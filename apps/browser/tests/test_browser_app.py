@@ -102,7 +102,6 @@ class BrowserAppTests(unittest.TestCase):
             "browser_companion_status",
             "browser_operation_get",
             "browser_operation_cancel",
-            "browser_instagram_collect",
             "browser_video_analyze",
             "browser_click",
             "browser_type",
@@ -127,10 +126,10 @@ class BrowserAppTests(unittest.TestCase):
         responses = {
             "session.create": {"session_id": "research-session"},
             "navigate": {"url": "https://example.com/article", "title": "Example"},
-            "snapshot": {
+            "content.read": {
                 "url": "https://example.com/article",
                 "title": "Example",
-                "snapshot": "heading Example\nlink Source https://example.com/source",
+                "text": "heading Example\nlink Source https://example.com/source",
             },
             "session.close": {"closed": True},
         }
@@ -155,11 +154,11 @@ class BrowserAppTests(unittest.TestCase):
                     state = load_state(temp_dir)
 
         self.assertEqual(status_code, 200)
-        self.assertEqual(result["content"], responses["snapshot"]["snapshot"])
+        self.assertEqual(result["content"], responses["content.read"]["text"])
         self.assertEqual(result["url"], "https://example.com/article")
         self.assertEqual(
             [item["action"] for item in broker.actions],
-            ["session.create", "navigate", "snapshot", "session.close"],
+            ["session.create", "navigate", "content.read", "session.close"],
         )
         self.assertEqual(state["sessions"], {})
         self.assertEqual(state["audit"][-1]["action"], "research.open")

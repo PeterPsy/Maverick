@@ -49,11 +49,18 @@ export async function observe(action, p) {
   };
   if (["snapshot", "content.read"].includes(action)) {
     const result = globalThis.maverickBrowserRead({maxChars:p.max_chars ?? 40000,maxItems:p.max_items ?? 100});
-    const redact = value => {if (!value) return null; const url = new URL(value);url.search="";url.hash="";return url.href;};
-    for (const item of result.links) item.url = redact(item.url);
+    const redact = (value, navigation=false) => {
+      if (!value) return null;
+      const url = new URL(value);
+      const kept = new URLSearchParams();
+      if (navigation) for (const key of ["v","q","query","keywords","keyword","search_query","id","type","sort","t","restrict_sr","f","city","p"])
+        for (const value of url.searchParams.getAll(key).slice(0,2)) if (value.length <= 500) kept.append(key,value);
+      url.search=kept.toString();url.hash="";return url.href;
+    };
+    for (const item of result.links) item.url = redact(item.url,true);
     for (const item of result.images) item.url = redact(item.url);
     for (const item of result.videos) {item.url = redact(item.url);item.poster_url = redact(item.poster_url);}
-    return {...result,url:redact(location.href),observed_at:new Date().toISOString(),source:"shared_chrome_rendered_dom"};
+    return {...result,url:redact(location.href,true),observed_at:new Date().toISOString(),source:"shared_chrome_rendered_dom"};
   }
   if (action === "scroll") {
     let root = document.scrollingElement;

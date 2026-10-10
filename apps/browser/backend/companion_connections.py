@@ -10,7 +10,7 @@ import time
 from uuid import uuid4
 
 from companion_store import database, encoded, public_connection, sweep
-from companion_validation import instagram_url
+from platform_scope import platform_url, platform_for_url
 
 
 class CompanionError(Exception):
@@ -72,7 +72,7 @@ def overview(data_root: Path, workspace_id: str, user_id: str) -> dict:
 def heartbeat(db: sqlite3.Connection, row: sqlite3.Row, *, url: object, title: object) -> None:
     if row["expires_at"] <= time.time():
         raise CompanionError("connection_expired", "Open Browser and share the tab again.", 410)
-    sanitized_url = instagram_url(url)
+    sanitized_url = platform_url(url, expected_platform=platform_for_url(row["tab_url"]) if row["tab_url"] else None)
     now = time.time()
     db.execute(
         "UPDATE connections SET status='connected',seen_at=?,expires_at=?,tab_url=?,tab_title=? WHERE session_id=?",

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "2b20a3e70116d3a9a2a40e61ffa28bb1ef588c12290da26ff79e21e58b2d097c",
+  "build_id": "15e818ceda529b217e8f7fdf6364eed3407a2d1252c990506f8531b4b88e51e8",
   "entrypoints": [
     "companion/offscreen.html",
     "companion/popup.html",
@@ -13,9 +13,9 @@
       "size_bytes": 2533
     },
     {
-      "path": "assets/index-iXYEU3qc.js",
-      "sha256": "860d982a353056fc63b52c8a2fcb99e63d9d567ca186c2f09b29afa053ea0a20",
-      "size_bytes": 8384
+      "path": "assets/index-gimgFLhU.js",
+      "sha256": "d142a886fd149e8249ee0f1f2e78b67d08368e1c86b22fcc66282f0d3e79b786",
+      "size_bytes": 8638
     }
   ],
   "revalidated": [
@@ -26,12 +26,12 @@
     },
     {
       "path": "companion/dom-actions.mjs",
-      "sha256": "ce85a12660fd940f46967760ddf18e3d0ec16383ea7762196f9ceea2c3b1e79b",
-      "size_bytes": 6732
+      "sha256": "e0c07f336fb65d90c5ddb7cfbaf52c06dac9baf2685bc6e239487134b124f9c1",
+      "size_bytes": 7107
     },
     {
       "path": "companion/manifest.json",
-      "sha256": "92257622d2cee3920d62ffe522f6b3df0f06045c2d748d8fb48cd949f58a0d7f",
+      "sha256": "f3f493fa58573c937ad41b6ee66024aec496ae656ab7bc7baa73cd7b18d4d247",
       "size_bytes": 530
     },
     {
@@ -45,19 +45,29 @@
       "size_bytes": 4840
     },
     {
+      "path": "companion/platforms.json",
+      "sha256": "f3490e29b98ed56a0b79030ed8d90f47d0c65d4d28f587ff6b70dc78a3194d8d",
+      "size_bytes": 2391
+    },
+    {
+      "path": "companion/platforms.mjs",
+      "sha256": "16bdcb530ea180b900218131f39fc362e826426da586957e35d0f4de0496a6f3",
+      "size_bytes": 2473
+    },
+    {
       "path": "companion/popup.css",
       "sha256": "0e8daf1bb59fe9607ffd6395a31d1f7cd45c1542a5b0b0f1a6ff00f53f1cd3bd",
       "size_bytes": 566
     },
     {
       "path": "companion/popup.html",
-      "sha256": "ee278d3e2928547081caebc2e7b1c41ca349e50f278cd0935c1f85580dbbd618",
-      "size_bytes": 928
+      "sha256": "afcfdb6bd4c24fd704af861b4eee394bbc63a5c43cdf3330e19adca33e0533fe",
+      "size_bytes": 860
     },
     {
       "path": "companion/popup.mjs",
-      "sha256": "6f8cb563a4941dc7e2d92818d6b79cf39e19e909ad50d1de730a2473ca9838e6",
-      "size_bytes": 1345
+      "sha256": "989da4ac9b129379423deeaf984a8a9c1f6a22d17986c1c22f4c99a441ecfa9b",
+      "size_bytes": 1441
     },
     {
       "path": "companion/reader.js",
@@ -66,18 +76,18 @@
     },
     {
       "path": "companion/scope.mjs",
-      "sha256": "69d3134ece8186558e352b289fe3251f8cab1e9262360d865cda4f91e5ddf529",
-      "size_bytes": 4405
+      "sha256": "05d1bf822330d147677d1823635d18e6fab80745b1bb9ca7b93e34cf6fa55f39",
+      "size_bytes": 5651
     },
     {
       "path": "companion/worker.mjs",
-      "sha256": "e786057aac8f8a0988bc21b786ce70a4fd5dc751b6bc5926f09e5fafb71eacb7",
-      "size_bytes": 10280
+      "sha256": "4660401f7ba5ab4e94fc17af2bd02dc1ae026e5adb667713d5f7dcbe62bc533e",
+      "size_bytes": 10338
     },
     {
       "path": "companion/workflows.mjs",
-      "sha256": "880703a7be6e73884d3dd7788a73b07308495e54c3a727e8495f84b3d513c46b",
-      "size_bytes": 6623
+      "sha256": "90e3548b9dfc825178895320de52a39715228c13b04baff19c5935b5ed8166c7",
+      "size_bytes": 6376
     },
     {
       "path": "icon.svg",
@@ -86,13 +96,13 @@
     },
     {
       "path": "index.html",
-      "sha256": "297d95ace64f8733abdb2a98ac60cd93d811f171cea75736e2da6eefcfc9dd9c",
+      "sha256": "0b191499ea38b154aa9fe838c09b6e7ec036118376baf6c082a03133c6e29057",
       "size_bytes": 429
     },
     {
       "path": "maverick-browser-companion.zip",
-      "sha256": "8a3898be67d3d44cbf0a50b9fc5dddf2f7ac88e6449c842c5365d98a463ece7a",
-      "size_bytes": 16955
+      "sha256": "de2116958c9632db671c94712737d908505b82caf8c5ebb24e9bf946e1a6999e",
+      "size_bytes": 19167
     },
     {
       "path": "maverick-icon-compact.png",

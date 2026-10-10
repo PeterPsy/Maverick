@@ -1,18 +1,18 @@
-# Browser Reading and Instagram Integration
+# Browser Reading and Shared Platform Transport
 
-Date: 2026-10-06
+Date: 2026-10-10
 
 ## Implemented architecture
 
-Browser 0.3 extends the installation-level `apps/browser` app with an app-owned
+Browser 0.4 extends the installation-level `apps/browser` app with an app-owned
 Chrome Manifest V3 companion. Its fixed observation adapter reuses Browser's
-rendered DOM reader. Instagram-specific behavior belongs to Browser; Core remains
-app-agnostic. No commercial scraping, proxy, browser relay or speech service is
+rendered DOM reader. Platform workflows belong to `apps/platform-connectors`; Browser owns technical
+transport and fixed observation adapters. Core remains app-agnostic. No commercial scraping, proxy, browser relay or speech service is
 required. Browser's isolated Playwright Lab remains available for public research
 and authorized Maverick development inspection.
 
-The user shares one already authenticated Instagram tab from the extension popup.
-The popup requests optional permissions for Instagram and the chosen Maverick
+The user shares one already authenticated supported platform tab from the extension popup.
+The popup requests optional permissions for the selected platform and the chosen Maverick
 origin, then opens a dedicated authenticated Browser connector window. Chrome 120
 or later is required. The connector uses ordinary Core-hosted backend calls and a
 scoped content-script channel. Passwords, cookies, browser history, raw CDP,
@@ -21,7 +21,7 @@ selectors and arbitrary caller scripts are never exposed to agent tools.
 The connector window must remain open. A 30-second extension alarm wakes its
 poller when possible; alarms do not wake a sleeping computer and cannot guarantee
 uninterrupted execution. Reloading requires fresh user setup. Closing either tab,
-revoking sharing or leaving approved Instagram routes stops capture. Late connector
+revoking sharing or leaving approved platform routes stops capture. Late connector
 submissions cannot renew expired connections or complete expired operations.
 
 ## Ownership, transport and queues
@@ -49,39 +49,36 @@ A shared session's identity does not make its observations public-source evidenc
 Every command is tied to the shared tab, approved URL and Chrome document id.
 A page replacement during observation fails the operation. Explicit navigation
 resets that document binding. Server Lab egress policy is not claimed to govern
-the user's Chrome; Chrome loads ordinary Instagram subresources using its existing
-session, while extension commands only target approved top-level Instagram routes.
+the user's Chrome; Chrome loads ordinary platform subresources using its existing
+session, while extension commands only target approved top-level platform routes.
 
 ## Observation and collection contract
 
 The companion admits fixed navigate, snapshot, rendered-content, scroll,
-screenshot, video-frame, tab and wait observations. Navigation accepts HTTPS
-`www.instagram.com` profile, profile-Reels, post and Reel URLs. Login, challenge,
-messages, settings, credentials and normalization tricks are rejected. The user
-handles authentication or checkpoints directly in Chrome. Likes, follows,
+screenshot, video-frame, tab and wait observations. Navigation is bound to the platform inferred at sharing. Reviewed exact HTTPS
+hosts, routes and retained source query keys live in `companion/platforms.json`,
+with a generated Chrome module and a matching Python validator. Instagram,
+X/Twitter, Reddit, Facebook, LinkedIn, YouTube, Bilibili, XiaoHongShu, Xueqiu,
+Boss Zhipin and Xiaoyuzhou are scoped independently. Login, challenge, messages,
+settings, credentials and normalization tricks are rejected. Authentication and
+checkpoints remain user actions in Chrome. Likes, follows,
 messages, posting, uploads and form filling have no companion command.
 
-Rendered extraction omits form values and cookies, deduplicates URLs, removes
-queries/fragments and reports timestamp, coverage and truncation. Layout visibility
+Rendered extraction omits form values and cookies, deduplicates URLs, retains only reviewed source query keys and removes
+fragments and reports timestamp, coverage and truncation. Layout visibility
 is not a viewport or occlusion guarantee. Scrolling selects a rendered scrollable
 container or the document, with bounded steps and settling. A current scroll
 boundary never proves that an infinite feed is complete.
 
-`browser_instagram_collect` reads profile and optional Reels sections, deduplicates
-canonical post/Reel URLs across up to 40 batches and 200 items, and reports source,
-observation times and a stop reason. It stops on limits, rendered end, login,
-challenge or rate-limit indications. Profile and Reels sections split the remaining
-scan and item budgets, reserving capacity for each requested section; unused
-profile capacity passes to Reels. The `sections` projection identifies each
-requested URL, observed/skipped status, scan count and stop reason. Budgets too
-small to visit both sections explicitly mark the later section skipped.
-`section_batch_limit` and `section_item_limit` identify a section allocation,
-while the overall `section_limit` reports partial coverage when a later section
-ends without consuming the global budget. An overall `rendered_end` requires
-every requested section to reach its observed boundary.
-Each collected post/Reel must be opened
-separately before its full caption or media is analyzed. Unvisited, private and
-unavailable content is excluded; missing counts and dates remain unknown.
+The dependency-only `content.collect` observes one or two same-platform URLs,
+deduplicates canonical content links across up to 40 batches and 200 items, and
+reports page observations, timestamps, sections and stop reasons. It stops on
+limits, rendered end, login, challenge or rate-limit indications. Sections split
+remaining scan/item budgets, reserve capacity for later sections and report skipped
+sections explicitly. An overall rendered end requires every requested section to
+reach its observed boundary. Connectors constructs the Instagram profile/Reels
+workflow and opens links individually before recording their content as read.
+The former public Instagram collection tool has been removed.
 
 Screenshots use Chrome `captureVisibleTab` with the explicitly shared tab active,
 rate limiting and before/after window/tab activation guards. Video frames require
@@ -92,7 +89,7 @@ playback state. A briefly muted playback may be needed to refresh Chrome's
 compositor. A default single-frame capture seeks to zero when the selected video
 has already ended; video analysis always prepares from zero. The original position,
 including an ended position, remains part of the state restored afterward.
-Captures can bring the shared Instagram window to the foreground.
+Captures can bring the shared platform window to the foreground.
 
 `browser_video_analyze` samples 1–12 frames over a finite duration bounded to
 180 seconds. Tab audio comes from Chrome `tabCapture`, with a worker-issued stream
@@ -141,7 +138,7 @@ replaces that incompatible deployment path. Agent-owned builds and tests stay
 foreground and terminate their descendants.
 
 Core's reviewed execution closure includes Browser's Python controller, Node
-broker, companion source/build artifacts, frontend, hooks and dependency pins.
+broker, companion scope data and source/build artifacts, frontend, hooks and dependency pins.
 Exact descriptor/execution audits must be refreshed after executable changes.
 Only records for reviewed changed apps are updated; unrelated app digests remain
 unchanged.
@@ -197,3 +194,13 @@ verify profile identity, bounded feed collection, opening collected posts/Reels,
 actual captions/images/frames/audio, Storage evidence and local transcription.
 The resulting profile analysis must state observed sources, missing information
 and coverage. Fixture success alone cannot complete that acceptance.
+
+## Connectors dependency boundary
+
+Connectors calls Browser only through `browser.lab` dependency requests. Core
+forwards the authenticated initiating `user_id` to the provider and callback;
+request-body identity fields do not authorize access. This keeps Chrome sessions
+owned by the human actor. Public research reads rendered content rather than
+only an accessibility snapshot and returns bounded text, links and provenance.
+Platform workflows and their verification are documented in
+[`platform_connectors_architecture.md`](platform_connectors_architecture.md).

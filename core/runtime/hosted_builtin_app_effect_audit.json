@@ -33,11 +33,11 @@
     "browser": {
       "cli": {
         "descriptor_sha256": "5975554e6d022ed3491f525d69ef616fd679a0896e6b37b529da69331a2be505",
-        "execution_sha256": "bef3bc67d31362e324d5e1fc5859e87efda7ee6a6d7b9228de616c6144fe1ba4"
+        "execution_sha256": "2a647803c55c24d74b3678ee778a3a9675a5f34f3e5966f3a3808e57536baf0b"
       },
       "mcp": {
-        "descriptor_sha256": "28117a8ac1657a66e134789e293952dee30b580446ea59ba602dcf80722373ac",
-        "execution_sha256": "215664d9362c257608a0ab07ce991642ea716c950cdf06d599ad3220d6de6a50"
+        "descriptor_sha256": "6d6cc87613fd1282f0c27ace3a87e539952860b62137f8f2e50128572a385194",
+        "execution_sha256": "7326e60edfea663045975a50e4e9da81b57b559bc9eabffa6aaabc8026a5cfcb"
       }
     },
     "calendar": {
@@ -150,6 +150,16 @@
         "execution_sha256": "4dfff87dcd6ae9c8ee0599132df9ae2d4dc33e2187fd28f39e1f5c72e0883c04"
       }
     },
+    "platform-connectors": {
+      "cli": {
+        "descriptor_sha256": "52d23566cdcc1d0fd6be44ef3b96e72b30ed24df1f027371af1574fb787b4466",
+        "execution_sha256": "d7ff69413fb8a4bc89fc40c3abe5eab7494f4d1a61da5720b534959be0753822"
+      },
+      "mcp": {
+        "descriptor_sha256": "5ef4a929f0ff7963cf64327fdc8ba409123b470c559e0f5b8307420fc03d784a",
+        "execution_sha256": "06423aae10a907a058d783b2f5d9ea8fa5b00a675ee7f3255d0364273dfb21ef"
+      }
+    },
     "senses": {
       "cli": {
         "descriptor_sha256": "71e33795c89e595cad2db2419d2eaff7cd0b71175c50479decf061a784d6bfc1",
@@ -221,6 +231,6 @@
       }
     }
   },
-  "audit_revision": "2026-10-09-calendar-reminders-browser-inspection-reviewed-v11",
+  "audit_revision": "2026-10-10-platform-connectors-shared-platforms-reviewed-v13",
   "schema_version": "2"
 }

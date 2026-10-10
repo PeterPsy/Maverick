@@ -1,0 +1,467 @@
+{
+  "tools": {
+    "connectors_status": {
+      "effect_class": "read",
+      "description": "List all 9 sources, cached sharing status, operation history and saved collections.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "connectors_connections_refresh": {
+      "effect_class": "mutating",
+      "description": "Refresh the current user\u2019s shared Chrome tabs through Browser. Sign-in and sharing remain user-owned.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "connectors_run_start": {
+      "effect_class": "mutating",
+      "description": "Start a source read, profile, search, collection, transcript or video observation. Instagram first. Poll run.refresh until terminal; source operations read remote content only.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "instagram",
+              "twitter",
+              "reddit",
+              "facebook",
+              "linkedin",
+              "youtube",
+              "rss",
+              "web",
+              "github"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "read",
+              "profile",
+              "search",
+              "collect",
+              "transcript",
+              "video"
+            ]
+          },
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "query": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "username": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "session_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "language": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "kind": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "max_items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200
+              },
+              "max_batches": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 40
+              },
+              "max_details": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 200
+              },
+              "frame_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              },
+              "max_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 180
+              },
+              "read_details": {
+                "type": "boolean"
+              },
+              "include_reels": {
+                "type": "boolean"
+              },
+              "include_audio": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source",
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_run_get": {
+      "effect_class": "read",
+      "description": "Read a stored operation without polling Browser.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_run_refresh": {
+      "effect_class": "mutating",
+      "description": "Poll a pending Browser operation and advance bounded collection detail reads.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_run_cancel": {
+      "effect_class": "mutating",
+      "description": "Cancel an active observation. Late callbacks cannot restart it.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_collection_save": {
+      "effect_class": "mutating",
+      "description": "Save terminal observations, including useful partial failed or cancelled results, into a private collection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "run_id",
+          "title"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_collection_get": {
+      "effect_class": "read",
+      "description": "Read paginated saved collection items.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_collection_rename": {
+      "effect_class": "mutating",
+      "description": "Rename a saved collection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_collection_delete": {
+      "effect_class": "destructive",
+      "description": "Delete one owned collection and its saved items.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_collection_refresh": {
+      "effect_class": "mutating",
+      "description": "Rerun a collection source and merge observed items by canonical URL.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connectors_collection_export": {
+      "effect_class": "mutating",
+      "description": "Export saved observations as Markdown or JSON through verified Storage.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "platform_connectors_reference_manifest": {
+      "effect_class": "read",
+      "description": "Return the private collection reference manifest.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "platform_connectors_reference_search": {
+      "effect_class": "read",
+      "description": "Search the current user\u2019s saved collection titles.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "platform_connectors_reference_resolve": {
+      "effect_class": "read",
+      "description": "Resolve one owned collection reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "collection"
+            ]
+          },
+          "entity_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "entity_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "platform_connectors_reference_summarize": {
+      "effect_class": "read",
+      "description": "Summarize an owned saved collection reference without reproducing source text.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "collection"
+            ]
+          },
+          "entity_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "entity_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "platform_connectors_view_filter": {
+      "effect_class": "read",
+      "description": "Read the current Connectors board view state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "view_state": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "platform_connectors_set_view_filter": {
+      "effect_class": "mutating",
+      "description": "Set the Connectors board query filter.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "view_state": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "platform_connectors_set_custom_view": {
+      "effect_class": "mutating",
+      "description": "Show a curated set of platform-connectors references on the board.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "refs"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "view_state": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "platform_connectors_clear_custom_view": {
+      "effect_class": "mutating",
+      "description": "Return Connectors to its default board mode.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "view_state": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

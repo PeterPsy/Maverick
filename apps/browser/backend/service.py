@@ -103,7 +103,7 @@ DEFAULT_MOBILE_VIEWPORT = {"viewport_width": 390, "viewport_height": 844, "mobil
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
-    if action in {"companion.connect", "companion.disconnect", "companion.complete", "operation.cancel", "instagram.collect", "video.analyze", "media.completed"}:
+    if action in {"companion.connect", "companion.disconnect", "companion.complete", "operation.cancel", "content.collect", "video.analyze", "media.completed"}:
         return [{"type": "maverick.app.data-changed", "resource": "companion"}]
     if action in ACTION_EVENTS:
         return [{"type": "maverick.app.data-changed", "resource": "state"}]
@@ -303,11 +303,11 @@ def research_web_result(
         if navigate_status >= 400:
             return navigate_status, navigate_result
         snapshot_status, snapshot_result = invoke(
-            {"action": "snapshot", "session_id": session_id}
+            {"action": "content.read", "session_id": session_id, "max_chars":100000,"max_items":200}
         )
         if snapshot_status >= 400:
             return snapshot_status, snapshot_result
-        content = str(snapshot_result.get("snapshot") or "")
+        content = str(snapshot_result.get("text") or "")
         result: dict[str, Any] = {
             "status": "ok",
             "url": str(
@@ -321,7 +321,10 @@ def research_web_result(
                 or ""
             ),
             "content": content[:MAX_RESEARCH_CONTENT_CHARS],
-            "truncated": len(content) > MAX_RESEARCH_CONTENT_CHARS,
+            "truncated": bool(snapshot_result.get("truncated")) or len(content) > MAX_RESEARCH_CONTENT_CHARS,
+            "links": snapshot_result.get("links",[]),
+            "images": snapshot_result.get("images",[]),
+            "observed_at": snapshot_result.get("observed_at"),
         }
         if query is not None:
             result["query"] = query
@@ -447,9 +450,9 @@ def operations_manifest() -> dict[str, Any]:
         "mcp_tools": sorted(MCP_TOOL_ACTIONS),
         "chrome_companion": {
             "mode": "read_only",
-            "actions": ["navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame", "video.analyze", "instagram.collect", "tabs", "wait_for"],
+            "actions": ["navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame", "video.analyze", "tabs", "wait_for"],
             "results": "Queued operations; poll operation.get for observed results, or cancel with operation.cancel.",
-            "authentication": "One Instagram tab explicitly shared through the human Chrome connector.",
+            "authentication": "One supported platform tab explicitly shared through the human Chrome connector.",
             "audio_transcription": "Declared Speech dependency with local_only enforced.",
             "saved_evidence": "Declared Storage dependency, verified callback identities.",
         },

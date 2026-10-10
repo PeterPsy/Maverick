@@ -1,6 +1,6 @@
-import {boundedCommand,connectorUrl,instagramUrl,sameConnector} from "./scope.mjs";
+import {boundedCommand,connectorUrl,platformUrl,platformForUrl,sameConnector} from "./scope.mjs";
 import {observe} from "./dom-actions.mjs";
-import {collectInstagram,analyzeVideo} from "./workflows.mjs";
+import {collectContent,analyzeVideo} from "./workflows.mjs";
 
 let busy=null;
 let lastScreenshotAt=0;
@@ -44,29 +44,29 @@ async function scope(b) {
   const current=await binding();
   if(!b || current?.tabId !== b.tabId || current?.sharingId !== b.sharingId)throw new Error("sharing_revoked");
   const tab=await chrome.tabs.get(b.tabId);
-  instagramUrl(tab.url);
+  platformUrl(tab.url,b.platform);
   return tab;
 }
 async function dom(b,action,parameters={},expected) {
   const tab=await scope(b);
-  if(expected && instagramUrl(tab.url) !== expected.url)throw new Error("shared_tab_changed_during_operation");
+  if(expected && platformUrl(tab.url) !== expected.url)throw new Error("shared_tab_changed_during_operation");
   const target={tabId:b.tabId,...(expected?.documentId ? {documentIds:[expected.documentId]} : {})};
   const loaded=await chrome.scripting.executeScript({target,files:["reader.js"]});
   if(expected && !expected.documentId)expected.documentId=loaded[0]?.documentId;
   const results=await chrome.scripting.executeScript({target:{tabId:b.tabId,...(expected?.documentId ? {documentIds:[expected.documentId]} : {})},func:observe,args:[action,parameters]});
   const after=await scope(b);
-  if(expected && instagramUrl(after.url) !== expected.url)throw new Error("shared_tab_changed_during_operation");
+  if(expected && platformUrl(after.url) !== expected.url)throw new Error("shared_tab_changed_during_operation");
   if(results[0]?.result == null)throw new Error("observation_unavailable");
   if(results[0].result.error)throw new Error(results[0].result.detail || results[0].result.error);
   return results[0].result;
 }
 async function navigate(b,url) {
-  await scope(b);await chrome.tabs.update(b.tabId,{url:instagramUrl(url)});
+  await scope(b);await chrome.tabs.update(b.tabId,{url:platformUrl(url,b.platform)});
   const end=Date.now()+15000;
   while(Date.now()<end) {
     const tab=await scope(b);
-    if(tab.status === "complete" && instagramUrl(tab.url) === instagramUrl(url)) {
-      await delay(1000);return {url:instagramUrl(tab.url),title:tab.title};
+    if(tab.status === "complete" && platformUrl(tab.url) === platformUrl(url)) {
+      await delay(1000);return {url:platformUrl(tab.url),title:tab.title};
     }
     await delay(100);
   }
@@ -77,7 +77,7 @@ async function execute(b,command) {
   const initial=await scope(b);
   if(busy)throw new Error("operation_already_running");
   const task={id:command.operation_id,cancelled:false};busy=task;
-  const expected={url:instagramUrl(initial.url),documentId:null};
+  const expected={url:platformUrl(initial.url),documentId:null};
   task.expected=expected;
   const check=()=>{if(task.cancelled)throw new Error("operation_cancelled");if(Date.now()/1000>command.expires_at)throw new Error("operation_expired");};
   const fixedDom=async(a,p)=>{
@@ -89,35 +89,35 @@ async function execute(b,command) {
     return dom(b,a,p,expected);
   };
   const adapter={check,delay,dom:fixedDom,read:p=>fixedDom("content.read",p),scroll:p=>fixedDom("scroll",p),
-    navigate:async url=>{check();const result=await navigate(b,url);expected.url=instagramUrl(url);expected.documentId=null;return result;},
+    navigate:async url=>{check();const result=await navigate(b,url);expected.url=platformUrl(url);expected.documentId=null;return result;},
     capture:async(a,p)=>{check();await fixedDom("wait_for",{});const result=a === "frame" ? await screenshot(b,p) : await capture(a,p);await fixedDom("wait_for",{});return result;},
     cleanup:async(a,p)=>{await scope(b);return a === "video.restore" ? dom(b,a,p,expected) : capture(a,p);}};
   try {
     check();const p=command.parameters || {};let result;
     if(command.action === "navigate")result=await adapter.navigate(p.url);
-    else if(command.action === "instagram.collect")result=await collectInstagram(adapter,p);
+    else if(command.action === "content.collect")result=await collectContent(adapter,p);
     else if(command.action === "video.analyze")result=await analyzeVideo(adapter,p);
     else if(command.action === "screenshot")result=await adapter.capture("frame",{});
     else if(command.action === "video.frame") {
       try{const timing=await adapter.dom("video.prepare",p);result={...await adapter.capture("frame",timing),time_seconds:timing.presented_time_seconds,requested_time_seconds:p.time_seconds ?? null,video_index:p.video_index ?? 0};}
       finally{await dom(b,"video.restore",p,expected).catch(()=>{});}
-    } else if(command.action === "tabs") {const tab=await scope(b);result={tabs:[{url:instagramUrl(tab.url),title:tab.title,shared:true}]};}
+    } else if(command.action === "tabs") {const tab=await scope(b);result={tabs:[{url:platformUrl(tab.url),title:tab.title,shared:true}]};}
     else result=await adapter.dom(command.action,p);
     check();const tab=await scope(b);
-    return {...result,source_url:instagramUrl(tab.url),observed_at:new Date().toISOString()};
+    return {...result,source_url:platformUrl(tab.url),observed_at:new Date().toISOString()};
   } finally {if(busy===task)busy=null;}
 }
 async function share(message) {
-  const url=connectorUrl(message.url);const tab=await chrome.tabs.get(message.tabId);instagramUrl(tab.url);
+  const url=connectorUrl(message.url);const tab=await chrome.tabs.get(message.tabId);platformUrl(tab.url);
   await stop();
   try {
-    await chrome.offscreen.createDocument({url:"offscreen.html",reasons:["USER_MEDIA"],justification:"Read-only capture of the single Instagram tab explicitly shared by the user."});
+    await chrome.offscreen.createDocument({url:"offscreen.html",reasons:["USER_MEDIA"],justification:"Read-only capture of the single platform tab explicitly shared by the user."});
     // Chrome 116+ permits worker-issued stream IDs in the offscreen document.
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     await capture("start",{streamId});
     const window=await chrome.windows.create({url:url.href,type:"popup",width:1040,height:850});
     const connector=window.tabs[0];
-    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname}});
+    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,platform:platformForUrl(tab.url)}});
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
     await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#5665df"});
     // A tab may finish loading before onUpdated observes the stored binding.
@@ -142,7 +142,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return {cancelled:true};
     }
     if(message.action === "status") {
-      const tab=await scope(b);return {status:"shared",url:instagramUrl(tab.url),title:tab.title,active_operation:busy?.id || null};
+      const tab=await scope(b);return {status:"shared",url:platformUrl(tab.url),title:tab.title,active_operation:busy?.id || null};
     }
     if(message.action === "execute")return execute(b,message.command);
     throw new Error("bridge_action_unavailable");
@@ -151,7 +151,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
 chrome.tabs.onRemoved.addListener(async id=>{const b=await binding();if(b && [b.tabId,b.connectorTabId].includes(id))await stop("shared_tab_closed");});
 chrome.tabs.onUpdated.addListener(async (id,change,tab)=>{
   const b=await binding();if(!b)return;
-  if(id===b.tabId && change.url) {try{instagramUrl(change.url);}catch{await stop("tab_left_instagram_scope");}}
+  if(id===b.tabId && change.url) {try{platformUrl(change.url,b.platform);}catch{await stop("tab_left_platform_scope");}}
   if(id===b.connectorTabId && change.url && !sameConnector(tab,b))await stop("connector_left_browser");
   if(id===b.connectorTabId && change.status === "complete" && sameConnector(tab,b))await chrome.scripting.executeScript({target:{tabId:id},files:["content.js"]}).catch(()=>stop("connector_injection_failed"));
 });

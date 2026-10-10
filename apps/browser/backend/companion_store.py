@@ -81,10 +81,12 @@ def sweep(connection: sqlite3.Connection, now: float) -> None:
 
 
 def public_connection(row: sqlite3.Row) -> dict:
+    from platform_scope import platform_for_url
     return {
         "session_id": row["session_id"], "provider": "chrome_companion", "status": row["status"],
         "display_name": row["display_name"], "url": row["tab_url"], "title": row["tab_title"],
         "last_seen": row["seen_at"], "expires_at": row["expires_at"], "owned_by": "user",
+        "platform": platform_for_url(row["tab_url"]),
     }
 
 

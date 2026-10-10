@@ -9,7 +9,7 @@ import time
 
 from companion_connections import CompanionError, require_owner
 from companion_store import database, encoded, public_operation, sweep
-from companion_validation import instagram_url
+from platform_scope import platform_url
 
 
 STORAGE = "storage-file-content-write"
@@ -39,7 +39,7 @@ def prepare(db, row, result: dict, dependencies: dict | None) -> list[dict]:
     if row["action"] != "video.analyze" or result.get("error"):
         return []
     options = json.loads(row["input_json"])
-    result["source_url"] = instagram_url(result.get("source_url"))
+    result["source_url"] = platform_url(result.get("source_url"))
     frames = result.get("frames")
     if not isinstance(frames, list) or not 1 <= len(frames) <= options.get("frame_count", 6):
         raise CompanionError("invalid_media", "The expected bounded video samples are missing.")
@@ -95,8 +95,8 @@ def callback(data_root: Path, workspace_id: str, user_id: str | None, body: dict
         pending = db.execute("SELECT * FROM media_requests WHERE request_id=? AND operation_id=?", (request_id, operation_id)).fetchone()
         if row is None or pending is None:
             raise CompanionError("media_callback_unavailable", "No matching pending media request.", 404)
-        # Core callbacks omit actor payload fields; ownership is recovered from the
-        # durable operation only on the trusted dependency callback surface.
+        # Core forwards the initiating actor. Owner recovery also supports the
+        # app-owned lifecycle completion path on this trusted callback surface.
         owner = db.execute("SELECT * FROM connections WHERE session_id=?", (row["session_id"],)).fetchone()
         require_owner(db, row["session_id"], workspace_id, user_id or owner["user_id"], allow_revoked=True)
         original = body.get("request")

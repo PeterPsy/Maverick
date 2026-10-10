@@ -87,7 +87,7 @@
     },
     "browser_navigate": {
       "effect_class": "mutating",
-      "description": "Navigate a Lab session after Core egress approval, or navigate a shared Chrome tab to an approved Instagram profile/post/Reel. Chrome returns a queued operation_id.",
+      "description": "Navigate a Lab session after Core egress approval, or navigate a shared Chrome tab to an approved shared-platform page. Chrome returns a queued operation_id.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -474,45 +474,6 @@
         },
         "required": [
           "operation_id"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "browser_instagram_collect": {
-      "effect_class": "mutating",
-      "description": "Collect rendered profile text and deduplicated post/Reel links with bounded scrolling in a shared Chrome tab. Returns an operation_id; poll browser_operation_get. Open each collected URL to read its full content.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "session_id": {
-            "type": "string",
-            "pattern": "^chrome-[a-f0-9-]{36}$",
-            "description": "User-owned Chrome session from browser_companion_status."
-          },
-          "username": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._]{1,30}$"
-          },
-          "max_items": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 200,
-            "default": 60
-          },
-          "max_batches": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 40,
-            "default": 12
-          },
-          "include_reels": {
-            "type": "boolean",
-            "default": true
-          }
-        },
-        "required": [
-          "session_id",
-          "username"
         ],
         "additionalProperties": false
       }

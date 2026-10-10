@@ -2,8 +2,8 @@
   "app_id": "browser",
   "contract_version": "1.0",
   "name": "Browser",
-  "version": "0.3.0",
-  "description": "Read-only Instagram navigation and media analysis through a user-shared Chrome tab, plus isolated Browser Lab research.",
+  "version": "0.4.0",
+  "description": "User-shared Chrome transport for Connectors and isolated Browser Lab research.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -84,7 +84,6 @@
       "browser_companion_status",
       "browser_operation_get",
       "browser_operation_cancel",
-      "browser_instagram_collect",
       "browser_video_analyze",
       "browser_reference_manifest"
     ],

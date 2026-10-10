@@ -5,6 +5,7 @@ import {fileURLToPath} from "node:url";
 import {execFileSync} from "node:child_process";
 
 const source=dirname(fileURLToPath(import.meta.url));
+writeFileSync(join(source,"platforms.mjs"),`// Generated from platforms.json by the Companion build.\nexport const platforms=${readFileSync(join(source,"platforms.json"),"utf8")};\n`);
 const target=join(source,"../frontend/public/companion");
 rmSync(target,{recursive:true,force:true});mkdirSync(target,{recursive:true});
 for(const name of readdirSync(source).sort()) {

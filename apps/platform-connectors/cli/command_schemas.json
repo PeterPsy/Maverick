@@ -1,0 +1,207 @@
+{
+  "commands": {
+    "platform-connectors": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "status": "read",
+          "connections.refresh": "mutating",
+          "run.start": "mutating",
+          "run.get": "read",
+          "run.refresh": "mutating",
+          "run.cancel": "mutating",
+          "collection.save": "mutating",
+          "collection.get": "read",
+          "collection.rename": "mutating",
+          "collection.delete": "destructive",
+          "collection.refresh": "mutating",
+          "collection.export": "mutating",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating"
+        }
+      },
+      "description": "Read sources, observe shared platform tabs, manage private collections and export through Storage.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "connections.refresh",
+              "run.start",
+              "run.get",
+              "run.refresh",
+              "run.cancel",
+              "collection.save",
+              "collection.get",
+              "collection.rename",
+              "collection.delete",
+              "collection.refresh",
+              "collection.export",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ],
+            "default": "status"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "instagram",
+              "twitter",
+              "reddit",
+              "facebook",
+              "linkedin",
+              "youtube",
+              "rss",
+              "web",
+              "github"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "read",
+              "profile",
+              "search",
+              "collect",
+              "transcript",
+              "video"
+            ]
+          },
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "query": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "username": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "session_id": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "language": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "kind": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "max_items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200
+              },
+              "max_batches": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 40
+              },
+              "max_details": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 200
+              },
+              "frame_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              },
+              "max_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 180
+              },
+              "read_details": {
+                "type": "boolean"
+              },
+              "include_reels": {
+                "type": "boolean"
+              },
+              "include_audio": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "collection"
+            ]
+          },
+          "entity_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

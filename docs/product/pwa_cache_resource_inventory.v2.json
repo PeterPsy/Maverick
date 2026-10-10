@@ -620,6 +620,25 @@
       "invalidation": "never cached in Cache API, IndexedDB, or OPFS",
       "data_event": "none",
       "rollout": "invariant exclusion"
+    },
+    {
+      "app_ids": [
+        "platform-connectors"
+      ],
+      "resource": "source-observations-and-private-collections",
+      "owner": "Connectors",
+      "read_surface": "actor-scoped Connectors backend, CLI and MCP",
+      "canonical_data_class": "personal_data",
+      "provenance": "authenticated source observations and owner-scoped saved collections",
+      "local_persistence_policy": "deny",
+      "fresh_ttl_seconds": 0,
+      "expiry_ttl_seconds": 0,
+      "revision": "connectors.schema.v1",
+      "max_entry_bytes": 0,
+      "max_scope_bytes": 0,
+      "invalidation": "network only; saved collections remain in app-owned server storage",
+      "data_event": "state,view-state",
+      "rollout": "excluded"
     }
   ]
 }

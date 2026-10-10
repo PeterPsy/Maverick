@@ -5,6 +5,11 @@ description: "Use Browser's governed CLI or MCP surfaces for isolated read-only 
 
 # Browser Operations
 
+For Instagram and other platform workflows, use the `platform-connectors` app
+and its bundled `platform-connectors-ops` skill. Browser owns connection setup,
+shared-tab transport, media evidence and public Lab inspection. It does not own
+saved collections or expose an Instagram collection tool.
+
 Use Browser when a task needs an actual browser session: page navigation,
 accessibility snapshots, screenshots, console messages, network observations,
 rendered text and media metadata, bounded scrolling, video frames, tab state,
@@ -66,15 +71,16 @@ operations. Poll `browser_operation_get` using the operation id; only successful
 terminal results establish observations. Do not resend a command because one
 poll is still running. Use `browser_operation_cancel` to cancel pending work.
 
-Use `browser_instagram_collect` for bounded profile text and post/Reel discovery.
-Then open collected URLs and read each caption/media to substantiate analysis.
+Use Connectors and its `connectors_run_start` tool for bounded platform
+workflows. Its collection flow opens discovered links to read actual content.
 Use `browser_video_analyze` for sampled frames and local audio transcription.
 `max_seconds` is bounded to 180; duration beyond the observed portion is uncovered.
 With `save_evidence: true`, verified Storage references replace inline frames.
 Read and view the actual images through Storage/native image inspection before
 claiming visual details. Report missing transcript/capture/evidence explicitly.
 
-Chrome navigation is limited to Instagram profile/post/Reel routes. There are no
+Chrome navigation stays within the platform bound at sharing and its approved
+content routes. There are no
 external clicks/forms, caller selectors, arbitrary scripts, history reads or cookie
 exports. Social read-only mode permits local scroll/seek/playback for observation.
 Do not close or revoke the user's shared Chrome session during agent cleanup;

@@ -10,7 +10,7 @@ from errors import BrowserValidationError
 
 
 USER_ACTIONS = frozenset({"companion.connect", "companion.poll", "companion.progress", "companion.complete", "companion.disconnect"})
-COMPANION_ACTIONS = USER_ACTIONS | {"companion.overview", "operation.get", "operation.cancel", "instagram.collect", "video.analyze", "media.completed"}
+COMPANION_ACTIONS = USER_ACTIONS | {"companion.overview", "operation.get", "operation.cancel", "content.collect", "video.analyze", "media.completed"}
 FIELDS = {
     "companion.connect": {"display_name"},
     "companion.overview": set(),

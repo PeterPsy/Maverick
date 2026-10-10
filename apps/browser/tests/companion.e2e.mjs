@@ -15,7 +15,9 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const temporary=mkdtempSync(path.join(tmpdir(),"browser-companion-e2e-"));
 const server=spawn("python3",[path.join(root,"tests/companion_fixture_server.py")],{stdio:["ignore","pipe","pipe"]});
 let context;
-const wait=async(predicate,timeout=20000)=>{const end=Date.now()+timeout;while(Date.now()<end){const result=await predicate();if(result)return result;await new Promise(r=>setTimeout(r,100));}throw new Error("fixture_wait_timeout");};
+const connectorsOnly=process.argv.includes('--connectors-only');
+let mediaSummary={};
+const wait=async(predicate,timeout=45000)=>{const end=Date.now()+timeout;while(Date.now()<end){const result=await predicate();if(result)return result;await new Promise(r=>setTimeout(r,150));}throw new Error("fixture_wait_timeout");};
 try {
   for(const name of readdirSync(path.join(root,"companion"))) {
     if(name === "build.mjs" || name.endsWith(".test.mjs"))continue;
@@ -71,7 +73,7 @@ try {
   await wait(async()=>{
     const page=context.pages().find(page=>page.url().startsWith(`${origin}/apps/browser/`));if(page)return page;
     const status=await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"");
-    if(status && !status.startsWith("Scheda condivisa"))throw new Error(`share_failed: ${status}`);
+    if(status && !status.startsWith("Tab shared"))throw new Error(`share_failed: ${status}`);
     return context.pages().find(page=>page.url().startsWith(`${origin}/apps/browser/`));
   }).catch(async error=>{
     console.error(JSON.stringify({phase:"sharing",popup_status:await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"closed"),worker_state:await worker.evaluate(async()=>({contexts:await chrome.runtime.getContexts({}),binding:await chrome.storage.session.get("binding")}))}));
@@ -79,13 +81,17 @@ try {
   });
   const connector=context.pages().find(page=>page.url().startsWith(`${origin}/apps/browser/`));
   const consoleErrors=[];connector.on("pageerror",e=>consoleErrors.push(e.message));
+  await browser.send("Target.detachFromTarget",{sessionId});
+  await connector.bringToFront();
   await connector.locator("#connect").click();
   const connection=await wait(async()=> (await api({action:"companion.overview"})).connections.find(c=>c.status === "connected"));
+  console.log(JSON.stringify({phase:"chrome-connected"}));
   const run=async(action,parameters={})=>{
     const queued=await api({action,session_id:connection.session_id,...parameters});assert.equal(queued.status,"queued");
     const result=await wait(async()=>{const result=await api({action:"operation.get",operation_id:queued.operation_id});return ["completed","failed","cancelled","expired"].includes(result.status) ? result : null;},60000);
     assert.equal(result.status,"completed",JSON.stringify(result));return {...result.result,operation_id:queued.operation_id};
   };
+  if(!connectorsOnly) {
   const content=await run("content.read");assert(content.text.includes("Bio visibile"));assert(!content.text.includes("must-not-be-read"));assert(!content.text.includes("hidden-secret"));assert.equal(content.videos[0].duration_seconds,5);
   const scrolling=await run("scroll",{pixels:600});assert.equal(scrolling.target,"rendered_container");assert(scrolling.moved);
   const first=await run("video.frame",{time_seconds:0.5});assert(Buffer.from(first.base64,"base64").subarray(0,3).equals(Buffer.from([255,216,255])));
@@ -99,6 +105,7 @@ try {
   // separate Chromium page, independent of the shared tab's live audio clock.
   const endedPage=await context.newPage();
   try {
+    await endedPage.bringToFront();
     await endedPage.setContent(`<video controls width="640" height="360" src="data:video/mp4;base64,${endedMedia.toString("base64")}"></video>`);
     await wait(()=>endedPage.evaluate(()=>document.querySelector("video").readyState>=2));
     await endedPage.evaluate(()=>{const video=document.querySelector("video");video.currentTime=video.duration;});
@@ -125,16 +132,58 @@ try {
   await wait(()=>worker.evaluate(async()=>{const status=await chrome.runtime.sendMessage({target:"offscreen",action:"status"});return status?.recording === false;}));
   await wait(()=>instagram.evaluate(()=>document.querySelector("video").paused));
   assert(afterCancel.text.includes("Bio visibile"));
-  const collected=await run("instagram.collect",{username:"fixture_user",max_items:3,max_batches:4,include_reels:false});assert.equal(collected.items.length,3);assert.equal(collected.stop_reason,"item_limit");
+  const collected=await run("content.collect",{urls:["https://www.instagram.com/fixture_user/"],max_items:3,max_batches:4});assert.equal(collected.items.length,3);assert.equal(collected.stop_reason,"item_limit");
+  console.log(JSON.stringify({phase:"media-verified"}));
+  mediaSummary={read_content:true,nested_scroll:true,distinct_video_frames:true,ended_video_recovery:true,tab_audio_bytes:analyzed.audio.size_bytes,storage_evidence_files:4,collection_items:3,cancel_audio_cleanup:true,queued_read_after_cancel:true};
+  }
   assert.equal(consoleErrors.length,0,consoleErrors.join("\n"));
   // Native frontend at desktop and mobile sizes; no horizontal overflow.
   for(const viewport of [{width:1280,height:800},{width:390,height:844}]) {
     await connector.setViewportSize(viewport);assert(await connector.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await connector.screenshot({path:path.join(tmpdir(),`maverick-browser-ui-${viewport.width}.png`)});
   }
+  // Drive the shipped Connectors UI through real queue/callback/Storage boundaries.
+  const product=await context.newPage();
+  product.on("pageerror",e=>consoleErrors.push(e.message));
+  await product.goto(`${origin}/apps/platform-connectors/`);
+  await product.bringToFront();
+  await product.getByRole("heading",{name:"Connectors",exact:true}).waitFor();
+  await wait(async()=>await product.locator('.source-option').count() === 9);
+  await wait(async()=>await product.locator(`#sharing option[value="${connection.session_id}"]`).count() === 1);
+  await product.locator('#sharing').selectOption(connection.session_id);
+  await product.locator('.query-field input').fill('@fixture_user');
+  await product.getByText('Reading options',{exact:true}).click();
+  await product.getByText('Item limit',{exact:true}).locator('..').getByRole('spinbutton').fill('3');
+  await product.getByRole('button',{name:'Collect posts',exact:false}).click();
+  await product.getByRole('heading',{name:'Source observations',exact:true}).waitFor({timeout:90000}).catch(async error=>{
+    const diagnostic=await product.evaluate(async()=>({visibility:document.visibilityState,body:document.body.innerText.slice(0,2000),
+      state:await (await fetch('/api/apps/platform-connectors/backend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status'})})).json()}));
+    console.error(JSON.stringify({phase:'connectors-observation',...diagnostic,browser:await api({action:'companion.overview'}),consoleErrors}));throw error;
+  });
+  assert.equal(await product.locator('.source-context .result-card').count(),2);
+  assert.equal(await product.locator('main > .result-list .tag.observed').count(),3);
+  await product.getByRole('button',{name:'Save collection',exact:true}).click();
+  await product.getByRole('textbox',{name:'Collection title'}).fill('Instagram acceptance collection');
+  await product.getByRole('button',{name:'Save',exact:true}).click();
+  await product.getByRole('heading',{name:'Instagram acceptance collection',exact:true}).waitFor();
+  assert.equal(await product.locator('main > .result-list .result-card').count(),5);
+  for(const viewport of [{width:1280,height:800},{width:390,height:844}]) {
+    await product.setViewportSize(viewport);
+    assert(await product.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await product.screenshot({path:path.join(tmpdir(),`maverick-connectors-ui-${viewport.width}.png`)});
+  }
+  await product.getByRole('button',{name:'Export Markdown',exact:true}).click();
+  await product.getByRole('link',{name:'Open exported file in Storage',exact:false}).waitFor();
+  const productState=await product.evaluate(async()=> (await fetch('/api/apps/platform-connectors/backend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status'})})).json());
+  const exportRun=productState.runs.find(run=>run.operation === 'export');
+  assert(exportRun.result.file.file_id);
+  const exported=await fetch(`${origin}/${exportRun.result.file.workspace_relative_path}`);
+  assert(exported.ok);assert((await exported.text()).includes('Instagram acceptance collection'));
+  assert.equal(consoleErrors.length,0,consoleErrors.join('\n'));
+  await product.close();
   await instagram.goto("https://www.instagram.com/accounts/login/");
   await wait(async()=>{const overview=await api({action:"companion.overview"});return overview.connections.find(c=>c.session_id === connection.session_id)?.status === "revoked";});
-  console.log(JSON.stringify({status:"passed",real_chromium:true,read_content:true,nested_scroll:true,distinct_video_frames:true,ended_video_recovery:true,tab_audio_bytes:analyzed.audio.size_bytes,storage_evidence_files:4,collection_items:3,cancel_audio_cleanup:true,queued_read_after_cancel:true,scope_revocation:true,desktop_mobile_layout:true,instagram_access_verified:false}));
+  console.log(JSON.stringify({status:"passed",real_chromium:true,...mediaSummary,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,scope_revocation:true,desktop_mobile_layout:true,instagram_access_verified:false}));
 }finally {
   if(context)await context.close();
   if(server.exitCode === null && server.signalCode === null){const exited=new Promise(resolve=>server.once("exit",resolve));server.kill("SIGTERM");await exited;}

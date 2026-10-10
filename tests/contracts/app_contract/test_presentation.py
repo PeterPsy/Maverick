@@ -45,11 +45,11 @@ class SidebarPresentationTests(unittest.TestCase):
             self.assertFalse(loaded.contract.presentation.sidebar_enabled)
             self.assertEqual(app_contract_payload(loaded)["presentation"], {"frontend_role": "workspace", "sidebar_enabled": False})
 
-    def test_only_design_studio_disables_sidebar_in_current_apps(self) -> None:
+    def test_apps_with_self_contained_navigation_disable_shell_sidebar(self) -> None:
         root = Path(__file__).resolve().parents[3]
         disabled = []
         for contract in (root / "apps").glob("*/app_contract.json"):
             parsed = parse_app_contract_file(contract.parent)
             if not parsed.contract.presentation.sidebar_enabled:
                 disabled.append(parsed.app_id)
-        self.assertEqual(disabled, ["design-studio"])
+        self.assertEqual(sorted(disabled), ["design-studio", "platform-connectors"])

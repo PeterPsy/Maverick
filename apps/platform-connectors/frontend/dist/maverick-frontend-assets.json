@@ -1,0 +1,35 @@
+{
+  "build_id": "4ccef69b3e1d772768a56aae5417ead76e9866fa5df333f8b971d7ecbfc0e92c",
+  "entrypoints": [
+    "index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/index-2_urWOHd.js",
+      "sha256": "fbb9b81228efc387f749595475452ac0f8ef0041c52b5eb3276a6b2bb440e8e9",
+      "size_bytes": 247974
+    },
+    {
+      "path": "assets/index-i6g6uX25.css",
+      "sha256": "3f52e38d2291bbd0d366c8facf35a03d687cc388a38dd9fa1b2aaa75492c26ab",
+      "size_bytes": 13316
+    },
+    {
+      "path": "index.html",
+      "sha256": "98bfc6e78c4272ce5b0b610722e05a221985d50dea13692289ef4e7a41bfe8c2",
+      "size_bytes": 445
+    },
+    {
+      "path": "maverick-icon-compact.png",
+      "sha256": "af76f12bf1f7a55b93d15ad3938357a30b7a9d3383479d4cbde1b3b2131401c3",
+      "size_bytes": 1090
+    },
+    {
+      "path": "maverick-icon.svg",
+      "sha256": "ef5ff393d06edaaaca43d852b0595907bd3c91e3d1114521e7546d9d01ce30cc",
+      "size_bytes": 17151
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

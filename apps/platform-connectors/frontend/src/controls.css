@@ -1,0 +1,119 @@
+
+:root {
+  font-family: var(--maverick-font);
+  color: var(--maverick-text);
+  background: var(--maverick-bg);
+  --surface: var(--maverick-glass-surface);
+  --border: var(--maverick-border);
+  --muted: var(--maverick-text-muted);
+  --accent: var(--maverick-accent);
+  --maverick-shell-mobile-content-top-offset: 0px;
+}
+html, body, #root { height: 100%; min-height: 0; }
+body { overflow: hidden; }
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+button,
+a,
+input,
+select,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-surface);
+  padding: 10px 15px;
+  min-height: 40px;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+button:hover,
+.button:hover {
+  background: var(--maverick-surface-hover);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+input,
+select {
+  border: 1px solid var(--border);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-bg-strong);
+  padding: 11px 13px;
+  min-height: 42px;
+  min-width: 0;
+  width: 100%;
+  font-size: 13px;
+}
+select {
+  max-width: 100%;
+}
+a {
+  color: var(--accent);
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+}
+h2 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+h3 {
+  font-size: 15px;
+  line-height: 1.5;
+}
+p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.composer,
+.run-summary,
+.collection-board,
+.history-list {
+  border: 1px solid var(--border);
+  border-radius: var(--maverick-card-radius);
+  background: var(--maverick-glass-highlight), var(--surface);
+  box-shadow: var(--maverick-glass-edge);
+  padding: 22px;
+  margin-bottom: 20px;
+}

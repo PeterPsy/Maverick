@@ -1,26 +1,26 @@
 # Browser
 
-Browser 0.3 provides read-only Instagram navigation through a user-shared Chrome
+Browser 0.4 provides read-only platform navigation through a user-shared Chrome
 session and governed public-web research through an isolated Playwright Lab.
+Platform workflows and saved collections belong to the Connectors app.
 All browser, collection and speech components are open source; no scraping,
 proxy, hosted-browser or remote transcription service is used.
 
-## Connect Instagram
+## Connect a platform tab
 
 Open Browser in the workspace shell. Download and extract Browser Companion,
 then load its folder with Chrome's “Load unpacked” developer-mode action. Copy
-the connector address displayed by Browser. Use Chrome 120 or later. Open an Instagram profile, post or
-Reel in Chrome, log in directly if needed, and use the extension popup to share
+the connector address displayed by Browser. Use Chrome 120 or later. Open a supported platform page in Chrome, log in directly if needed, and use the extension popup to share
 that tab. Paste the connector address there. In the dedicated Browser window
-opened by the extension, press “Collega” and keep the window open during work.
+opened by the extension, press “Connect” and keep the window open during work.
 
 Sharing is explicit and limited to one tab. Passwords, cookies, browser history,
 forms, social writes and caller JavaScript are outside the tool surface. The
-extension requests optional access to the selected Maverick origin and Instagram;
+extension requests optional access to the selected Maverick origin and the selected platform;
 only the selected tab and exact connector window can execute its fixed commands.
-Closing either tab, leaving approved Instagram routes, or revoking sharing stops
+Closing either tab, leaving approved platform routes, or revoking sharing stops
 capture. Reloading the connector requires a fresh user-owned connection.
-Frame captures may bring the shared Instagram window to the foreground.
+Frame captures may bring the shared platform window to the foreground.
 
 ## Agent operations
 
@@ -38,16 +38,16 @@ calls return an operation id; poll `browser_operation_get` until terminal. A
 queued command is not evidence that content has been read. Cancel pending work
 with `browser_operation_cancel`.
 
-`browser_instagram_collect` reads the profile and deduplicates rendered post/Reel
-links across bounded scrolling: up to 200 items and 40 batches. Results include
-observed times, source URLs and a stop reason. When Reels are requested, scan and
-item budgets are shared between the profile and Reels sections; unused profile
-capacity passes to Reels. The `sections` results identify observed and skipped
-sections and their stop reasons. `section_limit` means at least one section was
-only partially scanned, even if another reached its rendered end.
-Open each collected link to inspect
-its caption and media; unvisited posts are not analyzed. A rendered end or viewport
-boundary does not prove complete feed coverage.
+Use Connectors (`platform-connectors`) for Instagram profile, post and Reel
+collection, native platform search and durable saved observations. Browser owns
+the fixed transport: the dependency-only `content.collect` action observes up to
+two same-platform URLs, 200 links and 40 scroll batches. It reports observed and
+skipped sections, limits, login/challenge indicators and coverage. Connectors opens
+collected links separately before marking their content as read.
+
+Supported Chrome scopes are Instagram, X/Twitter, Reddit, Facebook, LinkedIn,
+and YouTube. Each connection
+is bound to its platform. Switching platforms requires explicit sharing again.
 
 `browser_video_analyze` samples 1–12 frames and optionally plays/records at most
 180 seconds of tab audio. Analysis starts from zero; a default single-frame capture
@@ -75,9 +75,10 @@ sessions are not durable workspace references.
 ### Boundaries and persistence
 
 The sealed installation-level app is full-access only. Sandbox agents remain
-excluded. Instagram navigation accepts only HTTPS `www.instagram.com` profile,
-post, Reel and profile-Reels routes. Login, messages, settings, challenge routes,
-credentials, arbitrary selectors and script execution are rejected. The user
+excluded. Shared-tab navigation accepts only reviewed HTTPS hosts, platform routes and
+source query keys declared in `companion/platforms.json`. Python and Chrome use
+matching policies. Login, messages, settings, challenge routes, credentials,
+arbitrary selectors and script execution are rejected. The user
 handles authentication/checkpoints directly in Chrome.
 
 Workspace state lives in `data/browser/state.json` and `data/browser/companion.sqlite3`.
@@ -125,7 +126,7 @@ Browser is a built-in app under the Maverick repository root. Validate its
 source contract through the official SDK before rebuilding:
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-id browser --app-root apps/browser --workspace default --json
+maverick core cli run core.app-sdk.validate --app-id browser --app-root /home/ubuntu/projects/maverick-v3/apps/browser --workspace default --json
 ```
 
 Core invokes the declared install, migrate and recovery hooks to manage the

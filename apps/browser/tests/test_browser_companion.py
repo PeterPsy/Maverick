@@ -10,7 +10,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from companion_store import database
-from companion_validation import instagram_url
+from platform_scope import platform_url
 from errors import BrowserValidationError
 from service import handle_action, mcp_result_for_tool
 
@@ -155,8 +155,8 @@ class BrowserCompanionTests(unittest.TestCase):
     def test_navigation_only_accepts_explicit_instagram_read_routes(self):
         for url in ["http://www.instagram.com/marta/", "https://instagram.com/marta/", "https://www.instagram.com@127.0.0.1/marta/", "https://www.instagram.com/direct/", "https://www.instagram.com/accounts/login/", "https://www.instagram.com/marta/%2e%2e/", "file:///tmp/private", "https://www.instagram.com:9323/marta/"]:
             with self.subTest(url=url), self.assertRaises(BrowserValidationError):
-                instagram_url(url)
-        self.assertEqual(instagram_url("https://www.instagram.com/p/AbC_12/?token=private"), "https://www.instagram.com/p/AbC_12/")
+                platform_url(url)
+        self.assertEqual(platform_url("https://www.instagram.com/p/AbC_12/?token=private"), "https://www.instagram.com/p/AbC_12/")
 
     def test_expired_connection_cannot_refresh_or_complete_live_operation(self):
         credentials = self.sharing()

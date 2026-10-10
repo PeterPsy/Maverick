@@ -7,7 +7,7 @@ export function createConnector(report) {
     stopped=true;clearTimeout(timer);
     await bridge("stop").catch(()=>{});
     if(lease)await request({action:"companion.disconnect",session_id:lease.connection.session_id}).catch(()=>{});
-    lease=null;command=null;report("Condivisione interrotta.");
+    lease=null;command=null;report("Sharing stopped.");
   };
   const fields=()=>({session_id:lease.connection.session_id,connector_secret:lease.connector_secret});
   const deliver=async(next,result)=>{
@@ -21,7 +21,7 @@ export function createConnector(report) {
     }
   };
   const execute=async next=>{
-    command=next;report(`In corso: ${next.action}`);
+    command=next;report(`Running: ${next.action}`);
     try {
       const result=await bridge("execute",next,Math.max(1000,(next.expires_at*1000-Date.now())));
       if(!stopped && lease)await deliver(next,result);
@@ -44,12 +44,12 @@ export function createConnector(report) {
       const result=await request({action:"companion.poll",...fields(),url:shared.url,title:shared.title,active_operation_id:activeOperationId});
       failures=0;
       if(result.command && !activeOperationId)void execute(result.command);
-      if(!activeOperationId)report(`Collegato · ${shared.title || shared.url}`);
+      if(!activeOperationId)report(`Connected · ${shared.title || shared.url}`);
       // Maintain the app-frame auth lease independently of shell visibility.
       await fetch("/.well-known/maverick-app-frame-session",{method:"POST",credentials:"same-origin",cache:"no-store"}).catch(()=>{});
     } catch(error) {
       report(error.message);failures++;
-      if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|sharing_revoked|instagram_route_unavailable|extension_unavailable)/u.test(error.message) || failures>=10)await revoke();
+      if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|sharing_revoked|platform_route_unavailable|extension_unavailable)/u.test(error.message) || failures>=10)await revoke();
     }
     finally {ticking=false;if(!stopped)timer=setTimeout(tick,3000);}
   };
@@ -59,8 +59,8 @@ export function createConnector(report) {
   return {
     async start() {
       const shared=await bridge("status");
-      lease=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Instagram Chrome"});
-      stopped=false;report("Collegamento in corso…");void tick();
+      lease=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Shared Chrome tab"});
+      stopped=false;report("Connecting…");void tick();
       return lease.connection;
     },stop:revoke,
   };

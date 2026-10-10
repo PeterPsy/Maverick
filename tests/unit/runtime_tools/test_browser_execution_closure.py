@@ -19,6 +19,8 @@ class BrowserExecutionClosureTests(unittest.TestCase):
         self.assertIn("broker/snapshot-reference.mjs", roots)
         self.assertIn("package-lock.json", roots)
         self.assertIn("companion/worker.mjs", roots)
+        self.assertIn("companion/platforms.json", roots)
+        self.assertIn("companion/platforms.mjs", roots)
         self.assertIn("frontend/dist", roots)
         with TemporaryDirectory() as folder:
             apps = Path(folder)
@@ -41,6 +43,10 @@ class BrowserExecutionClosureTests(unittest.TestCase):
             reference_source = browser / "broker" / "snapshot-reference.mjs"
             reference_source.write_text(reference_source.read_text() + "\n// changed reference resolution\n")
             reference_changed = hosted_builtin_app_execution_digest("browser", surface="mcp", apps_root=apps)
+            policy_source = browser / "companion" / "platforms.json"
+            policy_source.write_text(policy_source.read_text() + "\n")
+            policy_changed = hosted_builtin_app_execution_digest("browser", surface="mcp", apps_root=apps)
         self.assertNotEqual(before, after)
         self.assertNotEqual(after, companion_changed)
         self.assertNotEqual(companion_changed, reference_changed)
+        self.assertNotEqual(reference_changed, policy_changed)

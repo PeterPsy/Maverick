@@ -1,57 +1,53 @@
-import {instagramUrl} from "./scope.mjs";
+import {platformUrl,platformForUrl} from "./scope.mjs";
+
+const itemPaths={instagram:/^\/(p|reel)\//u,twitter:/\/(status|article)\//u,reddit:/\/comments\//u,
+  facebook:/\/(posts|videos|reel)\//u,linkedin:/^\/(posts|feed\/update|jobs\/view)\//u,
+  youtube:/^\/(watch|shorts\/)/u};
+
+export async function collectContent(adapter,p) {
+  const urls=p.urls.map(url=>platformUrl(url)),source=platformForUrl(urls[0]);
+  const maxItems=p.max_items ?? 60,maxBatches=p.max_batches ?? 12;
+  const items=new Map(),observations=[],sections=[];let used=0,blocked=null;
+  for(const [index,url] of urls.entries()) {
+    const summary={source_url:url,batches:0,status:"skipped",stop_reason:"budget_exhausted"};sections.push(summary);
+    if(used>=maxBatches || items.size>=maxItems)continue;
+    const batchBudget=Math.ceil((maxBatches-used)/(urls.length-index));
+    const itemBudget=items.size+Math.ceil((maxItems-items.size)/(urls.length-index));
+    await adapter.navigate(url);let stagnant=0;
+    while(summary.batches<batchBudget) {
+      adapter.check();const observation=await adapter.read({max_chars:40000,max_items:200});
+      used++;summary.batches++;summary.status="observed";
+      if(summary.batches === 1)observations.push(observation);
+      const gate=contentGate(observation);
+      if(gate){blocked=gate;summary.stop_reason=gate;break;}
+      const before=items.size;
+      for(const link of observation.links || []) {
+        let canonical;try{canonical=platformUrl(link.url,source);}catch{continue;}
+        if(!itemPaths[source]?.test(new URL(canonical).pathname) || items.has(canonical))continue;
+        items.set(canonical,{url:canonical,text:String(link.text || "").slice(0,2000),observed_at:observation.observed_at,found_on:url,
+          kind:canonical.includes("/reel/") || canonical.includes("/shorts/") ? "video" : "item",content_observed:false});
+        if(items.size>=itemBudget)break;
+      }
+      if(items.size>=itemBudget){summary.stop_reason=items.size>=maxItems ? "item_limit" : "section_item_limit";break;}
+      if(summary.batches>=batchBudget){summary.stop_reason=used>=maxBatches ? "batch_limit" : "section_batch_limit";break;}
+      const scroll=await adapter.scroll({direction:"down",pixels:1000,steps:1,settle_ms:1200,target:"auto"});
+      stagnant=items.size === before && scroll.at_bottom && !scroll.moved ? stagnant+1 : 0;
+      if(stagnant>=3){summary.stop_reason="rendered_end";break;}
+    }
+    if(blocked)break;
+  }
+  return {source,source_url:urls[0],observations,items:[...items.values()],sections,batches:used,
+    stop_reason:blocked || (items.size>=maxItems ? "item_limit" : used>=maxBatches ? "batch_limit" : "rendered_boundary"),
+    observed_at:new Date().toISOString(),coverage:"Links observed during bounded scrolling. Item content is not observed until each item is opened; rendered boundaries do not establish complete feed coverage."};
+}
 
 export function contentGate(observation) {
   const text=(observation.text || "").toLowerCase();
   if (/challenge|checkpoint/u.test(new URL(observation.url).pathname)) return "challenge";
-  if (/accounts\/login/u.test(new URL(observation.url).pathname) || /log in to continue|accedi per continuare/u.test(text)) return "login_required";
+  if (/accounts\/login/u.test(new URL(observation.url).pathname) || /log in to continue|accedi per continuare|sign in to continue|请先登录/u.test(text)) return "login_required";
   if (/please wait a few minutes|riprova più tardi|try again later/u.test(text)) return "rate_limited";
   if (/page isn't available|pagina non è disponibile|sorry, this page/u.test(text)) return "page_unavailable";
   return null;
-}
-
-export async function collectInstagram(adapter,p) {
-  const maxItems=p.max_items ?? 60,maxBatches=p.max_batches ?? 12;
-  const base=instagramUrl(`https://www.instagram.com/${p.username}/`);
-  const items=new Map(),batches=[],sections=p.include_reels === false ? [base] : [base,`${base}reels/`];
-  const sectionResults=sections.map(source_url=>({source_url,status:"skipped",batches:0,stop_reason:null}));
-  let profile=null,blocked=null,used=0;
-  outer: for(const [sectionIndex,section] of sections.entries()) {
-    if(used>=maxBatches || items.size>=maxItems)break;
-    const summary=sectionResults[sectionIndex],remainingSections=sections.length-sectionIndex;
-    // Reserve scans and item capacity for each requested section. Unused capacity
-    // from a short profile is available to the following Reels section.
-    const batchBudget=Math.ceil((maxBatches-used)/remainingSections);
-    const itemLimit=items.size+Math.ceil((maxItems-items.size)/remainingSections);
-    await adapter.navigate(section);
-    let stagnant=0;
-    while(summary.batches < batchBudget) {
-      adapter.check();
-      const observation=await adapter.read({max_chars:40000,max_items:200});
-      summary.status="observed";
-      used++;summary.batches++;
-      if(!profile) profile=observation;
-      const gate=contentGate(observation);
-      if(gate){blocked=gate;summary.stop_reason=gate;break outer;}
-      const before=items.size;
-      for(const link of observation.links) {
-        let url;try{url=instagramUrl(link.url);}catch{continue;}
-        if(!/^https:\/\/www\.instagram\.com\/(p|reel)\//u.test(url) || items.has(url))continue;
-        items.set(url,{url,kind:url.includes("/reel/") ? "reel" : "post",text:link.text,observed_at:observation.observed_at,found_on:section});
-        if(items.size>=itemLimit)break;
-      }
-      batches.push({source_url:section,observed_at:observation.observed_at,new_items:items.size-before});
-      if(items.size>=itemLimit){summary.stop_reason=items.size>=maxItems ? "item_limit" : "section_item_limit";break;}
-      if(summary.batches>=batchBudget){summary.stop_reason=used>=maxBatches ? "batch_limit" : "section_batch_limit";break;}
-      const scrolling=await adapter.scroll({direction:"down",pixels:1000,steps:1,settle_ms:1200,target:"auto"});
-      stagnant=items.size===before && scrolling.at_bottom && !scrolling.moved ? stagnant+1 : 0;
-      if(stagnant>=3){summary.stop_reason="rendered_end";break;}
-    }
-  }
-  const stopReason=blocked || (items.size>=maxItems ? "item_limit" : used>=maxBatches ? "batch_limit" :
-    sectionResults.every(section=>section.stop_reason === "rendered_end") ? "rendered_end" : "section_limit");
-  for(const section of sectionResults)if(section.status === "skipped")section.stop_reason=stopReason;
-  return {username:p.username,source_url:base,profile,items:[...items.values()],batches,sections:sectionResults,stop_reason:stopReason,
-    observed_at:new Date().toISOString(),coverage:"Only rendered links observed during bounded scrolling. Each post/Reel must be opened to inspect its full content. Private, unavailable and unvisited content is excluded."};
 }
 
 export async function analyzeVideo(adapter,p) {

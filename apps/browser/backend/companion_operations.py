@@ -10,6 +10,7 @@ from uuid import uuid4
 from companion_connections import CompanionError, heartbeat, require_connector, require_owner
 from companion_store import database, encoded, public_operation, sweep
 from companion_validation import command_payload
+from platform_scope import platform_for_url, platform_url
 
 
 MAX_RESULT_BYTES = 8 * 1024 * 1024
@@ -25,7 +26,13 @@ def enqueue(data_root: Path, workspace_id: str, user_id: str, body: dict) -> dic
         sweep(db, now)
         connection = require_owner(db, session_id, workspace_id, user_id)
         if connection["status"] != "connected" or connection["expires_at"] <= now:
-            raise CompanionError("connector_offline", "Keep the Browser connector window open and share an Instagram tab.", 409)
+            raise CompanionError("connector_offline", "Keep the Browser connector window open and share a supported platform tab.", 409)
+        source = platform_for_url(connection["tab_url"])
+        if action == "navigate":
+            platform_url(parameters["url"], expected_platform=source)
+        if action == "content.collect":
+            for url in parameters["urls"]:
+                platform_url(url, expected_platform=source)
         pending = db.execute(
             "SELECT count(*) FROM operations WHERE session_id=? AND status IN ('queued','running','processing_media')", (session_id,)
         ).fetchone()[0]

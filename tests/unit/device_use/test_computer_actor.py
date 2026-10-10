@@ -92,10 +92,17 @@ class ComputerActorTests(unittest.TestCase):
             return {"status": "completed", "summary": "Stale", "evidence": "", "steps": 0}, b"stale"
         self.client.run.side_effect = run
         result = self.actor.run(binding=self.binding, turn_id="parent-turn", provider_thread_id="thread",
-            provider_turn_id="turn", call_id="call", task_text="Latest task", current_task=lambda: current[0],
+            provider_turn_id="turn", call_id="call", task_text="Latest task", authority_active=lambda: current[0] == "Latest task",
             arguments={"objective": "Select target", "completion_criterion": "Selected"})
         self.assertFalse(result.result["success"])
         self.assertIsNone(result.image_jpeg)
+        self.service.invoke.assert_not_called()
+
+    def test_correction_before_operator_admission_cannot_be_cleared_by_new_task(self):
+        self.actor.cancel()
+        with self.assertRaisesRegex(DeviceUseAuthorizationError, "computer_actor_parent_not_active"):
+            self.run_actor(authority_active=lambda: False)
+        self.factory.assert_not_called()
         self.service.invoke.assert_not_called()
 
     def test_operator_unavailable_does_not_dispatch_or_revoke_native_lease(self):
@@ -120,6 +127,24 @@ class ComputerActorTests(unittest.TestCase):
         self.client.cancel.assert_not_called()
         self.actor.cancel(close=True)
         self.client.cancel.assert_called_once()
+
+    def test_new_subtask_does_not_clear_the_cancelled_previous_subtasks_guard(self):
+        guards = []
+
+        def run(task, *, invoke, active, usage_sink):
+            guards.append(active)
+            if len(guards) == 1:
+                self.actor.cancel()
+                self.assertFalse(active())
+            else:
+                self.assertTrue(active())
+                self.assertFalse(guards[0]())
+            return {"status": "needs_decision", "summary": "Stopped", "evidence": "", "steps": 0}, None
+
+        self.client.run.side_effect = run
+        self.run_actor()
+        self.run_actor()
+        self.assertFalse(guards[0]())
 
     def test_native_catalog_is_not_mutated_by_planner_projection(self):
         tools = {tool["name"]: tool for tool in planner_device_use_tools()}

@@ -12,18 +12,19 @@ from core.device_use.computer_actor_contract import COMPUTER_INTERACT_TOOL, plan
 from core.device_use.computer_actor_registry import invoke_computer_actor
 from core.device_use.runtime_registry import device_use_service_for_session
 from core.device_use.result_facts import native_result_facts
+from core.providers.codex_app_server_device_use_authority import DeviceUseRequestAuthority
 from core.providers.codex_app_server_runtime_transport import _send_request
 from core.runtime.execution_events import RuntimeExecutionEvent
 
 
-def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
+def process_device_use_request(runtime, payload: dict[str, Any], *, authority: DeviceUseRequestAuthority) -> None:
     """Execute one server request off the stdout reader and answer exactly once."""
     request_id = payload.get("id")
     params = payload.get("params")
     if payload.get("method") != "item/tool/call" or not isinstance(params, dict):
         _send_error(runtime, request_id, "Native policy denies this request.")
         return
-    binding = runtime.device_use_binding
+    binding = authority.binding
     service = device_use_service_for_session(runtime.session_id)
     if binding is None or service is None:
         _send_tool_failure(runtime, request_id, "Device Use executor is unavailable.")
@@ -32,13 +33,13 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
     if not isinstance(arguments, dict):
         _send_tool_failure(runtime, request_id, "Device Use arguments are invalid.")
         return
-    with runtime.active_turn_lock:
-        provider_thread_id = str(runtime.provider_thread_id or "").strip()
-        provider_turn_id = str(runtime.current_provider_turn_id or "").strip()
-        runtime_turn_id = str(runtime.current_runtime_turn_id or "").strip()
-        task_text = runtime.current_task_text
+    provider_thread_id = str(authority.provider_thread_id or "").strip()
+    provider_turn_id = str(authority.provider_turn_id or "").strip()
+    runtime_turn_id = str(authority.runtime_turn_id or "").strip()
+    task_text = authority.task_text
     if (
-        not provider_thread_id
+        not authority.active(runtime)
+        or not provider_thread_id
         or not provider_turn_id
         or not runtime_turn_id
         or str(params.get("threadId") or "").strip() != provider_thread_id
@@ -62,7 +63,7 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
                   "failure_reason_code": "computer_actor_delegation_required"})
             return
         invoke = invoke_computer_actor if tool_name == COMPUTER_INTERACT_TOOL else service.invoke
-        authority = dict(
+        invocation_authority = dict(
             binding=binding,
             turn_id=runtime_turn_id,
             provider_thread_id=provider_thread_id,
@@ -72,10 +73,10 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
             task_text=task_text,
         )
         if tool_name == COMPUTER_INTERACT_TOOL:
-            result = invoke(runtime.session_id, **authority,
-                            current_task=lambda: runtime.current_task_text)
+            result = invoke(runtime.session_id, **invocation_authority,
+                            authority_active=lambda: authority.active(runtime))
         else:
-            result = invoke(runtime_session_id=runtime.session_id, tool_name=tool_name, **authority)
+            result = invoke(runtime_session_id=runtime.session_id, tool_name=tool_name, **invocation_authority)
         tool_result = result.result
         observation_delivery_ms = 0.0
         result_text_char_count = len(_tool_text(tool_result))

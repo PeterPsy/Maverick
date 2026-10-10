@@ -1,6 +1,9 @@
 """Usage diagnostics preserve transcript authority and numeric cache accounting."""
 
 from dataclasses import replace
+from pathlib import Path
+import sqlite3
+import tempfile
 from types import SimpleNamespace
 import unittest
 
@@ -15,6 +18,7 @@ from core.runtime.usage_read import read_runtime_usage
 from core.shared.in_memory_collection import InMemoryCollection
 from core.usage.service import ingest_runtime_usage
 from core.usage.store import UsageCollections, UsageDocumentStore
+from core.usage.sqlite_store import UsageSqliteStore
 from tests.unit.runtime_threads import test_runtime_transcript_surfaces as fixtures
 
 
@@ -90,3 +94,32 @@ class RuntimeUsageSurfaceTests(unittest.TestCase):
                 read_runtime_usage(self.runtime, usage_store=self.usage, context=context, thread_id="session-1")
         with self.assertRaisesRegex(RuntimeTranscriptAccessError, "runtime_usage_unavailable"):
             read_runtime_usage(self.runtime, usage_store=None, context=self.context, thread_id="session-1")
+
+    def test_turn_includes_only_its_internal_operator_usage(self):
+        state = SimpleNamespace(runtime_store=self.runtime, usage_store=self.usage, provider_registry=None)
+        worker = {"usage_worker": "computer_actor", "provider_id": "codex", "model_id": "gpt-6-luna",
+                  "source": "codex_computer_actor:operator", "semantics": "incremental",
+                  "input_tokens": 180, "output_tokens": 20, "total_tokens": 200, "token_accuracy": "exact"}
+        ingest_runtime_usage(state, session_id="session-1", turn_id="turn-1", observed_at=fixtures.NOW,
+                             payload={**worker, "usage_id": "operator-one"})
+        ingest_runtime_usage(state, session_id="session-1", turn_id="another-turn", observed_at=fixtures.NOW,
+                             payload={**worker, "usage_id": "operator-other"})
+        usage = self.read(turn_id="turn-1")["usage"]
+        self.assertEqual(usage["counts"]["processed"], 320)
+        self.assertEqual(usage["direct"]["processed"], 120)
+        self.assertEqual(usage["delegated"]["processed"], 200)
+        self.assertEqual(usage["sample_count"], 2)
+        self.assertEqual(usage["active_context"]["used"], 100)
+        self.assertIn("gpt-6-luna", usage["model_ids"])
+
+
+@unittest.skipIf(sqlite3.sqlite_version_info < (3, 51, 3), "Requires the verified WAL-safe runtime")
+class RuntimeUsageSqliteSurfaceTests(RuntimeUsageSurfaceTests):
+    def setUp(self):
+        super().setUp()
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        store = UsageSqliteStore(Path(scratch.name) / "usage.sqlite")
+        store.initialize()
+        store.save_sample_if_absent(self.sample)
+        self.usage = store

@@ -31,7 +31,16 @@ def emit_usage():
 
 def next_call():
     global step
-    if step >= 3:
+    actions = ["observe_app", "click", "observe_app"]
+    if mode in {"refresh", "refresh-no-list"}:
+        actions = ["observe_app", "list_windows", "observe", "click", "observe_app"]
+        if mode == "refresh-no-list":
+            actions.pop(1)
+    elif mode in {"uncertain-replay", "uncertain-other-app", "uncertain-other-engine", "uncertain-no-image"}:
+        actions = ["observe_app", "click", "observe_app", "click", "observe_app"]
+        if mode in {"uncertain-other-app", "uncertain-other-engine"}:
+            actions = ["observe_app", "click", "observe_app"]
+    if step >= len(actions):
         output = {"status": "completed", "summary": "Subtask complete", "evidence": "Latest screen shows the target."}
         if mode == "invalid":
             output["status"] = "invented"
@@ -40,11 +49,16 @@ def next_call():
         usage = emit_usage()
         notify("turn/completed", {"turn": {"id": turn_id, "status": "completed", "tokenUsage": usage}})
         return
-    action = "click" if step == 1 else "observe_app"
+    action = actions[step]
     tool = "mac_code" if mode == "forbidden" else "mac_peekaboo"
+    bundle = "com.apple.Safari"
+    if mode == "uncertain-other-app" and step == 2:
+        bundle = "com.apple.Notes"
+    if mode == "uncertain-other-engine" and step == 2:
+        tool, action = "mac_computer", "observe"
     send({"id": "native-" + str(step), "method": "item/tool/call", "params": {
         "threadId": thread_id, "turnId": turn_id, "callId": "call-" + str(step),
-        "tool": tool, "arguments": {"action": action, "bundle_id": "com.apple.Safari"}}})
+        "tool": tool, "arguments": {"action": action, "bundle_id": bundle, "snapshot": "snapshot-" + str(step)}}})
     step += 1
 
 

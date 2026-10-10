@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from core.device_use.computer_actor_contract import planner_device_use_tools
 from core.device_use.runtime_registry import stop_registered_device_use_session
+from core.providers.codex_app_server_device_use_authority import capture_device_use_authority
 from core.providers.codex_app_server_device_use import (
     process_device_use_request,
     reject_device_use_request,
@@ -47,7 +48,7 @@ def dispatch_server_request(
         fallback(runtime, payload)
         return
     try:
-        runtime.server_request_queue.put_nowait(payload)
+        runtime.server_request_queue.put_nowait((payload, capture_device_use_authority(runtime)))
     except queue.Full:
         reject_device_use_request(
             runtime,
@@ -89,7 +90,8 @@ def stop_device_use_runtime(runtime, *, reason: str) -> None:
 
 def _server_request_loop(runtime) -> None:
     while True:
-        payload = runtime.server_request_queue.get()
-        if payload is None:
+        request = runtime.server_request_queue.get()
+        if request is None:
             return
-        process_device_use_request(runtime, payload)
+        payload, authority = request
+        process_device_use_request(runtime, payload, authority=authority)

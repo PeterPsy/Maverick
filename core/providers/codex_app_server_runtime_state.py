@@ -52,6 +52,8 @@ class _CodexAppServerRuntime:
     research: bool = False
     current_runtime_turn_id: str | None = None
     current_task_text: str = ""
+    device_use_objective_revision: int = 0
+    device_use_correction_pending: bool = False
     generated_system_skills_cleaned_home: str | None = None
     current_invoked_skills: tuple[SkillDefinition, ...] = ()
     rehydrated_compaction_items: set[str] = field(default_factory=set)

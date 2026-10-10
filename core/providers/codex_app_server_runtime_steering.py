@@ -11,6 +11,7 @@ from core.providers.codex_app_server_runtime_errors import (
 )
 from core.providers.codex_app_server_runtime_state import _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
+from core.providers.codex_app_server_device_use_authority import device_use_correction
 from core.providers.models import RuntimeSteerResult
 from core.providers.codex_skill_inputs import codex_provider_input_text, codex_skill_input_items
 from core.skills.models import SkillDefinition
@@ -48,99 +49,101 @@ def steer_codex_app_server_turn(
                 reason="provider_turn_changed",
             )
 
-        backpressure_retries = 0
-        if getattr(runtime, "device_use_binding", None) is not None:
-            from core.device_use.computer_actor_registry import cancel_computer_actor
-            from core.device_use.runtime_registry import device_use_service_for_session
-            from core.device_use.errors import DeviceUseError
-            cancel_computer_actor(session_id)
-            service = device_use_service_for_session(session_id)
-            if service is not None and runtime.current_runtime_turn_id:
-                try:
-                    service.end_turn(runtime.device_use_binding,
-                        runtime_session_id=session_id, turn_id=runtime.current_runtime_turn_id)
-                except DeviceUseError:
-                    pass
-        while True:
-            params: dict[str, object] = {
-                "threadId": provider_thread_id,
-                "expectedTurnId": expected_turn_id,
-                "input": [
-                    {
-                        "type": "text",
-                        "text": codex_provider_input_text(
-                            input_text,
-                            skill_activation_mode=skill_activation_mode,
+        with device_use_correction(runtime) as acknowledge_correction:
+            backpressure_retries = 0
+            if getattr(runtime, "device_use_binding", None) is not None:
+                from core.device_use.computer_actor_registry import cancel_computer_actor
+                from core.device_use.runtime_registry import device_use_service_for_session
+                from core.device_use.errors import DeviceUseError
+                cancel_computer_actor(session_id)
+                service = device_use_service_for_session(session_id)
+                if service is not None and runtime.current_runtime_turn_id:
+                    try:
+                        service.end_turn(runtime.device_use_binding,
+                            runtime_session_id=session_id, turn_id=runtime.current_runtime_turn_id)
+                    except DeviceUseError:
+                        pass
+            while True:
+                params: dict[str, object] = {
+                    "threadId": provider_thread_id,
+                    "expectedTurnId": expected_turn_id,
+                    "input": [
+                        {
+                            "type": "text",
+                            "text": codex_provider_input_text(
+                                input_text,
+                                skill_activation_mode=skill_activation_mode,
+                            ),
+                        },
+                        *codex_skill_input_items(
+                            runtime.runtime_root,
+                            invoked_skills,
+                            runtime_home=runtime.runtime_home,
                         ),
-                    },
-                    *codex_skill_input_items(
-                        runtime.runtime_root,
-                        invoked_skills,
-                        runtime_home=runtime.runtime_home,
-                    ),
-                ],
-            }
-            normalized_client_message_id = str(client_message_id or "").strip()
-            device_use = getattr(runtime, "device_use_binding", None) is not None
-            if normalized_client_message_id:
-                params["clientUserMessageId"] = normalized_client_message_id
-            try:
-                result = _send_request(runtime, "turn/steer", params, timeout=5.0)
-            except CodexAppServerDeliveryUncertainError as error:
-                return RuntimeSteerResult(
-                    status="delivery_uncertain",
-                    provider_turn_id=expected_turn_id,
-                    reason=str(error),
-                )
-            except CodexAppServerRequestError as error:
-                actual_turn_id = _actual_provider_turn_id(error.data)
-                if actual_turn_id and actual_turn_id != expected_turn_id:
+                    ],
+                }
+                normalized_client_message_id = str(client_message_id or "").strip()
+                device_use = getattr(runtime, "device_use_binding", None) is not None
+                if normalized_client_message_id:
+                    params["clientUserMessageId"] = normalized_client_message_id
+                try:
+                    result = _send_request(runtime, "turn/steer", params, timeout=5.0)
+                except CodexAppServerDeliveryUncertainError as error:
                     return RuntimeSteerResult(
-                        status="not_active",
-                        provider_turn_id=actual_turn_id,
-                        reason="provider_turn_changed",
-                    )
-                normalized_message = error.message.lower()
-                if error.code == -32001:
-                    if backpressure_retries < len(_STEER_BACKPRESSURE_RETRY_DELAYS):
-                        delay = _STEER_BACKPRESSURE_RETRY_DELAYS[backpressure_retries] * random.uniform(
-                            0.8,
-                            1.2,
-                        )
-                        backpressure_retries += 1
-                        time.sleep(delay)
-                        continue
-                    return RuntimeSteerResult(
-                        status="overloaded",
+                        status="delivery_uncertain",
                         provider_turn_id=expected_turn_id,
-                        reason="provider_backpressure",
+                        reason=str(error),
                     )
-                if "no active turn" in normalized_message or (
-                    "active turn" in normalized_message and "not" in normalized_message
-                ):
-                    return RuntimeSteerResult(status="not_active", provider_turn_id=actual_turn_id, reason=error.message)
-                if "expected active turn id" in normalized_message:
-                    return RuntimeSteerResult(status="not_active", reason="provider_turn_changed")
-                if _active_turn_not_steerable(error.data) or any(
-                    token in normalized_message for token in ("not steerable", "review", "compact")
-                ):
-                    return RuntimeSteerResult(status="not_supported", provider_turn_id=actual_turn_id, reason=error.message)
-                if "direct app-server input is not allowed" in normalized_message:
-                    return RuntimeSteerResult(status="not_supported", reason=error.message)
-                return RuntimeSteerResult(status="failed", provider_turn_id=actual_turn_id, reason=error.message)
+                except CodexAppServerRequestError as error:
+                    actual_turn_id = _actual_provider_turn_id(error.data)
+                    if actual_turn_id and actual_turn_id != expected_turn_id:
+                        return RuntimeSteerResult(
+                            status="not_active",
+                            provider_turn_id=actual_turn_id,
+                            reason="provider_turn_changed",
+                        )
+                    normalized_message = error.message.lower()
+                    if error.code == -32001:
+                        if backpressure_retries < len(_STEER_BACKPRESSURE_RETRY_DELAYS):
+                            delay = _STEER_BACKPRESSURE_RETRY_DELAYS[backpressure_retries] * random.uniform(
+                                0.8,
+                                1.2,
+                            )
+                            backpressure_retries += 1
+                            time.sleep(delay)
+                            continue
+                        return RuntimeSteerResult(
+                            status="overloaded",
+                            provider_turn_id=expected_turn_id,
+                            reason="provider_backpressure",
+                        )
+                    if "no active turn" in normalized_message or (
+                        "active turn" in normalized_message and "not" in normalized_message
+                    ):
+                        return RuntimeSteerResult(status="not_active", provider_turn_id=actual_turn_id, reason=error.message)
+                    if "expected active turn id" in normalized_message:
+                        return RuntimeSteerResult(status="not_active", reason="provider_turn_changed")
+                    if _active_turn_not_steerable(error.data) or any(
+                        token in normalized_message for token in ("not steerable", "review", "compact")
+                    ):
+                        return RuntimeSteerResult(status="not_supported", provider_turn_id=actual_turn_id, reason=error.message)
+                    if "direct app-server input is not allowed" in normalized_message:
+                        return RuntimeSteerResult(status="not_supported", reason=error.message)
+                    return RuntimeSteerResult(status="failed", provider_turn_id=actual_turn_id, reason=error.message)
 
-            response_turn_id = str(result.get("turnId") or result.get("turn_id") or expected_turn_id).strip()
-            if device_use and response_turn_id == expected_turn_id:
-                with runtime.active_turn_lock:
-                    if runtime.current_provider_turn_id == expected_turn_id:
-                        runtime.current_task_text = runtime.current_task_text[:1500] + "\n[Latest user correction]\n" + input_text[-2400:]
-            if invoked_skills:
-                with runtime.skill_rehydration_lock:
-                    skills_by_id = {skill.skill_id: skill for skill in runtime.current_invoked_skills}
-                    for skill in invoked_skills:
-                        skills_by_id[skill.skill_id] = skill
-                    runtime.current_invoked_skills = tuple(skills_by_id.values())
-            return RuntimeSteerResult(status="steered", provider_turn_id=response_turn_id or expected_turn_id)
+                response_turn_id = str(result.get("turnId") or result.get("turn_id") or expected_turn_id).strip()
+                if device_use and response_turn_id == expected_turn_id:
+                    with runtime.active_turn_lock:
+                        if runtime.current_provider_turn_id == expected_turn_id:
+                            runtime.current_task_text = runtime.current_task_text[:1500] + "\n[Latest user correction]\n" + input_text[-2400:]
+                            acknowledge_correction()
+                if invoked_skills:
+                    with runtime.skill_rehydration_lock:
+                        skills_by_id = {skill.skill_id: skill for skill in runtime.current_invoked_skills}
+                        for skill in invoked_skills:
+                            skills_by_id[skill.skill_id] = skill
+                        runtime.current_invoked_skills = tuple(skills_by_id.values())
+                return RuntimeSteerResult(status="steered", provider_turn_id=response_turn_id or expected_turn_id)
 
 
 def _actual_provider_turn_id(data: object) -> str | None:

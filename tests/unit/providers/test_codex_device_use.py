@@ -24,6 +24,7 @@ from core.device_use.runtime_registry import (
 )
 from core.device_use.service import DeviceUseService
 from core.providers.codex_app_server_device_use import process_device_use_request
+from core.providers.codex_app_server_device_use_authority import capture_device_use_authority
 from core.providers.codex_app_server_device_use_turn import codex_turn_input, codex_turn_start_params
 from core.providers.codex_app_server_device_use_requests import dispatch_server_request, stop_device_use_runtime
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime
@@ -135,14 +136,17 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         project.assert_called_once_with(runtime.runtime_root, skills, runtime_home=runtime.runtime_home)
 
     def test_workspace_server_requests_keep_the_normal_handler(self):
-        runtime = SimpleNamespace(device_use_binding=self.binding, server_request_queue=queue.Queue())
+        runtime = _CodexAppServerRuntime(session_id="runtime", workspace_id="default",
+            runtime_root="/tmp/runtime", process=SimpleNamespace(), device_use_binding=self.binding)
         normal = {"id": 1, "method": "item/commandExecution/requestApproval", "params": {}}
         native = {"id": 2, "method": "item/tool/call", "params": {"tool": "mac_computer"}}
         with patch(__name__ + ".process_device_use_request") as fallback:
             dispatch_server_request(runtime, normal, fallback)
             dispatch_server_request(runtime, native, fallback)
             fallback.assert_called_once_with(runtime, normal)
-        self.assertEqual(runtime.server_request_queue.get_nowait(), native)
+        queued, authority = runtime.server_request_queue.get_nowait()
+        self.assertEqual(queued, native)
+        self.assertEqual(authority.binding, self.binding)
 
     def test_mac_runtime_preserves_normal_config_and_rules(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -233,7 +237,8 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             "tool": "mac_computer", "arguments": {"action": "observe"},
         }}
         with patch("core.providers.codex_app_server_device_use._send_request", return_value={"turnId": "provider-turn"}) as steer:
-            worker = threading.Thread(target=process_device_use_request, args=(runtime, payload))
+            worker = threading.Thread(target=process_device_use_request, args=(runtime, payload),
+                                      kwargs={"authority": capture_device_use_authority(runtime)})
             worker.start()
             frame = self.outbound.get(timeout=1)
             jpeg = b"\xff\xd8image\xff\xd9"
@@ -284,7 +289,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             current_task_text="Osserva Safari", current_event_sink=events.append,
         )
 
-        process_device_use_request(runtime, {
+        self.process_request(runtime, {
             "id": 8,
             "method": "item/tool/call",
             "params": {
@@ -328,7 +333,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             "core.providers.codex_app_server_device_use.device_use_service_for_session",
             return_value=SimpleNamespace(invoke=lambda **_kwargs: failed_result),
         ):
-            process_device_use_request(runtime, {
+            self.process_request(runtime, {
                 "id": 9,
                 "method": "item/tool/call",
                 "params": {
@@ -356,12 +361,16 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             device_use_binding=self.binding, provider_thread_id="provider-thread",
             current_provider_turn_id="provider-turn", current_runtime_turn_id="runtime-turn",
             current_task_text="Select a target", current_event_sink=events.append)
-        process_device_use_request(runtime, {"id": 10, "method": "item/tool/call", "params": {
+        self.process_request(runtime, {"id": 10, "method": "item/tool/call", "params": {
             "threadId": "provider-thread", "turnId": "provider-turn", "callId": "call",
             "tool": "mac_peekaboo", "arguments": {"action": "click", "snapshot": "old"}}})
         self.assertFalse(json.loads(stdin.getvalue())["result"]["success"])
         self.assertTrue(self.outbound.empty())
         self.assertEqual(events[-1].payload["failure_reason_code"], "computer_actor_delegation_required")
+
+    @staticmethod
+    def process_request(runtime, payload):
+        process_device_use_request(runtime, payload, authority=capture_device_use_authority(runtime))
 
     def _exit_runtime(self, *, active=False, completed=False):
         return _CodexAppServerRuntime(

@@ -23,15 +23,17 @@ class ComputerInteraction:
         self.lock = threading.Lock()
         self.client = None
         self.cancelled = threading.Event()
+        self.cancellation_lock = threading.Lock()
 
     def cancel(self, *, close=False):
-        self.cancelled.set()
-        client = self.client
+        with self.cancellation_lock:
+            self.cancelled.set()
+            client = self.client
         if client is not None and (close or self.lock.locked()):
             client.cancel()
 
     def run(self, *, binding, turn_id, provider_thread_id, provider_turn_id,
-            call_id, task_text, arguments, current_task=None):
+            call_id, task_text, arguments, authority_active=None):
         try:
             task = validate_actor_task(arguments)
         except ValueError as error:
@@ -40,20 +42,21 @@ class ComputerInteraction:
             raise DeviceUseAuthorizationError("computer_actor_activation_changed")
         if not self.lock.acquire(blocking=False):
             raise DeviceUseUnavailableError("computer_actor_busy")
+        with self.cancellation_lock:
+            cancelled = self.cancelled = threading.Event()
         recorder = _RuntimeTurnOutputRecorder(self.state, session_id=self.session_id, turn_id=turn_id)
         durations = []
         user_waits = []
         try:
-            self.cancelled.clear()
             session = self.state.runtime_store.get_session(self.session_id)
             service = self.state.device_use_service
-            if current_task is None:
+            if authority_active is None:
                 task_text = self.state.runtime_store.get_turn(turn_id).input_text or ""
 
             def active():
-                if self.cancelled.is_set() or not service.binding_connected(binding, self.session_id):
+                if cancelled.is_set() or not service.binding_connected(binding, self.session_id):
                     return False
-                if current_task is not None and current_task() != task_text:
+                if authority_active is not None and not authority_active():
                     return False
                 current = self.state.runtime_store.get_session(self.session_id)
                 turn = self.state.runtime_store.get_turn(turn_id)

@@ -129,3 +129,87 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertEqual(result[0][0]["status"], "blocked")
         self.assertEqual(self.calls, [])
+
+    def fail_native_call(self, index, code, *, omit_verification_image=False):
+        original = self.invoke
+
+        def invoke(tool, arguments, call_id):
+            result = original(tool, arguments, call_id)
+            if len(self.calls) == index:
+                return DeviceUseResult("invocation", call_id, {"success": False, "contentItems": [
+                    {"type": "inputText", "text": code + ": native failure"}]}, None, None, 1)
+            if omit_verification_image and len(self.calls) > index:
+                return DeviceUseResult("invocation", call_id, {"success": True}, None, None, 1)
+            # Exact-window observations carry the same verified image as observe_app.
+            if arguments["action"] == "observe":
+                return DeviceUseResult("invocation", call_id, result.result, b"fresh-window", None, 1)
+            return result
+
+        self.invoke = invoke
+
+    def test_recoverable_read_failures_refresh_windows_and_finish_in_the_same_task(self):
+        original = self.invoke
+        for code in ("MC-PEEKABOO-25", "MC-PEEKABOO-27"):
+            with self.subTest(code=code):
+                self.calls.clear()
+                self.invoke = original
+                self.fail_native_call(1, code)
+                output, jpeg = self.run_actor("refresh")
+                self.assertEqual(output["status"], "completed")
+                self.assertEqual([call[1]["action"] for call in self.calls],
+                                 ["observe_app", "list_windows", "observe", "click", "observe_app"])
+                self.assertIn(code, output["evidence"])
+                self.assertIsNotNone(jpeg)
+
+    def test_uncertain_inputs_get_read_only_verification_without_replay(self):
+        original = self.invoke
+        for code in ("MC-PEEKABOO-20", "MC-PEEKABOO-21", "MC-PEEKABOO-22", "MC-PEEKABOO-23"):
+            with self.subTest(code=code):
+                self.calls.clear()
+                self.invoke = original
+                self.fail_native_call(2, code)
+                output, jpeg = self.run_actor()
+                self.assertEqual(output["status"], "completed")
+                self.assertEqual([call[1]["action"] for call in self.calls], ["observe_app", "click", "observe_app"])
+                self.assertIn(code, output["evidence"])
+                self.assertIsNotNone(jpeg)
+
+    def test_denials_and_unknown_failures_stop_without_recovery(self):
+        original = self.invoke
+        for code in ("MC-PEEKABOO-24", "MC-PEEKABOO-01", "unknown_failure"):
+            with self.subTest(code=code):
+                self.calls.clear()
+                self.invoke = original
+                self.fail_native_call(2, code)
+                output, _ = self.run_actor()
+                self.assertEqual(output["summary"], "computer_actor_native_failure")
+                self.assertEqual(len(self.calls), 2)
+
+    def test_recovery_cannot_switch_app_or_engine_or_repeat_uncertain_input_with_new_receipt(self):
+        original = self.invoke
+        for mode, calls in (("uncertain-replay", 3), ("uncertain-other-app", 2), ("uncertain-other-engine", 2)):
+            with self.subTest(mode=mode):
+                self.calls.clear()
+                self.invoke = original
+                self.fail_native_call(2, "MC-PEEKABOO-21")
+                output, _ = self.run_actor(mode)
+                self.assertEqual(output["summary"], "computer_actor_recovery_action_denied")
+                self.assertEqual(len(self.calls), calls)
+
+    def test_observation_without_image_does_not_unlock_input_after_uncertainty(self):
+        self.fail_native_call(2, "MC-PEEKABOO-21", omit_verification_image=True)
+        output, _ = self.run_actor("uncertain-no-image")
+        self.assertEqual(output["status"], "blocked")
+        self.assertEqual(len(self.calls), 3)
+
+    def test_expired_window_requires_list_refresh_before_another_observation(self):
+        self.fail_native_call(1, "MC-PEEKABOO-25")
+        output, _ = self.run_actor("refresh-no-list")
+        self.assertEqual(output["summary"], "computer_actor_recovery_action_denied")
+        self.assertEqual(len(self.calls), 1)
+
+    def test_operator_cannot_claim_completion_before_uncertain_input_is_verified(self):
+        self.fail_native_call(2, "MC-PEEKABOO-21", omit_verification_image=True)
+        output, _ = self.run_actor()
+        self.assertEqual(output["summary"], "computer_actor_recovery_unverified")
+        self.assertEqual(output["status"], "blocked")

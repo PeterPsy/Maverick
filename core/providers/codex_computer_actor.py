@@ -12,6 +12,7 @@ from core.device_use.computer_actor_contract import (
     COMPUTER_ACTOR_MODEL, actor_device_use_instructions, actor_device_use_tools,
 )
 from core.device_use.errors import DeviceUseError
+from core.device_use.computer_actor_recovery import ComputerActorRecovery
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime
 from core.providers.codex_app_server_runtime_thread_params import codex_research_config
 from core.providers.codex_app_server_runtime_transport import _send_request
@@ -82,6 +83,7 @@ class CodexComputerActor:
         last_image = None
         steps = 0
         completed = False
+        recovery = ComputerActorRecovery(self.binding.initial_app)
         self.transport.output = ""
         self.transport.usage_sink = usage_sink
         self.transport.thread_id = None
@@ -132,8 +134,11 @@ class CodexComputerActor:
                     if event.get("status") != "completed":
                         return self._result("blocked", "computer_actor_inference_failed", steps), last_image
                     output = self._validated_output(self.transport.output)
-                    if output["status"] == "completed" and last_image is None:
+                    if output["status"] == "completed" and recovery.pending is not None:
+                        output = self._result("blocked", "computer_actor_recovery_unverified", steps)
+                    elif output["status"] == "completed" and last_image is None:
                         output = self._result("needs_decision", "computer_actor_completion_unverified", steps)
+                    output["evidence"] = recovery.evidence(output["evidence"])
                     return {**output, "steps": steps}, last_image
                 if event["kind"] != "call":
                     return self._result("blocked", event.get("reason", "computer_actor_transport_closed"), steps), last_image
@@ -145,6 +150,9 @@ class CodexComputerActor:
                     return self._result("needs_decision", "computer_actor_step_budget", steps), last_image
                 if params.get("tool") not in {t["name"] for t in tools}:
                     return self._result("blocked", "computer_actor_tool_denied", steps), last_image
+                if not recovery.permits(params.get("tool"), params.get("arguments")):
+                    return self._result("blocked", "computer_actor_recovery_action_denied", steps,
+                                        recovery.evidence("")), last_image
                 native_started = True
                 last_image = None
                 result = invoke(params.get("tool"), params.get("arguments"), params.get("callId"))
@@ -159,7 +167,7 @@ class CodexComputerActor:
                     if acknowledgement.get("turnId") != turn_id:
                         raise RuntimeError("computer_actor_image_delivery_uncertain")
                 self.transport.write_result(payload["id"], result.result)
-                if result.result.get("success") is False:
+                if not recovery.record(params.get("tool"), params.get("arguments"), result):
                     return self._result("blocked", "computer_actor_native_failure", steps,
                                         json.dumps(result.result, ensure_ascii=False)[:3000]), last_image
             return self._result("blocked", "computer_actor_cancelled", steps), last_image

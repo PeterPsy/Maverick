@@ -4,6 +4,7 @@ from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptV
 from core.runtime.transcript_access import resolve_authorized_transcript_thread
 from core.usage.payloads import runtime_usage_diagnostic_payload
 from core.usage.service import build_runtime_chat_usage_summary, summarize_samples
+from core.usage.worker_attribution import owned_usage_session_ids
 
 
 def read_runtime_usage(runtime_store, *, usage_store, context, thread_id, turn_id=None):
@@ -13,8 +14,10 @@ def read_runtime_usage(runtime_store, *, usage_store, context, thread_id, turn_i
     if turn_id is not None:
         if not any(turn.turn_id == turn_id for turn in runtime_store.list_turns(session.session_id)):
             raise RuntimeTranscriptValidationError("runtime_usage_turn_not_found")
-        samples = [sample for sample in usage_store.list_samples(workspace_id=session.workspace_id,
-                   session_id=session.session_id) if sample.turn_id == turn_id]
+        samples = [sample for session_id in owned_usage_session_ids([session.session_id])
+                   for sample in usage_store.list_samples(workspace_id=session.workspace_id,
+                       session_id=session_id) if sample.turn_id == turn_id]
+        samples.sort(key=lambda sample: (sample.observed_at, sample.sample_id))
         summary = summarize_samples(samples, workspace_id=session.workspace_id,
                     root_session_id=session.session_id, direct_session_ids={session.session_id})
     else:

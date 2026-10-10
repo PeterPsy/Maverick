@@ -34,11 +34,34 @@ switch models/providers. Catalog availability is checked before launching.
 Codex same-turn corrections also send the existing native turn-end control frame
 to invalidate old observation receipts. Already dispatched operations remain
 subject to native cancellation and outcome verification; Core never replays them.
+Each queued Codex native request retains the task text, binding, parent identities
+and objective revision captured on receipt. A correction increments that revision
+before cancellation, native turn-end or provider I/O. Requests received while the
+correction is pending cannot gain authority after acknowledgement. Dispatch and
+every operator call recheck the frozen authority, even when thread/turn ids or task
+text are unchanged. Each subtask owns its cancellation event; admitting a new
+subtask cannot clear the cancellation of its predecessor.
+A rejected or uncertain correction keeps native admission fenced until a
+correction is acknowledged or a new parent turn is admitted; subsequent calls
+from the provider's old goal cannot acquire the new revision.
+
+Native failure is terminal unless its contract declares recovery. Peekaboo
+`MC-PEEKABOO-25/27` requires a same-bundle window-list refresh followed by a fresh
+observation. `MC-PEEKABOO-20/21/22/23` permits only same-bundle Peekaboo reads until
+an observation with an image succeeds; the operator then reasons from that image
+and must stop if the intended effect is absent or ambiguous. A new receipt cannot
+authorize replay of the same uncertain input. Explicit native pre-dispatch
+recovery permits a fresh observation through the same engine and app. Refusals,
+unknown failures, engine/app changes during recovery and unverified completion
+remain blocked. Final evidence preserves recovered native failure codes.
 
 Actor usage has an internal attribution scoped to the parent session and provider
 thread. It contributes to delegated and total usage, while the main model's context
 meter remains unchanged. Chat folds internal worker consumption into its ordinary
 total without showing another model or delegation; diagnostics preserve the split.
+Turn diagnostics include that turn's main and internal operator streams, preserve
+the direct/delegated split and main-model context, and exclude other turns and
+inter-agent participants. The same projection serves document and SQLite stores.
 Deleting the owning runtime also removes its private usage streams.
 No new persisted control-plane schema or UI is introduced.
 Tests cover protocol routing, image delivery, authority, bounded outputs, usage
@@ -53,3 +76,11 @@ synthetic native test surface in two tool operations. This verifies actual model
 and image/tool transport, not physical Mac execution or CapCut performance.
 The broader repository fast suite also ran; existing failures in other app,
 model-fixture and repository-policy checks prevent claiming a green full suite.
+
+Regression verification on 2026-10-10 includes 194 passing tests covering native
+authority, queued and active corrections, bounded recovery, private actor
+JSON-RPC, usage, provider lifecycle and API/MCP routing. Another 35 tests were
+skipped because the available SQLite 3.46.1 is below the verified WAL-safe
+runtime requirement; the new turn-usage checks also have SQLite variants for
+that runtime. This regression run uses simulated native tools and does not
+measure physical Mac or CapCut performance.

@@ -40,12 +40,16 @@ def codex_turn_input(
 
 def set_device_use_turn(runtime, *, runtime_turn_id: str | None, task_text: str) -> None:
     with runtime.active_turn_lock:
+        runtime.device_use_objective_revision += 1
+        runtime.device_use_correction_pending = False
         runtime.current_runtime_turn_id = str(runtime_turn_id or "").strip() or None
         runtime.current_task_text = task_text if runtime.device_use_binding is not None else ""
 
 
 def clear_device_use_turn(runtime) -> None:
     with runtime.active_turn_lock:
+        runtime.device_use_objective_revision += 1
+        runtime.device_use_correction_pending = False
         runtime.current_runtime_turn_id = None
         runtime.current_task_text = ""
 

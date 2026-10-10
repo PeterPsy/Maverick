@@ -47,10 +47,17 @@ from the provider's old goal cannot acquire the new revision.
 
 Native failure is terminal unless its contract declares recovery. Peekaboo
 `MC-PEEKABOO-25/27` requires a same-bundle window-list refresh followed by a fresh
-observation. `MC-PEEKABOO-20/21/22/23` permits only same-bundle Peekaboo reads until
+observation. `MC-PEEKABOO-20/21/23` permits only same-bundle Peekaboo reads until
 an observation with an image succeeds; the operator then reasons from that image
 and must stop if the intended effect is absent or ambiguous. A new receipt cannot
-authorize replay of the same uncertain input. Explicit native pre-dispatch
+authorize replay of the same uncertain input. Peekaboo input identity uses the
+action, app and fields that determine its actual effect (target, text, key or
+scroll parameters). Receipt and observation-only arguments (`window_id`,
+`observe_after`, `details` and `image_max_dimension`) do not authorize another click.
+The partial outcome `MC-PEEKABOO-22` is terminal in bounded On mode. Full mode
+permits same-bundle read-only verification only when the native result explicitly
+declares that Full remains active and requests a fresh observation; mode alone
+does not grant recovery. Explicit native pre-dispatch
 recovery permits a fresh observation through the same engine and app. Refusals,
 unknown failures, engine/app changes during recovery and unverified completion
 remain blocked. Final evidence preserves recovered native failure codes.
@@ -84,3 +91,10 @@ skipped because the available SQLite 3.46.1 is below the verified WAL-safe
 runtime requirement; the new turn-usage checks also have SQLite variants for
 that runtime. This regression run uses simulated native tools and does not
 measure physical Mac or CapCut performance.
+
+The follow-up recovery review is covered by 84 passing focused tests, including
+same-target replay with changed observation options, numeric point identity,
+partial outcomes in On and Full, and anti-replay after explicitly authorized
+Full verification. The partial-outcome classification matches the current native
+`PeekabooFailure` and `ComputerTools.failureMessage` contract; protocol tests use
+simulated native results and do not exercise the physical Mac.

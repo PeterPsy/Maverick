@@ -130,14 +130,14 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertEqual(result[0][0]["status"], "blocked")
         self.assertEqual(self.calls, [])
 
-    def fail_native_call(self, index, code, *, omit_verification_image=False):
+    def fail_native_call(self, index, code, *, omit_verification_image=False, recovery_guidance=""):
         original = self.invoke
 
         def invoke(tool, arguments, call_id):
             result = original(tool, arguments, call_id)
             if len(self.calls) == index:
                 return DeviceUseResult("invocation", call_id, {"success": False, "contentItems": [
-                    {"type": "inputText", "text": code + ": native failure"}]}, None, None, 1)
+                    {"type": "inputText", "text": code + ": native failure" + recovery_guidance}]}, None, None, 1)
             if omit_verification_image and len(self.calls) > index:
                 return DeviceUseResult("invocation", call_id, {"success": True}, None, None, 1)
             # Exact-window observations carry the same verified image as observe_app.
@@ -163,7 +163,7 @@ class CodexComputerActorTests(unittest.TestCase):
 
     def test_uncertain_inputs_get_read_only_verification_without_replay(self):
         original = self.invoke
-        for code in ("MC-PEEKABOO-20", "MC-PEEKABOO-21", "MC-PEEKABOO-22", "MC-PEEKABOO-23"):
+        for code in ("MC-PEEKABOO-20", "MC-PEEKABOO-21", "MC-PEEKABOO-23"):
             with self.subTest(code=code):
                 self.calls.clear()
                 self.invoke = original
@@ -213,3 +213,37 @@ class CodexComputerActorTests(unittest.TestCase):
         output, _ = self.run_actor()
         self.assertEqual(output["summary"], "computer_actor_recovery_unverified")
         self.assertEqual(output["status"], "blocked")
+
+    def test_same_click_with_different_observation_options_is_not_dispatched_twice(self):
+        original = self.invoke
+        for mode in ("uncertain-replay-details", "uncertain-replay-image-size", "uncertain-replay-observation-options"):
+            with self.subTest(mode=mode):
+                self.calls.clear()
+                self.invoke = original
+                self.fail_native_call(2, "MC-PEEKABOO-21")
+                output, _ = self.run_actor(mode)
+                self.assertEqual(output["summary"], "computer_actor_recovery_action_denied")
+                self.assertEqual([call[1]["element"] for call in self.calls if call[1]["action"] == "click"], ["B1"])
+
+    def test_partial_input_respects_mode_and_native_recovery_declaration(self):
+        original = self.invoke
+        guidance = " Full resta attivo: acquisisci una nuova osservazione e continua dal nuovo stato senza duplicare un effetto già avvenuto."
+        for mode, declared, expected in (("on", False, "blocked"), ("on", True, "blocked"),
+                                         ("full", False, "blocked"), ("full", True, "completed")):
+            with self.subTest(mode=mode, declared=declared):
+                self.calls.clear()
+                self.invoke = original
+                self.actor.binding.mode = mode
+                self.fail_native_call(2, "MC-PEEKABOO-22", recovery_guidance=guidance if declared else "")
+                output, _ = self.run_actor()
+                self.assertEqual(output["status"], expected)
+                self.assertEqual([call[1]["action"] for call in self.calls],
+                                 ["observe_app", "click", "observe_app"] if expected == "completed" else ["observe_app", "click"])
+
+    def test_full_partial_input_verification_does_not_authorize_replay(self):
+        self.actor.binding.mode = "full"
+        self.fail_native_call(2, "MC-PEEKABOO-22", recovery_guidance=
+                              " Full resta attivo: acquisisci una nuova osservazione e continua dal nuovo stato.")
+        output, _ = self.run_actor("uncertain-replay-details")
+        self.assertEqual(output["summary"], "computer_actor_recovery_action_denied")
+        self.assertEqual([call[1]["action"] for call in self.calls], ["observe_app", "click", "observe_app"])

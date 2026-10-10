@@ -36,7 +36,7 @@ def next_call():
         actions = ["observe_app", "list_windows", "observe", "click", "observe_app"]
         if mode == "refresh-no-list":
             actions.pop(1)
-    elif mode in {"uncertain-replay", "uncertain-other-app", "uncertain-other-engine", "uncertain-no-image"}:
+    elif mode.startswith("uncertain-replay") or mode in {"uncertain-other-app", "uncertain-other-engine", "uncertain-no-image"}:
         actions = ["observe_app", "click", "observe_app", "click", "observe_app"]
         if mode in {"uncertain-other-app", "uncertain-other-engine"}:
             actions = ["observe_app", "click", "observe_app"]
@@ -56,9 +56,19 @@ def next_call():
         bundle = "com.apple.Notes"
     if mode == "uncertain-other-engine" and step == 2:
         tool, action = "mac_computer", "observe"
+    arguments = {"action": action, "bundle_id": bundle, "snapshot": "snapshot-" + str(step)}
+    if action == "click":
+        arguments["element"] = "B1"
+    if step == 3:
+        if mode == "uncertain-replay-details":
+            arguments["details"] = True
+        elif mode == "uncertain-replay-image-size":
+            arguments["image_max_dimension"] = 3840
+        elif mode == "uncertain-replay-observation-options":
+            arguments.update(details=False, image_max_dimension=640, observe_after=True)
     send({"id": "native-" + str(step), "method": "item/tool/call", "params": {
         "threadId": thread_id, "turnId": turn_id, "callId": "call-" + str(step),
-        "tool": tool, "arguments": {"action": action, "bundle_id": bundle, "snapshot": "snapshot-" + str(step)}}})
+        "tool": tool, "arguments": arguments}})
     step += 1
 
 

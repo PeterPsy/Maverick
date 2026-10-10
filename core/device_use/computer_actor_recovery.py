@@ -7,13 +7,27 @@ from core.device_use.result_facts import native_result_facts
 
 _PEEKABOO_READS = frozenset({"list_windows", "observe", "observe_app"})
 _WINDOW_REFRESH = frozenset({"MC-PEEKABOO-25", "MC-PEEKABOO-27"})
-_UNCERTAIN_INPUT = frozenset({"MC-PEEKABOO-20", "MC-PEEKABOO-21", "MC-PEEKABOO-22", "MC-PEEKABOO-23"})
+_UNCERTAIN_INPUT = frozenset({"MC-PEEKABOO-20", "MC-PEEKABOO-21", "MC-PEEKABOO-23"})
+_PARTIAL_INPUT = "MC-PEEKABOO-22"
 _PRE_DISPATCH_RECOVERY = "Questo errore pre-dispatch non blocca il turno:"
+_FULL_RECOVERY = "Full resta attivo: acquisisci una nuova osservazione"
+_RECEIPT_AND_OBSERVATION_FIELDS = frozenset({
+    "snapshot", "observation_id", "window_id", "observe_after", "details", "image_max_dimension",
+})
+_PEEKABOO_INPUT_FIELDS = {
+    "click": ("element",), "double_click": ("element",), "right_click": ("element",),
+    "type": ("element", "text"), "replace": ("element", "text"),
+    "click_point": ("point_x", "point_y"),
+    "type_at_point": ("point_x", "point_y", "text"),
+    "replace_at_point": ("point_x", "point_y", "text"),
+    "press": ("key",), "scroll": ("element", "direction", "amount"), "launch_app": (),
+}
 
 
 class ComputerActorRecovery:
-    def __init__(self, initial_app):
+    def __init__(self, initial_app, *, mode):
         self.selected_app = initial_app
+        self.mode = mode
         self.pending = None
         self.refresh_required = False
         self.uncertain_inputs = set()
@@ -54,7 +68,10 @@ class ComputerActorRecovery:
         if tool == "mac_peekaboo" and code in _WINDOW_REFRESH and action in {"observe", "observe_app"}:
             self.pending = (tool, bundle)
             self.refresh_required = True
-        elif tool == "mac_peekaboo" and code in _UNCERTAIN_INPUT and action not in _PEEKABOO_READS:
+        elif (tool == "mac_peekaboo" and (code in _UNCERTAIN_INPUT or code == _PARTIAL_INPUT)
+              and action not in _PEEKABOO_READS):
+            if code == _PARTIAL_INPUT and (self.mode != "full" or _FULL_RECOVERY not in text):
+                return False
             self.pending = (tool, bundle)
             self.uncertain_inputs.add(self._input_key(tool, arguments))
         elif tool in {"mac_computer", "mac_peekaboo"} and _PRE_DISPATCH_RECOVERY in text:
@@ -76,7 +93,11 @@ class ComputerActorRecovery:
 
     @staticmethod
     def _input_key(tool, arguments):
-        # A fresh receipt does not make replay of the same uncertain input safe.
+        # Compare the dispatched action independently of receipt and observation settings.
+        action = arguments.get("action")
+        if tool == "mac_peekaboo" and action in _PEEKABOO_INPUT_FIELDS:
+            return (tool, action, arguments.get("bundle_id"),
+                    tuple(arguments.get(field) for field in _PEEKABOO_INPUT_FIELDS[action]))
         target = {key: value for key, value in arguments.items()
-                  if key not in {"snapshot", "observation_id", "observe_after"}}
+                  if key not in _RECEIPT_AND_OBSERVATION_FIELDS}
         return tool, json.dumps(target, sort_keys=True, ensure_ascii=False)

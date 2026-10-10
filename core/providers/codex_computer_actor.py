@@ -83,7 +83,7 @@ class CodexComputerActor:
         last_image = None
         steps = 0
         completed = False
-        recovery = ComputerActorRecovery(self.binding.initial_app)
+        recovery = ComputerActorRecovery(self.binding.initial_app, mode=self.binding.mode)
         self.transport.output = ""
         self.transport.usage_sink = usage_sink
         self.transport.thread_id = None

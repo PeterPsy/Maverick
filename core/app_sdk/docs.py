@@ -53,6 +53,41 @@ Do not declare surfaces that are not implemented.
 
 The contract is not documentation-only metadata. It is an executable promise to the rest of Maverick.
 
+## Centralized App Notifications
+
+Assess notifications when creating or porting an app. If reminders, messages,
+background completion/failure, approvals, or meaningful domain changes make
+notifications useful, implement them through Base Shell's centralized inbox.
+Do not create a separate app bell or put domain producers inside the shell.
+
+Declare `provides: [{"interface":"notifications.inbox","version":"1","surfaces":["backend"]}]`
+alongside the app's other interfaces, and declare/publish `notifications` in
+`events.data.resources`. Implement `notifications.list` (offset/limit up to 100,
+returning notifications/total/has_more) and idempotent trusted-user
+`notifications.dismiss` (id). Keep notifications, deduplication and per-user
+receipts under `data/<app_id>`; background producers use app-owned hooks.
+The shell discovers all enabled providers, displays registry-owned names/icons,
+and opens the owning app with primitive `open_params` even while another app is
+active. No shell app-id registration or UI import into consumer apps is needed.
+
+Optional list fields `body`, `created_at`, `read`, `presentation`, `actions`,
+`unread_total`, and `capabilities` enrich the feed. Advertise `capabilities.read`
+only with a real `notifications.read` action (`id` or `all: true`), and
+`capabilities.actions` only with a validated `notifications.action` (`id`,
+`action_id`) dispatching advertised action ids. Provider projections own state;
+read receipts are distinct from dismissal. Never send arbitrary backend URLs
+or secrets as notification actions. Publish data events for every receipt and
+notification change. Another app may request domain work through declared
+interface dependencies, never by writing a producer's private inbox files.
+
+Use `presentation.kind` for generic, message, delivery, ride, payment, calendar,
+code, flight or fitness details. Unknown/malformed detail falls back to a
+generic card. Real codes use absolute `expires_at`. Full schemas, examples and
+verification criteria: `docs/development/app_notifications.md` in the Maverick
+root repository. Verify an actual notification while another app is active,
+read/dismiss/action failures, reconnect, and trusted-user/workspace isolation.
+This is in-app delivery; browser-closed OS push is a separate channel.
+
 ## App-Owned Sidecar Client
 
 An app that declares a governed HTTP sidecar may expose a separate

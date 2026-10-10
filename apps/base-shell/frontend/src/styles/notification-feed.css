@@ -1,0 +1,42 @@
+/* Generate only feed utilities. The existing shell keeps its own base styles. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" source(none);
+@source "../components/ui";
+
+@theme inline {
+  --color-background: var(--maverick-bg);
+  --color-foreground: var(--maverick-text);
+  --color-card: var(--maverick-bg-strong);
+  --color-card-foreground: var(--maverick-text);
+  --color-primary: var(--maverick-accent);
+  --color-muted: var(--maverick-surface);
+  --color-muted-foreground: var(--maverick-text-muted);
+  --color-border: var(--maverick-border);
+  --color-ring: var(--maverick-focus);
+}
+
+:where([data-slot="live-notification-feed"]) :where(*) {
+  border-width: 0;
+  border-style: solid;
+}
+:where([data-slot="live-notification-feed"]) :where(h2, p) {
+  margin: 0;
+}
+:where([data-slot="live-notification-feed"]) :where(button) {
+  background: transparent;
+}
+:where([data-slot="live-notification-feed"]) :where(svg, img) {
+  display: block;
+}
+[data-slot="live-notification-feed"] {
+  min-width: 0;
+}
+[data-slot="live-notification-feed"] [data-open],
+[data-slot="live-notification-feed"] p {
+  overflow-wrap: anywhere;
+}
+@media (hover: none) {
+  [data-slot="live-notification-feed"] [data-dismiss] {
+    opacity: 1;
+  }
+}

@@ -1,20 +1,18 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { NotificationPopover } from "./NotificationPopover";
-import {
-  connectAppEventSocket,
-  maverickAppIsVisible,
-  observeMaverickVisibility,
-} from "@maverick/pwa-cache";
+import { LiveNotificationFeed } from "./ui/live-notification-feed";
+import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import type { AppRegistryItem } from "../api";
 import type { MaverickFrameScope } from "../iframePolicy";
+import { noticeKey, noticeTime } from "../notificationInbox";
 import {
-  request,
-  noticeTime,
-  type Notice,
-  type Inbox,
-} from "../notificationInbox";
+  navigationParams,
+  noticeAge,
+  noticeTimestamp,
+  notificationPresentation,
+} from "../notificationPresentation";
 
-/** App-owned inboxes remain available while any authenticated app is active. */
+/** Accessible from every app, including apps opting out of the detail sidebar. */
 export function AppNotifications({
   apps,
   scope,
@@ -31,228 +29,162 @@ export function AppNotifications({
     params?: Record<string, string | boolean | null>,
   ) => void;
 }) {
-  const providers = useMemo(
-    () =>
-      apps.filter(
-        (app) =>
-          app.status === "enabled" &&
-          app.provides.some(
-            (entry) =>
-              entry.interface === "notifications.inbox" &&
-              entry.version === "1" &&
-              entry.surfaces.includes("backend"),
-          ),
-      ),
-    [apps],
-  );
-  const [inboxes, setInboxes] = useState<Inbox[]>([]);
-  const [error, setError] = useState("");
+  const {
+    inboxes,
+    error,
+    pending,
+    mutate,
+    retry,
+    loadMore,
+    readAll,
+    dismissMany,
+  } = useNotificationInbox(apps, scope);
   const [limit, setLimit] = useState(5);
-  const [pages, setPages] = useState(1);
-  const [pending, setPending] = useState<string[]>([]);
-  const [refresh, setRefresh] = useState(0);
-
-  useEffect(() => {
-    let disposed = false;
-    let timer = 0;
-    let controller: AbortController | undefined;
-    const suspend = () => {
-      window.clearTimeout(timer);
-      controller?.abort();
-    };
-    const schedule = () => {
-      window.clearTimeout(timer);
-      if (!maverickAppIsVisible()) return;
-      timer = window.setTimeout(async () => {
-        controller?.abort();
-        const current = new AbortController();
-        controller = current;
-        const results = await Promise.allSettled(
-          providers.map(async (app) => {
-            const value = await request(
-              app.app_id,
-              { action: "notifications.list", limit: 100 },
-              current.signal,
-            );
-            if (
-              !Array.isArray(value.notifications) ||
-              !Number.isInteger(value.total)
-            )
-              throw new Error("Risposta notifiche non valida.");
-            for (
-              let offset = 100;
-              offset < Math.min(value.total, pages * 100);
-              offset += 100
-            ) {
-              const page = await request(
-                app.app_id,
-                { action: "notifications.list", limit: 100, offset },
-                current.signal,
-              );
-              if (!Array.isArray(page.notifications))
-                throw new Error("Risposta notifiche non valida.");
-              value.notifications.push(...page.notifications);
-            }
-            return {
-              appId: app.app_id,
-              name: app.name,
-              notices: value.notifications.filter(
-                (n: Notice) =>
-                  typeof n.id === "string" && typeof n.title === "string",
-              ),
-              total: value.total,
-            };
-          }),
-        );
-        if (disposed || current.signal.aborted || !maverickAppIsVisible())
-          return;
-        setInboxes((previous) =>
-          results.flatMap((result, i) =>
-            result.status === "fulfilled"
-              ? [result.value]
-              : previous.filter((inbox) => inbox.appId === providers[i].app_id),
-          ),
-        );
-        setError(
-          results.some((result) => result.status === "rejected")
-            ? "Impossibile aggiornare le notifiche. Riprova."
-            : "",
-        );
-      }, 100);
-    };
-    const stopVisibility = observeMaverickVisibility((visible) =>
-      visible ? schedule() : suspend(),
-    );
-    const stopEvents = connectAppEventSocket<{
-      type?: string;
-      owner_app_id?: string;
-      resource?: string;
-      workspace_id?: string;
-    }>((event) => {
-      if (
-        event.type === "maverick.app.data-changed" &&
-        event.resource === "notifications" &&
-        (!event.workspace_id || event.workspace_id === scope.workspaceId) &&
-        providers.some((app) => app.app_id === event.owner_app_id)
-      )
-        schedule();
-    }, schedule);
-    schedule();
-    return () => {
-      disposed = true;
-      suspend();
-      stopVisibility();
-      stopEvents();
-    };
-  }, [providers, scope, refresh, pages]);
-
-  if (!providers.length) return children(null);
   const total = inboxes.reduce((sum, inbox) => sum + inbox.total, 0);
-  const notices = inboxes.flatMap((inbox) =>
-    inbox.notices.map((notice) => ({
-      ...notice,
-      appId: inbox.appId,
-      name: inbox.name,
-    })),
+  const unread = inboxes.reduce((sum, inbox) => sum + inbox.unread, 0);
+  const notices = inboxes
+    .flatMap((inbox) =>
+      inbox.notices.map((notice) => ({
+        inbox,
+        notice,
+        key: noticeKey(inbox.appId, notice.id),
+      })),
+    )
+    .sort(
+      (a, b) =>
+        noticeTimestamp(b.notice) - noticeTimestamp(a.notice) ||
+        a.key.localeCompare(b.key),
+    );
+  const visible = notices.slice(0, limit);
+  const items = [...visible].reverse().map(({ inbox, notice, key }) =>
+    notificationPresentation(
+      {
+        id: key,
+        app: inbox.name,
+        title: notice.title,
+        body:
+          (typeof notice.body === "string" ? notice.body : undefined) ??
+          (notice.scheduled_at ? noticeTime(notice) : undefined),
+        time: noticeAge(notice),
+        read: notice.read === true,
+        readable: inbox.capabilities.read,
+        pending:
+          pending.includes(key) ||
+          pending.includes(noticeKey(inbox.appId, null)),
+        done:
+          typeof notice.action_done === "string"
+            ? notice.action_done
+            : undefined,
+        icon:
+          inbox.logo?.kind === "image" ? (
+            <img
+              src={inbox.logo.value}
+              alt=""
+              loading="lazy"
+              className="size-6 object-contain"
+            />
+          ) : inbox.logo?.kind === "glyph" ? (
+            <span aria-hidden className="material-symbols-rounded">
+              {inbox.logo.value}
+            </span>
+          ) : undefined,
+        actions:
+          inbox.capabilities.actions && Array.isArray(notice.actions)
+            ? notice.actions.filter(
+                (action) =>
+                  action &&
+                  typeof action.id === "string" &&
+                  typeof action.label === "string",
+              )
+            : undefined,
+      },
+      notice.presentation,
+    ),
   );
-
-  async function dismiss(appId: string, id: string) {
-    const key = `${appId}:${id}`;
-    setPending((current) => [...current, key]);
-    try {
-      await request(appId, { action: "notifications.dismiss", id });
-      setInboxes((current) =>
-        current.map((inbox) =>
-          inbox.appId === appId
-            ? {
-                ...inbox,
-                total: Math.max(0, inbox.total - 1),
-                notices: inbox.notices.filter((notice) => notice.id !== id),
-              }
-            : inbox,
-        ),
-      );
-      setError("");
-      setRefresh((current) => current + 1);
-    } catch (failure) {
-      setError(
-        failure instanceof Error
-          ? failure.message
-          : "Impossibile chiudere la notifica.",
-      );
-    } finally {
-      setPending((current) => current.filter((value) => value !== key));
-    }
-  }
-
   return children(
-    <NotificationPopover placement={placement}
-      announcement={total ? `${total} notifiche da leggere` : ""}
-      toggleContent={<>
-        <span className="material-symbols-rounded" aria-hidden="true">
-          notifications
-        </span>
-        <span className="bs-notifications__announcement">
-          Notifiche{total > 0 ? ` (${total})` : ""}
-          {error ? " · !" : ""}
-        </span>
-        {(total > 0 || error) && (
-          <span className="bs-notifications__badge" aria-hidden="true">
-            {error ? "!" : total}
+    <NotificationPopover
+      placement={placement}
+      announcement={unread ? `${unread} notifiche da leggere` : ""}
+      toggleContent={
+        <>
+          <span className="material-symbols-rounded" aria-hidden="true">
+            notifications
           </span>
-        )}
-      </>}>
-      {(close) => <>
-        {error && (
-          <p role="alert">
-            {error}{" "}
+          <span className="bs-notifications__announcement">
+            Notifiche{unread > 0 ? ` (${unread})` : ""}
+            {error ? " · !" : ""}
+          </span>
+          {(unread > 0 || error) && (
+            <span className="bs-notifications__badge" aria-hidden="true">
+              {error ? "!" : unread}
+            </span>
+          )}
+        </>
+      }
+    >
+      {(close) => (
+        <>
+          {error && (
+            <p className="bs-notifications__error" role="alert">
+              {error}{" "}
+              <button type="button" onClick={retry}>
+                Riprova
+              </button>
+            </p>
+          )}
+          <LiveNotificationFeed
+            items={items}
+            managed
+            unreadCount={unread}
+            height="min(440px, calc(100dvh - var(--notification-popover-top, 80px) - 120px))"
+            onReadAll={
+              inboxes.some((inbox) => inbox.capabilities.read)
+                ? readAll
+                : undefined
+            }
+            onClear={() => dismissMany(visible)}
+            onOpen={(id) => {
+              const entry = visible.find((value) => value.key === id);
+              if (!entry) return;
+              if (entry.inbox.capabilities.read && !entry.notice.read)
+                void mutate(entry.inbox, entry.notice.id, "read").catch(
+                  () => {},
+                );
+              onOpenApp(
+                entry.inbox.appId,
+                navigationParams(entry.notice.open_params),
+              );
+              close();
+            }}
+            onDismiss={(id) => {
+              const entry = visible.find((value) => value.key === id);
+              return entry
+                ? mutate(entry.inbox, entry.notice.id, "dismiss")
+                : undefined;
+            }}
+            onAction={(id, label, actionId) => {
+              const entry = visible.find((value) => value.key === id);
+              const action = entry?.notice.actions?.find(
+                (value) => value.id === actionId && value.label === label,
+              );
+              if (!entry?.inbox.capabilities.actions || !action) return;
+              return mutate(entry.inbox, entry.notice.id, "action", action.id);
+            }}
+          />
+          {total > visible.length && (
             <button
               type="button"
-              onClick={() => setRefresh((value) => value + 1)}
-            >
-              Riprova
-            </button>
-          </p>
-        )}
-        {!total && !error && <p>Nessuna notifica da leggere.</p>}
-        {notices.slice(0, limit).map((notice) => (
-          <article key={`${notice.appId}:${notice.id}`}>
-            <small>{notice.name}</small>
-            <button
-              type="button"
-              className="bs-notifications__open"
+              className="bs-notifications__more"
               onClick={() => {
-                onOpenApp(notice.appId, notice.open_params || {});
-                close();
+                if (limit >= notices.length) loadMore();
+                setLimit((value) => value + 5);
               }}
             >
-              {notice.title}
+              Mostra altre notifiche
             </button>
-            {notice.scheduled_at && (
-              <time dateTime={notice.scheduled_at}>{noticeTime(notice)}</time>
-            )}
-            <button
-              type="button"
-              disabled={pending.includes(`${notice.appId}:${notice.id}`)}
-              aria-label={`Chiudi notifica: ${notice.title}`}
-              onClick={() => void dismiss(notice.appId, notice.id)}
-            >
-              Chiudi
-            </button>
-          </article>
-        ))}
-        {total > limit && (
-          <button
-            type="button"
-            onClick={() => {
-              if (limit >= notices.length) setPages((value) => value + 1);
-              setLimit((value) => value + 5);
-            }}
-          >
-            Mostra altre notifiche
-          </button>
-        )}
-      </>}
+          )}
+        </>
+      )}
     </NotificationPopover>,
   );
 }

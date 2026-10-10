@@ -22,7 +22,7 @@
     {
       "interface": "notifications.inbox",
       "version": "1",
-      "description": "Durable local reminder notifications with per-user dismissal.",
+      "description": "Durable local reminders with calendar detail and per-user read/dismiss receipts.",
       "surfaces": [
         "backend"
       ]

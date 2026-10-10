@@ -5,6 +5,7 @@ import { registerShellServiceWorker } from "./pwa";
 import { initializeShellPwaCacheRuntime } from "./pwaCacheRuntime";
 import { applyInitialShellTheme } from "./theme";
 import "./styles/main.css";
+import "./styles/notification-feed.css";
 
 applyInitialShellTheme();
 initializeShellPwaCacheRuntime();

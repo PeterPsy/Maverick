@@ -95,6 +95,47 @@ class CalendarReminderTest(unittest.TestCase):
             self.list(self.root, {}, user_id="alice", now=self.now)["total"], 0
         )
 
+    def test_read_receipts_are_durable_per_user_and_preserve_dismissal(self):
+        from reminders import read_notification
+
+        self.create(timezone="Europe/Rome")
+        self.tick(self.root, now=self.now)
+        initial = self.list(self.root, {}, user_id="alice", now=self.now)
+        notice = initial["notifications"][0]
+        self.assertEqual(initial["unread_total"], 1)
+        self.assertEqual(initial["capabilities"], {"read": True, "actions": False})
+        self.assertEqual(notice["presentation"]["kind"], "calendar")
+        self.assertEqual(notice["presentation"]["date"], "2026-10-09")
+        read_notification(self.root, {"id": notice["id"]}, user_id="alice", now=self.now)
+        self.tick(self.root, now=self.now + timedelta(minutes=1))
+        alice = self.list(self.root, {}, user_id="alice", now=self.now)
+        self.assertEqual(alice["total"], 1)
+        self.assertEqual(alice["unread_total"], 0)
+        self.assertTrue(alice["notifications"][0]["read"])
+        self.assertNotIn("read_by", alice["notifications"][0])
+        self.assertEqual(self.list(self.root, {}, user_id="bob", now=self.now)["unread_total"], 1)
+        self.dismiss(self.root, notice["id"], user_id="alice", now=self.now)
+        self.assertEqual(self.list(self.root, {}, user_id="alice", now=self.now)["total"], 0)
+
+    def test_read_all_validates_identity_and_selector_and_covers_pagination(self):
+        from reminders import read_notification
+
+        self.create()
+        self.create()
+        self.tick(self.root, now=self.now)
+        with self.assertRaises(ValueError):
+            read_notification(self.root, {"all": True})
+        with self.assertRaises(ValueError):
+            read_notification(self.root, {"all": True, "id": "a" * 64}, user_id="alice")
+        with self.assertRaises(ValueError):
+            read_notification(self.root, {"id": "bad"}, user_id="alice")
+        read_notification(self.root, {"all": True}, user_id="alice", now=self.now)
+        page = self.list(self.root, {"limit": 1}, user_id="alice", now=self.now)
+        self.assertEqual(page["total"], 2)
+        self.assertEqual(page["unread_total"], 0)
+        self.assertTrue(page["has_more"])
+        self.assertEqual(self.actions.app_events_for_action("notifications.read")[0]["resource"], "notifications")
+
     def test_edit_move_and_delete_retract_stale_alerts_before_next_tick(self):
         event = self.create()
         self.tick(self.root, now=self.now)
@@ -194,6 +235,19 @@ class CalendarReminderTest(unittest.TestCase):
             cwd=app_root,
         )
         notification_id = listed["json"]["notifications"][0]["id"]
+        read = run_json_entrypoint(
+            app_root / "backend/app_backend.py",
+            payload={
+                **payload,
+                "user_id": "alice",
+                "body": {"action": "notifications.read", "id": notification_id, "user_id": "bob"},
+            },
+            cwd=app_root,
+        )
+        self.assertEqual(read["status_code"], 200)
+        self.assertEqual(read["app_events"][0]["resource"], "notifications")
+        self.assertEqual(self.list(self.root, {}, user_id="alice", now=now)["unread_total"], 0)
+        self.assertEqual(self.list(self.root, {}, user_id="bob", now=now)["unread_total"], 1)
         dismissed = run_json_entrypoint(
             app_root / "backend/app_backend.py",
             payload={

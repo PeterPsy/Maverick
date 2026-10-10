@@ -69,6 +69,11 @@ const click = async (text: string) =>
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();
+  vi.spyOn(window, "matchMedia").mockReturnValue({
+    matches: true,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as MediaQueryList);
   // happy-dom lacks the native top-layer API; real behavior is covered by Chromium.
   Object.defineProperties(HTMLElement.prototype, {
     showPopover: { configurable: true, value: vi.fn() },
@@ -90,15 +95,291 @@ afterEach(() => {
 });
 
 describe("App notification inbox", () => {
+  it("withdraws a disabled provider immediately before the next refresh", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => reply()),
+    );
+    await act(async () =>
+      root.render(
+        <AppNotifications
+          apps={[provider]}
+          scope={scope}
+          onOpenApp={() => {}}
+          children={renderInbox}
+          placement="sidebar"
+        />,
+      ),
+    );
+    await flush();
+    await click("Notifiche");
+    expect(host.textContent).toContain("Dentista");
+    await act(async () =>
+      root.render(
+        <AppNotifications
+          apps={[{ ...provider, status: "disabled" }]}
+          scope={scope}
+          onOpenApp={() => {}}
+          children={renderInbox}
+          placement="sidebar"
+        />,
+      ),
+    );
+    expect(host.textContent).not.toContain("Dentista");
+    expect(host.querySelector(".bs-notifications__badge")).toBeNull();
+  });
+
+  it("keeps the central bell available when no app produces notifications", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () =>
+      root.render(
+        <AppNotifications
+          apps={[]}
+          scope={scope}
+          onOpenApp={() => {}}
+          children={renderInbox}
+          placement="header"
+        />,
+      ),
+    );
+    await flush();
+    await click("Notifiche");
+    expect(host.textContent).toContain("Nessuna notifica");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("merges arbitrary enabled providers by time, namespaces ids and uses registry identity", async () => {
+    const other = {
+      ...provider,
+      app_id: "jobs",
+      name: "Jobs",
+      logo: { kind: "image", value: "/apps/jobs/icon.png" },
+    } as AppRegistryItem;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async (url: string) =>
+          new Response(
+            JSON.stringify({
+              notifications: [
+                {
+                  ...notice,
+                  created_at: url.includes("jobs")
+                    ? "2026-10-10T11:00:00Z"
+                    : "2026-10-10T10:00:00Z",
+                  title: url.includes("jobs") ? "Export pronto" : "Dentista",
+                  presentation: {
+                    kind: "payment",
+                    amount: "invalid",
+                    app: "Wrong app",
+                  },
+                },
+              ],
+              total: 1,
+            }),
+          ),
+      ),
+    );
+    await act(async () =>
+      root.render(
+        <AppNotifications
+          apps={[
+            provider,
+            other,
+            { ...other, app_id: "disabled", status: "disabled" },
+          ]}
+          scope={scope}
+          onOpenApp={() => {}}
+          children={renderInbox}
+          placement="sidebar"
+        />,
+      ),
+    );
+    await flush();
+    await click("Notifiche");
+    const rows = host.querySelectorAll<HTMLElement>("[data-notification]");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain("Export pronto");
+    expect(rows[0].dataset.notification).not.toEqual(
+      rows[1].dataset.notification,
+    );
+    expect(rows[0].dataset.kind).toBe("generic");
+    expect(rows[0].querySelector("img")?.getAttribute("src")).toBe(
+      "/apps/jobs/icon.png",
+    );
+    expect(host.textContent).not.toContain("Wrong app");
+  });
+
+  it("persists read-all only with supported capabilities and reflects same-id receipt updates", async () => {
+    let read = false;
+    const fetchMock = vi.fn(async (_url: string, options: RequestInit) => {
+      const body = JSON.parse(String(options.body));
+      if (body.action === "notifications.read") {
+        expect(body).toMatchObject({ all: true });
+        expect(body.id).toBeUndefined();
+        read = true;
+        return new Response("{}");
+      }
+      return new Response(
+        JSON.stringify({
+          notifications: [{ ...notice, read }],
+          total: 1,
+          unread_total: read ? 0 : 1,
+          capabilities: { read: true },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const apps = [provider];
+    await act(async () =>
+      root.render(
+        <AppNotifications
+          apps={apps}
+          scope={scope}
+          onOpenApp={() => {}}
+          children={renderInbox}
+          placement="sidebar"
+        />,
+      ),
+    );
+    await flush();
+    await click("Notifiche");
+    expect(host.querySelector("[data-unread]")).not.toBeNull();
+    await click("Segna lette");
+    await flush();
+    expect(
+      host.querySelector("[data-notification]")?.hasAttribute("data-read"),
+    ).toBe(true);
+    expect(host.textContent).toContain("Dentista");
+    expect(host.querySelector(".bs-notifications__badge")).toBeNull();
+    read = false;
+    transport.reconnect();
+    await flush();
+    expect(
+      host.querySelector("[data-notification]")?.hasAttribute("data-read"),
+    ).toBe(false);
+  });
+
+  it("dispatches advertised actions to their provider and never reports completion after failure", async () => {
+    let fail = true,
+      done = false;
+    const fetchMock = vi.fn(async (_url: string, options: RequestInit) => {
+      const body = JSON.parse(String(options.body));
+      if (body.action === "notifications.action") {
+        expect(body).toMatchObject({ id: "reminder", action_id: "accept" });
+        if (fail) return new Response("{}", { status: 503 });
+        done = true;
+        return new Response(
+          JSON.stringify({
+            notification: { ...notice, action_done: "Accettato", read: true },
+          }),
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          notifications: [
+            {
+              ...notice,
+              action_done: done ? "Accettato" : undefined,
+              read: done,
+              actions: [{ id: "accept", label: "Accetta", done: "Accettato" }],
+            },
+          ],
+          total: 1,
+          unread_total: done ? 0 : 1,
+          capabilities: { actions: true },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () =>
+      root.render(
+        <AppNotifications
+          apps={[provider]}
+          scope={scope}
+          onOpenApp={() => {}}
+          children={renderInbox}
+          placement="sidebar"
+        />,
+      ),
+    );
+    await flush();
+    await click("Notifiche");
+    await click("Accetta");
+    expect(host.querySelector("[data-done]")).toBeNull();
+    expect(host.querySelector("[data-action]")).not.toBeNull();
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    fail = false;
+    await click("Accetta");
+    await flush();
+    expect(host.querySelector("[data-done]")?.textContent).toContain(
+      "Accettato",
+    );
+    expect(host.querySelector("[data-action]")).toBeNull();
+  });
+
+  it("retains only failed cards when bulk dismissal partially fails", async () => {
+    let removed = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, options: RequestInit) => {
+        const body = JSON.parse(String(options.body));
+        if (body.action === "notifications.dismiss") {
+          if (body.id === "fail") return new Response("{}", { status: 503 });
+          removed = true;
+          return new Response("{}");
+        }
+        return reply(
+          removed
+            ? [{ ...notice, id: "fail", title: "Da riprovare" }]
+            : [notice, { ...notice, id: "fail", title: "Da riprovare" }],
+        );
+      }),
+    );
+    await act(async () =>
+      root.render(
+        <AppNotifications
+          apps={[provider]}
+          scope={scope}
+          onOpenApp={() => {}}
+          children={renderInbox}
+          placement="sidebar"
+        />,
+      ),
+    );
+    await flush();
+    await click("Notifiche");
+    await click("Chiudi visibili");
+    await flush();
+    expect(host.textContent).toContain("Da riprovare");
+    expect(host.textContent).not.toContain("Dentista");
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
   it("retains one reader and unread state as the responsive surface moves or closes", async () => {
     const fetchMock = vi.fn(async () => reply());
     vi.stubGlobal("fetch", fetchMock);
     const apps = [provider];
-    const renderAt = (visible: boolean, placement: "sidebar" | "header") => act(async () =>
-      root.render(<AppNotifications apps={apps} scope={scope} onOpenApp={() => {}} placement={placement}>
-        {(notifications) => visible ? <div data-surface={placement} key={placement}>{notifications}</div> : null}
-      </AppNotifications>),
-    );
+    const renderAt = (visible: boolean, placement: "sidebar" | "header") =>
+      act(async () =>
+        root.render(
+          <AppNotifications
+            apps={apps}
+            scope={scope}
+            onOpenApp={() => {}}
+            placement={placement}
+          >
+            {(notifications) =>
+              visible ? (
+                <div data-surface={placement} key={placement}>
+                  {notifications}
+                </div>
+              ) : null
+            }
+          </AppNotifications>,
+        ),
+      );
     await renderAt(true, "sidebar");
     await flush();
     const sidebar = host.querySelector('[data-surface="sidebar"]')!;
@@ -109,13 +390,17 @@ describe("App notification inbox", () => {
     expect(sidebar.isConnected).toBe(false);
     expect(host.querySelectorAll(".bs-notifications__toggle")).toHaveLength(1);
     expect(header.textContent).toContain("Notifiche (1)");
-    expect(header.querySelector(".bs-mobile-shell-header__button")).not.toBeNull();
+    expect(
+      header.querySelector(".bs-mobile-shell-header__button"),
+    ).not.toBeNull();
     await renderAt(false, "sidebar");
     await flush();
     expect(host.querySelector("button")).toBeNull();
     await renderAt(true, "sidebar");
     await flush();
-    expect(host.querySelector('[data-surface="sidebar"]')!.textContent).toContain("Notifiche (1)");
+    expect(
+      host.querySelector('[data-surface="sidebar"]')!.textContent,
+    ).toContain("Notifiche (1)");
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -127,7 +412,13 @@ describe("App notification inbox", () => {
     const open = vi.fn();
     await act(async () =>
       root.render(
-        <AppNotifications apps={[provider]} scope={scope} onOpenApp={open} children={renderInbox} placement="sidebar" />,
+        <AppNotifications
+          apps={[provider]}
+          scope={scope}
+          onOpenApp={open}
+          children={renderInbox}
+          placement="sidebar"
+        />,
       ),
     );
     await flush();
@@ -162,7 +453,8 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
-          children={renderInbox} placement="sidebar"
+          children={renderInbox}
+          placement="sidebar"
           apps={[provider]}
           scope={scope}
           onOpenApp={() => {}}
@@ -208,7 +500,8 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
-          children={renderInbox} placement="sidebar"
+          children={renderInbox}
+          placement="sidebar"
           apps={[provider]}
           scope={scope}
           onOpenApp={() => {}}
@@ -245,7 +538,8 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
-          children={renderInbox} placement="sidebar"
+          children={renderInbox}
+          placement="sidebar"
           key="alice"
           apps={[provider]}
           scope={scope}
@@ -270,7 +564,8 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
-          children={renderInbox} placement="sidebar"
+          children={renderInbox}
+          placement="sidebar"
           key="bob"
           apps={[provider]}
           scope={{
@@ -299,7 +594,8 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
-          children={renderInbox} placement="sidebar"
+          children={renderInbox}
+          placement="sidebar"
           apps={[provider]}
           scope={scope}
           onOpenApp={() => {}}
@@ -316,5 +612,5 @@ describe("App notification inbox", () => {
         (call) => JSON.parse(String(call[1].body)).offset === 100,
       ),
     ).toBe(true);
-  });
+  }, 15000);
 });

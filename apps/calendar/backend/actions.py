@@ -53,7 +53,7 @@ from view_state import clear_custom_view, read_view_filter, set_custom_view, set
 from store import read_state
 from pwa_read_model import read_model
 from account_summary import account_summary
-from reminders import list_notifications, dismiss_notification
+from reminders import list_notifications, dismiss_notification, read_notification
 from recurrence_mutations import mutate_occurrence
 
 
@@ -85,6 +85,8 @@ def handle_action(
             return 200, list_notifications(data_root, body, user_id=user_id)
         if action == "notifications.dismiss":
             return 200, dismiss_notification(data_root, body.get("id"), user_id=user_id)
+        if action == "notifications.read":
+            return 200, read_notification(data_root, body, user_id=user_id)
         if action == "calendar_connections.list":
             return 200, list_connections(data_root, now=oauth_now)
         if action == "calendar_calendars.list":
@@ -337,7 +339,7 @@ def list_payload(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 def app_events_for_action(action: str, *, app_id: str = "calendar") -> list[dict[str, str]]:
     normalized = normalize_action(action)
-    if normalized == "notifications.dismiss":
+    if normalized in {"notifications.dismiss", "notifications.read"}:
         return [{"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "notifications"}]
     if normalized in MUTATING_ACTIONS:
         return [

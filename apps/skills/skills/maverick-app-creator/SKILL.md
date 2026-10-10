@@ -61,6 +61,21 @@ Choose `presentation.sidebar_enabled` deliberately for every workspace frontend.
 
 With false, Base Shell keeps the app rail, suppresses detail-panel hover/focus/open requests and fixed-panel spacing, and exposes workspace/app settings and branding/theme through two compact glass rail menus above/below the desktop shortcuts. Sidebar overlay/fixed controls are omitted while disabled; the saved preference resumes on enabled apps. On mobile the header menu exposes the same controls. Do not reimplement these generic controls in the app or add app-id exceptions to the shell. Verify rail/menu keyboard and touch access, mobile layout, and switching back to an enabled app with the saved fixed/overlay preference. Existing apps stay enabled unless their contract opts out; Design Studio declares false.
 
+## Centralized Notifications
+
+Assess notification use cases for every app. If reminders, messages, background
+completion/failure, approvals, or meaningful domain changes make notifications
+useful, implement them through Base Shell's shared inbox. Follow `maverick sdk
+docs` and `docs/development/app_notifications.md` in the Maverick root. Declare
+`notifications.inbox` v1 on `backend`, implement `notifications.list` and
+trusted-user `notifications.dismiss`, and declare/publish the `notifications`
+data resource. Keep producers, deduplication and per-user receipts in the app's
+`data/<app_id>` and hooks. Advertise optional read/action capabilities only
+when their backend behavior exists; provide typed presentation and owning-app
+`open_params` where useful. Do not add a second app bell, shell app-id branch,
+or direct access to another app's inbox data. Verify a real arrival while
+another app is active, reconnect, failed writes and user/workspace isolation.
+
 ## App Icon Is Part Of The App
 
 The icon is part of a user-facing app's product quality, not optional polish. Do not ship a new frontend app with Maverick's generic fallback icon.

@@ -41,11 +41,23 @@ row (including the compact workspace menu for apps without a sidebar). On mobile
 it is the last header action, immediately after the app's plus button; the
 contextual Chat action precedes the plus. It reuses each surface's native button
 style. A single inbox reader survives layout changes and closed sidebar menus.
+The inbox uses `frontend/src/components/ui/live-notification-feed.tsx` with the
+provided eight animated detail kinds plus a generic fallback. Provider data
+supplies the cards; demo autoplay/backgrounds remain in a separate unmounted
+example. Tailwind utilities and shadcn aliases are app-local, theme colors map
+to Maverick, and the shell keeps its existing base styles. Registry app icons
+appear in service tiles. New arrivals animate; reduced motion, keyboard focus
+and mobile touch dismissal are supported. Read-all and action controls require
+explicit backend capabilities; failures retain cards. Read/dismiss receipts
+persist in the provider and the badge uses whole-inbox unread counts. The bell
+remains available when no provider has notifications.
 The anchored inbox uses the browser's top layer to avoid sidebar clipping,
 stays within the viewport, and closes with an outside click or Escape.
 The current channel is in-app delivery; it does not send OS push notifications
 while the browser is closed. See the notification contract in
 [`app_contract_architecture.md`](../../docs/architecture/app_contract_architecture.md).
+New and ported apps with applicable notification use cases must integrate here;
+see [the integration guide](../../docs/development/app_notifications.md).
 Shell frame generations use the SDK's unique identifier helper, so approved
 HTTP development origins also work when `crypto.randomUUID` is unavailable.
 

@@ -1,52 +1,8 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { test } from "node:test";
-import { browserExecutable, close, listen, send } from "./browser-contract-support.mjs";
-
-const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const requireBrowser = createRequire(resolve(appRoot, "../browser/package.json"));
-const { chromium } = requireBrowser("playwright");
-const apps = ["chat", "canvas", "settings"].map((app_id) => ({
-  app_id, name: app_id, status: "enabled", frontend_role: "workspace", frontend_launchable: true,
-  frontend_mount: `/apps/${app_id}/`, sidebar_enabled: app_id !== "canvas",
-  provides: app_id === "chat" ? [{ interface: "notifications.inbox", version: "1", surfaces: ["backend"] }] : [], requires: [],
-}));
-const user = { user_id: "fixture-user", username: "fixture", platform_role: "admin", account_type: "local" };
-
-function fixtureServer(requests) {
-  return createServer(async (request, response) => {
-    const url = new URL(request.url, "http://localhost");
-    requests.push(url.pathname + url.search);
-    const json = (body, status = 200) => send(response, JSON.stringify(body), "application/json", status);
-    if (url.pathname === "/api/session") return json({ authenticated: true, expires_at: "2099-01-01T00:00:00Z", session_generation: "fixture-session", workspace_id: "default", user });
-    if (url.pathname === "/api/apps") return json({ items: apps });
-    if (url.pathname === "/api/workspaces") return json({ items: [{ workspace_id: "default", name: "Default", is_active: true, status: "active" }], active_workspace_id: "default" });
-    if (url.pathname === "/api/apps/app-store/backend") return json({ pinned_apps: ["chat", "canvas"] });
-    if (url.pathname === "/api/apps/chat/backend") return json({ notifications: [{ id: "fixture-reminder", title: "Promemoria di prova" }], total: 1 });
-    if (url.pathname === "/api/settings/provider-setup") return json({ provider: { active_provider: "fixture", available_providers: [], blocked_reason: "ready", model_settings: null, selection: null }, user, workspace: { workspace_id: "default" } });
-    if (url.pathname === "/api/apps/dependencies") return json({ workspace_id: "default", consumer_app_id: "canvas", status: "ready", dependencies: [] });
-    if (url.pathname === "/api/apps/widgets") return json({ items: [] });
-    // App documents and sidecars are outside this shell-only fixture.
-    if (url.pathname.startsWith("/api/")) return json({ error: "fixture_surface_unavailable" }, 503);
-    const assetPath = url.pathname.startsWith("/apps/base-shell/")
-      ? url.pathname.slice("/apps/base-shell/".length)
-      : url.pathname.startsWith("/app/") || url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-    const path = resolve(appRoot, "frontend/dist", assetPath);
-    if (!path.startsWith(resolve(appRoot, "frontend/dist") + "/")) return send(response, "", "text/plain", 404);
-    try {
-      const mime = path.endsWith(".js") ? "text/javascript" : path.endsWith(".css") ? "text/css"
-        : path.endsWith(".html") ? "text/html" : path.endsWith(".woff2") ? "font/woff2"
-        : path.endsWith(".svg") ? "image/svg+xml" : path.endsWith(".png") ? "image/png" : "application/octet-stream";
-      send(response, await readFile(path), mime);
-    } catch {
-      send(response, "", "text/plain", 404);
-    }
-  });
-}
+import { browserExecutable, close, listen } from "./browser-contract-support.mjs";
+import { appRoot, chromium, fixtureServer } from "./shell-presentation-fixture.mjs";
 
 test("built shell supports app sidebar opt-out, desktop menus, saved preferences and mobile touch", { timeout: 45_000 }, async () => {
   const requests = [];
@@ -109,8 +65,10 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     const inbox = page.getByRole("region", { name: "Notifiche da leggere" });
     await inbox.waitFor({ state: "visible" });
     assert.equal(await inbox.evaluate((element) => element.matches(":popover-open")), true);
-    await page.keyboard.press("Tab");
     assert.equal(await page.getByRole("button", { name: "Promemoria di prova", exact: true })
+      .evaluate((button) => button === document.activeElement), true);
+    await page.keyboard.press("Tab");
+    assert.equal(await page.getByRole("button", { name: "Chiudi notifica: Promemoria di prova", exact: true })
       .evaluate((button) => button === document.activeElement), true);
     await page.keyboard.press("Escape");
     await inbox.waitFor({ state: "hidden" });

@@ -884,6 +884,12 @@ Backend recovery may invoke a declared app hook such as `backend_recovery` on en
 
 ### App-owned notification inboxes
 
+New and ported apps must assess notification use cases. When notifications are
+needed or applicable, they must integrate with this centralized Base Shell
+surface. Do not create independent app bells/inboxes or app-id branches in the
+shell. App-owned inline status may complement the central feed. The executable
+contract and examples are in [Centralized app notifications](../development/app_notifications.md).
+
 Apps may provide `notifications.inbox`, version `1`, with the `backend` surface
 to expose durable notifications in Base Shell while another app is active.
 The shell discovers enabled providers from its authorized app registry. It
@@ -892,11 +898,20 @@ does not calculate calendar deadlines or read app persistence.
 The provider implements `notifications.list` with integer `offset` (default 0)
 and `limit` (default 50, maximum 100), returning `notifications`, `total` and
 `has_more`. Each notification has a stable `id`, `title`, optional ISO
-`scheduled_at` and IANA `timezone`, and optional `open_params` containing
+`scheduled_at` and IANA `timezone`, optional `body`, `created_at`, `read`, typed
+`presentation` detail and optional `open_params` containing
 primitive app navigation parameters. The shell opens the owning app with those
 parameters. `notifications.dismiss` takes `id` and acknowledges it for the
 trusted entrypoint `user_id`; caller-supplied actor fields confer no authority.
 Receipts belong to the provider and are excluded from notification projections.
+Optional `capabilities.read: true` adds `notifications.read` (`id` or `all: true`)
+and `unread_total` covering the whole inbox; read receipts do not dismiss rows.
+Optional `capabilities.actions: true` adds validated `notifications.action`
+(`id`, `action_id`) for advertised `{id, label, done?}` actions. Providers return
+updated public state, including `action_done` when needed. Unsupported controls
+remain absent; failed writes preserve cards. Names and icons come from the app
+registry. The shell renders the shared Live Notification Feed, namespaces ids,
+merges by timestamps, and keeps the bell accessible across all app layouts.
 Inbox reads and acknowledgements require no provider credentials. The shell
 explicitly requests no app secrets on these backend actions.
 

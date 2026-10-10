@@ -281,8 +281,13 @@ UI deletion has an eight-second undo window before any local or provider delete
 is committed. Closing the app cancels an uncommitted deletion. Local popup
 reminders are collected by the existing backend `background_tick` scheduler
 without an open Calendar frontend. The app provides `notifications.inbox` version
-`1`; Base Shell shows unread alerts from any active app and opens the event from
-its notification. Dismissal is idempotent and scoped to the trusted user.
+`1`; Base Shell shows alerts while any app is active and opens the event from
+its notification. Its live feed uses a calendar date detail in the event's
+timezone. `notifications.read` accepts an `id` or `all: true` and persists
+trusted-user read receipts separately from dismissal; the list supplies
+`unread_total` and `capabilities.read: true`. Read-all includes unloaded pages.
+Dismissal is idempotent and scoped to the trusted user. Calendar has no inbox
+approval action and advertises `capabilities.actions: false`.
 
 `data/calendar/reminders.json` stores the scheduler watermark, stable delivery
 identities and per-user acknowledgements separately from event state. Recovery

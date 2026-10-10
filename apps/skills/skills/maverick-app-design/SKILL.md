@@ -130,6 +130,17 @@ Choose `presentation.sidebar_enabled` deliberately for every workspace frontend.
 
 With false, Base Shell keeps the app rail, suppresses detail-panel hover/focus/open requests and fixed-panel spacing, and exposes workspace/app settings and branding/theme through two compact glass rail menus above/below the desktop shortcuts. Sidebar overlay/fixed controls are omitted while disabled; the saved preference resumes on enabled apps. On mobile the header menu exposes the same controls. Do not reimplement these generic controls in the app or add app-id exceptions to the shell. Verify rail/menu keyboard and touch access, mobile layout, and switching back to an enabled app with the saved fixed/overlay preference. Existing apps stay enabled unless their contract opts out; Design Studio declares false.
 
+## Centralized Notifications
+
+When an app needs or can use notifications, integrate `notifications.inbox` v1
+through Base Shell's shared Live Notification Feed. App names/icons come from
+the registry; domain producers, read/dismiss/action receipts, typed detail and
+navigation belong to the provider backend. Do not introduce a second app bell
+or a private global inbox. Follow `maverick sdk docs` and
+`docs/development/app_notifications.md` in the Maverick root. Verify the inbox
+while another app is active, sidebar opt-out, desktop/mobile, keyboard/touch,
+themes and reduced motion. App-owned inline status may complement this surface.
+
 ## Sidebar Widgets In Base Shell
 
 If the app needs internal navigation, filters, folders, projects, or object lists, declare app-owned widgets in `app_contract.json` instead of putting shell-specific sidebar code in `base-shell`:

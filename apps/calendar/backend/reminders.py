@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 import json
+from zoneinfo import ZoneInfo
 
 from core.app_sdk.storage import read_json_state, update_json_state
 from recurrence import expand_events
@@ -118,6 +119,7 @@ def reminder_tick(data_root, *, now=None):
                 "due_at": format_time(due),
                 "created_at": format_time(current),
                 "dismissed_by": {},
+                "read_by": {},
             }
             result["delivered"] += 1
         watermark = min(deferred) if deferred else current
@@ -153,8 +155,16 @@ def list_notifications(data_root, body, *, user_id=None, now=None):
         }
         notices = [
             {
-                **{k: v for k, v in n.items() if k != "dismissed_by"},
+                **{k: v for k, v in n.items() if k not in {"dismissed_by", "read_by"}},
                 "title": valid[n["id"]]["title"],
+                "read": bool(user_id and user_id in (n.get("read_by") or {})),
+                "presentation": {
+                    "kind": "calendar",
+                    "date": iso_time(n["startTime"], "startTime").astimezone(
+                        ZoneInfo(valid[n["id"]]["timezone"])
+                    ).date().isoformat(),
+                    "accent": "#ef4444",
+                },
             }
             for n in notices
             if n["id"] in valid
@@ -176,6 +186,8 @@ def list_notifications(data_root, body, *, user_id=None, now=None):
     return {
         "notifications": notices[offset : offset + limit],
         "total": len(notices),
+        "unread_total": sum(not n.get("read", False) for n in notices),
+        "capabilities": {"read": True, "actions": False},
         "has_more": offset + limit < len(notices),
         "checked_at": state.get("checked_at"),
     }
@@ -197,3 +209,32 @@ def dismiss_notification(data_root, notification_id, *, user_id=None, now=None):
 
     update_json_state(data_root, REMINDER_FILE, update, _default())
     return {"id": notification_id, "dismissed": True}
+
+
+def read_notification(data_root, body, *, user_id=None, now=None):
+    """Read receipts are distinct from dismissal and private to the trusted actor."""
+    if not user_id:
+        raise ValueError("Reading notifications requires an authenticated user.")
+    notification_id = body.get("id")
+    all_notices = body.get("all") is True
+    if all_notices and notification_id is not None:
+        raise ValueError("Choose either `id` or `all: true`.")
+    if not all_notices and (
+        not isinstance(notification_id, str) or len(notification_id) != 64
+    ):
+        raise ValueError("`id` must identify a reminder notification.")
+    result = {"read": True, "count": 0}
+
+    def update(state):
+        for key, notice in (state.get("notifications") or {}).items():
+            if (all_notices or key == notification_id) and user_id not in (
+                notice.get("dismissed_by") or {}
+            ):
+                notice.setdefault("read_by", {}).setdefault(
+                    user_id, format_time(now or datetime.now(UTC))
+                )
+                result["count"] += 1
+        return state
+
+    update_json_state(data_root, REMINDER_FILE, update, _default())
+    return result

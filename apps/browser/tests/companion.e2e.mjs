@@ -148,7 +148,8 @@ try {
   await product.goto(`${origin}/apps/platform-connectors/`);
   await product.bringToFront();
   await product.getByRole("heading",{name:"Connectors",exact:true}).waitFor();
-  await wait(async()=>await product.locator('.source-option').count() === 9);
+  await product.getByRole('heading',{name:'Instagram',exact:true}).waitFor();
+  assert.equal(await product.locator('.source-option').count(),0);
   await wait(async()=>await product.locator(`#sharing option[value="${connection.session_id}"]`).count() === 1);
   await product.locator('#sharing').selectOption(connection.session_id);
   await product.locator('.query-field input').fill('@fixture_user');

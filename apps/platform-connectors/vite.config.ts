@@ -7,6 +7,12 @@ export default defineConfig({
   root: 'frontend',
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        app: 'frontend/index.html',
+        'widgets/connectors-sidebar/index': 'frontend/widgets/connectors-sidebar/index.html'
+      }
+    }
   }
 });

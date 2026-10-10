@@ -29,50 +29,10 @@
   margin-top: 4px;
 }
 .workspace-grid {
-  display: grid;
-  grid-template-columns: 196px minmax(0, 1fr);
-  gap: 24px;
-  min-height: 0;
-  flex: 1;
-}
-.sources {
-  overflow: auto;
-  padding-bottom: 28px;
-}
-.section-label {
-  display: flex;
-  justify-content: space-between;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  font-size: 11px;
-  color: var(--muted);
-  margin: 4px 10px 14px;
-}
-.sources nav {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-}
-.source-option {
-  justify-content: flex-start;
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-  min-height: 44px;
-  padding: 8px 10px;
-  border-radius: 16px;
-  gap: 10px;
-  text-align: left;
-}
-.source-option.selected {
-  background: var(--maverick-surface-active);
-  color: var(--maverick-text);
-  border-color: var(--maverick-border-strong);
-}
-.source-option small {
-  font-size: 11px;
-  color: var(--accent);
-  margin-left: auto;
+  min-height: 0;
+  flex: 1;
 }
 .source-symbol {
   display: inline-flex;
@@ -93,13 +53,8 @@
   border-radius: 14px;
   font-size: 27px;
 }
-.aside-note {
-  font-size: 11px;
-  line-height: 1.8;
-  margin: 22px 10px;
-  max-width: 175px;
-}
 .main-panel {
+  flex: 1;
   overflow-y: auto;
   min-height: 0;
   padding-bottom: 20px;
@@ -371,12 +326,6 @@ details summary {
 .source-symbol svg { width: 20px; height: 20px; }
 .source-symbol.large svg { width: 26px; height: 26px; }
 .empty-symbol svg { width: 100%; height: 100%; }
-.sources { border-right: 1px solid var(--border); padding-right: 12px; }
 .tabs { padding-top: 2px; }
 .source-heading .tag { flex-shrink: 0; }
 input:hover, select:hover { border-color: var(--maverick-border-strong); }
-.source-option.selected .source-symbol { color: var(--maverick-text); }
-@media (max-width: 700px) {
-  .sources { border: 0; padding-right: 0; }
-  .source-option .source-symbol svg { width: 18px; height: 18px; }
-}

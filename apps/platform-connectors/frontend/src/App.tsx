@@ -7,6 +7,7 @@ import { Results } from "./Results";
 import { operationNames } from "./presentation";
 import { shellHref, dateLabel, type Collection } from "./api";
 import { useConnectorsState } from "./useConnectorsState";
+import { ownerAppId, postToShell, type ConnectorsTab } from "./sourceNavigation";
 export function App() {
   const mainPanel = useRef<HTMLElement>(null);
   const {
@@ -14,7 +15,7 @@ export function App() {
     sourceId,
     setSourceId,
     tab,
-    setTab,
+    setTab: setTabState,
     selected,
     setSelected,
     collection,
@@ -32,10 +33,15 @@ export function App() {
   useEffect(() => {
     mainPanel.current?.scrollTo({ top: 0 });
   }, [tab]);
+  const setTab = (next: ConnectorsTab) => {
+    setTabState(next);
+    postToShell({ type: "maverick.app.open-app", app_id: ownerAppId, params: { source: sourceId, tab: next } });
+  };
   const chooseSource = (id: string) => {
     setSourceId(id);
-    setTab("explore");
+    setTabState("explore");
     setSelected(null);
+    postToShell({ type: "maverick.app.open-app", app_id: ownerAppId, params: { source: id } });
   };
   const openCollection = async (id: string) => {
     const result = await perform<{ collection: Collection }>({
@@ -78,32 +84,6 @@ export function App() {
         </a>
       </header>
       <div className="workspace-grid">
-        <aside className="sources">
-          <div className="section-label">
-            Sources <span>{state.sources.length}</span>
-          </div>
-          <nav aria-label="Sources">
-            {state.sources.map((s) => (
-              <button
-                key={s.id}
-                className={
-                  "source-option " + (s.id === sourceId ? "selected" : "")
-                }
-                aria-pressed={s.id === sourceId}
-                onClick={() => chooseSource(s.id)}
-              >
-                <span className={"source-symbol " + s.id}>
-                  <SourceIcon source={s.id} />
-                </span>
-                <span>{s.name}</span>
-              </button>
-            ))}
-          </nav>
-          <p className="aside-note">
-            Your sign-in stays in Chrome. Observations and saved collections are
-            private to your Maverick user.
-          </p>
-        </aside>
         <main ref={mainPanel} className="main-panel">
           <nav className="tabs" aria-label="Workspace">
             <button

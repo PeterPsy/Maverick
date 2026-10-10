@@ -2,16 +2,6 @@
   .connectors-app {
     padding: 20px 18px 0;
   }
-  .workspace-grid {
-    grid-template-columns: 170px minmax(0, 1fr);
-    gap: 18px;
-  }
-  .source-option {
-    font-size: 12px;
-  }
-  .source-option small {
-    display: none;
-  }
   .source-heading {
     flex-wrap: wrap;
   }
@@ -61,34 +51,6 @@
     min-height: 34px;
     padding: 8px 10px;
     max-width: 125px;
-  }
-  .workspace-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .sources {
-    padding: 0;
-    overflow: visible;
-  }
-  .section-label,
-  .aside-note {
-    display: none;
-  }
-  .sources nav {
-    flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: 7px;
-  }
-  .source-option {
-    white-space: nowrap;
-    padding: 7px 10px;
-    min-height: 36px;
-  }
-  .source-option .source-symbol {
-    width: 22px;
-    height: 22px;
-    font-size: 13px;
   }
   .main-panel {
     flex: 1;

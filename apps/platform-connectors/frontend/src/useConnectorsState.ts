@@ -7,6 +7,7 @@ import {
   type Run,
   type State,
 } from "./api";
+import { ownerAppId, postToShell, sourceFromParams, tabFromParams } from "./sourceNavigation";
 const empty: State = {
   sources: [],
   connections: [],
@@ -33,6 +34,7 @@ export function useConnectorsState() {
   const refresh = useCallback(async () => {
     const next = await callBackend<State>({ action: "status" });
     setState(next);
+    setSourceId((current) => next.sources.some((item) => item.id === current) ? current : "instagram");
     if (!filterDirty.current) setFilter(next.view_state?.query || "");
     setSelected((current) =>
       current
@@ -104,6 +106,9 @@ export function useConnectorsState() {
     };
   }, [refresh]);
   useEffect(() => {
+    postToShell({ type: "maverick.app.selection-changed", owner_app_id: ownerAppId, selection: { source: sourceId } });
+  }, [sourceId]);
+  useEffect(() => {
     const navigate = (event: MessageEvent) => {
       if (
         !isExactMaverickParentMessage(event) ||
@@ -129,15 +134,23 @@ export function useConnectorsState() {
             setTab("history");
           })
           .catch((e) => setError(e.message));
-      if (
-        typeof params.source === "string" &&
-        /^[a-z_]{1,40}$/.test(params.source)
-      )
-        setSourceId(params.source);
+      const requestedSource = sourceFromParams(params);
+      const requestedTab = tabFromParams(params);
+      if (requestedSource) {
+        setSourceId(requestedSource);
+        setTab(requestedTab || "explore");
+        if (!requestedTab) setSelected(null);
+      } else if (requestedTab) {
+        setTab(requestedTab);
+      }
     };
     const params = Object.fromEntries(
       new URLSearchParams(window.location.search),
     );
+    const requestedSource = sourceFromParams(params);
+    if (requestedSource) setSourceId(requestedSource);
+    const requestedTab = tabFromParams(params);
+    if (requestedTab) setTab(requestedTab);
     if (params.collection_id)
       void callBackend<{ collection: Collection }>({
         action: "collection.get",
@@ -156,6 +169,7 @@ export function useConnectorsState() {
         })
         .catch((e) => setError(e.message));
     window.addEventListener("message", navigate);
+    postToShell({ type: "maverick.app.ready", app_id: ownerAppId });
     return () => window.removeEventListener("message", navigate);
   }, []);
 

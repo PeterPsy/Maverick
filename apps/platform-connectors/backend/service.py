@@ -84,6 +84,8 @@ def handle(payload, body=None):
         return 200,{"app_id":"platform-connectors","entity_types":[ENTITY]}
     if not payload.user_id or not payload.workspace_id:
         return 403,{"error":"actor_required","detail":"A workspace-authenticated user is required."}
+    if action == "sources.list":
+        return 200,{"sources":SOURCES}
     root, owner = Path(payload.data_root),payload.user_id
     if action == "dependency.completed" and payload.raw.get("surface") != "dependency_backend_request_callback":
         return 403,{"error":"trusted_callback_required","detail":"Dependency callbacks can only be delivered by Core."}

@@ -102,6 +102,8 @@ collection export uses governed Storage.
 
 ```bash
 python3 -m unittest discover -s apps/platform-connectors/tests -p 'test_*.py'
+node --test apps/platform-connectors/tests/source-navigation.test.mjs
+PLAYWRIGHT_BROWSERS_PATH=/home/ubuntu/.cache/ms-playwright node --test apps/platform-connectors/tests/sidebar.browser.test.mjs
 python3 -m unittest discover -s apps/browser/tests -p 'test_browser*.py'
 npm --prefix apps/browser test
 PLAYWRIGHT_BROWSERS_PATH=/home/ubuntu/.cache/ms-playwright npm --prefix apps/browser run test:companion
@@ -120,8 +122,11 @@ Architecture: [Platform Connectors](../../docs/architecture/platform_connectors_
 Connectors uses the current Maverick Storage/Agents token values in app-owned
 styles, a monochrome accent, glass surfaces and consistent SVG source icons.
 Its transparent compact identity is optically centred and padded for the rail
-and App Store. Desktop has compact source navigation; mobile has a horizontally
-scrollable source selector and respects the shell content offset. All copy is English.
+and App Store. Sources and the privacy note live in the app-owned
+`connectors-sidebar` widget hosted by Base Shell at `shell.sidebar.primary`.
+The shell sidebar is enabled; source selection opens Explore and closes the mobile
+drawer. Main-panel shortcuts and deep links keep the selected source aligned with
+the sidebar without reloading the app. All copy is English.
 The catalog contains nine sources; the seven additional sources removed from the
 requested screenshot are absent from executable descriptors and readers.
 

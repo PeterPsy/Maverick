@@ -87,9 +87,16 @@ The English frontend uses app-owned copies of current Maverick Storage tokens:
 neutral accent, native font stack, glass surfaces, 22px cards and 18px controls.
 Source navigation uses consistent inline SVG icons; the compact app identity is
 neutral line art with transparent padding matched to rail and App Store glyph
-sizes. Main-panel scrolling and compact mobile source navigation preserve the
-shell content offset. Connectors is a self-contained research workspace with
-`presentation.sidebar_enabled: false`; no shared shell implementation is imported.
+sizes. Source navigation and the privacy note are app-owned in the
+`connectors-sidebar` iframe widget declared for `shell.sidebar.primary`. The
+shell sidebar uses the default enabled presentation; Base Shell owns its frame,
+workspace controls and mobile drawer. The main frontend keeps Explore, Collections
+and History and respects the shell content offset. Bounded source navigation uses
+`maverick.widget.open-app`, `maverick.app.navigate` and the generic selection relay;
+mobile selection closes the drawer through `maverick.shell.sidebar.close`. Widgets
+validate the exact shell parent, owner and widget context, reset on workspace
+changes and request only the authenticated `sources.list` catalog. No private
+observations are loaded in the sidebar and no shared shell code is imported.
 
 App Store now enriches summaries with public icon metadata from the existing
 active workspace registry, matching public identities and preserving explicit

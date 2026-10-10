@@ -95,11 +95,13 @@ export type State = {
 
 export async function callBackend<T>(
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch("/api/apps/platform-connectors/backend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
   const data = await response.json();
   if (!response.ok || data.error)

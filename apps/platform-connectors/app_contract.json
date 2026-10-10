@@ -41,8 +41,7 @@
     "platform_roles": null
   },
   "presentation": {
-    "frontend_role": "workspace",
-    "sidebar_enabled": false
+    "frontend_role": "workspace"
   },
   "capabilities": {
     "mcp_tools": [
@@ -196,7 +195,25 @@
     "data": false,
     "repair_only": false
   },
-  "widgets": [],
+  "widgets": [
+    {
+      "widget_id": "connectors-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/connectors-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
   "permissions": {
     "secrets": {
       "read": [],

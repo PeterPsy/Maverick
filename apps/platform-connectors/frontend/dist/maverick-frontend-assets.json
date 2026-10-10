@@ -1,24 +1,40 @@
 {
-  "build_id": "4ccef69b3e1d772768a56aae5417ead76e9866fa5df333f8b971d7ecbfc0e92c",
+  "build_id": "cd58539f12a85e3b3efd0a6fc533b31e6885277f9128dbab1c508cfdbbbdd922",
   "entrypoints": [
-    "index.html"
+    "index.html",
+    "widgets/connectors-sidebar/index.html"
   ],
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/index-2_urWOHd.js",
-      "sha256": "fbb9b81228efc387f749595475452ac0f8ef0041c52b5eb3276a6b2bb440e8e9",
-      "size_bytes": 247974
+      "path": "assets/app-BFdkX5Bl.js",
+      "sha256": "257701dd7d2fa405d689c224823418510a10497970dd3d327d318759e7d12fe6",
+      "size_bytes": 20427
     },
     {
-      "path": "assets/index-i6g6uX25.css",
-      "sha256": "3f52e38d2291bbd0d366c8facf35a03d687cc388a38dd9fa1b2aaa75492c26ab",
-      "size_bytes": 13316
+      "path": "assets/app-CwcRtHGa.css",
+      "sha256": "a6ecfe164277c2466d480ede9e4e8446543257fd19f1b1a408aba9604a2b1d07",
+      "size_bytes": 11851
+    },
+    {
+      "path": "assets/index-ohi39O6R.css",
+      "sha256": "063ad2680021c7c6d477b265407db98fbbe073c9158d16196fb4d6e12c44cd13",
+      "size_bytes": 3218
+    },
+    {
+      "path": "assets/sourceNavigation-CU2eDoaq.js",
+      "sha256": "9c0b83670341efa8c942305f86909455945148658bb72a89bbef946d256352b1",
+      "size_bytes": 228257
+    },
+    {
+      "path": "assets/widgets/connectors-sidebar/index-CIrtrL3w.js",
+      "sha256": "45c78232a92855a39fa2faec1f8d42144146d2866913c5c05f0923d90e1cc1be",
+      "size_bytes": 2031
     },
     {
       "path": "index.html",
-      "sha256": "98bfc6e78c4272ce5b0b610722e05a221985d50dea13692289ef4e7a41bfe8c2",
-      "size_bytes": 445
+      "sha256": "5f62dc58868942c32fb44448a64096675f2dd98904c0ebde3dce1ca009290654",
+      "size_bytes": 553
     },
     {
       "path": "maverick-icon-compact.png",
@@ -29,6 +45,11 @@
       "path": "maverick-icon.svg",
       "sha256": "ef5ff393d06edaaaca43d852b0595907bd3c91e3d1114521e7546d9d01ce30cc",
       "size_bytes": 17151
+    },
+    {
+      "path": "widgets/connectors-sidebar/index.html",
+      "sha256": "8426910ac5fde41312db44cfe3834489679b456f30b675b348051f1f2cd38253",
+      "size_bytes": 629
     }
   ],
   "schema": "maverick.frontend-assets.v2"

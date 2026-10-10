@@ -296,7 +296,8 @@ test.describe("Chat app browser smoke", () => {
     });
   }
 
-  test("boots the full app shell with composer controls", async ({ page }) => {
+  test("adapts new-chat composer controls to desktop and mobile width", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await installChatMocks(page);
 
     await page.goto("/apps/chat/");
@@ -304,10 +305,23 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
     await expect(page.getByRole("textbox")).toBeEditable();
     await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
-    if (await page.getByRole("button", { name: "Composer utilities" }).isVisible()) {
-      await page.getByRole("button", { name: "Composer utilities" }).click();
-    }
+    const composer = page.locator(".chatapp-composer");
+    const utilityButton = composer.getByRole("button", { name: "Composer utilities" });
+    await expect.poll(async () => (await composer.boundingBox())?.width ?? 0).toBeGreaterThan(720);
+    await expect(utilityButton).toBeHidden();
     await expect(page.getByRole("button", { name: "Multi-agent mode: Off" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Agent runner: Free Agent" })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("new-chat-desktop.png"), animations: "disabled" });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(utilityButton).toBeVisible();
+    await expect(composer.getByRole("button", { name: "Add attachments" })).toBeVisible();
+    await expect(composer.locator("button:visible")).toHaveCount(4);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: testInfo.outputPath("new-chat-mobile.png"), animations: "disabled" });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(utilityButton).toBeHidden();
     await expect(page.getByRole("button", { name: "Agent runner: Free Agent" })).toBeVisible();
   });
 

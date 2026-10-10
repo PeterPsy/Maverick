@@ -223,7 +223,6 @@
 
 .chatapp-chat-main.is-empty-chat {
   justify-content: center;
-  width: min(100%, 42rem);
   min-height: 100%;
 }
 

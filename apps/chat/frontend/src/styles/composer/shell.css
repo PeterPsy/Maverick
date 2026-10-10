@@ -73,7 +73,7 @@
 }
 
 .chatapp-composer.is-empty-mode {
-  max-width: 42rem;
+  max-width: 54rem;
   margin-inline: auto;
   animation: chatapp-composer-pop-in 420ms 80ms ease-out both;
 }

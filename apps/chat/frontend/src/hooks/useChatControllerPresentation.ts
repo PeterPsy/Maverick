@@ -65,6 +65,7 @@ type UseChatControllerPresentationParams = {
   executionMode: ExecutionMode | null;
   failedUserMessages: PendingMessage[];
   handleAddAttachments: (files: File[]) => void;
+  handleAddReferenceMentions: (items: MentionItem[]) => void;
   handleCapturePageArea: () => void;
   handleChatRootPointerDown: () => void;
   handleReferenceAdd: (reference: AppReference) => void;
@@ -154,6 +155,7 @@ export function useChatControllerPresentation({
   executionMode,
   failedUserMessages,
   handleAddAttachments,
+  handleAddReferenceMentions,
   handleCapturePageArea,
   handleChatRootPointerDown,
   handleReferenceAdd,
@@ -266,6 +268,7 @@ export function useChatControllerPresentation({
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
     disabled: isThreadLoading || runtimeAdmissionBlocked || isolatedResearch || Boolean(historicalReadOnlyReason),
     handleAddAttachments,
+    handleAddReferenceMentions,
   });
   const surfaceProps: ChatSurfaceProps = {
     composerProps: {

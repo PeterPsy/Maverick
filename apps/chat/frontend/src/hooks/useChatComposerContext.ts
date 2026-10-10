@@ -20,6 +20,7 @@ type UseChatComposerContextParams = {
   setComposer: Dispatch<SetStateAction<string>>;
   setComposerError: Dispatch<SetStateAction<string | null>>;
   workspaceId: string;
+  ready: boolean;
 };
 
 export function useChatComposerContext({
@@ -32,6 +33,7 @@ export function useChatComposerContext({
   setComposer,
   setComposerError,
   workspaceId,
+  ready,
 }: UseChatComposerContextParams) {
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
   const [selectedReferences, setSelectedReferences] = useState<AppReference[]>([]);
@@ -55,12 +57,12 @@ export function useChatComposerContext({
   }, []);
 
   useEffect(() => {
-    if (!externalMentionDrop || consumedExternalMentionDrops.current.has(externalMentionDrop.requestId)) {
+    if (!ready || !externalMentionDrop || consumedExternalMentionDrops.current.has(externalMentionDrop.requestId)) {
       return;
     }
     consumedExternalMentionDrops.current.add(externalMentionDrop.requestId);
     appendMentionItemsToComposer(externalMentionDrop.items);
-  }, [externalMentionDrop]);
+  }, [externalMentionDrop, ready]);
 
   useEffect(() => {
     if (!externalFileDrop || consumedExternalFileDrops.current.has(externalFileDrop.requestId)) {
@@ -90,6 +92,10 @@ export function useChatComposerContext({
   }
 
   function appendMentionItemsToComposer(items: MentionItem[]) {
+    if (!appReferencesAllowed) {
+      setComposerError("The selected runtime profile does not allow app references.");
+      return;
+    }
     const validItems = items.filter((item) => item.reference);
     if (!validItems.length) {
       return;
@@ -147,6 +153,7 @@ export function useChatComposerContext({
   }
 
   return {
+    appendMentionItemsToComposer,
     composerMentionItems,
     handleAddAttachments,
     handleCapturePageArea,

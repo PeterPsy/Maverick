@@ -352,6 +352,7 @@ export function useChatAppController({
   });
   const {
     composerMentionItems,
+    appendMentionItemsToComposer,
     handleAddAttachments,
     handleCapturePageArea,
     handleReferenceAdd,
@@ -370,6 +371,7 @@ export function useChatAppController({
     setComposer,
     setComposerError,
     workspaceId,
+    ready: initialDependenciesReady && targetConversationResolved && !isBootstrapping,
   });
   const runtimeControls = useChatRuntimeControls({
     activeSession,
@@ -770,6 +772,7 @@ export function useChatAppController({
     executionMode,
     failedUserMessages,
     handleAddAttachments,
+    handleAddReferenceMentions: appendMentionItemsToComposer,
     handleCapturePageArea,
     handleChatRootPointerDown,
     handleReferenceAdd,

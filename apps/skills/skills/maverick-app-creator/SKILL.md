@@ -3,6 +3,9 @@ name: maverick-app-creator
 description: "Use when planning or implementing a brand-new Maverick app in the current workspace/repository. Enforces clean-slate app design, app-agnostic core boundaries, contract-first implementation, deliberate app icon design, workspace-owned data under data/<app_id>, declared frontend/backend/MCP/CLI/skills/hooks surfaces, tests, docs, tasklist updates, final review, and checkpoint commits."
 ---
 
+For every new app with a frontend, **read and apply `maverick-app-design` before implementing the UI**. This is a required step of app creation, not an optional polish pass. Inspect current Storage/Agents tokens and shell/App Store icon presentation, then use app-owned copies of the current native token values and consistent vector control icons. Keep all app UI copy in English unless the user explicitly requests another language. Verify the mounted desktop/mobile workflow, focus, clipping, scrolling, shell offsets, and the actual rail/App Store icon size, colour and padding. Do not call the app complete from SDK validation or a build alone; report any visual acceptance that could not be exercised.
+
+
 # Maverick App Creator
 
 Use this skill when creating a new Maverick app from scratch.

@@ -158,6 +158,17 @@ Rules:
 - do not rely on `~/.codex/skills`, plugin skills, or repository `local-skills/` as Maverick runtime skill sources
 - Codex provider-generated system skills under `CODEX_HOME/skills/.system` are not Maverick product skills and must be removed from Maverick-managed runtime homes
 
+## New App Design Requirements
+
+When creating an app, read and follow `maverick-app-creator` (or the v3 creation
+entrypoint) and, for every mounted frontend, `maverick-app-design` **before writing
+UI code**. Use current Storage/Agents native tokens in app-owned source. App copy
+is English unless the user explicitly requests another language. Verify desktop
+and mobile layouts and the app-owned icon in the actual rail and App Store.
+Build/SDK validation alone does not complete design acceptance. Record any
+unverified surface in the work summary. Do not add app-id icon exceptions to
+core, shell, or App Store.
+
 ## Maverick CLI And MCP Discovery
 
 - do not guess app CLI or MCP commands, and do not inspect installation-level app source just to discover how to call an installed app

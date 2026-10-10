@@ -3,6 +3,9 @@ name: maverick-app-design
 description: Use when creating or visually aligning a Maverick app frontend so it follows Maverick-owned design tokens, layout, sidebar widgets, search, actions, and icon conventions.
 ---
 
+For every new app with a frontend, **apply this skill before implementing the UI**. This is a required step of app creation, not an optional polish pass. Inspect current Storage/Agents tokens and shell/App Store icon presentation, then use app-owned copies of the current native token values and consistent vector control icons. Keep all app UI copy in English unless the user explicitly requests another language. Verify the mounted desktop/mobile workflow, focus, clipping, scrolling, shell offsets, and the actual rail/App Store icon size, colour and padding. Do not call the app complete from SDK validation or a build alone; report any visual acceptance that could not be exercised.
+
+
 Use this Maverick-owned design skill when creating, porting, or visually aligning a Maverick v3 app frontend, including app-owned `base-shell` sidebar widgets and footer actions. The goal is to make the app feel native to Maverick before adding decorative flourishes.
 
 ## Reference Apps

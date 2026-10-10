@@ -35,7 +35,11 @@ submit observations. CLI/MCP projections never include connector credentials.
 Agent reads enqueue an operation and return its id with `queued` status, rather
 than claiming data has already been observed. `browser_operation_get` returns
 progress and terminal results; `browser_operation_cancel` fences subsequent
-completion. There are at most 16 pending operations per connection. Heartbeats
+completion. The connector retains its active operation until the extension has
+finished audio cleanup and video restoration; a cancellation acknowledgement alone
+does not release that operation. The worker's active-operation status also prevents
+another claim after a local bridge timeout.
+There are at most 16 pending operations per connection. Heartbeats
 refresh the 120-second connection lease; claimed work requires progress within
 60 seconds and has a 600-second total deadline. Terminal observations expire
 after roughly one hour and are bounded to 256 records/64 MiB.
@@ -66,7 +70,16 @@ boundary never proves that an infinite feed is complete.
 `browser_instagram_collect` reads profile and optional Reels sections, deduplicates
 canonical post/Reel URLs across up to 40 batches and 200 items, and reports source,
 observation times and a stop reason. It stops on limits, rendered end, login,
-challenge or rate-limit indications. Each collected post/Reel must be opened
+challenge or rate-limit indications. Profile and Reels sections split the remaining
+scan and item budgets, reserving capacity for each requested section; unused
+profile capacity passes to Reels. The `sections` projection identifies each
+requested URL, observed/skipped status, scan count and stop reason. Budgets too
+small to visit both sections explicitly mark the later section skipped.
+`section_batch_limit` and `section_item_limit` identify a section allocation,
+while the overall `section_limit` reports partial coverage when a later section
+ends without consuming the global budget. An overall `rendered_end` requires
+every requested section to reach its observed boundary.
+Each collected post/Reel must be opened
 separately before its full caption or media is analyzed. Unvisited, private and
 unavailable content is excluded; missing counts and dates remain unknown.
 
@@ -76,7 +89,10 @@ the selected video to fit in the viewport; an offscreen document crops the captu
 JPEG to its rendered bounds. Seeking waits for a newly presented decoded frame
 at the requested time, reports the observed media time and restores prior video
 playback state. A briefly muted playback may be needed to refresh Chrome's
-compositor. Captures can bring the shared Instagram window to the foreground.
+compositor. A default single-frame capture seeks to zero when the selected video
+has already ended; video analysis always prepares from zero. The original position,
+including an ended position, remains part of the state restored afterward.
+Captures can bring the shared Instagram window to the foreground.
 
 `browser_video_analyze` samples 1–12 frames over a finite duration bounded to
 180 seconds. Tab audio comes from Chrome `tabCapture`, with a worker-issued stream

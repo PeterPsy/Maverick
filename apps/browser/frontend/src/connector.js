@@ -35,13 +35,16 @@ export function createConnector(report) {
       const shared=await bridge("status");
       if(command) {
         const operation=await request({action:"operation.get",operation_id:command.operation_id});
-        if(operation.status !== "running") {await bridge("cancel",{operation_id:command.operation_id}).catch(()=>{});command=null;}
+        if(operation.status !== "running")await bridge("cancel",{operation_id:command.operation_id}).catch(()=>{});
         else await request({action:"companion.progress",...fields(),operation_id:command.operation_id,lease_id:command.lease_id,phase:command.action});
       }
-      const result=await request({action:"companion.poll",...fields(),url:shared.url,title:shared.title,active_operation_id:command?.operation_id || null});
+      // Cancellation only sets a flag; the worker remains busy while restoring media.
+      // Its status also fences a bridge timeout whose local promise already settled.
+      const activeOperationId=command?.operation_id || shared.active_operation || null;
+      const result=await request({action:"companion.poll",...fields(),url:shared.url,title:shared.title,active_operation_id:activeOperationId});
       failures=0;
-      if(result.command && !command)void execute(result.command);
-      if(!command)report(`Collegato · ${shared.title || shared.url}`);
+      if(result.command && !activeOperationId)void execute(result.command);
+      if(!activeOperationId)report(`Collegato · ${shared.title || shared.url}`);
       // Maintain the app-frame auth lease independently of shell visibility.
       await fetch("/.well-known/maverick-app-frame-session",{method:"POST",credentials:"same-origin",cache:"no-store"}).catch(()=>{});
     } catch(error) {

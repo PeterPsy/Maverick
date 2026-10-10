@@ -8,6 +8,8 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {createInterface} from "node:readline";
+import {observe} from "../companion/dom-actions.mjs";
+import {analyzeVideo} from "../companion/workflows.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const temporary=mkdtempSync(path.join(tmpdir(),"browser-companion-e2e-"));
@@ -32,7 +34,9 @@ try {
   writeFileSync(path.join(extension,"manifest.json"),JSON.stringify(manifest));
   execFileSync("espeak-ng",["-w",path.join(temporary,"voice.wav"),"Maverick browser reads video and records audio locally."]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc=size=320x180:rate=12","-i",path.join(temporary,"voice.wav"),"-t","5","-vf","format=yuv420p","-af","apad","-c:v","libx264","-threads","1","-c:a","aac","-movflags","+faststart",path.join(temporary,"video.mp4")]);
+  execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc2=size=320x180:rate=12","-t","3","-c:v","libx264","-threads","1","-movflags","+faststart",path.join(temporary,"ended.mp4")]);
   const media=readFileSync(path.join(temporary,"video.mp4"));
+  const endedMedia=readFileSync(path.join(temporary,"ended.mp4"));
   context=await chromium.launchPersistentContext(path.join(temporary,"profile"),{headless:true,channel:"chromium",ignoreDefaultArgs:["--mute-audio"],viewport:{width:1000,height:800},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,"--enable-unsafe-extension-debugging","--autoplay-policy=no-user-gesture-required"]});
   await context.route("https://www.instagram.com/**",route=>{
     if(route.request().url().includes("fixture-media.mp4"))return route.fulfill({contentType:"video/mp4",body:media});
@@ -91,6 +95,25 @@ try {
   writeFileSync(path.join(tmpdir(),"maverick-browser-frame-1.jpg"),Buffer.from(first.base64,"base64"));
   writeFileSync(path.join(tmpdir(),"maverick-browser-frame-2.jpg"),Buffer.from(second.base64,"base64"));
   assert(first.base64 !== second.base64,"Different video seeks must produce different captured frames.");
+  // Exercise the actual DOM adapter and video workflow on ended media in a
+  // separate Chromium page, independent of the shared tab's live audio clock.
+  const endedPage=await context.newPage();
+  try {
+    await endedPage.setContent(`<video controls width="640" height="360" src="data:video/mp4;base64,${endedMedia.toString("base64")}"></video>`);
+    await wait(()=>endedPage.evaluate(()=>document.querySelector("video").readyState>=2));
+    await endedPage.evaluate(()=>{const video=document.querySelector("video");video.currentTime=video.duration;});
+    await wait(()=>endedPage.evaluate(()=>{const video=document.querySelector("video");return video.ended && !video.seeking;}));
+    const dom=(action,p)=>endedPage.evaluate(`(${observe.toString()})(${JSON.stringify(action)},${JSON.stringify(p)})`).then(result=>{
+      assert(!result.error,JSON.stringify(result));return result;
+    });
+    const prepared=await dom("video.prepare",{});
+    assert(prepared.presented_time_seconds>=0 && prepared.presented_time_seconds<0.4,"Default capture must recover from an ended video.");
+    await dom("video.restore",{});
+    const endedAnalysis=await analyzeVideo({check(){},dom,async capture(){return {base64:(await endedPage.screenshot({type:"jpeg"})).toString("base64")};}},
+      {frame_count:2,max_seconds:2,include_audio:false});
+    assert.equal(endedAnalysis.frames.length,2);
+    assert(await endedPage.evaluate(()=>{const video=document.querySelector("video");return video.paused && Math.abs(video.currentTime-video.duration)<0.01;}),"Analysis must restore the original ended state.");
+  } finally {await endedPage.close();}
   const analyzed=await run("video.analyze",{frame_count:3,max_seconds:4,include_audio:true,save_evidence:true});
   assert.equal(analyzed.frames.length,3);assert(analyzed.frames.every(f=>f.storage?.file_id && !f.base64));assert(analyzed.audio.storage?.file_id);assert(analyzed.audio.size_bytes>5000);assert.equal(analyzed.transcription.status,"unavailable");
   const capturedAudio=await fetch(`${origin}/__test/media?operation_id=${analyzed.operation_id}`);assert(capturedAudio.ok);
@@ -98,8 +121,10 @@ try {
   const cancelled=await api({action:"video.analyze",session_id:connection.session_id,frame_count:1,max_seconds:4,include_audio:true,save_evidence:false});
   await wait(()=>worker.evaluate(async()=>{const status=await chrome.runtime.sendMessage({target:"offscreen",action:"status"});return status?.recording;}));
   await api({action:"operation.cancel",operation_id:cancelled.operation_id});
+  const afterCancel=await run("content.read");
   await wait(()=>worker.evaluate(async()=>{const status=await chrome.runtime.sendMessage({target:"offscreen",action:"status"});return status?.recording === false;}));
   await wait(()=>instagram.evaluate(()=>document.querySelector("video").paused));
+  assert(afterCancel.text.includes("Bio visibile"));
   const collected=await run("instagram.collect",{username:"fixture_user",max_items:3,max_batches:4,include_reels:false});assert.equal(collected.items.length,3);assert.equal(collected.stop_reason,"item_limit");
   assert.equal(consoleErrors.length,0,consoleErrors.join("\n"));
   // Native frontend at desktop and mobile sizes; no horizontal overflow.
@@ -109,7 +134,7 @@ try {
   }
   await instagram.goto("https://www.instagram.com/accounts/login/");
   await wait(async()=>{const overview=await api({action:"companion.overview"});return overview.connections.find(c=>c.session_id === connection.session_id)?.status === "revoked";});
-  console.log(JSON.stringify({status:"passed",real_chromium:true,read_content:true,nested_scroll:true,distinct_video_frames:true,tab_audio_bytes:analyzed.audio.size_bytes,storage_evidence_files:4,collection_items:3,cancel_audio_cleanup:true,scope_revocation:true,desktop_mobile_layout:true,instagram_access_verified:false}));
+  console.log(JSON.stringify({status:"passed",real_chromium:true,read_content:true,nested_scroll:true,distinct_video_frames:true,ended_video_recovery:true,tab_audio_bytes:analyzed.audio.size_bytes,storage_evidence_files:4,collection_items:3,cancel_audio_cleanup:true,queued_read_after_cancel:true,scope_revocation:true,desktop_mobile_layout:true,instagram_access_verified:false}));
 }finally {
   if(context)await context.close();
   if(server.exitCode === null && server.signalCode === null){const exited=new Promise(resolve=>server.once("exit",resolve));server.kill("SIGTERM");await exited;}

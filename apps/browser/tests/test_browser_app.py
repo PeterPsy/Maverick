@@ -73,7 +73,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertIn("sessionLifecycle.touch(session);", broker_text)
         self.assertIn('reducedMotion: "reduce"', broker_text)
         self.assertIn("build", package["scripts"])
-        self.assertEqual(package["scripts"]["test"], "node --test broker/*.test.mjs companion/*.test.mjs")
+        self.assertEqual(package["scripts"]["test"], "node --test broker/*.test.mjs companion/*.test.mjs tests/connector.test.mjs")
         self.assertEqual(package["scripts"]["broker"], "node broker/playwright-broker.mjs")
         self.assertEqual(package["scripts"]["broker:docker"], "node broker/playwright-server-docker.mjs")
         self.assertEqual(package["scripts"]["broker:local"], "node broker/playwright-server-local.mjs")

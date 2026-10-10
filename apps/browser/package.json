@@ -3,8 +3,9 @@
   "version": "0.3.0",
   "license": "MIT",
   "private": true,
+  "type": "module",
   "scripts": {
-    "test": "node --test broker/*.test.mjs companion/*.test.mjs",
+    "test": "node --test broker/*.test.mjs companion/*.test.mjs tests/connector.test.mjs",
     "prebroker": "node ../../scripts/check-node-runtime.mjs",
     "broker": "node broker/playwright-broker.mjs",
     "prebroker:docker": "node ../../scripts/check-node-runtime.mjs",

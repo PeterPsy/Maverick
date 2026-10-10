@@ -91,7 +91,10 @@ export async function observe(action, p) {
     globalThis.maverickVideoState = [...document.querySelectorAll("video")].map(e => ({element:e,time:e.currentTime,paused:e.paused,muted:e.muted,volume:e.volume,rate:e.playbackRate}));
     for (const e of document.querySelectorAll("video")) e.pause();
     element.scrollIntoView({block:"center",inline:"center",behavior:"instant"});
-    const presented=await seek(element,p.time_seconds);
+    // There is no decoded frame at duration; replaying an ended video starts at
+    // zero and can never present its old end timestamp within the seek deadline.
+    const time=p.time_seconds ?? (element.ended || element.currentTime>=element.duration ? 0 : undefined);
+    const presented=await seek(element,time);
     return {...metadata(element),presented_time_seconds:presented};
   }
   if (action === "video.seek") {const e=video();e.pause();const presented=await seek(e,p.time_seconds,p.present_frame !== false);return {...metadata(e),presented_time_seconds:presented};}

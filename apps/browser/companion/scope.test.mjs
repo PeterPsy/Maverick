@@ -28,6 +28,47 @@ test("Collection stops at rendered end or a login gate without claiming a comple
   adapter.read=async()=>({url:"https://www.instagram.com/accounts/login/",text:"",links:[]});
   assert.equal((await collectInstagram(adapter,{username:"marta"})).stop_reason,"login_required");
 });
+test("Collection reserves scans for Reels when the profile never reaches its rendered end",async()=>{
+  let section,read=0;const navigated=[];
+  const adapter={check(){},async navigate(url){section=url;navigated.push(url);},async scroll(){return {at_bottom:false,moved:true};},
+    async read(){return {url:section,text:"Bio",links:[{url:`https://www.instagram.com/${section.endsWith("reels/") ? "reel" : "p"}/${++read}/`,text:"item"}],observed_at:"now"};}};
+  const result=await collectInstagram(adapter,{username:"marta",max_items:200,max_batches:12,include_reels:true});
+  assert.deepEqual(navigated,["https://www.instagram.com/marta/","https://www.instagram.com/marta/reels/"]);
+  assert.equal(result.batches.length,12);
+  assert.equal(result.items.filter(item=>item.kind === "reel").length,6);
+  assert.deepEqual(result.sections.map(section=>section.batches),[6,6]);
+});
+test("Collection reserves item capacity for Reels and reports skipped sections under small budgets",async()=>{
+  let section;
+  const adapter={check(){},async navigate(url){section=url;},async scroll(){return {at_bottom:false,moved:true};},
+    async read(){return {url:section,text:"Bio",links:Array.from({length:10},(_,i)=>({url:`https://www.instagram.com/${section.endsWith("reels/") ? "reel" : "p"}/${i}/`,text:"item"})),observed_at:"now"};}};
+  const result=await collectInstagram(adapter,{username:"marta",max_items:4,max_batches:12});
+  assert.equal(result.items.length,4);
+  assert.equal(result.items.filter(item=>item.kind === "reel").length,2);
+  assert.equal(result.stop_reason,"item_limit");
+  for(const [options,reason] of [[{max_batches:1},"batch_limit"],[{max_items:1},"item_limit"]]) {
+    const limited=await collectInstagram(adapter,{username:"marta",...options});
+    assert.equal(limited.sections[1].status,"skipped");
+    assert.equal(limited.sections[1].stop_reason,reason);
+  }
+});
+test("Collection distinguishes a partial profile section from a fully observed rendered end",async()=>{
+  let section,read=0;
+  const adapter={check(){},async navigate(url){section=url;},async scroll(){return {at_bottom:true,moved:false};},
+    async read(){return {url:section,text:"Bio",links:section.endsWith("reels/") ? [] : [{url:`https://www.instagram.com/p/${++read}/`,text:"post"}],observed_at:"now"};}};
+  const result=await collectInstagram(adapter,{username:"marta",max_items:4,max_batches:12});
+  assert.equal(result.sections[0].stop_reason,"section_item_limit");
+  assert.equal(result.sections[1].stop_reason,"rendered_end");
+  assert.equal(result.stop_reason,"section_limit");
+});
+test("A short profile passes its unused scan budget to Reels",async()=>{
+  let section,read=0;
+  const adapter={check(){},async navigate(url){section=url;},async scroll(){return {at_bottom:true,moved:false};},
+    async read(){return {url:section,text:"Bio",links:section.endsWith("reels/") ? [{url:`https://www.instagram.com/reel/${++read}/`,text:"reel"}] : [],observed_at:"now"};}};
+  const result=await collectInstagram(adapter,{username:"marta",max_items:200,max_batches:12});
+  assert.deepEqual(result.sections.map(section=>section.batches),[3,9]);
+  assert.equal(result.items.length,9);assert.equal(result.stop_reason,"batch_limit");
+});
 test("Video analysis samples bounded times and restores playback after failure",async()=>{
   const calls=[];
   const adapter={check(){},async dom(a,p){calls.push([a,p]);return {duration_seconds:30,current_time_seconds:p.time_seconds};},async capture(){return {base64:"jpeg"};}};

@@ -40,12 +40,20 @@ with `browser_operation_cancel`.
 
 `browser_instagram_collect` reads the profile and deduplicates rendered post/Reel
 links across bounded scrolling: up to 200 items and 40 batches. Results include
-observed times, source URLs and a stop reason. Open each collected link to inspect
+observed times, source URLs and a stop reason. When Reels are requested, scan and
+item budgets are shared between the profile and Reels sections; unused profile
+capacity passes to Reels. The `sections` results identify observed and skipped
+sections and their stop reasons. `section_limit` means at least one section was
+only partially scanned, even if another reached its rendered end.
+Open each collected link to inspect
 its caption and media; unvisited posts are not analyzed. A rendered end or viewport
 boundary does not prove complete feed coverage.
 
 `browser_video_analyze` samples 1–12 frames and optionally plays/records at most
-180 seconds of tab audio. It restores video playback state afterward. The declared
+180 seconds of tab audio. Analysis starts from zero; a default single-frame capture
+also restarts an already ended video. Both restore the original playback position
+and state afterward. Cancelling an operation waits for Chrome's media cleanup
+before the connector claims the next queued command. The declared
 Speech dependency transcribes with `local_only: true`, selecting faster-whisper or
 whisper.cpp without changing workspace preferences or requesting vendor secrets.
 Unavailable capture, autoplay or local models returns an explicit error.

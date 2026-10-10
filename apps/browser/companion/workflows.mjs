@@ -13,32 +13,44 @@ export async function collectInstagram(adapter,p) {
   const maxItems=p.max_items ?? 60,maxBatches=p.max_batches ?? 12;
   const base=instagramUrl(`https://www.instagram.com/${p.username}/`);
   const items=new Map(),batches=[],sections=p.include_reels === false ? [base] : [base,`${base}reels/`];
-  let profile=null,stopReason="batch_limit",used=0;
-  outer: for(const section of sections) {
+  const sectionResults=sections.map(source_url=>({source_url,status:"skipped",batches:0,stop_reason:null}));
+  let profile=null,blocked=null,used=0;
+  outer: for(const [sectionIndex,section] of sections.entries()) {
+    if(used>=maxBatches || items.size>=maxItems)break;
+    const summary=sectionResults[sectionIndex],remainingSections=sections.length-sectionIndex;
+    // Reserve scans and item capacity for each requested section. Unused capacity
+    // from a short profile is available to the following Reels section.
+    const batchBudget=Math.ceil((maxBatches-used)/remainingSections);
+    const itemLimit=items.size+Math.ceil((maxItems-items.size)/remainingSections);
     await adapter.navigate(section);
     let stagnant=0;
-    while(used < maxBatches) {
+    while(summary.batches < batchBudget) {
       adapter.check();
       const observation=await adapter.read({max_chars:40000,max_items:200});
+      summary.status="observed";
+      used++;summary.batches++;
       if(!profile) profile=observation;
       const gate=contentGate(observation);
-      if(gate){stopReason=gate;break outer;}
+      if(gate){blocked=gate;summary.stop_reason=gate;break outer;}
       const before=items.size;
       for(const link of observation.links) {
         let url;try{url=instagramUrl(link.url);}catch{continue;}
         if(!/^https:\/\/www\.instagram\.com\/(p|reel)\//u.test(url) || items.has(url))continue;
         items.set(url,{url,kind:url.includes("/reel/") ? "reel" : "post",text:link.text,observed_at:observation.observed_at,found_on:section});
-        if(items.size>=maxItems){stopReason="item_limit";break;}
+        if(items.size>=itemLimit)break;
       }
-      used++;batches.push({source_url:section,observed_at:observation.observed_at,new_items:items.size-before});
-      if(items.size>=maxItems)break outer;
+      batches.push({source_url:section,observed_at:observation.observed_at,new_items:items.size-before});
+      if(items.size>=itemLimit){summary.stop_reason=items.size>=maxItems ? "item_limit" : "section_item_limit";break;}
+      if(summary.batches>=batchBudget){summary.stop_reason=used>=maxBatches ? "batch_limit" : "section_batch_limit";break;}
       const scrolling=await adapter.scroll({direction:"down",pixels:1000,steps:1,settle_ms:1200,target:"auto"});
       stagnant=items.size===before && scrolling.at_bottom && !scrolling.moved ? stagnant+1 : 0;
-      if(stagnant>=3){stopReason="rendered_end";break;}
-      if(used>=maxBatches){stopReason="batch_limit";break outer;}
+      if(stagnant>=3){summary.stop_reason="rendered_end";break;}
     }
   }
-  return {username:p.username,source_url:base,profile,items:[...items.values()],batches,stop_reason:stopReason,
+  const stopReason=blocked || (items.size>=maxItems ? "item_limit" : used>=maxBatches ? "batch_limit" :
+    sectionResults.every(section=>section.stop_reason === "rendered_end") ? "rendered_end" : "section_limit");
+  for(const section of sectionResults)if(section.status === "skipped")section.stop_reason=stopReason;
+  return {username:p.username,source_url:base,profile,items:[...items.values()],batches,sections:sectionResults,stop_reason:stopReason,
     observed_at:new Date().toISOString(),coverage:"Only rendered links observed during bounded scrolling. Each post/Reel must be opened to inspect its full content. Private, unavailable and unvisited content is excluded."};
 }
 
@@ -46,7 +58,7 @@ export async function analyzeVideo(adapter,p) {
   const index=p.video_index ?? 0,count=p.frame_count ?? 6,limit=p.max_seconds ?? 90;
   const frames=[];let audio=null,recording=false;
   try {
-    const prepared=await adapter.dom("video.prepare",{video_index:index});
+    const prepared=await adapter.dom("video.prepare",{video_index:index,time_seconds:0});
     const duration=prepared.duration_seconds;
     if(!Number.isFinite(duration) || duration<=0) throw new Error("finite_video_duration_required");
     const covered=Math.min(duration,limit);

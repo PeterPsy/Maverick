@@ -78,6 +78,14 @@ class CodexComputerActorTests(unittest.TestCase):
         output, _ = self.run_actor('paired-image')
         self.assertEqual(output['status'], 'completed')
 
+    def test_native_target_lines_are_injected_verbatim_with_the_image(self):
+        self.invoke = lambda tool, arguments, call_id: DeviceUseResult(
+            'invocation', call_id, {'success': True, 'contentItems': [
+                {'type': 'inputText', 'text': 'snapshot=ps1_current\nelem_72 - button - Seven\nelem_73 - button - Eight'}]},
+            b'fresh-jpeg', None, 1.0)
+        output, _ = self.run_actor('multiline-receipt')
+        self.assertEqual(output['status'], 'completed')
+
     def test_failed_image_injection_stops_before_native_input(self):
         output, _ = self.run_actor('image-injection-failure')
         self.assertEqual(output['status'], 'blocked')

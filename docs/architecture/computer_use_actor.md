@@ -21,11 +21,18 @@ cannot cross tasks. Its output and reasoning never become Chat messages. Normal
 native operation evidence and aggregated usage remain on the owning conversation.
 Each screenshot and its textual native receipt are paired in one raw history
 message through Codex `thread/inject_items` while the dynamic tool is pending.
+The unchanged bounded task card accompanies each image to keep the original
+objective and completion criterion explicit. Native receipt and target lines are
+injected verbatim, with result metadata separate, rather than JSON-escaped inside
+one string; line boundaries and current target IDs remain readable.
 The tool reply follows only after injection is acknowledged. This does not steer
 the active turn or replace its objective. The installed Codex dynamic-tool
 `inputImage` response shape alone did not provide reliable visual input in a
 live Luna check; the raw `input_image` history path did. Receipt IDs and element
 IDs remain observation-specific, and the operator must resolve targets anew.
+Immediate post-input captures can precede asynchronous UI updates. Same-target
+read-only observations allow that state to settle without replaying the input;
+an unchanged immediate capture alone is not proof the mutation failed.
 Its catalog always includes native computer, Peekaboo and companion-browser tools.
 Actor instructions
 retain native UI rules while omitting workspace, project and code guidance that
@@ -168,7 +175,7 @@ The Mac companion browser reached the actual Maverick Settings URL but showed
 the unauthenticated login page. Live Settings save/reload and desktop/mobile
 visual acceptance still require an authenticated companion session.
 
-The corrective review on 2026-10-10 passed 98 focused backend tests with SQLite
+The corrective review on 2026-10-10 passed 99 focused backend tests with SQLite
 3.51.3, 41 Settings frontend tests, and all 23 Settings integration tests. The
 integration fixture now includes the SDK used by installation hooks, same-origin
 proof for cookie mutations and explicit isolated app-frame scope for document
@@ -176,3 +183,52 @@ requests; ordinary direct app requests remain denied. A live authenticated Luna
 `low` check read the user-provided Settings screenshot correctly through the paired
 history path. It used a read-only mock native callback, so physical Mac acceptance
 is recorded separately after backend activation.
+
+Physical Settings verification used the authenticated `MaverickMac` work surface
+(`com.giuntiocram.maverick.mac`), rather than the unauthenticated companion page.
+The UI saved Luna `medium` (labelled Mid), preserved it across an official frontend
+reload, then saved and visually verified the original Luna `low` selection.
+Immediate post-input captures preceded the selection/save updates; later same-app
+observations proved those effects, without repeating the mutations.
+The new backend operator is not yet certified on the physical Mac. The first
+official restart returned `restarted=false` because systemd was unavailable in
+the execution environment, while backend health remained true. The user later
+reported a successful host restart; subsequent native observations returned
+`Device Use executor is unavailable`, so reconnection is still required for
+physical acceptance. The earlier physical Calculator retest
+was also blocked before input by `MC-TOOL-30` / `MC-PEEKABOO-27`: its visible window
+was classified `pixels_only` with no matching Accessibility window. These checks
+do not establish unrestricted native-app reliability or a measured latency gain.
+
+Authenticated Codex evaluations used a synthetic native callback with a rendered
+calculator, newly numbered element IDs for every observation and delayed input
+effects. The fixture has no physical Mac connection. Results were:
+
+| Receipt text | Model / effort | Task | Result |
+| --- | --- | --- | --- |
+| JSON-escaped | Luna / low | 17 × 23 | Two runs failed to reach 391 within the bounded task. |
+| Verbatim lines | Luna / low | 17 × 23 | Reached 391 in 19 calls, with a pre-dispatch recovery. |
+| Verbatim lines | Luna / low | 27 × 14 | Incorrect digit targets; task timed out without 378. |
+| JSON-escaped | Luna / medium | 17 × 23 | Reached 391 in 15 calls. |
+| Verbatim lines | Luna / medium | 27 × 14 | Incorrect digit targets; returned blocked without 378. |
+| Verbatim lines | GPT-6.1-Sol / medium | Both calculations | Both reached the expected display in 15 calls, with the correct digit sequence. |
+
+These small evaluations support recommending Sol `medium` for a reliability
+trial, not a guarantee of general correctness. Luna remains the saved `low`
+selection pending the user's model preference. Receipt readability and stronger
+completion instructions do not eliminate model target-selection errors.
+The checked-in evaluation also reproduced Sol's 17 × 23 success in 15 calls.
+
+The opt-in evaluation is reproducible, uses existing Codex authentication, and
+does not modify the saved workspace selection. It requires the Browser app's
+installed Playwright dependency and a local Chromium executable:
+
+```bash
+python3 scripts/eval_computer_actor_calculator.py --model gpt-6.1-sol --effort medium
+python3 scripts/eval_computer_actor_calculator.py --model gpt-6.1-sol --effort medium --left 27 --right 14
+```
+
+Its success exit code requires both `completed` and the correct actual fixture
+display. It prints the dispatched labels and observed values, so an incorrect
+sequence cannot be hidden by a plausible completion summary. This provider
+evaluation is explicit and is not part of the deterministic unit suite.

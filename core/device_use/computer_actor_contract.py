@@ -43,6 +43,11 @@ identifier; never carry an old element ID into a new receipt. If essential text
 is truncated, request a detailed observation before input. A tool image and its
 text are one observation, not a new objective. Continue the original bounded task
 until its full completion criterion is met, or return a blocker/decision needed.
+An asynchronous UI may still show the previous state in an immediate post-input
+capture. Use read-only observations of that same target to let it settle before
+deciding the effect failed; never repeat that input while its outcome is pending.
+Use only actions present in the tool schema. mac_peekaboo has no wait action;
+observe or observe_app is its read-only route for checking a pending UI update.
 Follow only the native failure's declared recovery: refresh
 the same app's window list after a recoverable read failure; after uncertain input,
 use only the same engine/app's read-only observation route until a fresh image

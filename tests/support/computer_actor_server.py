@@ -130,9 +130,15 @@ for line in sys.stdin:
         assert 'pending tool call call-' + str(step - 1) in content[0]['text']
         if mode == 'paired-image':
             assert 'native result' in content[0]['text']
+        if mode == 'multiline-receipt':
+            assert '\nsnapshot=ps1_current\nelem_72 - button - Seven\nelem_73 - button - Eight' in content[0]['text']
+            assert '\\n' not in content[0]['text'], 'Native target lines must remain readable, not JSON-escaped.'
+        assert 'Native result metadata: {"success": true}' in content[0]['text']
         assert content[1]['type'] == 'input_image'
         assert content[1]['image_url'].startswith('data:image/jpeg;base64,')
         assert content[1]['detail'] == 'high'
+        assert content[2]['type'] == 'input_text'
+        assert json.loads(content[2]['text'].split('\n', 1)[1])['objective'] == mode
         injected = True
     send({"id": request.get("id"), "result": result})
     if method == "turn/interrupt":

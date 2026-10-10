@@ -339,7 +339,7 @@ export function Sidebar({
           />
           {!sidebarEnabled ? <SidebarRailMenu icon="tune" label="Controlli Maverick" placement="bottom">
             <SidebarShellControls mode={mode} onModeChange={onModeChange} onThemeModeChange={onThemeModeChange}
-              shellTheme={shellTheme} themeMode={themeMode} />
+              shellTheme={shellTheme} themeMode={themeMode} showSidebarModeControls={false} />
           </SidebarRailMenu> : null}
         </div>
       ) : null}
@@ -350,7 +350,7 @@ export function Sidebar({
           isWorkspacesLoading={isWorkspacesLoading} onOpenAppSettings={onOpenAppSettings}
           onWorkspaceChange={onWorkspaceChange} workspaces={workspaces} />
         <SidebarShellControls mode={mode} onModeChange={onModeChange} onThemeModeChange={onThemeModeChange}
-          shellTheme={shellTheme} themeMode={themeMode} />
+          shellTheme={shellTheme} themeMode={themeMode} showSidebarModeControls={false} />
       </SidebarRailMenu> : null}
       <div className="bs-sidebar__details" aria-hidden={!isDetailLayerOpen}>
         <div className="bs-sidebar__top-overlay">

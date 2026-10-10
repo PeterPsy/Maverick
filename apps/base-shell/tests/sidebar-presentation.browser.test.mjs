@@ -55,7 +55,9 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
   let browser;
   let lastPage;
   try {
-    browser = await chromium.launch({ headless: true, executablePath: browserExecutable() || undefined, args: ["--no-sandbox"] });
+    // Render backdrop blur with a software GPU on headless hosts.
+    browser = await chromium.launch({ headless: true, executablePath: browserExecutable() || undefined,
+      args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" });
     await context.addInitScript(() => localStorage.setItem("maverick:base-shell:session", JSON.stringify({ activeAppId: "canvas", sidebarMode: "fixed", isSidebarOpen: true })));
     const page = await context.newPage();
@@ -74,6 +76,12 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
 
     const top = page.getByRole("button", { name: "Controlli workspace", exact: true });
     await top.hover();
+    for (const trigger of await page.locator(".bs-sidebar__rail-menu-trigger").all()) {
+      assert.deepEqual(await trigger.evaluate((button) => {
+        const style = getComputedStyle(button);
+        return [style.backgroundColor, style.color];
+      }), ["rgb(255, 255, 255)", "rgb(10, 10, 11)"]);
+    }
     const workspace = page.getByRole("combobox", { name: "Workspace", exact: true });
     await workspace.waitFor({ state: "visible" });
     await workspace.hover();
@@ -114,10 +122,32 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     assert.equal(await top.getAttribute("aria-expanded"), "false");
 
     await page.getByRole("button", { name: "Controlli Maverick", exact: true }).hover();
+    assert.equal(await page.getByRole("button", { name: "Sidebar fissa", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "Solo app in overlay", exact: true }).count(), 0);
+    const bottomPanel = page.locator(".bs-sidebar__rail-menu--bottom .bs-sidebar__rail-menu-panel");
+    assert.deepEqual(await bottomPanel.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const railStyle = getComputedStyle(document.querySelector(".bs-sidebar__rail"));
+      return [style.backdropFilter, style.backgroundColor, railStyle.backdropFilter];
+    }), ["blur(26px)", "rgba(12, 12, 14, 0.58)", "none"]);
+    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-bottom-dark.png") });
     await page.getByRole("button", { name: "Light mode", exact: true }).click();
     assert.equal(await page.locator("html").getAttribute("data-maverick-theme"), "light");
+    await page.waitForFunction(() => [...document.querySelectorAll(".bs-sidebar__rail-menu-trigger")].every((button) => {
+      const style = getComputedStyle(button);
+      return style.backgroundColor === "rgb(17, 24, 39)" && style.color === "rgb(255, 255, 255)";
+    }));
+    for (const trigger of await page.locator(".bs-sidebar__rail-menu-trigger").all()) {
+      assert.deepEqual(await trigger.evaluate((button) => {
+        const style = getComputedStyle(button);
+        return [style.backgroundColor, style.color];
+      }), ["rgb(17, 24, 39)", "rgb(255, 255, 255)"]);
+    }
+    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-bottom-light.png") });
     await page.getByRole("button", { name: "chat. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-shell.is-sidebar-mode-fixed").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Sidebar fissa", exact: true }).getAttribute("aria-pressed"), "true");
+    assert.equal(await page.getByRole("button", { name: "Solo app in overlay", exact: true }).count(), 1);
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x > 300);
     assert.equal(await page.locator(".bs-sidebar__header > .bs-notifications").count(), 1);
     await bell.click();
@@ -165,6 +195,8 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await mobilePage.setViewportSize({ width: 390, height: 844 });
     await mobilePage.getByRole("button", { name: "Apri controlli workspace", exact: true }).tap();
     await mobilePage.getByRole("combobox", { name: "Workspace", exact: true }).waitFor({ state: "visible" });
+    assert.equal(await mobilePage.getByRole("button", { name: "Sidebar fissa", exact: true }).count(), 0);
+    assert.equal(await mobilePage.getByRole("button", { name: "Solo app in overlay", exact: true }).count(), 0);
     assert.equal(await mobilePage.locator(".bs-shell.is-sidebar-open").count(), 0);
     const mobilePanel = await mobilePage.locator(".bs-sidebar__rail-menu-panel").boundingBox();
     assert.ok(mobilePanel.x >= 0 && mobilePanel.x + mobilePanel.width <= 390);

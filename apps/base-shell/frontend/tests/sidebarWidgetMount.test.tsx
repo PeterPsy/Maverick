@@ -92,7 +92,7 @@ describe("Sidebar widget mount gate", () => {
     expect(primaryActionStateChange).toHaveBeenCalledWith({ available: false, label: "", preferredSurface: "app" });
   });
 
-  it("exposes workspace, app settings, theme and mode through the two rail menus", async () => {
+  it("exposes workspace, app settings and theme without sidebar modes through the two rail menus", async () => {
     const settings = vi.fn();
     const theme = vi.fn();
     const mode = vi.fn();
@@ -109,9 +109,11 @@ describe("Sidebar widget mount gate", () => {
     const bottom = container.querySelector<HTMLButtonElement>('button[aria-label="Controlli Maverick"]')!;
     await act(async () => bottom.focus());
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Light mode"]')!.click());
-    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Sidebar fissa"]')!.click());
+    expect(container.querySelector('.bs-sidebar__mode-switcher')).toBeNull();
+    expect(container.querySelector('button[aria-label="Solo app in overlay"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Sidebar fissa"]')).toBeNull();
     expect(theme).toHaveBeenCalledWith("light");
-    expect(mode).toHaveBeenCalledWith("fixed");
+    expect(mode).not.toHaveBeenCalled();
     expect(widgetSlotMock).not.toHaveBeenCalled();
   });
 
@@ -120,6 +122,7 @@ describe("Sidebar widget mount gate", () => {
       activeAppId: "canvas", isMobileLayout: true, isOpen: true });
     expect(container.querySelector('.bs-sidebar__rail-menu--mobile select[aria-label="Workspace"]')).not.toBeNull();
     expect(container.querySelector('.bs-sidebar__rail-menu--mobile button[aria-label="Light mode"]')).not.toBeNull();
+    expect(container.querySelector('.bs-sidebar__mode-switcher')).toBeNull();
     expect(container.querySelector('.bs-sidebar')?.classList.contains("is-closed")).toBe(true);
     expect(widgetSlotMock).not.toHaveBeenCalled();
   });
@@ -129,6 +132,15 @@ describe("Sidebar widget mount gate", () => {
 
     expect(widgetSlotMock).toHaveBeenCalledTimes(2);
     expect(widgetSlotMountMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps sidebar mode controls available for enabled apps", async () => {
+    const mode = vi.fn();
+    await renderSidebar(root, primaryActionStateChange, { isOpen: true, onModeChange: mode });
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Sidebar fissa"]')!.click());
+    expect(mode).toHaveBeenCalledWith("fixed");
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Solo app in overlay"]')!.click());
+    expect(mode).toHaveBeenCalledWith("rail");
   });
 
   it("waits for app metadata before mounting sidebar widgets from a saved fixed preference", async () => {

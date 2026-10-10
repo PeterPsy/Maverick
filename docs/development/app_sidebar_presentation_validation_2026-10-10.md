@@ -13,7 +13,8 @@ resolved active app, including fallback navigation. The shell waits for app
 metadata before mounting sidebar widgets during startup.
 
 Apps opting out keep the app rail, with workspace/current-app settings above
-its shortcuts and branding/theme/global sidebar preferences below them. The
+its shortcuts and branding/theme below them. Sidebar overlay/fixed controls
+are omitted in these menus, including on mobile. The
 two compact menus open on hover or keyboard focus, support pointer/touch, and
 dismiss with Escape, outside clicks or focus leaving the group. Mobile exposes
 both groups through the existing header menu. Opt-out suppresses sidebar-open
@@ -51,7 +52,7 @@ and a sidecar workspace-isolation fixture returns 503. Five existing static
 shell/Chat source assertions also fail identically against committed HEAD and
 the working tree. These were isolated from the focused feature checks.
 
-## Runtime activation
+## Initial runtime activation
 
 The official backend restart was attempted through
 `core.recovery.restart_backend`. It returned `restarted: false` because this
@@ -61,3 +62,24 @@ the new Core parser/registry still require a managed restart. Browser app smoke
 at `http://hostmachine:8014/app/design-studio` verified shell transport only;
 it does not establish authenticated activation of the new contract. No manual
 detached replacement backend was started.
+
+## Compact menu refinement
+
+The disabled-sidebar menus omit overlay/fixed buttons while preserving the
+saved preference for enabled apps. Both desktop menu triggers use solid theme
+accents (white on dark, near-black on light) and separators from app shortcuts.
+The floating menus use glass highlights and a translucent backdrop with 26px
+blur. Rail blur moved to its pseudo-element so it no longer creates an ancestor
+backdrop root that restricts the menus to sampling rail content.
+
+The two affected Vitest files passed all 24 tests, including desktop/mobile
+mode-control suppression and enabled-app mode switching. The official frontend
+build completed with TypeScript validation and emitted the refresh event; this
+refinement changes no backend code. The persistent workspace creator/design
+skills were updated through Skills and read back with their metadata preserved.
+The built-shell Chromium fixture passed on desktop and mobile, confirming
+mode-control absence, theme accent contrast, transparent glass backgrounds,
+and restoration of the saved fixed preference on enabled apps. Screenshots
+were inspected in both themes and on mobile. A temporary striped-backdrop
+diagnostic confirmed actual blur with software GPU rendering, which the
+headless fixture now enables for future visual reviews.

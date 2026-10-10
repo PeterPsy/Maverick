@@ -137,5 +137,16 @@ authority, catalog admission, selected model/effort on private JSON-RPC, operato
 replacement between tasks, usage attribution and stale workspace responses.
 The official Settings frontend build passed; the restarted backend reports healthy
 and exposes the authenticated settings route. Its live Codex catalog includes Luna
-and the `low` effort. Physical Mac and desktop/mobile visual acceptance remain
-unverified because the Device Use executor is disconnected after restart.
+and the `low` effort. The initial physical Mac and desktop/mobile visual checks
+were unavailable because the Device Use executor disconnected after restart.
+
+After reconnection on 2026-10-10, 60 focused backend tests and five decision-model
+frontend tests passed; seven SQLite variants remained skipped. Core Usage records
+the live internal operator as `gpt-6-luna` through Codex. The physical Mac smoke
+completed Calculator `1 + 2 = 3` with explicit target guidance and a fresh final
+observation. Two earlier `17 × 23` tasks failed: native evidence shows that the
+operator selected incorrect digit targets, so these runs do not establish general
+target-selection reliability. No model configuration was changed by these checks.
+The Mac companion browser reached the actual Maverick Settings URL but showed
+the unauthenticated login page. Live Settings save/reload and desktop/mobile
+visual acceptance still require an authenticated companion session.

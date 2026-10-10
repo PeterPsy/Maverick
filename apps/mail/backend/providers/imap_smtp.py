@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 import re
 import smtplib
+import ssl
 from uuid import uuid4
 
 from connections import IMAP_PASSWORD_SECRET, MAILBOX_PASSWORD_SECRET, SMTP_PASSWORD_SECRET
@@ -391,11 +392,17 @@ def _open_imap(settings: dict[str, object]):
     host = str(settings["imap_host"])
     port = int(settings["imap_port"])
     security = str(settings.get("imap_security") or "ssl")
+    if security not in {"ssl", "starttls"}:
+        raise ValueError("IMAP authentication requires verified TLS (ssl or starttls)")
+    context = ssl.create_default_context()
     if security == "ssl":
-        return imaplib.IMAP4_SSL(host, port, timeout=30)
+        return imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=30)
     client = imaplib.IMAP4(host, port, timeout=30)
-    if security == "starttls":
-        client.starttls()
+    try:
+        client.starttls(ssl_context=context)
+    except Exception:
+        client.shutdown()
+        raise
     return client
 
 
@@ -403,13 +410,19 @@ def _open_smtp(settings: dict[str, object]):
     host = str(settings["smtp_host"])
     port = int(settings["smtp_port"])
     security = str(settings.get("smtp_security") or "ssl")
+    if security not in {"ssl", "starttls"}:
+        raise ValueError("SMTP authentication requires verified TLS (ssl or starttls)")
+    context = ssl.create_default_context()
     if security == "ssl":
-        return smtplib.SMTP_SSL(host, port, timeout=30)
+        return smtplib.SMTP_SSL(host, port, context=context, timeout=30)
     client = smtplib.SMTP(host, port, timeout=30)
     client.ehlo()
-    if security == "starttls":
-        client.starttls()
+    try:
+        client.starttls(context=context)
         client.ehlo()
+    except Exception:
+        client.close()
+        raise
     return client
 
 
@@ -942,17 +955,27 @@ def _folder_by_canonical(folders: list[dict[str, str]], canonical: str) -> dict[
 
 
 def _move_message(client: object, source_folder: str, uid: int, target_folder: str) -> None:
-    client.select(f'"{source_folder}"', readonly=False)
-    typ, _data = client.uid("MOVE", str(uid), f'"{target_folder}"')
+    typ, _ = client.select(f'"{source_folder}"', readonly=False)
+    if str(typ).upper() != "OK":
+        raise ValueError("IMAP server rejected the source folder")
+    try:
+        typ, _data = client.uid("MOVE", str(uid), f'"{target_folder}"')
+    except imaplib.IMAP4.error:
+        typ = "NO"
     if str(typ).upper() == "OK":
         return
+    capabilities = {value.decode("ascii") if isinstance(value, bytes) else str(value) for value in getattr(client, "capabilities", ())}
+    if "UIDPLUS" not in {value.upper() for value in capabilities}:
+        raise ValueError("Safe IMAP move requires MOVE or UIDPLUS; this server supports neither")
     copy_typ, _copy_data = client.uid("COPY", str(uid), f'"{target_folder}"')
     if str(copy_typ).upper() != "OK":
         raise ValueError("IMAP server rejected the move-to-trash operation")
-    client.uid("STORE", str(uid), "+FLAGS.SILENT", r"(\Deleted)")
-    expunge = getattr(client, "expunge", None)
-    if callable(expunge):
-        expunge()
+    typ, _ = client.uid("STORE", str(uid), "+FLAGS.SILENT", r"(\Deleted)")
+    if str(typ).upper() != "OK":
+        raise ValueError("IMAP message was copied to trash but source deletion failed")
+    typ, _ = client.uid("EXPUNGE", str(uid))
+    if str(typ).upper() != "OK":
+        raise ValueError("IMAP message was copied to trash but UID deletion failed")
 
 
 def _folder_canonical(name: str) -> str:

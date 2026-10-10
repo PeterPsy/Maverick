@@ -285,7 +285,7 @@ def _port(value: object, default: object) -> int:
 
 def _security(value: object, protocol: str) -> str:
     text = str(value or "ssl").strip().lower()
-    allowed = {"ssl", "starttls", "none"}
+    allowed = {"ssl", "starttls"}
     if text not in allowed:
         raise ValueError(f"{protocol}_security must be one of {', '.join(sorted(allowed))}")
     return text

@@ -43,6 +43,13 @@ publishes a message to the provider.
 
 ## Storage
 
+IMAP and SMTP require `ssl` or `starttls`, with system-trusted certificates and
+hostname verification. Cleartext configuration is rejected, including previously
+stored `none` settings. Moving to Trash uses IMAP MOVE or COPY followed by STORE
+and UID EXPUNGE on servers advertising UIDPLUS. Servers supporting neither safe
+operation return an error before copying or marking the source deleted; Mail
+never issues a global EXPUNGE or CLOSE on a writable folder.
+
 The app owns `workspaces/<workspace_id>/data/mail/`.
 
 Primary data lives in:

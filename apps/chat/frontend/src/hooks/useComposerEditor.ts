@@ -27,6 +27,7 @@ type UseComposerEditorParams = {
   clearDismissedMention: () => void;
   disabled: boolean;
   editorRef: RefObject<HTMLDivElement | null>;
+  isEditorExpanded: boolean;
   handleAppMentionPickerKey: (event: KeyboardEvent<HTMLElement>, focusEditorOnClose?: boolean) => boolean;
   insertAppMentions: (items: MentionItem[]) => void;
   mentionTokens: MentionToken[];
@@ -71,6 +72,7 @@ export function useComposerEditor({
   clearDismissedMention,
   disabled,
   editorRef,
+  isEditorExpanded,
   handleAppMentionPickerKey,
   insertAppMentions,
   mentionTokens,
@@ -145,7 +147,7 @@ export function useComposerEditor({
     replaceComposerRangeWithText(currentValue, selection, text, kind);
   }
 
-  function replaceComposerRangeWithText(currentValue: string, selection: ComposerSelection, text: string, kind: ComposerEditKind) {
+  function replaceComposerRangeWithText(currentValue: string, selection: ComposerSelection, text: string, kind: ComposerEditKind, focusEditor = true) {
     const boundedSelection = boundComposerSelection(currentValue, selection);
     const nextValue = `${currentValue.slice(0, boundedSelection.start)}${text}${currentValue.slice(boundedSelection.end)}`;
     const nextCaret = boundedSelection.start + text.length;
@@ -156,6 +158,9 @@ export function useComposerEditor({
     onChange(nextValue);
     setCaretIndex(nextCaret);
     clearDismissedMention();
+    if (!focusEditor) {
+      return;
+    }
     requestAnimationFrame(() => {
       const nextEditor = editorRef.current;
       if (!nextEditor) {
@@ -186,6 +191,7 @@ export function useComposerEditor({
       selection,
       dictationInsertionForSelection(currentValue, selection, transcript),
       "dictation",
+      isEditorExpanded,
     );
   }
 
@@ -205,6 +211,9 @@ export function useComposerEditor({
     onChange(nextValue);
     setCaretIndex(before.length);
     clearDismissedMention();
+    if (!isEditorExpanded) {
+      return true;
+    }
     requestAnimationFrame(() => {
       const nextEditor = editorRef.current;
       if (!nextEditor) {

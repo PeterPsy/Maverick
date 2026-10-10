@@ -48,6 +48,8 @@
 }
 
 .chatapp-composer {
+  container-name: chat-composer;
+  container-type: inline-size;
   position: relative;
   width: 100%;
   padding: 0;

@@ -100,9 +100,9 @@ async function installActiveTurn(page: Page, widgetMode = "overlay") {
 }
 
 for (const { surface, width, touch, path, widgetMode } of [
-  { surface: "app", width: 1280, touch: false, path: "/apps/chat/" },
-  { surface: "app", width: 390, touch: false, path: "/apps/chat/" },
-  { surface: "app", width: 390, touch: true, path: "/apps/chat/" },
+  { surface: "app", width: 1280, touch: false, path: `/apps/chat/?thread_id=${SESSION_ID}` },
+  { surface: "app", width: 390, touch: false, path: `/apps/chat/?thread_id=${SESSION_ID}` },
+  { surface: "app", width: 390, touch: true, path: `/apps/chat/?thread_id=${SESSION_ID}` },
   {
     surface: "floating", width: 480, touch: false, widgetMode: "overlay",
     path: "/apps/chat/widgets/chat-floating/index.html?context=steering-fixture",

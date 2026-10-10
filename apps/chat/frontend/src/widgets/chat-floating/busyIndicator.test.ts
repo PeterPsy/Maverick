@@ -54,13 +54,13 @@ describe("floating chat busy indicator", () => {
     expect(sidebarStyles).toContain(".bs-chat-list__glow-layer::before");
   });
 
-  it("keeps the floating composer collapsed until it has focus or active content", () => {
-    const floatingStyles = readWidgetFile("styles.css");
+  it("shares explicit editor expansion with the full app", () => {
+    const floatingStyles = readFileSync(resolve(currentDir, "../../styles/composer/compact.css"), "utf8");
 
     expect(floatingStyles).toContain('grid-template-areas: "tools field actions";');
     expect(floatingStyles).toContain("min-height: 2.48rem;");
-    expect(floatingStyles).toContain(".chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__input-shell");
-    expect(floatingStyles).toContain("grid-template-areas:\n    \"field\"\n    \"toolbar\";");
+    expect(floatingStyles).toContain('.chatapp-composer[data-editor-expanded="true"] .chatapp-composer__input-shell');
+    expect(floatingStyles).toMatch(/grid-template-areas:\s*"field"\s*"toolbar";/);
   });
 
   it("uses one floating runtime for overlay, right dock, and mobile fullscreen modes", () => {

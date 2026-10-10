@@ -13,6 +13,7 @@ import type { MentionItem, MentionToken } from "../lib/mentions";
 import { useAppPickerDismiss } from "./useAppPickerDismiss";
 import { mergeMentionItems } from "./mentionPickerUtils";
 import { useAppReferenceSearch } from "./useAppReferenceSearch";
+import { usePopupFocusReturn } from "./usePopupFocusReturn";
 
 const APP_PICKER_REFERENCE_LIMIT = 16;
 function focusEditorAtCaret(editorRef: RefObject<HTMLDivElement | null>, caret: number) {
@@ -28,6 +29,7 @@ function focusEditorAtCaret(editorRef: RefObject<HTMLDivElement | null>, caret: 
 type UseMentionPickerParams = {
   caretIndex: number;
   editorRef: RefObject<HTMLDivElement | null>;
+  isEditorExpanded: boolean;
   mentionItems: MentionItem[];
   onChange: (value: string) => void;
   onReferenceAdd?: (reference: AppReference) => void;
@@ -40,6 +42,7 @@ type UseMentionPickerParams = {
 export function useMentionPicker({
   caretIndex,
   editorRef,
+  isEditorExpanded,
   mentionItems,
   onChange,
   onReferenceAdd,
@@ -72,6 +75,8 @@ export function useMentionPicker({
   const activeMention = isMentionCandidateDismissed || activeMentionComplete ? null : activeMentionCandidate;
   const activeAppMention = activeMention;
   const isAppMentionPickerOpen = showAppPicker || Boolean(activeAppMention);
+  const pickerStartedExpandedRef = useRef(false);
+  const returnPickerFocus = usePopupFocusReturn(isAppMentionPickerOpen, appPickerButtonRef);
   const appMentionPickerQuery = activeAppMention ? activeAppMention.query : appPickerQuery;
   useAppReferenceSearch({
     isOpen: isAppMentionPickerOpen,
@@ -143,7 +148,7 @@ export function useMentionPicker({
       insertMention(item);
       return;
     }
-    insertAppMention(item);
+    insertAppMentions([item], { focusEditor: !showAppPicker || pickerStartedExpandedRef.current });
   }
 
   function removeMention(token: MentionToken) {
@@ -157,11 +162,7 @@ export function useMentionPicker({
     focusEditorAtCaret(editorRef, next.cursor);
   }
 
-  function insertAppMention(item: MentionItem) {
-    insertAppMentions([item]);
-  }
-
-  function insertAppMentions(items: MentionItem[]) {
+  function insertAppMentions(items: MentionItem[], { focusEditor = true } = {}) {
     if (!items.length) {
       return;
     }
@@ -185,17 +186,25 @@ export function useMentionPicker({
     setShowAppPicker(false);
     setAppPickerQuery("");
     setAppPickerSearchError(null);
-    focusEditorAtCaret(editorRef, nextCaret);
+    if (focusEditor) {
+      focusEditorAtCaret(editorRef, nextCaret);
+    } else {
+      returnPickerFocus();
+    }
   }
 
   function closeAppMentionPicker(focusEditor = false) {
+    const returnToEditor = focusEditor && (!showAppPicker || pickerStartedExpandedRef.current);
+    if (showAppPicker && !returnToEditor) {
+      returnPickerFocus();
+    }
     if (showAppPicker) {
       setShowAppPicker(false);
     } else if (activeAppMention) {
       setDismissedMentionStart(activeAppMention.start);
     }
     setAppPickerSearchError(null);
-    if (focusEditor) {
+    if (returnToEditor) {
       focusEditorAtCaret(editorRef, caretIndex);
     }
   }
@@ -206,6 +215,7 @@ export function useMentionPicker({
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       closeAppMentionPicker(focusEditorOnClose);
       return true;
     }
@@ -245,6 +255,7 @@ export function useMentionPicker({
     }
     setAppPickerQuery("");
     setAppPickerSearchError(null);
+    pickerStartedExpandedRef.current = isEditorExpanded;
     setShowAppPicker(true);
   }
 

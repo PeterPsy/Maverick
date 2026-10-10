@@ -26,17 +26,16 @@ afterEach(async () => {
   container = null;
 });
 
-describe("composer action pointer focus", () => {
+describe("composer action activation", () => {
   for (const label of ["Send message", "Stop chat"]) {
     for (const pointerType of ["mouse", "touch"]) {
-      it(`keeps ${label} stable on ${pointerType} down and acts only on click`, async () => {
+      it(`activates ${label} on click after ${pointerType} down`, async () => {
         const { onSubmit, onStopTurn } = await renderActions();
         const button = container!.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
         const pointerDown = new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerType });
 
         button.dispatchEvent(pointerDown);
 
-        expect(pointerDown.defaultPrevented).toBe(true);
         expect(onSubmit).not.toHaveBeenCalled();
         expect(onStopTurn).not.toHaveBeenCalled();
 

@@ -1,6 +1,5 @@
 import {
   KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
   useEffect,
   useId,
   useMemo,
@@ -8,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { AgentTypeSummary } from "../api/client";
+import { usePopupFocusReturn } from "../hooks/usePopupFocusReturn";
 
 type AgentMenuOption = {
   agentTypeId: string;
@@ -79,6 +79,7 @@ export function AgentSelector({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocus = usePopupFocusReturn(isOpen, buttonRef);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeIndexRef = useRef(0);
@@ -122,7 +123,7 @@ export function AgentSelector({
     activeIndexRef.current = 0;
     setActiveIndex(0);
     if (restoreFocus) {
-      buttonRef.current?.focus();
+      returnFocus();
     }
   }
 
@@ -180,7 +181,7 @@ export function AgentSelector({
 
   function selectAgent(agentTypeId: string) {
     onSelect(agentTypeId);
-    closeMenu();
+    closeMenu({ restoreFocus: true });
   }
 
   function handleQueryChange(value: string) {
@@ -227,14 +228,6 @@ export function AgentSelector({
     }
   }
 
-  function handleTriggerPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
-    if (event.pointerType === "mouse") {
-      return;
-    }
-    // Preserve composer focus, but wait for click before replacing this trigger with its menu.
-    event.preventDefault();
-  }
-
   function handleTriggerClick() {
     if (isOpen) {
       closeMenu();
@@ -252,7 +245,6 @@ export function AgentSelector({
         className={`chatapp-composer__tool-button chatapp-agent-selector__trigger ${selectedAgentTypeId || isOpen ? "is-active" : ""}`}
         disabled={isDisabled}
         onClick={handleTriggerClick}
-        onPointerDown={handleTriggerPointerDown}
         ref={buttonRef}
         title={locked ? "This chat is already running with its selected agent" : `Agent runner: ${label}`}
         type="button"

@@ -1,6 +1,5 @@
 import {
   KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
   useEffect,
   useId,
   useMemo,
@@ -8,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { ProviderItem } from "../api/client";
+import { usePopupFocusReturn } from "../hooks/usePopupFocusReturn";
 import {
   orderedExecutionFamilies,
   safeProviderExecutionFamily,
@@ -38,6 +38,7 @@ export function ProviderSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocus = usePopupFocusReturn(isOpen, buttonRef);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const activeIndexRef = useRef(0);
   const selectableProviders = useMemo(
@@ -85,7 +86,7 @@ export function ProviderSelector({
     activeIndexRef.current = 0;
     setActiveIndex(0);
     if (restoreFocus) {
-      buttonRef.current?.focus();
+      returnFocus();
     }
   }
 
@@ -145,7 +146,7 @@ export function ProviderSelector({
       return;
     }
     onSelect(providerId);
-    closeMenu();
+    closeMenu({ restoreFocus: true });
   }
 
   function selectProviderReasoning(provider: ProviderItem, effort: string) {
@@ -166,6 +167,7 @@ export function ProviderSelector({
   function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       closeMenu({ restoreFocus: true });
       return;
     }
@@ -185,13 +187,6 @@ export function ProviderSelector({
     }
   }
 
-  function handleTriggerPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
-    if (event.pointerType === "mouse") {
-      return;
-    }
-    event.preventDefault();
-  }
-
   return (
     <div className="chatapp-provider-selector">
       <button
@@ -204,7 +199,6 @@ export function ProviderSelector({
           if (isOpen) closeMenu();
           else openMenu();
         }}
-        onPointerDown={handleTriggerPointerDown}
         ref={buttonRef}
         title={locked
           ? `${selectedDisplayLabel}. Start a new chat to change model or reasoning.`

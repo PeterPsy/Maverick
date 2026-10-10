@@ -263,7 +263,9 @@ test.describe("Chat app browser smoke", () => {
       }));
       await page.goto("/apps/chat/native-frame-preview");
       const chat = page.frameLocator('iframe[title="Maverick Mac preview"]');
-      if (width < 600) await chat.getByRole("button", { name: "Composer utilities" }).click();
+      await expect(chat.getByRole("textbox")).toBeEditable();
+      const compact = await chat.getByRole("button", { name: "Composer utilities" }).isVisible();
+      if (compact) await chat.getByRole("button", { name: "Composer utilities" }).click();
       const toggle = chat.locator(".chatapp-device-use-control");
       await expect(toggle).toHaveCount(1);
       await expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -274,7 +276,7 @@ test.describe("Chat app browser smoke", () => {
       await expect(chat.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
       await expect(chat.getByRole("button", { name: "Apps and references", exact: true })).toBeEnabled();
       await expect(chat.getByRole("button", { name: "Multi-agent mode: Off", exact: true })).toBeEnabled();
-      if (width > 720) {
+      if (!compact) {
         const attachment = await chat.getByRole("button", { name: "Add attachments" }).boundingBox();
         const pcUse = await toggle.boundingBox();
         expect(attachment).not.toBeNull();
@@ -302,8 +304,11 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
     await expect(page.getByRole("textbox")).toBeEditable();
     await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+    if (await page.getByRole("button", { name: "Composer utilities" }).isVisible()) {
+      await page.getByRole("button", { name: "Composer utilities" }).click();
+    }
     await expect(page.getByRole("button", { name: "Multi-agent mode: Off" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Agent runner: Free Agent" })).toBeVisible();
   });
 
   test.describe("mobile composer", () => {
@@ -335,7 +340,7 @@ test.describe("Chat app browser smoke", () => {
       await expect(utilityPanel).toBeVisible();
       await expect(composer.getByRole("button", { name: "Apps and references" })).toBeVisible();
       await expect(composer.getByRole("button", { name: "Multi-agent mode: Off" })).toBeVisible();
-      await expect(composer.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Agent runner: Free Agent" })).toBeVisible();
       await expect(composer.getByRole("button", { name: "Dictate" })).toBeVisible();
       await expect(composer.getByRole("button", { name: "Send message" })).toBeEnabled();
       await expect(composer.locator(".chatapp-multi-agent-control__label")).toBeVisible();
@@ -350,7 +355,7 @@ test.describe("Chat app browser smoke", () => {
 
       const appsButton = composer.getByRole("button", { name: "Apps and references" });
       const multiAgentButton = composer.getByRole("button", { name: "Multi-agent mode: Off" });
-      const agentButton = composer.getByRole("button", { name: "Agent runner: Default Chat" });
+      const agentButton = composer.getByRole("button", { name: "Agent runner: Free Agent" });
       const modelButton = composer.getByRole("button", { name: "Model: Codex" });
 
       await multiAgentButton.tap();
@@ -652,8 +657,11 @@ test.describe("Chat app browser smoke", () => {
 
     await page.goto("/apps/chat/");
     await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
+    if (await page.getByRole("button", { name: "Composer utilities" }).isVisible()) {
+      await page.getByRole("button", { name: "Composer utilities" }).click();
+    }
 
-    await page.getByRole("button", { name: "Agent runner: Default Chat" }).click();
+    await page.getByRole("button", { name: "Agent runner: Free Agent" }).click();
     await page.getByRole("option", { name: /Researcher/ }).click();
     await expect(page.getByRole("button", { name: "Agent runner: Researcher" })).toBeVisible();
 
@@ -735,8 +743,11 @@ test.describe("Chat app browser smoke", () => {
 
     await page.goto("/apps/chat/");
     await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
+    if (await page.getByRole("button", { name: "Composer utilities" }).isVisible()) {
+      await page.getByRole("button", { name: "Composer utilities" }).click();
+    }
 
-    await page.getByRole("button", { name: "Agent runner: Default Chat" }).click();
+    await page.getByRole("button", { name: "Agent runner: Free Agent" }).click();
     await page.getByRole("option", { name: /Researcher/ }).click();
     await page.getByRole("button", { name: "Multi-agent mode: Off" }).click();
     await page.getByRole("menuitemradio", { name: "Group chat" }).click();

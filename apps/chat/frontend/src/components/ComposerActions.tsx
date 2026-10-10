@@ -1,10 +1,4 @@
-import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-
-function keepActionTargetStable(event: ReactPointerEvent<HTMLButtonElement>) {
-  // Preserve the current focus/layout until click, as the utility trigger does.
-  // Otherwise the compact composer moves Send/Stop between pointer-down and up.
-  event.preventDefault();
-}
+import type { ReactNode } from "react";
 
 export function ComposerActions({
   canSend,
@@ -26,7 +20,6 @@ export function ComposerActions({
           aria-label="Stop chat"
           className="chatapp-composer__icon-action is-stop"
           onClick={onStopTurn}
-          onPointerDown={keepActionTargetStable}
           title="Stop chat"
           type="button"
         >
@@ -42,7 +35,6 @@ export function ComposerActions({
         className="chatapp-composer__icon-action is-send"
         disabled={!canSend}
         onClick={onSubmit}
-        onPointerDown={keepActionTargetStable}
         title="Send"
         type="button"
       >

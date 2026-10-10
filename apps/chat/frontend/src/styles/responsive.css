@@ -4,3 +4,5 @@
 @import "./responsive/tablet-operating.css";
 @import "./responsive/phone-operating.css";
 @import "./responsive/empty-chat-composer.css";
+@import "./composer/compact.css";
+@import "./composer/compact-utilities.css";

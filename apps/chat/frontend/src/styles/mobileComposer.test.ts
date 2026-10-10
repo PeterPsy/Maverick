@@ -25,19 +25,19 @@ function cssBlock(styles: string, selector: string): string {
 }
 
 describe("mobile chat composer layout", () => {
-  it("collapses the normal composer on mobile and opens it on focus", () => {
+  it("uses container width and explicit editor expansion for the compact layout", () => {
     const responsiveStyles = readStyle("responsive.css");
     const desktopComposerStyles = readStyle("composer.css");
 
-    expect(responsiveStyles).toContain("@media (max-width: 720px)");
+    expect(responsiveStyles).toContain("@container chat-composer (max-width: 720px)");
     expect(responsiveStyles).toContain('grid-template-areas: "tools field actions";');
     expect(responsiveStyles).toContain(
-      ".chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__input-shell",
+      '.chatapp-composer[data-editor-expanded="true"] .chatapp-composer__input-shell',
     );
     expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__icon-action:active)");
     expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__tool-button:active)");
-    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__input-shell");
-    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__input-shell");
+    expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-attachment-picker__trigger:active)");
+    expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-provider-menu)");
     expect(responsiveStyles).toContain("min-height: 2.48rem;");
     expect(desktopComposerStyles).not.toContain('grid-template-areas: "tools field actions";');
   });
@@ -77,11 +77,11 @@ describe("mobile chat composer layout", () => {
     expect(composerStyles).not.toContain("margin-left: auto;");
   });
 
-  it("keeps the compact composer open only while voice dictation is recording", () => {
+  it("sizes active dictation without coupling it to editor expansion", () => {
     const responsiveStyles = readStyle("responsive.css");
 
-    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__input-shell");
-    expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__dictation.is-transcribing) .chatapp-composer__input-shell");
+    expect(responsiveStyles).toContain(".chatapp-voice-input:is(.is-recording, .is-transcribing) .chatapp-voice-input__control");
+    expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__dictation");
   });
 
   it("keeps the send button as an explicit click action", () => {

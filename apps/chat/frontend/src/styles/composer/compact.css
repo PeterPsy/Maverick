@@ -1,0 +1,149 @@
+/* Narrow composers share one layout in the full app and every widget host. */
+@container chat-composer (max-width: 720px) {
+  .chatapp-form-stack {
+    padding: 0.34rem 0.5rem;
+  }
+
+  .chatapp-composer__send-label,
+  .chatapp-composer__stop-label {
+    display: none;
+  }
+
+  .chatapp-mention-panel--app-picker {
+    left: 0;
+    right: 0;
+    max-height: min(18rem, 48dvh);
+  }
+
+  .chatapp-composer__input-shell {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "tools field actions";
+    align-items: center;
+    gap: 0.28rem;
+    min-height: 2.48rem;
+  }
+
+  .chatapp-composer__text-area {
+    grid-area: field;
+    padding: 0 0.18rem;
+  }
+
+  .chatapp-composer .chat-ui-input.chatapp-composer__editor {
+    min-height: 2.1rem;
+    max-height: 2.1rem;
+    font-size: 16px;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 2.1rem;
+  }
+
+  .chatapp-composer__toolbar {
+    display: contents;
+  }
+
+  .chatapp-composer__tools {
+    grid-area: tools;
+    gap: 0.12rem;
+    flex-wrap: nowrap;
+    align-self: center;
+  }
+
+  .chatapp-attachment-picker {
+    gap: 0.12rem;
+    height: 2rem;
+    padding-bottom: 0;
+  }
+
+  .chatapp-composer__actions {
+    grid-area: actions;
+    gap: 0.12rem;
+    align-self: center;
+  }
+
+  .chatapp-composer__tool-button,
+  .chatapp-attachment-picker__trigger,
+  .chatapp-voice-input__control {
+    flex: 0 0 2rem;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    line-height: 1;
+  }
+
+  .chatapp-composer__icon-action,
+  .chatapp-composer__icon-action.is-stop,
+  .chatapp-voice-input:not(.is-recording):not(.is-transcribing) .chatapp-voice-input__control {
+    flex: 0 0 2rem;
+    min-width: 2rem;
+    max-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    width: 2rem;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chatapp-composer__input-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "field"
+      "toolbar";
+    align-items: stretch;
+    gap: 0;
+    min-height: 0;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chatapp-composer__text-area {
+    padding: 0.9rem 0.9rem 0.75rem;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chat-ui-input.chatapp-composer__editor {
+    min-height: 54px;
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chatapp-composer__toolbar {
+    grid-area: toolbar;
+    display: flex;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chatapp-composer__tools {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-self: auto;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chatapp-composer__actions {
+    gap: 0.35rem;
+    align-self: auto;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chatapp-composer__icon-action {
+    flex: 0 0 auto;
+    min-height: 2.2rem;
+    max-width: none;
+    height: auto;
+    width: auto;
+    padding: 0 0.8rem;
+  }
+
+  .chatapp-composer[data-editor-expanded="true"] .chatapp-voice-input__control {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 2.2rem;
+    max-width: min(10rem, 45cqw);
+    min-height: 2.2rem;
+    height: auto;
+    padding: 0 0.58rem;
+  }
+
+  .chatapp-voice-input:is(.is-recording, .is-transcribing) .chatapp-voice-input__control {
+    width: auto;
+    max-width: min(10rem, 45cqw);
+    padding-inline: 0.58rem;
+  }
+}

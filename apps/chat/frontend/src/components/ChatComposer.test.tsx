@@ -382,7 +382,7 @@ describe("composer utilities", () => {
     expect(utilityButton?.getAttribute("aria-expanded")).toBe("true");
 
     await act(async () => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      element.querySelector(".chatapp-multi-agent-menu")!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
     });
 
     expect(element.querySelector(".chatapp-multi-agent-menu")).toBeNull();
@@ -824,40 +824,46 @@ describe("ChatComposer reference search", () => {
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("records microphone audio and inserts the transcript without submitting", async () => {
-    const onSubmit = vi.fn();
-    const { element, getValue } = await renderComposer({
-      onSubmit,
-      transcriptionProviderAppId: "speech",
-      transcriptionProviderAvailable: true,
-    });
-    const media = mockMediaRecorder();
-    vi.mocked(transcribeSpeechBlob).mockResolvedValue({ text: "Hello transcript", retention: "metadata_only" });
+  for (const expanded of [false, true]) {
+    it(`inserts dictation without submitting and preserves ${expanded ? "expanded" : "collapsed"} editor state`, async () => {
+      const onSubmit = vi.fn();
+      const { element, getValue } = await renderComposer({
+        onSubmit,
+        transcriptionProviderAppId: "speech",
+        transcriptionProviderAvailable: true,
+      });
+      const media = mockMediaRecorder();
+      vi.mocked(transcribeSpeechBlob).mockResolvedValue({ text: "Hello transcript", retention: "metadata_only" });
+      if (expanded) {
+        await act(async () => editorElement().focus());
+      }
 
-    await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
-      await Promise.resolve();
-    });
-    expect(element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')).toBeInstanceOf(HTMLButtonElement);
-    await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    await waitForComposerAssertion(() => {
-      const options = vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] as Record<string, unknown>;
-      expect(options).toMatchObject({ dictation: true, language: undefined, profile: "fast" });
-      expect(options).not.toHaveProperty("chunkIndex");
-      expect(options).not.toHaveProperty("sessionId");
-      expect(getValue()).toBe("Hello transcript");
-    });
+      await act(async () => {
+        element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+        await Promise.resolve();
+      });
+      expect(element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')).toBeInstanceOf(HTMLButtonElement);
+      await act(async () => {
+        element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await waitForComposerAssertion(() => {
+        const options = vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] as Record<string, unknown>;
+        expect(options).toMatchObject({ dictation: true, language: undefined, profile: "fast" });
+        expect(options).not.toHaveProperty("chunkIndex");
+        expect(options).not.toHaveProperty("sessionId");
+        expect(getValue()).toBe("Hello transcript");
+        expect(element.querySelector(".chatapp-composer")?.getAttribute("data-editor-expanded")).toBe(String(expanded));
+      });
 
-    expect(media.getUserMedia).toHaveBeenCalledWith({
-      audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+      expect(media.getUserMedia).toHaveBeenCalledWith({
+        audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+      });
+      expect(media.stopTrack).toHaveBeenCalled();
+      expect(onSubmit).not.toHaveBeenCalled();
     });
-    expect(media.stopTrack).toHaveBeenCalled();
-    expect(onSubmit).not.toHaveBeenCalled();
-  });
+  }
 
   it("keeps every ordered transcript when chunked dictation responses settle before React renders", async () => {
     const pendingResults: Array<(result: { chunk_text: string; text: string; retention: string }) => void> = [];

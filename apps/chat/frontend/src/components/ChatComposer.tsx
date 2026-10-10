@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ChatUsageSummary, ProviderItem } from "../api/client";
 import type { MultiAgentComposerMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
@@ -8,6 +8,7 @@ import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
 import type { MentionItem } from "../lib/mentions";
 import { isResearchRunner, RESEARCH_RUNNER_ID } from "../lib/runtimeProfiles";
 import { useComposerEditor } from "../hooks/useComposerEditor";
+import { useComposerInteraction } from "../hooks/useComposerInteraction";
 import { useMentionPicker } from "../hooks/useMentionPicker";
 import { AgentSelector } from "./AgentSelector";
 import { AttachmentMenu } from "./AttachmentMenu";
@@ -18,6 +19,7 @@ import { ComposerRuntimeBadges } from "./ComposerRuntimeBadges";
 import { ComposerUtilities } from "./ComposerUtilities";
 import { DeviceUseControl } from "./DeviceUseControl";
 import { MentionPanel } from "./MentionPanel";
+import { MultiAgentModeControl } from "./MultiAgentModeControl";
 import { QueuedMessageNotice } from "./QueuedMessageNotice";
 
 export type ExecutionMode = "sandbox" | "full-access";
@@ -133,6 +135,7 @@ export function ChatComposer({
   const [caretIndex, setCaretIndex] = useState(value.length);
   const [multiAgentMenuOpen, setMultiAgentMenuOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const { composerRef, isEditorExpanded, onComposerFocus, onToolbarPointerDown } = useComposerInteraction(editorRef);
   const pendingCaretIndexRef = useRef<number | null>(null);
   const {
     appMentionPickerQuery,
@@ -155,6 +158,7 @@ export function ChatComposer({
   } = useMentionPicker({
     caretIndex,
     editorRef,
+    isEditorExpanded,
     mentionItems,
     onChange,
     onReferenceAdd,
@@ -179,6 +183,7 @@ export function ChatComposer({
     clearDismissedMention,
     disabled,
     editorRef,
+    isEditorExpanded,
     handleAppMentionPickerKey,
     insertAppMentions,
     mentionTokens,
@@ -210,7 +215,12 @@ export function ChatComposer({
 
   return (
     <>
-      <section className={`chat-ui-surface chatapp-composer ${isEmptyMode ? "is-empty-mode" : "is-docked"}`}>
+      <section
+        className={`chat-ui-surface chatapp-composer ${isEmptyMode ? "is-empty-mode" : "is-docked"}`}
+        data-editor-expanded={isEditorExpanded}
+        onFocusCapture={onComposerFocus}
+        ref={composerRef}
+      >
         <form className="chatapp-form-stack" onSubmit={submit}>
           <AttachmentPreviewStrip attachments={attachments} disabled={isSending} onRemoveAttachment={onRemoveAttachment} />
           <QueuedMessageNotice queuedCount={queuedCount} queuedPreview={queuedPreview} />
@@ -255,7 +265,7 @@ export function ChatComposer({
                 tabIndex={disabled ? -1 : 0}
               />
             </div>
-            <div className="chatapp-composer__toolbar">
+            <div className="chatapp-composer__toolbar" onPointerDownCapture={onToolbarPointerDown}>
               <div className="chatapp-composer__tools">
                 {!isolatedResearch ? (
                   <AttachmentMenu
@@ -265,7 +275,7 @@ export function ChatComposer({
                     onCapturePageArea={onCapturePageArea}
                   />
                 ) : null}
-                <ComposerUtilities>
+                <ComposerUtilities externalPanelOpen={isAppMentionPickerOpen}>
                   {!isolatedResearch && onCapturePageArea ? (
                     <button
                       aria-label="Capture page area"
@@ -388,110 +398,4 @@ export function ChatComposer({
       </section>
     </>
   );
-}
-
-function MultiAgentModeControl({
-  budgetLabel,
-  disabled,
-  groupChatEnabled,
-  menuOpen,
-  mode,
-  onMenuOpenChange,
-  onSelect,
-}: {
-  budgetLabel: string;
-  disabled: boolean;
-  groupChatEnabled: boolean;
-  menuOpen: boolean;
-  mode: MultiAgentComposerMode;
-  onMenuOpenChange: (open: boolean) => void;
-  onSelect: (mode: MultiAgentComposerMode) => void;
-}) {
-  const label = multiAgentModeLabel(mode);
-  const modeItems: MultiAgentComposerMode[] = groupChatEnabled ? ["off", "auto", "multi", "group_chat"] : ["off", "auto", "multi"];
-  const controlRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node | null;
-      if (!target || controlRef.current?.contains(target)) {
-        return;
-      }
-      onMenuOpenChange(false);
-    }
-
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key !== "Escape") {
-        return;
-      }
-      onMenuOpenChange(false);
-      triggerRef.current?.focus();
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [menuOpen, onMenuOpenChange]);
-
-  return (
-    <div className="chatapp-multi-agent-control" ref={controlRef}>
-      <button
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        aria-label={`Multi-agent mode: ${label}`}
-        className={`chatapp-composer__tool-button chatapp-multi-agent-control__button ${mode !== "off" ? "is-active" : ""}`}
-        disabled={disabled}
-        onClick={() => onMenuOpenChange(!menuOpen)}
-        ref={triggerRef}
-        title="Multi-agent mode"
-        type="button"
-      >
-        <span aria-hidden="true" className="material-symbols-rounded">
-          account_tree
-        </span>
-        <span className="chatapp-multi-agent-control__label">{label}</span>
-      </button>
-      {menuOpen ? (
-        <div className="chatapp-multi-agent-menu" role="menu">
-          {modeItems.map((item) => (
-            <button
-              aria-checked={mode === item}
-              className="chatapp-multi-agent-menu__item"
-              key={item}
-              onClick={() => onSelect(item)}
-              role="menuitemradio"
-              type="button"
-            >
-              <span aria-hidden="true" className="material-symbols-rounded">
-                {mode === item ? "radio_button_checked" : "radio_button_unchecked"}
-              </span>
-              <span>{multiAgentModeLabel(item)}</span>
-            </button>
-          ))}
-          {budgetLabel ? <div className="chatapp-multi-agent-menu__budget">{budgetLabel}</div> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function multiAgentModeLabel(mode: MultiAgentComposerMode): string {
-  if (mode === "auto") {
-    return "Auto";
-  }
-  if (mode === "multi") {
-    return "Multi";
-  }
-  if (mode === "group_chat") {
-    return "Group chat";
-  }
-  return "Off";
 }

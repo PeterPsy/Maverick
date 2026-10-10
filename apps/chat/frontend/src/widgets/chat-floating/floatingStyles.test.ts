@@ -68,15 +68,15 @@ describe("floating chat widget styles", () => {
   });
 
   it("keeps model and runtime controls visible in the compact utility panel", () => {
-    const styles = readStyle("styles.css");
+    const styles = readFileSync(resolve(currentDir, "../../styles/composer/compact-utilities.css"), "utf8");
     const singleLineStyles = styles.replace(/\s+/g, " ");
     const runtimeBadgesBlock = cssBlock(
       styles,
-      ".chat-floating-widget-shell__body .chatapp-composer-utilities__menu .chatapp-composer__runtime-badges",
+      ".chatapp-composer-utilities__menu .chatapp-composer__runtime-badges",
     );
     const providerPanelBadgesBlock = cssBlock(
       singleLineStyles,
-      ".chat-floating-widget-shell__body .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-composer__runtime-badges",
+      ".chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-composer__runtime-badges",
     );
 
     expect(runtimeBadgesBlock).toContain("display: inline-flex;");

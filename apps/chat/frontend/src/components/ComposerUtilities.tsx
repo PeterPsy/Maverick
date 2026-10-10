@@ -3,20 +3,14 @@ import {
   useId,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 
-export function ComposerUtilities({ children }: { children: ReactNode }) {
+export function ComposerUtilities({ children, externalPanelOpen = false }: { children: ReactNode; externalPanelOpen?: boolean }) {
   const panelId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-
-  function keepTriggerStable(event: ReactPointerEvent<HTMLButtonElement>) {
-    // Retain editor focus so the expanded mobile composer cannot collapse before the tap completes.
-    event.preventDefault();
-  }
 
   useEffect(() => {
     if (!isOpen) {
@@ -28,11 +22,15 @@ export function ComposerUtilities({ children }: { children: ReactNode }) {
       if (!target || containerRef.current?.contains(target)) {
         return;
       }
+      const composer = containerRef.current?.closest(".chatapp-composer");
+      if (externalPanelOpen && composer?.querySelector(".chatapp-mention-panel--app-picker")?.contains(target)) {
+        return;
+      }
       setIsOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") {
+      if (event.key !== "Escape" || event.defaultPrevented || externalPanelOpen) {
         return;
       }
       const nestedPopupTrigger = containerRef.current?.querySelector<HTMLElement>(
@@ -45,13 +43,14 @@ export function ComposerUtilities({ children }: { children: ReactNode }) {
       triggerRef.current?.focus();
     }
 
-    document.addEventListener("pointerdown", handlePointerDown);
+    // Inspect containment before an option's handler removes its popup.
+    document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [externalPanelOpen, isOpen]);
 
   return (
     <div className="chatapp-composer-utilities" ref={containerRef}>
@@ -61,7 +60,6 @@ export function ComposerUtilities({ children }: { children: ReactNode }) {
         aria-label="Composer utilities"
         className={`chatapp-composer__tool-button chatapp-composer-utilities__trigger ${isOpen ? "is-active" : ""}`}
         onClick={() => setIsOpen((current) => !current)}
-        onPointerDown={keepTriggerStable}
         ref={triggerRef}
         title="Composer utilities"
         type="button"

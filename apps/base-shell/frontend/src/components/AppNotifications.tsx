@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { NotificationPopover } from "./NotificationPopover";
 import {
   connectAppEventSocket,
   maverickAppIsVisible,
@@ -18,9 +19,13 @@ export function AppNotifications({
   apps,
   scope,
   onOpenApp,
+  children,
+  placement,
 }: {
   apps: AppRegistryItem[];
   scope: MaverickFrameScope;
+  children: (notifications: ReactNode) => ReactNode;
+  placement: "sidebar" | "header";
   onOpenApp: (
     appId: string,
     params?: Record<string, string | boolean | null>,
@@ -41,7 +46,6 @@ export function AppNotifications({
     [apps],
   );
   const [inboxes, setInboxes] = useState<Inbox[]>([]);
-  const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState("");
   const [limit, setLimit] = useState(5);
   const [pages, setPages] = useState(1);
@@ -142,7 +146,7 @@ export function AppNotifications({
     };
   }, [providers, scope, refresh, pages]);
 
-  if (!providers.length) return null;
+  if (!providers.length) return children(null);
   const total = inboxes.reduce((sum, inbox) => sum + inbox.total, 0);
   const notices = inboxes.flatMap((inbox) =>
     inbox.notices.map((notice) => ({
@@ -181,26 +185,10 @@ export function AppNotifications({
     }
   }
 
-  return (
-    <aside
-      className="bs-notifications"
-      aria-label="Notifiche delle app"
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && expanded) {
-          setExpanded(false);
-          event.currentTarget
-            .querySelector<HTMLButtonElement>(".bs-notifications__toggle")
-            ?.focus();
-        }
-      }}
-    >
-      <button
-        type="button"
-        className="bs-notifications__toggle"
-        aria-expanded={expanded}
-        aria-controls="app-notification-inbox"
-        onClick={() => setExpanded((value) => !value)}
-      >
+  return children(
+    <NotificationPopover placement={placement}
+      announcement={total ? `${total} notifiche da leggere` : ""}
+      toggleContent={<>
         <span className="material-symbols-rounded" aria-hidden="true">
           notifications
         </span>
@@ -213,71 +201,58 @@ export function AppNotifications({
             {error ? "!" : total}
           </span>
         )}
-      </button>
-      <span
-        className="bs-notifications__announcement"
-        role="status"
-        aria-live="polite"
-      >
-        {total ? `${total} notifiche da leggere` : ""}
-      </span>
-      {expanded && (
-        <section
-          id="app-notification-inbox"
-          className="bs-notifications__inbox"
-          aria-label="Notifiche da leggere"
-        >
-          {error && (
-            <p role="alert">
-              {error}{" "}
-              <button
-                type="button"
-                onClick={() => setRefresh((value) => value + 1)}
-              >
-                Riprova
-              </button>
-            </p>
-          )}
-          {!total && !error && <p>Nessuna notifica da leggere.</p>}
-          {notices.slice(0, limit).map((notice) => (
-            <article key={`${notice.appId}:${notice.id}`}>
-              <small>{notice.name}</small>
-              <button
-                type="button"
-                className="bs-notifications__open"
-                onClick={() => {
-                  onOpenApp(notice.appId, notice.open_params || {});
-                  setExpanded(false);
-                }}
-              >
-                {notice.title}
-              </button>
-              {notice.scheduled_at && (
-                <time dateTime={notice.scheduled_at}>{noticeTime(notice)}</time>
-              )}
-              <button
-                type="button"
-                disabled={pending.includes(`${notice.appId}:${notice.id}`)}
-                aria-label={`Chiudi notifica: ${notice.title}`}
-                onClick={() => void dismiss(notice.appId, notice.id)}
-              >
-                Chiudi
-              </button>
-            </article>
-          ))}
-          {total > limit && (
+      </>}>
+      {(close) => <>
+        {error && (
+          <p role="alert">
+            {error}{" "}
             <button
               type="button"
+              onClick={() => setRefresh((value) => value + 1)}
+            >
+              Riprova
+            </button>
+          </p>
+        )}
+        {!total && !error && <p>Nessuna notifica da leggere.</p>}
+        {notices.slice(0, limit).map((notice) => (
+          <article key={`${notice.appId}:${notice.id}`}>
+            <small>{notice.name}</small>
+            <button
+              type="button"
+              className="bs-notifications__open"
               onClick={() => {
-                if (limit >= notices.length) setPages((value) => value + 1);
-                setLimit((value) => value + 5);
+                onOpenApp(notice.appId, notice.open_params || {});
+                close();
               }}
             >
-              Mostra altre notifiche
+              {notice.title}
             </button>
-          )}
-        </section>
-      )}
-    </aside>
+            {notice.scheduled_at && (
+              <time dateTime={notice.scheduled_at}>{noticeTime(notice)}</time>
+            )}
+            <button
+              type="button"
+              disabled={pending.includes(`${notice.appId}:${notice.id}`)}
+              aria-label={`Chiudi notifica: ${notice.title}`}
+              onClick={() => void dismiss(notice.appId, notice.id)}
+            >
+              Chiudi
+            </button>
+          </article>
+        ))}
+        {total > limit && (
+          <button
+            type="button"
+            onClick={() => {
+              if (limit >= notices.length) setPages((value) => value + 1);
+              setLimit((value) => value + 5);
+            }}
+          >
+            Mostra altre notifiche
+          </button>
+        )}
+      </>}
+    </NotificationPopover>,
   );
 }

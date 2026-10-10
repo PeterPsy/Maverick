@@ -12,7 +12,8 @@ const requireBrowser = createRequire(resolve(appRoot, "../browser/package.json")
 const { chromium } = requireBrowser("playwright");
 const apps = ["chat", "canvas", "settings"].map((app_id) => ({
   app_id, name: app_id, status: "enabled", frontend_role: "workspace", frontend_launchable: true,
-  frontend_mount: `/apps/${app_id}/`, sidebar_enabled: app_id !== "canvas", provides: [], requires: [],
+  frontend_mount: `/apps/${app_id}/`, sidebar_enabled: app_id !== "canvas",
+  provides: app_id === "chat" ? [{ interface: "notifications.inbox", version: "1", surfaces: ["backend"] }] : [], requires: [],
 }));
 const user = { user_id: "fixture-user", username: "fixture", platform_role: "admin", account_type: "local" };
 
@@ -25,6 +26,7 @@ function fixtureServer(requests) {
     if (url.pathname === "/api/apps") return json({ items: apps });
     if (url.pathname === "/api/workspaces") return json({ items: [{ workspace_id: "default", name: "Default", is_active: true, status: "active" }], active_workspace_id: "default" });
     if (url.pathname === "/api/apps/app-store/backend") return json({ pinned_apps: ["chat", "canvas"] });
+    if (url.pathname === "/api/apps/chat/backend") return json({ notifications: [{ id: "fixture-reminder", title: "Promemoria di prova" }], total: 1 });
     if (url.pathname === "/api/settings/provider-setup") return json({ provider: { active_provider: "fixture", available_providers: [], blocked_reason: "ready", model_settings: null, selection: null }, user, workspace: { workspace_id: "default" } });
     if (url.pathname === "/api/apps/dependencies") return json({ workspace_id: "default", consumer_app_id: "canvas", status: "ready", dependencies: [] });
     if (url.pathname === "/api/apps/widgets") return json({ items: [] });
@@ -79,6 +81,33 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     const panel = await page.locator(".bs-sidebar__rail-menu-panel").boundingBox();
     assert.ok(panel.x > (await rail.boundingBox()).x);
     assert.ok(panel.x + panel.width <= 1440);
+    const bell = page.getByRole("button", { name: "Notifiche (1)", exact: true });
+    const gear = page.getByRole("button", { name: "Impostazioni di canvas", exact: true });
+    const bellBox = await bell.boundingBox();
+    const gearBox = await gear.boundingBox();
+    assert.ok(bellBox.x > gearBox.x + gearBox.width);
+    assert.equal(bellBox.width, gearBox.width);
+    assert.equal(bellBox.height, gearBox.height);
+    assert.deepEqual(await bell.evaluate((button) => {
+      const style = getComputedStyle(button);
+      const icon = getComputedStyle(button.querySelector(".material-symbols-rounded"));
+      return [style.borderRadius, style.backgroundColor, style.borderColor, icon.fontSize, icon.fontVariationSettings];
+    }), await gear.evaluate((button) => {
+      const style = getComputedStyle(button);
+      const icon = getComputedStyle(button.querySelector(".material-symbols-rounded"));
+      return [style.borderRadius, style.backgroundColor, style.borderColor, icon.fontSize, icon.fontVariationSettings];
+    }));
+    await bell.click();
+    const inbox = page.getByRole("region", { name: "Notifiche da leggere" });
+    await inbox.waitFor({ state: "visible" });
+    assert.equal(await inbox.evaluate((element) => element.matches(":popover-open")), true);
+    await page.keyboard.press("Tab");
+    assert.equal(await page.getByRole("button", { name: "Promemoria di prova", exact: true })
+      .evaluate((button) => button === document.activeElement), true);
+    await page.keyboard.press("Escape");
+    await inbox.waitFor({ state: "hidden" });
+    assert.equal(await bell.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await top.getAttribute("aria-expanded"), "true");
     if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-desktop.png") });
     await top.focus();
     await page.keyboard.press("Escape");
@@ -90,6 +119,15 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await page.getByRole("button", { name: "chat. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-shell.is-sidebar-mode-fixed").waitFor();
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x > 300);
+    assert.equal(await page.locator(".bs-sidebar__header > .bs-notifications").count(), 1);
+    await bell.click();
+    await inbox.waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "Promemoria di prova", exact: true }).hover();
+    const fixedInboxBox = await inbox.boundingBox();
+    assert.ok(fixedInboxBox.x >= 0 && fixedInboxBox.x + fixedInboxBox.width <= 1440);
+    await page.mouse.click(1400, 800);
+    await inbox.waitFor({ state: "hidden" });
+    await page.waitForFunction(() => document.querySelector(".bs-notifications__toggle")?.getAttribute("aria-expanded") === "false");
     await page.getByRole("button", { name: "canvas. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-sidebar--disabled").waitFor();
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x < 100);
@@ -99,6 +137,32 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     const mobilePage = await mobile.newPage();
     lastPage = mobilePage;
     await mobilePage.goto(`${origin}/app/canvas`);
+    const mobileBell = mobilePage.getByRole("button", { name: "Notifiche (1)", exact: true });
+    await mobileBell.waitFor();
+    for (const width of [390, 320]) {
+      await mobilePage.setViewportSize({ width, height: 844 });
+      assert.equal(await mobilePage.locator(".bs-notifications__toggle").count(), 1);
+      assert.equal(await mobilePage.locator(".bs-mobile-shell-header__actions > :last-child .bs-notifications__toggle").count(), 1);
+      const plus = mobilePage.locator(".bs-mobile-shell-header__primary-action");
+      const plusBox = await plus.boundingBox();
+      const mobileBellBox = await mobileBell.boundingBox();
+      const logoBox = await mobilePage.locator(".bs-mobile-shell-header__logo-button").boundingBox();
+      const actionsBox = await mobilePage.locator(".bs-mobile-shell-header__actions").boundingBox();
+      assert.ok(mobileBellBox.x >= plusBox.x + plusBox.width);
+      assert.ok(mobileBellBox.x + mobileBellBox.width <= width);
+      assert.ok(logoBox.x + logoBox.width <= actionsBox.x);
+      assert.equal(await mobileBell.evaluate((button) => getComputedStyle(button).height),
+        await plus.evaluate((button) => getComputedStyle(button).height));
+      await mobileBell.tap();
+      const mobileInbox = mobilePage.getByRole("region", { name: "Notifiche da leggere" });
+      await mobileInbox.waitFor({ state: "visible" });
+      const inboxBox = await mobileInbox.boundingBox();
+      assert.ok(inboxBox.x >= 0 && inboxBox.x + inboxBox.width <= width);
+      assert.ok(inboxBox.y >= mobileBellBox.y + mobileBellBox.height);
+      await mobilePage.keyboard.press("Escape");
+      await mobileInbox.waitFor({ state: "hidden" });
+    }
+    await mobilePage.setViewportSize({ width: 390, height: 844 });
     await mobilePage.getByRole("button", { name: "Apri controlli workspace", exact: true }).tap();
     await mobilePage.getByRole("combobox", { name: "Workspace", exact: true }).waitFor({ state: "visible" });
     assert.equal(await mobilePage.locator(".bs-shell.is-sidebar-open").count(), 0);

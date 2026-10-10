@@ -5,6 +5,7 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
+  ReactNode,
   TouchEvent as ReactTouchEvent,
 } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
@@ -40,6 +41,7 @@ export function Sidebar({
   isPinned,
   mode,
   mobilePrimaryActionRequestId,
+  notifications,
   onClose,
   onModeChange,
   onOpenApp,
@@ -72,6 +74,7 @@ export function Sidebar({
   isPinned: boolean;
   mode: SidebarMode;
   mobilePrimaryActionRequestId: number;
+  notifications?: ReactNode;
   onClose: () => void;
   onModeChange: (mode: SidebarMode) => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
@@ -319,6 +322,7 @@ export function Sidebar({
         <div className="bs-sidebar__rail" aria-label="Applications">
           {!sidebarEnabled ? <SidebarRailMenu icon="workspaces" label="Controlli workspace" placement="top">
             <SidebarHeader activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} isLoading={isLoading}
+              notifications={notifications}
               isWorkspacesLoading={isWorkspacesLoading} onOpenAppSettings={onOpenAppSettings}
               onWorkspaceChange={onWorkspaceChange} workspaces={workspaces} />
           </SidebarRailMenu> : null}
@@ -356,6 +360,7 @@ export function Sidebar({
             isLoading={isLoading}
             isWorkspacesLoading={isWorkspacesLoading}
             onOpenAppSettings={onOpenAppSettings}
+            notifications={notifications}
             onWorkspaceChange={onWorkspaceChange}
             workspaces={workspaces}
           /> : null}

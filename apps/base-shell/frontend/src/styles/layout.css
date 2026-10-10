@@ -276,7 +276,7 @@
   right: 0;
   z-index: 46;
   display: none;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
   height: var(--bs-mobile-shell-header-height);
@@ -417,6 +417,8 @@
   display: grid;
   place-items: center;
   width: min(8.1rem, 38vw);
+  max-width: 100%;
+  min-width: 0;
   height: 2.1rem;
   padding: 0;
   border: 0;
@@ -451,7 +453,8 @@
 }
 
 .bs-mobile-shell-header__primary-action .material-symbols-rounded,
-.bs-mobile-shell-header__chat-action .material-symbols-rounded {
+.bs-mobile-shell-header__chat-action .material-symbols-rounded,
+.bs-mobile-shell-header .bs-notifications__toggle .material-symbols-rounded {
   font-size: 1.36rem;
   font-variation-settings:
     "FILL" 0,

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { AppRegistryItem } from "../api";
 import { DEFAULT_SHELL_THEME_STATE, type ShellThemeState } from "../theme";
 import { AppLogo } from "./AppLogo";
@@ -19,6 +20,7 @@ export function MobileShellHeader({
   onPrimaryAction,
   primaryActionLabel,
   shellTheme = DEFAULT_SHELL_THEME_STATE,
+  notifications,
 }: {
   activeApp: AppRegistryItem | null;
   chatApp: AppRegistryItem | null;
@@ -35,6 +37,7 @@ export function MobileShellHeader({
   onPrimaryAction: () => void;
   primaryActionLabel: string;
   shellTheme?: ShellThemeState;
+  notifications?: ReactNode;
 }) {
   const actionLabel = primaryActionLabel || "Azione principale";
   const logoSrc = sidebarLogoSrc(shellTheme);
@@ -83,16 +86,6 @@ export function MobileShellHeader({
         <img alt="Maverick" className="bs-mobile-shell-header__logo" src={logoSrc} />
       </button>
       <div className="bs-mobile-shell-header__actions">
-        <button
-          aria-label={actionLabel}
-          className="bs-mobile-shell-header__button bs-mobile-shell-header__primary-action"
-          disabled={!isPrimaryActionAvailable}
-          onClick={onPrimaryAction}
-          title={actionLabel}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">add</span>
-        </button>
         {showMobileChatAction ? (
           <button
             aria-label={isMobileChatOpen ? "Chiudi chat contestuale" : "Apri chat contestuale"}
@@ -111,6 +104,17 @@ export function MobileShellHeader({
             )}
           </button>
         ) : null}
+        <button
+          aria-label={actionLabel}
+          className="bs-mobile-shell-header__button bs-mobile-shell-header__primary-action"
+          disabled={!isPrimaryActionAvailable}
+          onClick={onPrimaryAction}
+          title={actionLabel}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">add</span>
+        </button>
+        {notifications}
       </div>
     </header>
   );

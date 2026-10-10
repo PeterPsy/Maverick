@@ -2,7 +2,7 @@ import { reportShellAuthorizationFailure, resetShellAuthorizationChecks } from "
 import { useShellSessionRecovery } from "./hooks/useShellSessionRecovery";
 import { createIdempotencyKey } from "@maverick/pwa-cache";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import {
   AppRegistryItem,
@@ -946,7 +946,7 @@ export function AppShell() {
   const needsProviderSetup =
     !!settings && !settings.provider.active_provider && dismissedProviderSetupWorkspaceId !== activeWorkspaceId;
 
-  return (
+  const renderShell = (notifications: ReactNode) => (
     <main
       className={`bs-shell is-sidebar-mode-${sidebarEnabled ? sidebarMode : "rail"} ${sidebarEnabled && isSidebarOpen ? "is-sidebar-open" : ""} ${sidebarEnabled && isSidebarClosing ? "is-sidebar-closing" : ""} ${sidebarEnabled && isSidebarResizing ? "is-sidebar-resizing" : ""} ${isFloatingChatFixed ? "is-floating-chat-fixed" : ""} ${isFloatingChatResizing ? "is-floating-chat-resizing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
       style={shellStyle}
@@ -968,9 +968,9 @@ export function AppShell() {
           onPrimaryAction={invokeMobilePrimaryAction}
           primaryActionLabel={mobilePrimaryAction.label}
           shellTheme={shellTheme}
+          notifications={notifications}
         />
       ) : null}
-      <AppNotifications key={frameScope.sessionGeneration} apps={apps} scope={frameScope} onOpenApp={openApp} />
       {isMobileLayout ? (
         <MobilePinnedAppsPanel
           activeAppId={activeApp?.app_id ?? activeAppId}
@@ -1011,6 +1011,7 @@ export function AppShell() {
         isPinned={isSidebarPinned}
         mode={sidebarMode}
         mobilePrimaryActionRequestId={mobilePrimaryActionRequestId}
+        notifications={isMobileLayout ? null : notifications}
         onClose={closeSidebar}
         onModeChange={handleSidebarModeChange}
         onOpenApp={openApp}
@@ -1079,6 +1080,13 @@ export function AppShell() {
         settings={settings}
       />
     </main>
+  );
+
+  return (
+    <AppNotifications key={frameScope.sessionGeneration} apps={apps} scope={frameScope} onOpenApp={openApp}
+      placement={isMobileLayout ? "header" : "sidebar"}>
+      {renderShell}
+    </AppNotifications>
   );
 }
 

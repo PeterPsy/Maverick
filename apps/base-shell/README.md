@@ -36,6 +36,13 @@ the shell, including while another app is active. The shell reads and acknowledg
 them through app backends and the shared app-event transport; it does not own
 reminder schedules. Pending alerts return after reconnect. Reads stop when hidden
 or offline, and inbox state is discarded with the authenticated workspace/session.
+The bell sits immediately after app settings in the desktop sidebar workspace
+row (including the compact workspace menu for apps without a sidebar). On mobile
+it is the last header action, immediately after the app's plus button; the
+contextual Chat action precedes the plus. It reuses each surface's native button
+style. A single inbox reader survives layout changes and closed sidebar menus.
+The anchored inbox uses the browser's top layer to avoid sidebar clipping,
+stays within the viewport, and closes with an outside click or Escape.
 The current channel is in-app delivery; it does not send OS push notifications
 while the browser is closed. See the notification contract in
 [`app_contract_architecture.md`](../../docs/architecture/app_contract_architecture.md).

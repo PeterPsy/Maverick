@@ -1,9 +1,10 @@
+import type { ReactNode } from "react";
 import type { AppRegistryItem, WorkspaceItem } from "../api";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
-export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorkspacesLoading, onOpenAppSettings, onWorkspaceChange, workspaces }: {
+export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorkspacesLoading, onOpenAppSettings, onWorkspaceChange, workspaces, notifications }: {
   activeApp: AppRegistryItem | null;
   activeWorkspaceId: string;
   isLoading: boolean;
@@ -11,6 +12,7 @@ export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorks
   onOpenAppSettings: () => void;
   onWorkspaceChange: (workspaceId: string) => Promise<void> | void;
   workspaces: WorkspaceItem[];
+  notifications?: ReactNode;
 }) {
   const settingsLabel = activeApp ? `Impostazioni di ${activeApp.name}` : "Impostazioni app";
   return (
@@ -24,6 +26,7 @@ export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorks
         disabled={!activeApp || isLoading} onClick={onOpenAppSettings} type="button">
         <span aria-hidden="true" className="material-symbols-rounded">settings</span>
       </button>
+      {notifications}
     </div>
   );
 }

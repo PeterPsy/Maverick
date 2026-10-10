@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppNotifications } from "./AppNotifications";
@@ -41,6 +41,7 @@ const provider = {
   ],
 } as AppRegistryItem;
 const scope = { sessionGeneration: "alice-default", workspaceId: "default" };
+const renderInbox = (notifications: ReactNode) => notifications;
 const notice = {
   id: "reminder",
   title: "Dentista",
@@ -68,6 +69,11 @@ const click = async (text: string) =>
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();
+  // happy-dom lacks the native top-layer API; real behavior is covered by Chromium.
+  Object.defineProperties(HTMLElement.prototype, {
+    showPopover: { configurable: true, value: vi.fn() },
+    hidePopover: { configurable: true, value: vi.fn() },
+  });
   transport.visible = true;
   host = document.createElement("div");
   document.body.append(host);
@@ -79,9 +85,40 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(HTMLElement.prototype, "showPopover");
+  Reflect.deleteProperty(HTMLElement.prototype, "hidePopover");
 });
 
 describe("App notification inbox", () => {
+  it("retains one reader and unread state as the responsive surface moves or closes", async () => {
+    const fetchMock = vi.fn(async () => reply());
+    vi.stubGlobal("fetch", fetchMock);
+    const apps = [provider];
+    const renderAt = (visible: boolean, placement: "sidebar" | "header") => act(async () =>
+      root.render(<AppNotifications apps={apps} scope={scope} onOpenApp={() => {}} placement={placement}>
+        {(notifications) => visible ? <div data-surface={placement} key={placement}>{notifications}</div> : null}
+      </AppNotifications>),
+    );
+    await renderAt(true, "sidebar");
+    await flush();
+    const sidebar = host.querySelector('[data-surface="sidebar"]')!;
+    expect(sidebar.textContent).toContain("Notifiche (1)");
+    await renderAt(true, "header");
+    await flush();
+    const header = host.querySelector('[data-surface="header"]')!;
+    expect(sidebar.isConnected).toBe(false);
+    expect(host.querySelectorAll(".bs-notifications__toggle")).toHaveLength(1);
+    expect(header.textContent).toContain("Notifiche (1)");
+    expect(header.querySelector(".bs-mobile-shell-header__button")).not.toBeNull();
+    await renderAt(false, "sidebar");
+    await flush();
+    expect(host.querySelector("button")).toBeNull();
+    await renderAt(true, "sidebar");
+    await flush();
+    expect(host.querySelector('[data-surface="sidebar"]')!.textContent).toContain("Notifiche (1)");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("shows reminders without a Calendar frame and navigates through provider parameters", async () => {
     const fetchMock = vi.fn(async (_url: string, _options: RequestInit) =>
       reply(),
@@ -90,7 +127,7 @@ describe("App notification inbox", () => {
     const open = vi.fn();
     await act(async () =>
       root.render(
-        <AppNotifications apps={[provider]} scope={scope} onOpenApp={open} />,
+        <AppNotifications apps={[provider]} scope={scope} onOpenApp={open} children={renderInbox} placement="sidebar" />,
       ),
     );
     await flush();
@@ -125,6 +162,7 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
+          children={renderInbox} placement="sidebar"
           apps={[provider]}
           scope={scope}
           onOpenApp={() => {}}
@@ -170,6 +208,7 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
+          children={renderInbox} placement="sidebar"
           apps={[provider]}
           scope={scope}
           onOpenApp={() => {}}
@@ -206,6 +245,7 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
+          children={renderInbox} placement="sidebar"
           key="alice"
           apps={[provider]}
           scope={scope}
@@ -230,6 +270,7 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
+          children={renderInbox} placement="sidebar"
           key="bob"
           apps={[provider]}
           scope={{
@@ -258,6 +299,7 @@ describe("App notification inbox", () => {
     await act(async () =>
       root.render(
         <AppNotifications
+          children={renderInbox} placement="sidebar"
           apps={[provider]}
           scope={scope}
           onOpenApp={() => {}}

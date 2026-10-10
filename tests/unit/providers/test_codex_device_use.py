@@ -158,13 +158,13 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             with patch.object(adapter, "_source_codex_home", return_value=source), patch.object(adapter, "_runtime_home", return_value=home):
                 adapter._prepare_runtime_home(session)
             config = tomllib.loads((home / "config.toml").read_text())
-            for name in ("shell_tool", "unified_exec", "multi_agent"):
+            for name in ("shell_tool", "multi_agent"):
                 self.assertIsNot(config["features"].get(name), False)
+            self.assertFalse(config["features"]["unified_exec"])
             self.assertEqual((home / "rules" / "workspace.rules").read_text(), "Workspace rules")
             self.assertIn("shell_environment_policy", config)
 
     def test_device_runtime_mounts_the_bundled_code_mode_host(self):
-            self.assertFalse(config["features"]["unified_exec"])
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             vendor_bin = root / "vendor" / "target" / "bin"

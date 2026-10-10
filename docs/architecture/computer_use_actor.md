@@ -129,3 +129,13 @@ partial outcomes with and without declared recovery, and anti-replay after expli
 Full verification. The partial-outcome classification matches the current native
 `PeekabooFailure` and `ComputerTools.failureMessage` contract; protocol tests use
 simulated native results and do not exercise the physical Mac.
+
+Workspace model selection verification on 2026-10-10 passed 95 focused backend
+tests and 36 Settings frontend tests, with seven SQLite variants skipped for the
+runtime-version requirement. Tests cover persistent workspace isolation, HTTP
+authority, catalog admission, selected model/effort on private JSON-RPC, operator
+replacement between tasks, usage attribution and stale workspace responses.
+The official Settings frontend build passed; the restarted backend reports healthy
+and exposes the authenticated settings route. Its live Codex catalog includes Luna
+and the `low` effort. Physical Mac and desktop/mobile visual acceptance remain
+unverified because the Device Use executor is disconnected after restart.

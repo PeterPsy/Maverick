@@ -56,6 +56,20 @@ class ComputerActorTests(unittest.TestCase):
         self.assertEqual(result.image_jpeg, b"jpeg")
         self.assertEqual(result.native_duration_ms, 1)
 
+    def test_selection_changes_recreate_operator_only_for_the_next_task(self):
+        selection = SimpleNamespace(provider_id='codex', model_id='gpt-6-luna', reasoning_effort='low')
+        store = Mock()
+        store.get_task_provider_selection.side_effect = lambda **kwargs: selection
+        self.actor.state.provider_store = store
+        self.run_actor()
+        self.run_actor()
+        self.assertEqual(self.factory.call_count, 1)
+        selection.model_id = 'gpt-6-sol'
+        self.run_actor()
+        self.assertEqual(self.factory.call_count, 2)
+        self.client.close.assert_called_once()
+        self.assertEqual(self.factory.call_args.kwargs['selection'].model_id, 'gpt-6-sol')
+
     def test_completed_parent_or_cancellation_fences_inference(self):
         for status in ("completed", "cancelled", "waiting_for_tool_confirmation"):
             with self.subTest(status=status):

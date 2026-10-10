@@ -99,15 +99,17 @@ for line in sys.stdin:
     if method == "initialize":
         result = {"codexHome": os.environ["CODEX_HOME"]}
     elif method == "thread/start":
-        assert params["model"] == "gpt-6-luna"
+        assert params["model"] in {"gpt-6-luna", "gpt-6-sol"}
+        thread_model = params["model"]
+        assert params.get("allowProviderModelFallback") is False
         assert params["config"]["features"]["shell_tool"] is False
         assert params["config"]["mcp_servers"] == {}
         sequence += 1
         thread_id = "operator-thread-" + str(sequence)
         result = {"thread": {"id": thread_id}}
     elif method == "turn/start":
-        assert params["effort"] == "low"
-        assert params["model"] == "gpt-6-luna"
+        assert params["effort"] in {"low", "medium"}
+        assert params["model"] == thread_model
         mode = json.loads(params["input"][0]["text"])["objective"]
         step = 0
         turn_id = "operator-turn-" + str(sequence)

@@ -22,17 +22,21 @@ class CodexComputerActorTests(unittest.TestCase):
         self.validate = patch("core.providers.codex_computer_actor.CodexProviderAdapter.validate_model_settings")
         self.home = patch("core.providers.codex_computer_actor.CodexProviderAdapter._source_codex_home", return_value=root)
         self.launch = patch("core.providers.codex_computer_actor.CodexProviderAdapter._build_command", return_value=["fixture"])
-        self.validate.start()
+        self.validate_mock = self.validate.start()
         self.home.start()
         self.launch_mock = self.launch.start()
-        server = Path(__file__).resolve().parents[2] / "support" / "computer_actor_server.py"
-        self.actor = CodexComputerActor(
-            SimpleNamespace(session_id="actor-test", workspace_id="default", runtime_root=str(root)),
-            SimpleNamespace(mode="full", approved_apps=("com.apple.Safari",), initial_app="com.apple.Safari"),
-            command_runner=lambda _command, **kwargs: subprocess.Popen([sys.executable, "-I", "-u", str(server)], **kwargs),
-        )
+        self.actor = self.make_actor()
         self.calls = []
         self.usage = []
+
+    def make_actor(self, selection=None):
+        server = Path(__file__).resolve().parents[2] / "support" / "computer_actor_server.py"
+        return CodexComputerActor(
+            SimpleNamespace(session_id="actor-test", workspace_id="default", runtime_root=self.temp.name),
+            SimpleNamespace(mode="full", approved_apps=("com.apple.Safari",), initial_app="com.apple.Safari"),
+            selection=selection,
+            command_runner=lambda _command, **kwargs: subprocess.Popen([sys.executable, "-I", "-u", str(server)], **kwargs),
+        )
 
     def tearDown(self):
         self.actor.close()
@@ -60,6 +64,15 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertNotIn("PRIVATE_ACTOR", json.dumps(output))
         self.assertTrue(all(item["model_id"] == "gpt-6-luna" for item in self.usage))
         self.assertTrue(all(item["context_tokens"] is None for item in self.usage))
+
+    def test_selected_model_and_effort_reach_protocol_and_usage(self):
+        self.actor.close()
+        self.actor = self.make_actor(SimpleNamespace(model_id="gpt-6-sol", reasoning_effort="medium"))
+        self.validate_mock.assert_called_with("gpt-6-sol", "medium")
+        output, _ = self.run_actor()
+        self.assertEqual(output["status"], "completed")
+        self.assertTrue(self.usage)
+        self.assertTrue(all(item["model_id"] == "gpt-6-sol" for item in self.usage))
 
     def test_process_is_confined_to_private_operator_filesystem(self):
         scope = self.launch_mock.call_args.kwargs

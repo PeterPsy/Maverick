@@ -645,6 +645,17 @@ export type RuntimeSessionInventoryPayload = {
   cleanup_scope?: 'none' | 'workspace' | 'server';
 };
 
+export type ComputerUseSettings = {
+  workspace_id: string;
+  provider_id: string;
+  model_id: string;
+  reasoning_effort: string | null;
+  can_configure: boolean;
+  available: boolean;
+  unavailable_reason: string | null;
+  providers: Array<{ provider_id: string; label: string; models: ProviderModelOption[] }>;
+};
+
 export type PlatformSettings = {
   user: SessionUser;
   workspace: WorkspaceItem;
@@ -652,6 +663,7 @@ export type PlatformSettings = {
   runtime: RuntimeStatus;
   recovery: Record<string, unknown>;
   agentic_admin?: AgenticAdminPayload;
+  computer_use?: ComputerUseSettings;
 };
 
 export type SessionPayload = {

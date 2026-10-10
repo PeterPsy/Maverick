@@ -76,6 +76,7 @@ class SettingsAgenticAdminTest(unittest.TestCase):
         stack.enter_context(patch("core.api.settings_api.workspace_provider_status", return_value={}))
         stack.enter_context(patch("core.api.settings_api.provider_projection_context", return_value=object()))
         stack.enter_context(patch("core.api.settings_api.recovery_status", return_value={}))
+        stack.enter_context(patch("core.api.settings_api.computer_actor_settings", return_value={}))
         stack.enter_context(patch("core.api.settings_api._runtime_cleanup_scope", return_value="none"))
         stack.enter_context(
             patch(

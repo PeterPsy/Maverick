@@ -8,8 +8,9 @@ from core.providers.codex_app_server_runtime_usage import codex_usage_event
 
 
 class ComputerActorTransport:
-    def __init__(self, runtime):
+    def __init__(self, runtime, *, model_id):
         self.runtime = runtime
+        self.model_id = model_id
         self.events = queue.Queue(maxsize=128)
         self.closed = threading.Event()
         self.thread_id = None
@@ -127,7 +128,7 @@ class ComputerActorTransport:
             return
         event = codex_usage_event(self.runtime, params)
         if event is not None:
-            self.usage_sink({**event.payload, "model_id": "gpt-6-luna",
-                             "source": "codex_computer_actor:" + str(self.thread_id),
+            self.usage_sink({**event.payload, "model_id": self.model_id,
+                             "source": "computer_actor:codex:" + str(self.thread_id),
                              "usage_worker": "computer_actor", "context_tokens": None,
                              "context_window_tokens": None, "context_accuracy": "unavailable"})

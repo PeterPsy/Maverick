@@ -9,19 +9,21 @@ from uuid import uuid4
 from core.device_use.computer_actor_contract import UI_TOOLS, validate_actor_task
 from core.device_use.errors import DeviceUseAuthorizationError, DeviceUseUnavailableError
 from core.device_use.models import DeviceUseResult
-from core.providers.codex_computer_actor import CodexComputerActor
+from core.providers.computer_actor_factory import create_computer_actor
+from core.providers.computer_actor_settings import computer_actor_selection
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 
 
 class ComputerInteraction:
-    def __init__(self, state, session_id, activation_id, *, client_factory=CodexComputerActor):
+    def __init__(self, state, session_id, activation_id, *, client_factory=create_computer_actor):
         self.state = state
         self.session_id = session_id
         self.activation_id = activation_id
         self.client_factory = client_factory
         self.lock = threading.Lock()
         self.client = None
+        self.selection_key = None
         self.cancelled = threading.Event()
         self.cancellation_lock = threading.Lock()
 
@@ -72,11 +74,14 @@ class ComputerInteraction:
 
             if not active():
                 raise DeviceUseAuthorizationError("computer_actor_parent_not_active")
-            if self.client is None or self.client.cancelled.is_set():
+            selection = computer_actor_selection(getattr(self.state, "provider_store", None), session.workspace_id)
+            selection_key = (selection.provider_id, selection.model_id, selection.reasoning_effort)
+            if self.client is None or self.client.cancelled.is_set() or self.selection_key != selection_key:
                 if self.client is not None:
                     self.client.close()
                 try:
-                    self.client = self.client_factory(session, binding)
+                    self.client = self.client_factory(session, binding, selection=selection)
+                    self.selection_key = selection_key
                 except Exception as error:
                     raise DeviceUseUnavailableError("computer_actor_unavailable") from error
             task_call_prefix = "actor_" + uuid4().hex

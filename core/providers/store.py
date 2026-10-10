@@ -30,6 +30,7 @@ from core.providers.models import (
     ProviderReasoningOption,
     ProviderSelection,
     ProviderSpeechSelection,
+    ProviderTaskSelection,
 )
 from core.shared.in_memory_collection import InMemoryCollection
 
@@ -91,6 +92,12 @@ class ProviderStore(Protocol):
     def list_provider_selections(self) -> list[ProviderSelection]:
         ...
 
+    def save_task_provider_selection(self, record: ProviderTaskSelection) -> ProviderTaskSelection:
+        ...
+
+    def get_task_provider_selection(self, *, workspace_id: str, task_kind: str) -> ProviderTaskSelection | None:
+        ...
+
     def save_hosted_provider_selection(self, record: ProviderHostedSelection) -> ProviderHostedSelection:
         ...
 
@@ -148,6 +155,7 @@ class ProviderCollections:
     speech_selections: DocumentCollection | None = None
     agentic_profile_definitions: DocumentCollection | None = None
     workspace_agentic_profile_bindings: DocumentCollection | None = None
+    task_selections: DocumentCollection | None = None
 
 
 class ProviderDocumentStore:
@@ -157,6 +165,7 @@ class ProviderDocumentStore:
         self.collections = collections
         self._hosted_selections = collections.hosted_selections or InMemoryCollection()
         self._speech_selections = collections.speech_selections or InMemoryCollection()
+        self._task_selections = collections.task_selections or InMemoryCollection()
         self._agentic_profile_definitions = collections.agentic_profile_definitions or InMemoryCollection()
         self._workspace_agentic_profile_bindings = (
             collections.workspace_agentic_profile_bindings or InMemoryCollection()
@@ -255,6 +264,17 @@ class ProviderDocumentStore:
 
     def list_provider_selections(self) -> list[ProviderSelection]:
         return [ProviderSelection(**document) for document in self.collections.selections.find({})]
+
+    def save_task_provider_selection(self, record: ProviderTaskSelection) -> ProviderTaskSelection:
+        self._task_selections.update_one(
+            {"workspace_id": record.workspace_id, "task_kind": record.task_kind},
+            {"$set": asdict(record)}, upsert=True,
+        )
+        return record
+
+    def get_task_provider_selection(self, *, workspace_id: str, task_kind: str) -> ProviderTaskSelection | None:
+        document = self._task_selections.find_one({"workspace_id": workspace_id, "task_kind": task_kind})
+        return ProviderTaskSelection(**document) if document is not None else None
 
     def save_hosted_provider_selection(self, record: ProviderHostedSelection) -> ProviderHostedSelection:
         self._hosted_selections.update_one(

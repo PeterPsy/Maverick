@@ -1,4 +1,5 @@
 import { createSpeechSynthesisState, speechSynthesisSettingsHtml } from './speechSynthesisSettings';
+import { createComputerUseDraft, syncComputerUseDraft, computerUseSettingsHtml, type ComputerUseDraft } from './computerUseSettings';
 import type {
   AgenticAdminItem,
   AgenticAdminPayload,
@@ -50,6 +51,7 @@ type RuntimeProviderEntry = {
 };
 
 export type SettingsPanelState = {
+  computerUse: ComputerUseDraft;
   speechSynthesis: import('./speechSynthesisSettings').SpeechSynthesisState;
   activatingNativeProviders: Set<string>;
   nativeProviderErrors: Record<string, string>;
@@ -95,6 +97,7 @@ export type SettingsPanelActions = {
 
 export function createSettingsPanelState(): SettingsPanelState {
   return {
+    computerUse: createComputerUseDraft(),
     speechSynthesis: createSpeechSynthesisState(),
     activatingNativeProviders: new Set(),
     nativeProviderErrors: {},
@@ -123,6 +126,7 @@ export function createSettingsPanelState(): SettingsPanelState {
 }
 
 export function syncSettingsPanelDraft(state: SettingsPanelState, settings: PlatformSettings | null) {
+  syncComputerUseDraft(state.computerUse, settings);
   const { modelId: hostedModelId } = selectedHostedProviderDraft(settings);
   const speechDraft = selectedSpeechProviderDraft(settings);
   const hostedModelIds = new Set(hostedModelOptionsForSettings(settings).map((option) => option.model_id).filter(Boolean));
@@ -243,6 +247,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   const openHostedModel = openHostedModelId(settings, state);
 
   return `${userSettingsCardHtml(settings)}
+    ${computerUseSettingsHtml(settings, state.computerUse)}
     ${agenticRuntimeSettingsCardHtml(
       settings.agentic_admin || null,
       state,

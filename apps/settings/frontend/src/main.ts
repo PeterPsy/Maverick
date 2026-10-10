@@ -3,6 +3,7 @@ import './styles/learning.css';
 import './styles/learning-tickets.css';
 import './styles/speech-settings.css';
 import { createSpeechSynthesisController } from './speechSynthesisSettings';
+import { createComputerUseController } from './computerUseSettings';
 import { createLearningController } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { bindSettingsHostEvents, settingsHostVisible } from './settingsHostEvents';
@@ -59,6 +60,12 @@ let isRuntimeInventoryLoading = false;
 
 const speechSynthesisController = createSpeechSynthesisController({
   state: settingsPanelState.speechSynthesis, render,
+  notify: (message) => { notice = { tone: 'success', message }; }
+});
+
+const computerUseController = createComputerUseController({
+  state: settingsPanelState.computerUse, getSettings: () => platformSettings, render,
+  setSelection: (selection) => { if (platformSettings) platformSettings = { ...platformSettings, computer_use: selection }; },
   notify: (message) => { notice = { tone: 'success', message }; }
 });
 
@@ -518,6 +525,7 @@ function render() {
 function bindEvents() {
   speechSynthesisController.bind();
   learningController.bind();
+  computerUseController.bind();
   bindSettingsEvents({
     clearRuntimeSessionsFromPanel,
     cacheDiagnosticsController,

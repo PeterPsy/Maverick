@@ -295,8 +295,12 @@ Recommended split:
 The private planner/operator split is described in
 `docs/architecture/computer_use_actor.md`. PC use adds the internal
 `computer_interact` tool to every admitted native provider. The selected model
-keeps the conversation, content and planning; a separate, non-visible Codex
-context pinned to Luna `low` chooses and verifies UI actions. Core brokers those
+keeps the conversation, content and planning; a separate, non-visible operator
+context chooses and verifies UI actions. Its workspace-scoped provider/model/effort
+selection is configured in Settings and defaults to Codex Luna `low`. Only Codex
+has an executable operator adapter today. Each bounded task captures the selection;
+changes replace the operator at the next task without changing the chat model.
+Core brokers those
 calls through the original parent authority and fences them on cancellation,
 correction, turn completion or native revocation. The operator has no general
 workspace tools or full chat history. Its usage contributes to the chat total

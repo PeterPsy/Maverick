@@ -2,8 +2,9 @@
 
 PC use retains one visible conversation and the user's selected planner model.
 Every admitted native provider exposes `computer_interact` for bounded UI tasks.
-The Core-owned operator uses a separate Codex provider context pinned explicitly
-to `gpt-6-luna` / `low`; it is not a Chat thread or an inter-agent board participant.
+The Core-owned operator uses a separate provider context selected in Settings
+under **PC use decision model**, defaulting to Codex `gpt-6-luna` / `low`.
+It is not a Chat thread or an inter-agent board participant.
 Only read-only UI tools and structured project, code and calendar capabilities
 remain directly available to the planner. Native UI input is brokered by Core
 through the original activation/session/turn authority, never a copied Mac lease.
@@ -83,7 +84,24 @@ Turn diagnostics include that turn's main and internal operator streams, preserv
 the direct/delegated split and main-model context, and exclude other turns and
 inter-agent participants. The same projection serves document and SQLite stores.
 Deleting the owning runtime also removes its private usage streams.
-No new persisted control-plane schema or UI is introduced.
+The workspace-scoped `provider_task_selections` collection persists the operator's
+provider, model and reasoning effort under task kind `computer_use`. This selection
+is independent of the conversation model and hosted-provider profiles. Settings
+projects it through `/api/settings/platform` and owns the authenticated
+`GET`/`POST /api/settings/computer-use` route. Mutations use the existing provider
+selection authority, reject another workspace's identity, and validate the provider
+catalog and reasoning effort. The UI offers image-capable models from the installed
+Codex catalog; an unavailable saved model remains visible and blocks operator launch
+instead of silently falling back.
+
+Each bounded task captures its selection once. A selection change retires the
+private operator before the next task; an active task retains its model. Codex
+thread and turn creation use the selected model and effort, disable model fallback,
+and attribute usage to that actual model. `computer_actor_factory` is the provider
+dispatch boundary: another decision provider requires its own bounded native-tool
+operator and catalog integration before Settings can offer it. Only Codex is
+implemented today; this setting does not invoke OpenAI's separate Decisions API
+or require an OpenAI API key.
 Tests cover protocol routing, image delivery, authority, bounded outputs, usage
 stream isolation, cancellation and provider-independent tool projection. Performance
 claims require a measured matched task; model choice alone is not a speedup result.

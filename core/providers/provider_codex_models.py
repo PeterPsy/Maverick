@@ -229,6 +229,7 @@ class CodexModelMixin:
                 description=str(item.get("description") or "").strip() or None,
                 default_reasoning_effort=str(item.get("default_reasoning_level") or "").strip() or None,
                 supported_reasoning_efforts=reasoning_options,
+                input_modalities=[value for value in (item.get("input_modalities") or []) if value in {"text", "image"}],
             )
         )
 

@@ -27,6 +27,7 @@ from core.runtime.remote_agentic_admission import remote_agentic_containment_rea
 from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.workspaces.errors import WorkspaceMembershipError
+from core.api.computer_actor_settings_api import computer_actor_settings, handle_computer_actor_settings
 
 
 GOVERNANCE_PATCH_FIELDS = {
@@ -54,6 +55,7 @@ def platform_settings_payload(state: PlatformState, context: RequestSession) -> 
         "user": public_user_payload(context.user),
         "workspace": workspace_payload(state, context.workspace_id),
         "provider": provider_status,
+        "computer_use": computer_actor_settings(state, context),
         "runtime": {
             "sessions": [],
             "cleanup_allowed": cleanup_scope != "none",
@@ -308,6 +310,7 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
     method = environ.get("REQUEST_METHOD", "GET").upper()
     owned_paths = {
         "/api/settings/platform",
+        "/api/settings/computer-use",
         "/api/settings/provider-setup",
         "/api/settings/workspace",
         "/api/settings/runtime-sessions",
@@ -322,6 +325,9 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
     if not isinstance(context_or_response, RequestSession):
         return context_or_response
     context = context_or_response
+
+    if path == "/api/settings/computer-use":
+        return handle_computer_actor_settings(state, context, environ, start_response)
 
     if path == "/api/settings/platform" and method == "GET":
         return json_response(

@@ -34,7 +34,7 @@ class WorkerUsageTests(unittest.TestCase):
 
     def actor_usage(self, thread="actor-1", total=200):
         return {"usage_worker": "computer_actor", "usage_id": thread + ":" + str(total),
-            "provider_id": "codex", "model_id": "gpt-6-luna", "source": "codex_computer_actor:" + thread,
+            "provider_id": "codex", "model_id": "gpt-6-luna", "source": "computer_actor:codex:" + thread,
             "semantics": "cumulative", "input_tokens": total - 20, "cached_input_tokens": 80,
             "output_tokens": 20, "reasoning_output_tokens": 5, "total_tokens": total,
             "latest_input_tokens": total - 20, "latest_cached_input_tokens": 80,
@@ -69,6 +69,19 @@ class WorkerUsageTests(unittest.TestCase):
         payload["source"] = "untrusted"
         result = self.ingest(payload)
         self.assertEqual(result.sample.session_id, "root")
+
+    def test_configured_model_consumption_stays_internal(self):
+        payload = self.actor_usage()
+        payload['model_id'] = 'gpt-6-sol'
+        result = self.ingest(payload)
+        self.assertEqual(result.sample.session_id, 'root:computer_actor')
+        self.assertEqual(result.summary.delegated_tokens.total_tokens, 200)
+        self.assertNotIn('gpt-6-sol', chat_usage_summary_payload(result.summary)['model_ids'])
+
+    def test_worker_provider_must_match_its_trusted_source(self):
+        payload = self.actor_usage()
+        payload['provider_id'] = 'other'
+        self.assertEqual(self.ingest(payload).sample.session_id, 'root')
 
     def test_parent_cleanup_removes_internal_worker_streams(self):
         self.ingest(self.actor_usage())

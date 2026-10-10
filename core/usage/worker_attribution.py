@@ -4,10 +4,10 @@ from dataclasses import replace
 
 
 def attributed_worker_session(session, payload):
+    provider_id = str(payload.get("provider_id") or "")
     if (payload.get("usage_worker") != "computer_actor"
-        or payload.get("provider_id") != "codex"
-        or payload.get("model_id") != "gpt-6-luna"
-        or not str(payload.get("source", "")).startswith("codex_computer_actor:")):
+        or not provider_id or not payload.get("model_id")
+        or not str(payload.get("source", "")).startswith("computer_actor:" + provider_id + ":")):
         return session
     return replace(session, session_id=session.session_id + ":computer_actor")
 

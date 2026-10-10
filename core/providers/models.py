@@ -226,6 +226,19 @@ class ProviderSelection:
 
 
 @dataclass(frozen=True)
+class ProviderTaskSelection:
+    """Workspace selection for a bounded internal provider task."""
+
+    workspace_id: str
+    task_kind: str
+    provider_id: str
+    model_id: str
+    reasoning_effort: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class ProviderHostedSelection:
     """Persist the hosted text provider/model selection for one workspace profile."""
 

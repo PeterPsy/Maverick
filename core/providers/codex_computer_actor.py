@@ -1,4 +1,4 @@
-"""A bounded, tool-only Luna operator using the existing Codex authentication."""
+"""A bounded, tool-only operator using the existing Codex authentication."""
 
 import base64
 import json
@@ -26,9 +26,11 @@ from core.runtime.process_control import (
 
 
 class CodexComputerActor:
-    def __init__(self, session, binding, *, command_runner=subprocess.Popen):
+    def __init__(self, session, binding, *, selection=None, command_runner=subprocess.Popen):
         adapter = CodexProviderAdapter()
-        adapter.validate_model_settings(COMPUTER_ACTOR_MODEL, COMPUTER_ACTOR_EFFORT)
+        self.model_id = selection.model_id if selection is not None else COMPUTER_ACTOR_MODEL
+        self.reasoning_effort = selection.reasoning_effort if selection is not None else COMPUTER_ACTOR_EFFORT
+        adapter.validate_model_settings(self.model_id, self.reasoning_effort)
         command, env, home, workdir = computer_actor_launch(session, adapter)
         self.process = command_runner(
             command, cwd=str(workdir), env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -41,7 +43,7 @@ class CodexComputerActor:
             runtime_root=str(home.parent), runtime_home=str(home), process=self.process,
         )
         self.binding = binding
-        self.transport = ComputerActorTransport(self.runtime)
+        self.transport = ComputerActorTransport(self.runtime, model_id=self.model_id)
         self.cancelled = self.transport.closed
         try:
             initialized = _send_request(self.runtime, "initialize", {
@@ -94,7 +96,8 @@ class CodexComputerActor:
             if not active() or self.cancelled.is_set():
                 return self._result("blocked", "computer_actor_cancelled", steps), None
             thread = _send_request(self.runtime, "thread/start", {
-                "model": COMPUTER_ACTOR_MODEL, "modelProvider": "openai", "ephemeral": True,
+                "model": self.model_id, "modelProvider": "openai", "ephemeral": True,
+                "allowProviderModelFallback": False,
                 "approvalPolicy": "never", "sandbox": "read-only", "environments": [],
                 "baseInstructions": ACTOR_GUIDANCE,
                 "developerInstructions": scope + "\n\n" + ACTOR_GUIDANCE,
@@ -107,8 +110,8 @@ class CodexComputerActor:
             self.runtime.provider_thread_id = thread_id
             self.transport.turn_id = None
             turn = _send_request(self.runtime, "turn/start", {
-                "threadId": thread_id, "model": COMPUTER_ACTOR_MODEL,
-                "effort": COMPUTER_ACTOR_EFFORT, "approvalPolicy": "never",
+                "threadId": thread_id, "model": self.model_id,
+                "effort": self.reasoning_effort, "approvalPolicy": "never",
                 "sandboxPolicy": {"type": "readOnly"}, "environments": [],
                 "input": [{"type": "text", "text": json.dumps(task, ensure_ascii=False)}],
                 "outputSchema": ACTOR_OUTPUT_SCHEMA,

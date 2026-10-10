@@ -48,6 +48,7 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "provider_credential_bindings": (("binding_id",),),
     "provider_selections": (("workspace_id",),),
     "provider_hosted_selections": (("workspace_id", "profile"),),
+    "provider_task_selections": (("workspace_id", "task_kind"),),
     "provider_speech_selections": (("workspace_id", "profile"),),
     "provider_agentic_profile_definitions": (("definition_id",),),
     "provider_agentic_workspace_bindings": (("binding_id",),),
@@ -184,6 +185,7 @@ def control_plane_collection_specs(collections: ControlPlaneCollections, *, incl
         ControlPlaneCollectionSpec("provider_credential_bindings", collections.provider.bindings),
         ControlPlaneCollectionSpec("provider_selections", collections.provider.selections),
         ControlPlaneCollectionSpec("provider_hosted_selections", collections.provider.hosted_selections),
+        ControlPlaneCollectionSpec("provider_task_selections", collections.provider.task_selections),
         ControlPlaneCollectionSpec(
             "provider_agentic_profile_definitions",
             collections.provider.agentic_profile_definitions,
@@ -261,6 +263,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             bindings=JsonFileCollection(provider_state_root / "bindings.json"),
             selections=JsonFileCollection(provider_state_root / "selections.json"),
             hosted_selections=JsonFileCollection(provider_state_root / "hosted_selections.json"),
+            task_selections=JsonFileCollection(provider_state_root / "task_selections.json"),
             speech_selections=JsonFileCollection(provider_state_root / "speech_selections.json"),
             agentic_profile_definitions=JsonFileCollection(
                 provider_state_root / "agentic_profile_definitions.json"
@@ -327,6 +330,7 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             bindings=collection("provider_credential_bindings"),
             selections=collection("provider_selections"),
             hosted_selections=collection("provider_hosted_selections"),
+            task_selections=collection("provider_task_selections"),
             speech_selections=collection("provider_speech_selections"),
             agentic_profile_definitions=collection("provider_agentic_profile_definitions"),
             workspace_agentic_profile_bindings=collection(

@@ -190,15 +190,36 @@ The UI saved Luna `medium` (labelled Mid), preserved it across an official front
 reload, then saved and visually verified the original Luna `low` selection.
 Immediate post-input captures preceded the selection/save updates; later same-app
 observations proved those effects, without repeating the mutations.
-The new backend operator is not yet certified on the physical Mac. The first
-official restart returned `restarted=false` because systemd was unavailable in
+The initial post-change physical verification was blocked. The first official
+restart returned `restarted=false` because systemd was unavailable in
 the execution environment, while backend health remained true. The user later
 reported a successful host restart; subsequent native observations returned
-`Device Use executor is unavailable`, so reconnection is still required for
-physical acceptance. The earlier physical Calculator retest
+`Device Use executor is unavailable`, preventing physical acceptance at that
+checkpoint. The earlier physical Calculator retest
 was also blocked before input by `MC-TOOL-30` / `MC-PEEKABOO-27`: its visible window
 was classified `pixels_only` with no matching Accessibility window. These checks
 do not establish unrestricted native-app reliability or a measured latency gain.
+
+After the next reconnection on 2026-10-10, the restarted backend's operator
+completed live Settings tasks on the authenticated `MaverickMac` surface. Fresh
+observations verified Luna `low`, a temporary save to `medium`, persistence of
+`medium` after the official Settings build/reload, and restoration of `low` with
+visible save confirmation. A second official build/reload and a read-only task
+verified that `low` remained persisted. The desktop panel was readable with Chat
+in the right dock; mobile layout was not inspected. Both official builds passed
+and left the tracked frontend artifacts unchanged.
+
+The initial save/navigation task returned `blocked` after 23 native operations:
+it observed the save confirmation but did not attest the complete Cache/Platform
+return criterion. Separate fresh observations and the official reload completed
+the persistence check; the partial task was not counted as a pass. The native
+Calculator remained inaccessible before input: Peekaboo could inventory its
+`pixels_only` window but could not observe a matching Accessibility window, and
+the separate computer-engine trial stopped on `MC-TOOL-30`. Consequently the
+physical `17 × 23` retest and a physical comparison with Sol remain unverified.
+Core's native audit and Usage surfaces recorded the live operations and operator
+consumption, but these unmatched tasks do not establish a latency improvement.
+The final saved selection remains Luna `low`.
 
 Authenticated Codex evaluations used a synthetic native callback with a rendered
 calculator, newly numbered element IDs for every observation and delayed input

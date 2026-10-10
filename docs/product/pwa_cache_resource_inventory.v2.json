@@ -637,7 +637,7 @@
       "max_entry_bytes": 0,
       "max_scope_bytes": 0,
       "invalidation": "network only; saved collections remain in app-owned server storage",
-      "data_event": "state,view-state",
+      "data_event": "state",
       "rollout": "excluded"
     }
   ]

@@ -69,6 +69,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_callbacks_are_owner_scoped_trusted_idempotent_and_not_spoofable(self):
         started=self.start(read_details=False)
+        self.assertNotIn('deep_link', started['run'])
         req=started["dependency_backend_requests"][0]
         self.assertEqual(self.call("dependency.completed",request_id=req["request_id"])[0],403)
         self.assertEqual(self.complete(req,{},user="bob")[0],404)
@@ -183,9 +184,15 @@ class WorkflowTests(unittest.TestCase):
         started=self.start(read_details=False)
         self.complete(started["dependency_backend_requests"][0],{"operation_id":"one","status":"completed","result":{"items":[{"url":"https://www.instagram.com/p/a/"}]}})
         _, saved=self.call("collection.save",run_id=started["run"]["id"],title="Private collection")
+        self.assertNotIn('deep_link', saved['collection'])
         identifier=saved["collection"]["id"]
         _, refs=self.call("references.search",query="Private")
         self.assertEqual(refs["results"][0]["entity_id"],identifier)
+        self.assertNotIn('deep_link', refs['results'][0])
+        _, resolved = self.call('references.resolve', entity_id=identifier)
+        self.assertNotIn('deep_link', resolved)
+        self.assertNotIn('deep_link', resolved['payload'])
+        self.assertEqual(resolved['payload']['id'], identifier)
         self.assertEqual(self.call("references.search",query="Private",user="bob")[1]["results"],[])
         self.assertEqual(self.call("set_custom_view",refs=[refs["results"][0]],user="bob")[0],404)
         self.assertEqual(self.call("set_custom_view",refs=[refs["results"][0]])[0],200)

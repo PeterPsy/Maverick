@@ -1,9 +1,9 @@
 # Connectors
 
-Connectors is a native English Maverick app for reading platform content and
-keeping private, refreshable collections. Instagram is the default source.
-Explore, Collections and History work on desktop and mobile; agents use the
-same backend through declared CLI/MCP tools.
+Connectors is a backend-only Maverick app for agents to read platform content
+and keep private, refreshable collections. Instagram is the primary source.
+Agents use the declared CLI/MCP tools and bundled skill. The app stays installed
+and enabled without a frontend, shell sidebar or launchable rail shortcut.
 
 ## Sources
 
@@ -29,13 +29,14 @@ Chrome developer mode. Sign in directly to Instagram and share that tab through
 the extension with the Browser connector address. Press **Connect** in the
 dedicated connector window and keep it open.
 
-Refresh connections in Connectors and choose the shared Instagram tab. Enter a
-profile URL or username and collect posts. Profile and Reels share finite scan
-budgets; discovered links are opened with **Open each result to read its content**
-enabled. Profile context is displayed separately. A discovered link is labelled
-**Link found** until opened content has been observed. **Inspect video** saves
-frames and requests local transcription. View actual frame files before visual
-claims.
+Ask the agent to call `connectors_connections_refresh`, find the matching shared
+Instagram session in `connectors_status`, and start `connectors_run_start` with
+`source: instagram`, `operation: collect` and a profile URL or username plus
+`parameters.session_id`. Poll `connectors_run_refresh` until terminal. Profile
+and Reels share finite scan budgets; `read_details` defaults true so discovered
+links are opened individually. Profile context and discovered links remain
+separate from observed post content. `operation: video` saves bounded frames and
+requests local transcription. View actual frame files before visual claims.
 
 Chrome scopes are platform-bound. Authentication, challenges, permissions and
 sharing stay with the user. No passwords, cookies, arbitrary scripts, forms,
@@ -75,13 +76,13 @@ Created through the official SDK, the app is installation-level source under
 
 ```bash
 maverick core cli run core.app-sdk.validate --app-id platform-connectors --app-root /home/ubuntu/projects/maverick-v3/apps/platform-connectors --workspace default --json
-maverick app platform-connectors frontend build --json
 ```
 
 Install/upgrade hooks initialize SQLite and install `yt-dlp[default]==2026.8.19`
 into app-owned `data/platform-connectors/vendor`. Shared Python environments and
-browser profiles are untouched. PyPI access, Node and ffmpeg are needed for the
-managed media reader. Health checks verify schema and reader version.
+browser profiles are untouched. PyPI access and ffmpeg are needed for the
+managed media reader. Connectors has no Node/frontend build dependencies.
+Health checks verify schema and reader version.
 
 ## Contract Notes
 
@@ -102,33 +103,32 @@ collection export uses governed Storage.
 
 ```bash
 python3 -m unittest discover -s apps/platform-connectors/tests -p 'test_*.py'
-node --test apps/platform-connectors/tests/source-navigation.test.mjs
-PLAYWRIGHT_BROWSERS_PATH=/home/ubuntu/.cache/ms-playwright node --test apps/platform-connectors/tests/sidebar.browser.test.mjs
 python3 -m unittest discover -s apps/browser/tests -p 'test_browser*.py'
 npm --prefix apps/browser test
 PLAYWRIGHT_BROWSERS_PATH=/home/ubuntu/.cache/ms-playwright npm --prefix apps/browser run test:companion
 ```
 
-The real Chromium/MV3 product fixture uses intercepted Instagram-shaped pages;
-it does not prove live account access. Installed surfaces verified public RSS,
-GitHub and Web reads. Public YouTube acquisition encountered
+The real Chromium/MV3 product fixture drives Connectors through its MCP
+entrypoint and real dependency callbacks/Storage using intercepted
+Instagram-shaped pages; it does not prove live account access. Installed surfaces
+verified public RSS, GitHub and Web reads. Public YouTube acquisition encountered
 an anti-bot sign-in wall; shared Chrome is an explicit fallback. Authenticated
 source acceptance needs a user-shared tab.
 
 Architecture: [Platform Connectors](../../docs/architecture/platform_connectors_architecture.md).
 
-## Native UI
+## Agent-only presentation
 
-Connectors uses the current Maverick Storage/Agents token values in app-owned
-styles, a monochrome accent, glass surfaces and consistent SVG source icons.
-Its transparent compact identity is optically centred and padded for the rail
-and App Store. Sources and the privacy note live in the app-owned
-`connectors-sidebar` widget hosted by Base Shell at `shell.sidebar.primary`.
-The shell sidebar is enabled; source selection opens Explore and closes the mobile
-drawer. Main-panel shortcuts and deep links keep the selected source aligned with
-the sidebar without reloading the app. All copy is English.
-The catalog contains nine sources; the seven additional sources removed from the
-requested screenshot are absent from executable descriptors and readers.
+`presentation.frontend_role` is `none`; `entrypoints.frontend` is null and no
+widgets or mounted views are declared. The shell and App Store derive
+launchability from this contract. Connectors remains available for installation,
+management and agent discovery. Collection references expose ids and payloads
+without app-page deep links; exports return verified Storage links. The Core
+visual-reference manifest is empty; collection search/resolve/summarize remain
+direct agent tools. Saved filters and curated reference selections remain
+available through the agent tools.
+
+## Source coverage
 
 GitHub requests one bounded API page (at most 100 entries); result coverage and
 truncation report the remaining source scope. A missing or inaccessible README

@@ -5,7 +5,8 @@ Date: 2026-10-10
 ## Ownership
 
 `apps/platform-connectors` owns the nine-source catalog, workflows, private saved
-observations, references/views and native English UI. Browser owns Chrome sharing,
+observations, references, saved selections and backend/CLI/MCP operations for
+agents. Browser owns Chrome sharing,
 fixed read-only transport, queues, media capture and public Lab research. Storage
 owns exports/evidence; Speech owns local transcription. Consumers do not read
 provider-private data.
@@ -54,13 +55,22 @@ minutes; terminal history retains at most 200 runs/32 MiB per actor.
 Private mode-0600 `data/platform-connectors/connectors.sqlite3` stores operations,
 request fingerprints, cached connections, collections/items and view state.
 Canonical URLs identify items; collections retain the original action for refresh
-and persist independently of run retention. UI/CLI/MCP share ownership checks,
+and persist independently of run retention. Backend/CLI/MCP share ownership checks,
 CRUD, pagination, exports, references and standard view filters/curation.
 
-The native English UI defaults to Instagram with Explore, Collections and History.
-Responsive app-owned navigation, cancellation, coverage and results work on desktop
-and mobile. Shell messages require the exact parent. Source text is rendered as
-text; external images are linked. PWA offline persistence excludes personal data.
+Connectors is backend-only: `presentation.frontend_role` is `none`, the frontend
+entrypoint is null, and widgets/mounted views are absent. It remains
+installed and enabled for agents. Base Shell and App Store derive non-launchable
+presentation from the generic contract. Chrome sign-in and tab sharing remain
+in Browser/Chrome Companion. No frontend source, compiled assets, Node build chain
+or app-owned shell navigation is retained.
+
+Collection references expose owner-checked ids, summaries and resolved payloads
+without app-page deep links. Core visual-reference entity/view declarations are
+absent and the reference manifest is empty; collection search/resolve/summarize
+remain direct agent tools. Saved query filters and curated selections remain
+backend state available through agent tools. Storage exports/evidence retain their
+Storage deep links. PWA offline persistence excludes personal observations.
 
 Markdown/JSON exports go through Storage under
 `storage/generated/platform-connectors/<run_id>/`; a matching verified identity
@@ -73,32 +83,11 @@ hooks initialize schema and install pinned yt-dlp in app-owned `vendor/`.
 Tests cover source parsing, HTTP confinement, ownership, callback sequencing/replay,
 bounded media, private references/views, collections and export identity. Browser
 scope tests cover all platforms and parity. A real Chromium/MV3 fixture drives
-shipped UI, extension, queue and Storage against intercepted Instagram-shaped pages;
+the Connectors MCP entrypoint, Browser UI/extension, queue and Storage against
+intercepted Instagram-shaped pages;
 it does not establish live source access.
 
 Installed surfaces verified RSS, GitHub and Web. Public
 YouTube acquisition encountered an anti-bot sign-in wall. Authenticated Instagram
 and other Chrome sources need a human-shared session for final live acceptance.
 Coverage and source constraints remain explicit in results.
-
-## Native presentation
-
-The English frontend uses app-owned copies of current Maverick Storage tokens:
-neutral accent, native font stack, glass surfaces, 22px cards and 18px controls.
-Source navigation uses consistent inline SVG icons; the compact app identity is
-neutral line art with transparent padding matched to rail and App Store glyph
-sizes. Source navigation and the privacy note are app-owned in the
-`connectors-sidebar` iframe widget declared for `shell.sidebar.primary`. The
-shell sidebar uses the default enabled presentation; Base Shell owns its frame,
-workspace controls and mobile drawer. The main frontend keeps Explore, Collections
-and History and respects the shell content offset. Bounded source navigation uses
-`maverick.widget.open-app`, `maverick.app.navigate` and the generic selection relay;
-mobile selection closes the drawer through `maverick.shell.sidebar.close`. Widgets
-validate the exact shell parent, owner and widget context, reset on workspace
-changes and request only the authenticated `sources.list` catalog. No private
-observations are loaded in the sidebar and no shared shell code is imported.
-
-App Store now enriches summaries with public icon metadata from the existing
-active workspace registry, matching public identities and preserving explicit
-catalog logos. This generic frontend change aligns its Connectors icon with the
-rail without Core icon maps or contract extensions.

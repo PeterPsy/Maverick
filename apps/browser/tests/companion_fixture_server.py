@@ -49,17 +49,22 @@ def browser_request(body, surface="backend"):
     return status, response
 
 
-def connectors_request(body, surface="backend", depth=0):
+def connectors_request(body, surface="backend", depth=0, tool_name=None):
     if depth > 10:
         raise ValueError("Fixture dependency chain exceeded its bound.")
     payload = {"surface":surface,"workspace_id":"fixture","workspace_root":str(WORKSPACE),
                "app_id":"platform-connectors","data_root":str(WORKSPACE / "data/platform-connectors"),
                "user_id":"fixture-user","effective_mode":"full-access","body":body}
-    process = subprocess.run([sys.executable,str(ROOT / "apps/platform-connectors/backend/app_backend.py")],
+    entrypoint = "backend/app_backend.py"
+    if tool_name:
+        entrypoint = "mcp/server.py"
+        payload.update(tool_name=tool_name, arguments=body)
+        payload.pop("body")
+    process = subprocess.run([sys.executable,str(ROOT / "apps/platform-connectors" / entrypoint)],
                              input=json.dumps(payload),capture_output=True,text=True,cwd=ROOT,
                              env={**os.environ,"PYTHONPATH":str(ROOT)},timeout=30,check=True)
     envelope = json.loads(process.stdout)
-    response = envelope["json"]
+    response = envelope if tool_name else envelope["json"]
     for request in response.pop("dependency_backend_requests",[]):
         if request["dependency_alias"] == "browser":
             status,result = browser_request(request["body"],"dependency_backend")
@@ -90,6 +95,8 @@ class Handler(BaseHTTPRequestHandler):
             status,response = browser_request(body)
         elif self.path == "/api/apps/platform-connectors/backend":
             status,response = connectors_request(body)
+        elif self.path == "/__test/connectors/mcp":
+            status,response = connectors_request(body.get("arguments",{}), "mcp", tool_name=body["tool_name"])
         else:
             self.send_error(404); return
         content = json.dumps(response).encode()
@@ -111,8 +118,7 @@ class Handler(BaseHTTPRequestHandler):
             root = (WORKSPACE / "storage/generated").resolve()
             relative = parsed.path.removeprefix("/storage/generated/")
         elif parsed.path.startswith("/apps/platform-connectors/"):
-            root = (ROOT / "apps/platform-connectors/frontend/dist").resolve()
-            relative = parsed.path.removeprefix("/apps/platform-connectors/") or "index.html"
+            self.send_error(404); return
         else:
             root = (APP / "frontend/dist").resolve()
             relative = parsed.path.removeprefix("/apps/browser/") or "index.html"

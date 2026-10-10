@@ -41,7 +41,7 @@
     "platform_roles": null
   },
   "presentation": {
-    "frontend_role": "workspace"
+    "frontend_role": "none"
   },
   "capabilities": {
     "mcp_tools": [
@@ -72,64 +72,15 @@
     "skills": [
       "platform-connectors-ops"
     ],
-    "views": [
-      "main",
-      "collections"
-    ],
+    "views": [],
     "data_events": [
       {
         "resource": "state",
         "description": "Primary app state changed."
-      },
-      {
-        "resource": "view-state",
-        "description": "The persisted collection-board view changed."
       }
     ],
-    "view_surfaces": [
-      {
-        "view_id": "collections",
-        "display_name": "Collections",
-        "entity_types": [
-          "collection"
-        ],
-        "state_actions": [
-          {
-            "action": "view_filter",
-            "standard": true,
-            "description": "view_filter"
-          },
-          {
-            "action": "set_view_filter",
-            "standard": true,
-            "description": "set_view_filter"
-          },
-          {
-            "action": "set_custom_view",
-            "standard": true,
-            "description": "set_custom_view"
-          },
-          {
-            "action": "clear_custom_view",
-            "standard": true,
-            "description": "clear_custom_view"
-          }
-        ],
-        "supports_custom_view": true,
-        "supports_filter_refinement": true
-      }
-    ],
-    "reference_entities": [
-      {
-        "entity_type": "collection",
-        "display_name": "Connector collection",
-        "searchable": true,
-        "resolvable": true,
-        "summarizable": true,
-        "deep_link_supported": true,
-        "cache_scope": "workspace_user"
-      }
-    ]
+    "view_surfaces": [],
+    "reference_entities": []
   },
   "entrypoints": {
     "hooks": {
@@ -138,7 +89,7 @@
       "health_check": "hooks/health_check.py"
     },
     "backend": "backend/app_backend.py",
-    "frontend": "frontend/dist",
+    "frontend": null,
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",
     "skills_root": "skills"
@@ -195,25 +146,7 @@
     "data": false,
     "repair_only": false
   },
-  "widgets": [
-    {
-      "widget_id": "connectors-sidebar",
-      "host": "base-shell",
-      "content_kinds": [
-        "shell.sidebar.primary"
-      ],
-      "frontend": {
-        "kind": "iframe",
-        "mount": "frontend/dist/widgets/connectors-sidebar",
-        "spa_fallback": true
-      },
-      "actions": {
-        "backend": true,
-        "mcp": false,
-        "cli": false
-      }
-    }
-  ],
+  "widgets": [],
   "permissions": {
     "secrets": {
       "read": [],

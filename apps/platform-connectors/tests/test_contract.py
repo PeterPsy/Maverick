@@ -20,11 +20,13 @@ class ConnectorsContractTests(unittest.TestCase):
         self.assertEqual(set(parsed.contract.capabilities.mcp_tools),set(tools))
         self.assertEqual(tools['connectors_run_refresh']['effect_class'],'mutating')
         self.assertEqual(tools['connectors_collection_delete']['effect_class'],'destructive')
-        self.assertTrue(parsed.contract.presentation.sidebar_enabled)
-        sidebar = json.loads((app_root / 'app_contract.json').read_text())['widgets'][0]
-        self.assertEqual(sidebar['host'], 'base-shell')
-        self.assertEqual(sidebar['content_kinds'], ['shell.sidebar.primary'])
-        self.assertTrue((app_root / sidebar['frontend']['mount'] / 'index.html').is_file())
+        self.assertEqual(parsed.contract.presentation.frontend_role, 'none')
+        self.assertIsNone(parsed.contract.entrypoints.frontend)
+        self.assertFalse(parsed.contract.widgets)
+        self.assertFalse(parsed.contract.capabilities.views)
+        self.assertFalse(parsed.contract.capabilities.view_surfaces)
+        self.assertFalse(parsed.contract.capabilities.reference_entities)
+        self.assertFalse((app_root / 'frontend').exists())
 
     def test_cli_mcp_and_backend_preserve_manifest_and_actor_boundaries(self):
         app=Path(__file__).resolve().parents[1]
@@ -34,23 +36,9 @@ class ConnectorsContractTests(unittest.TestCase):
                                      ('mcp/server.py',{'tool_name':'platform_connectors_reference_manifest','arguments':{}})]:
                 manifest=run_json_entrypoint(app/relative,payload=payload|request,cwd=app)
                 self.assertEqual(manifest['app_id'],'platform-connectors')
-                self.assertEqual(manifest['entity_types'][0]['entity_type'],'collection')
+                self.assertEqual(manifest['entity_types'], [])
             denied=run_json_entrypoint(app/'backend/app_backend.py',payload=payload|{'body':{'action':'status'}},cwd=app)
             self.assertEqual(denied['status_code'],403)
-            self.assertFalse((Path(temporary)/'connectors.sqlite3').exists())
-
-    def test_sidebar_catalog_requires_actor_and_does_not_read_private_history(self):
-        app = Path(__file__).resolve().parents[1]
-        with TemporaryDirectory() as temporary:
-            payload = {'workspace_id':'fixture','app_id':'platform-connectors','data_root':temporary,
-                       'body':{'action':'sources.list'}}
-            denied = run_json_entrypoint(app/'backend/app_backend.py', payload=payload, cwd=app)
-            self.assertEqual(denied['status_code'], 403)
-            result = run_json_entrypoint(app/'backend/app_backend.py', payload=payload|{'user_id':'fixture-user'}, cwd=app)
-            self.assertEqual(result['status_code'], 200)
-            self.assertEqual(result['json']['sources'][0]['id'], 'instagram')
-            self.assertEqual(len(result['json']['sources']), 9)
-            self.assertEqual(set(result['json']), {'sources'})
             self.assertFalse((Path(temporary)/'connectors.sqlite3').exists())
 
 

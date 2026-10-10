@@ -78,8 +78,7 @@ def database(root: Path):
 
 def public_run(row) -> dict:
     return {key:row[key] for key in ("id","source","operation","status","phase","error","created_at","updated_at")} | {
-        "parameters":json.loads(row["parameters"]),"result":json.loads(row["result"]),
-        "deep_link":f"/app/platform-connectors?run_id={row['id']}"}
+        "parameters":json.loads(row["parameters"]),"result":json.loads(row["result"])}
 
 
 def owned_run(db, run_id: str, owner: str):
@@ -142,5 +141,4 @@ def collection(db, owner: str, identifier: str, *, offset: int = 0, limit: int =
     total = db.execute("SELECT count(*) FROM items WHERE collection_id=?",(identifier,)).fetchone()[0]
     items = db.execute("SELECT payload FROM items WHERE collection_id=? ORDER BY last_seen DESC LIMIT ? OFFSET ?",(identifier,limit,offset)).fetchall()
     return dict(row) | {"parameters":json.loads(row["parameters"]),"items":[json.loads(item["payload"]) for item in items],
-                       "total":total,"offset":offset,"has_more":offset+len(items)<total,"next_offset":offset+len(items),
-                       "deep_link":f"/app/platform-connectors?collection_id={identifier}"}
+                       "total":total,"offset":offset,"has_more":offset+len(items)<total,"next_offset":offset+len(items)}

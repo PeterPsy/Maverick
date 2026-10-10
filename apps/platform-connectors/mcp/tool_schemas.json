@@ -380,7 +380,7 @@
     },
     "platform_connectors_view_filter": {
       "effect_class": "read",
-      "description": "Read the current Connectors board view state.",
+      "description": "Read the current user\u2019s saved collection filters and curated selection.",
       "input_schema": {
         "type": "object",
         "properties": {},
@@ -397,7 +397,7 @@
     },
     "platform_connectors_set_view_filter": {
       "effect_class": "mutating",
-      "description": "Set the Connectors board query filter.",
+      "description": "Persist a collection query filter for agent workflows.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -418,7 +418,7 @@
     },
     "platform_connectors_set_custom_view": {
       "effect_class": "mutating",
-      "description": "Show a curated set of platform-connectors references on the board.",
+      "description": "Persist a curated selection of owned Connectors collection references.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -448,7 +448,7 @@
     },
     "platform_connectors_clear_custom_view": {
       "effect_class": "mutating",
-      "description": "Return Connectors to its default board mode.",
+      "description": "Clear the current user\u2019s curated collection selection and filters.",
       "input_schema": {
         "type": "object",
         "properties": {},

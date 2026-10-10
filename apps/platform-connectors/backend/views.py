@@ -1,4 +1,4 @@
-"""Persisted collection-board filters and curated owner-checked references."""
+"""Persisted collection filters and curated owner-checked references for agents."""
 
 import json
 

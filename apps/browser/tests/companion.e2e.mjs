@@ -142,49 +142,48 @@ try {
     await connector.setViewportSize(viewport);assert(await connector.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await connector.screenshot({path:path.join(tmpdir(),`maverick-browser-ui-${viewport.width}.png`)});
   }
-  // Drive the shipped Connectors UI through real queue/callback/Storage boundaries.
-  const product=await context.newPage();
-  product.on("pageerror",e=>consoleErrors.push(e.message));
-  await product.goto(`${origin}/apps/platform-connectors/`);
-  await product.bringToFront();
-  await product.getByRole("heading",{name:"Connectors",exact:true}).waitFor();
-  await product.getByRole('heading',{name:'Instagram',exact:true}).waitFor();
-  assert.equal(await product.locator('.source-option').count(),0);
-  await wait(async()=>await product.locator(`#sharing option[value="${connection.session_id}"]`).count() === 1);
-  await product.locator('#sharing').selectOption(connection.session_id);
-  await product.locator('.query-field input').fill('@fixture_user');
-  await product.getByText('Reading options',{exact:true}).click();
-  await product.getByText('Item limit',{exact:true}).locator('..').getByRole('spinbutton').fill('3');
-  await product.getByRole('button',{name:'Collect posts',exact:false}).click();
-  await product.getByRole('heading',{name:'Source observations',exact:true}).waitFor({timeout:90000}).catch(async error=>{
-    const diagnostic=await product.evaluate(async()=>({visibility:document.visibilityState,body:document.body.innerText.slice(0,2000),
-      state:await (await fetch('/api/apps/platform-connectors/backend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status'})})).json()}));
-    console.error(JSON.stringify({phase:'connectors-observation',...diagnostic,browser:await api({action:'companion.overview'}),consoleErrors}));throw error;
-  });
-  assert.equal(await product.locator('.source-context .result-card').count(),2);
-  assert.equal(await product.locator('main > .result-list .tag.observed').count(),3);
-  await product.getByRole('button',{name:'Save collection',exact:true}).click();
-  await product.getByRole('textbox',{name:'Collection title'}).fill('Instagram acceptance collection');
-  await product.getByRole('button',{name:'Save',exact:true}).click();
-  await product.getByRole('heading',{name:'Instagram acceptance collection',exact:true}).waitFor();
-  assert.equal(await product.locator('main > .result-list .result-card').count(),5);
-  for(const viewport of [{width:1280,height:800},{width:390,height:844}]) {
-    await product.setViewportSize(viewport);
-    assert(await product.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-    await product.screenshot({path:path.join(tmpdir(),`maverick-connectors-ui-${viewport.width}.png`)});
-  }
-  await product.getByRole('button',{name:'Export Markdown',exact:true}).click();
-  await product.getByRole('link',{name:'Open exported file in Storage',exact:false}).waitFor();
-  const productState=await product.evaluate(async()=> (await fetch('/api/apps/platform-connectors/backend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status'})})).json());
-  const exportRun=productState.runs.find(run=>run.operation === 'export');
-  assert(exportRun.result.file.file_id);
-  const exported=await fetch(`${origin}/${exportRun.result.file.workspace_relative_path}`);
+  // Exercise the agent-owned MCP surface through real Chrome/queue/Storage boundaries.
+  const mcp=async(tool_name,arguments_={})=>{
+    const response=await fetch(`${origin}/__test/connectors/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({tool_name,arguments:arguments_})});
+    const result=await response.json();assert(response.ok,JSON.stringify(result));return result;
+  };
+  await mcp('connectors_connections_refresh');
+  assert.deepEqual((await mcp('platform_connectors_reference_manifest')).entity_types,[]);
+  const status=await mcp('connectors_status');
+  assert.equal(status.sources.length,9);
+  assert(status.connections.some(c=>c.session_id === connection.session_id));
+  const started=await mcp('connectors_run_start',{source:'instagram',operation:'collect',
+    parameters:{username:'fixture_user',session_id:connection.session_id,max_items:3}});
+  const observed=await wait(async()=>{
+    const result=await mcp('connectors_run_refresh',{id:started.run.id});
+    return ['completed','failed','cancelled'].includes(result.run.status) ? result.run : null;
+  },90000);
+  assert.equal(observed.status,'completed',JSON.stringify(observed));
+  assert.equal(observed.result.items.length,3);
+  assert(observed.result.items.every(item=>item.content_observed));
+  assert.equal(observed.result.context_items.length,2);
+  const saved=await mcp('connectors_collection_save',{run_id:observed.id,title:'Instagram acceptance collection'});
+  assert(!('deep_link' in observed));
+  assert(!('deep_link' in saved.collection));
+  const retained=await mcp('connectors_collection_get',{id:saved.collection.id});
+  assert.equal(retained.collection.items.length,5);
+  const refs=await mcp('platform_connectors_reference_search',{query:'Instagram acceptance'});
+  assert.equal(refs.results[0].entity_id,saved.collection.id);
+  assert(!('deep_link' in refs.results[0]));
+  const resolved=await mcp('platform_connectors_reference_resolve',{entity_type:'collection',entity_id:saved.collection.id});
+  assert.equal(resolved.payload.id,saved.collection.id);
+  const exporting=await mcp('connectors_collection_export',{id:saved.collection.id,format:'markdown'});
+  const exportedRun=(await mcp('connectors_run_get',{id:exporting.run.id})).run;
+  assert.equal(exportedRun.status,'completed',JSON.stringify(exportedRun));
+  assert(exportedRun.result.file.file_id);
+  const exported=await fetch(`${origin}/${exportedRun.result.file.workspace_relative_path}`);
   assert(exported.ok);assert((await exported.text()).includes('Instagram acceptance collection'));
+  assert.equal((await fetch(`${origin}/apps/platform-connectors/`)).status,404);
   assert.equal(consoleErrors.length,0,consoleErrors.join('\n'));
-  await product.close();
   await instagram.goto("https://www.instagram.com/accounts/login/");
   await wait(async()=>{const overview=await api({action:"companion.overview"});return overview.connections.find(c=>c.session_id === connection.session_id)?.status === "revoked";});
-  console.log(JSON.stringify({status:"passed",real_chromium:true,...mediaSummary,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,scope_revocation:true,desktop_mobile_layout:true,instagram_access_verified:false}));
+  console.log(JSON.stringify({status:"passed",real_chromium:true,...mediaSummary,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,connectors_mcp_workflow:true,connectors_frontend_absent:true,scope_revocation:true,browser_desktop_mobile_layout:true,instagram_access_verified:false}));
 }finally {
   if(context)await context.close();
   if(server.exitCode === null && server.signalCode === null){const exited=new Promise(resolve=>server.once("exit",resolve));server.kill("SIGTERM");await exited;}

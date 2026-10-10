@@ -80,12 +80,9 @@ def handle(payload, body=None):
     body = payload.body if body is None else body
     action = body.get("action","status")
     if action == "references.manifest":
-        from references import ENTITY
-        return 200,{"app_id":"platform-connectors","entity_types":[ENTITY]}
+        return 200,{"app_id":"platform-connectors","entity_types":[]}
     if not payload.user_id or not payload.workspace_id:
         return 403,{"error":"actor_required","detail":"A workspace-authenticated user is required."}
-    if action == "sources.list":
-        return 200,{"sources":SOURCES}
     root, owner = Path(payload.data_root),payload.user_id
     if action == "dependency.completed" and payload.raw.get("surface") != "dependency_backend_request_callback":
         return 403,{"error":"trusted_callback_required","detail":"Dependency callbacks can only be delivered by Core."}
@@ -136,7 +133,7 @@ def handle(payload, body=None):
             else:
                 raise ValueError("Unknown Connectors action.")
         if action not in {"status","run.get","collection.get","references.manifest","references.search","references.resolve","references.summarize","view_filter"}:
-            result["app_events"] = [{"type":"maverick.app.data-changed","resource":"view-state" if action in {"set_view_filter","set_custom_view","clear_custom_view"} else "state"}]
+            result["app_events"] = [{"type":"maverick.app.data-changed","resource":"state"}]
         return 200,result
     except FetchError as error:
         return error.status,{"error":error.code,"detail":str(error)}

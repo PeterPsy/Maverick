@@ -153,11 +153,11 @@
     "platform-connectors": {
       "cli": {
         "descriptor_sha256": "52d23566cdcc1d0fd6be44ef3b96e72b30ed24df1f027371af1574fb787b4466",
-        "execution_sha256": "4ee690b7a0e1c0917b12e3fc3028c6513f856ce91aad74af776220d5f2ba10f7"
+        "execution_sha256": "e6c8e342f71641ac90ab1b7c86aab66b6d55718a4d7fb884c56240325e2391e2"
       },
       "mcp": {
-        "descriptor_sha256": "5ef4a929f0ff7963cf64327fdc8ba409123b470c559e0f5b8307420fc03d784a",
-        "execution_sha256": "7b746c66d6c315062bfa23342b50b224fd0e907ffd15c6de8487b0460e37b66a"
+        "descriptor_sha256": "0c60744ddece461cff019c189231bd94c26fce5986033fd475e3faef6758ba10",
+        "execution_sha256": "0ea717628bf59b66c70d168b0e6da2c6867e0dc8d9d18dab00d6aefcb27a0ff4"
       }
     },
     "senses": {

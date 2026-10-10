@@ -38,9 +38,13 @@ Use `conflict_policy` intentionally:
 - Use `warn` when the user wants the event created or moved but should be told about overlaps.
 - Use `allow` only when the user explicitly accepts conflicts or conflicts do not matter.
 
-Calendar events can be `confirmed`, `tentative`, or `cancelled`. Treat confirmed and tentative events as busy; cancelled events remain visible history but do not block availability or free-time search.
+Calendar events can be `confirmed`, `tentative`, or `cancelled`. Confirmed and tentative events block time only when `transparency` is `opaque`; transparent and cancelled events do not block availability. Calendar visibility, sync and availability participation are separate settings. Availability checks cover known local events, not the complete calendars of invitees.
+
+For all-day proposals, call `calendar_find_free_time` with `all_day: true`, an explicit `timezone`, and `duration_days` (1–366). This searches whole civil days independently of work hours, including daylight-saving changes. Timed proposals use `duration_minutes`, work hours, weekdays and buffers. All-day end dates are exclusive in API writes.
 
 Calendar normalizes event metadata for orchestration. Use `location`, `organizer`, `all_day`, `source`, `external_refs`, `recurrence`, `reminders`, and `idempotency_key` only when those values are genuinely known or needed; do not invent metadata.
+
+Keep updates limited to the fields the user intends to change. `attendees` is the participant index; `attendee_details` preserves names, optional flags and provider response statuses. Do not replace invitees with email-only records or invent RSVP responses. `conference` is a read projection for joining provider calls. Local participants do not receive invitations. Preserve every reminder when editing one, and distinguish Google default reminders from custom overrides. Category and tags are local classification and survive Google sync. For recurring events, choose occurrence, future or series scope explicitly and preserve advanced rules and exclusions.
 
 When retrying a create after a transport or runtime interruption, reuse the same `idempotency_key` so Calendar can return the existing event instead of creating a duplicate. When updating, moving, or deleting an event you previously read, pass its current `revision` as `expected_revision`; if Calendar returns `revision_conflict`, resolve or present the returned `current_event` before retrying.
 

@@ -1,4 +1,4 @@
-import { CalendarApiError, getFullEvent } from "@/api";
+import { CalendarApiError, getFullEvent, checkAvailability } from "@/api";
 import { t } from "@/preferences";
 import { FindTime } from "./find-time";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +27,9 @@ import {
   validateDraft,
 } from "./calendar-utils";
 import { EventPanel } from "./calendar-event-panel";
+import { eventPatch, rebaseDraft } from "./event-editor-domain";
+import { EventRevisionNotice } from "./event-revision-notice";
+import { eventIsReadOnly } from "./calendar-utils";
 
 type CalendarEventOverlayProps = {
   runtimeAppId: string;
@@ -76,8 +79,11 @@ export function CalendarEventOverlay({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [revisionConflict, setRevisionConflict] = useState(false);
   const latestEvent = useRef<Event | null>(null);
+  const baseEvent = useRef<Event | null>(null);
+  const [preSaveWarning, setPreSaveWarning] = useState(false);
+  const acceptedConflicts = useRef(new Set<string>());
   const [conflicts, setConflicts] = useState<
-    Array<{ title: string; startTime: string; endTime: string }>
+    Array<{ id?: string; title: string; startTime: string; endTime: string }>
   >([]);
 
   const selectedEvent = useMemo(
@@ -113,11 +119,14 @@ export function CalendarEventOverlay({
       dirty.current = false;
       changedFields.current.clear();
       setRevisionConflict(false);
+      clearReview();
     }
     if (uiState.sidebarMode === "details" && selectedEvent) {
       latestEvent.current = selectedEvent;
       if (loadedId.current !== selectedEvent.id || !dirty.current) {
+        if (loadedId.current !== selectedEvent.id) clearReview();
         loadedId.current = selectedEvent.id;
+        baseEvent.current = selectedEvent;
         setSelectedDraft((current) =>
           current?.id === selectedEvent.id &&
           current.revision === selectedEvent.revision
@@ -162,6 +171,12 @@ export function CalendarEventOverlay({
             return;
           }
           latestEvent.current = event;
+          if (
+            !dirty.current ||
+            !baseEvent.current ||
+            baseEvent.current.revision === event.revision
+          )
+            baseEvent.current = event;
           if (!dirty.current) setSelectedDraft(event);
           else {
             setRevisionConflict(
@@ -299,7 +314,7 @@ export function CalendarEventOverlay({
         return;
       const elements = Array.from(
         dialogRef.current?.querySelectorAll<HTMLElement>(
-          'input:not(:disabled), button:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]',
+          'a[href], input:not(:disabled), button:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]',
         ) || [],
       ).filter((e) => e.getClientRects().length);
       if (!elements.length) return;
@@ -365,7 +380,15 @@ export function CalendarEventOverlay({
     );
   }
 
+  function clearReview() {
+    setConflicts([]);
+    setPreSaveWarning(false);
+    acceptedConflicts.current.clear();
+  }
+
   function setPanelDraft(patch: DraftEvent) {
+    if (savingRef.current) return;
+    clearReview();
     dirty.current = true;
     Object.keys(patch).forEach((key) => changedFields.current.add(key));
     if (uiState.sidebarMode === "create") {
@@ -378,6 +401,8 @@ export function CalendarEventOverlay({
   }
 
   function toggleTag(tag: string) {
+    if (savingRef.current) return;
+    clearReview();
     dirty.current = true;
     changedFields.current.add("tags");
     const updateTags = (currentTags: string[] = []) =>
@@ -396,6 +421,28 @@ export function CalendarEventOverlay({
     );
   }
 
+  async function reviewOverlaps(draft: DraftEvent) {
+    if (draft.transparency === "transparent" || draft.status === "cancelled") {
+      setConflicts([]);
+      setPreSaveWarning(false);
+      return true;
+    }
+    const result = await checkAvailability(runtimeAppId, {
+      startTime: draft.startTime!.toISOString(),
+      endTime: draft.endTime!.toISOString(),
+      ignore_event_id: draft.id,
+      attendees: draft.attendees,
+    });
+    const overlaps = result.conflicts || [];
+    setConflicts(overlaps);
+    if (overlaps.some((event) => !acceptedConflicts.current.has(event.id))) {
+      setPreSaveWarning(true);
+      return false;
+    }
+    setPreSaveWarning(false);
+    return true;
+  }
+
   async function submitCreate() {
     const validation = validateDraft(newEvent);
     if (validation) {
@@ -405,6 +452,7 @@ export function CalendarEventOverlay({
     setIsSaving(true);
     setError("");
     try {
+      if (!(await reviewOverlaps(newEvent))) return;
       const created = await onCreateEvent({
         ...newEvent,
         title: newEvent.title!.trim(),
@@ -441,7 +489,11 @@ export function CalendarEventOverlay({
     setIsSaving(true);
     setError("");
     try {
-      const updated = await onUpdateEvent(selectedDraft.id, selectedDraft);
+      if (!(await reviewOverlaps(selectedDraft))) return;
+      const updated = await onUpdateEvent(
+        selectedDraft.id,
+        eventPatch(selectedDraft, changedFields.current, baseEvent.current),
+      );
       dirty.current = false;
       setSelectedDraft(updated);
       updateUiState(
@@ -511,6 +563,15 @@ export function CalendarEventOverlay({
 
   const panelDraft =
     uiState.sidebarMode === "create" ? newEvent : selectedDraft;
+  const conflictingFields =
+    baseEvent.current && selectedDraft && latestEvent.current
+      ? rebaseDraft(
+          baseEvent.current,
+          selectedDraft,
+          latestEvent.current,
+          changedFields.current,
+        ).conflicts
+      : [];
 
   return (
     <div
@@ -518,9 +579,9 @@ export function CalendarEventOverlay({
       className="calendar-event-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label={
-        uiState.sidebarMode === "create" ? "Create event" : "Event details"
-      }
+      aria-label={t(
+        uiState.sidebarMode === "create" ? "Create Event" : "Event Details",
+      )}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           closeOverlay();
@@ -533,6 +594,7 @@ export function CalendarEventOverlay({
           draft={panelDraft}
           error={error}
           isSaving={isSaving}
+          hasChanges={dirty.current}
           canSave={
             uiState.sidebarMode === "create" ||
             (detailsAvailable && !loadingDetails)
@@ -541,6 +603,7 @@ export function CalendarEventOverlay({
           colors={defaultColors}
           availableTags={availableTags}
           calendars={calendars}
+          connections={connections}
           calendarSourceOptions={sourceOptions}
           getColorClasses={getColorClasses}
           setDraft={setPanelDraft}
@@ -549,43 +612,48 @@ export function CalendarEventOverlay({
           onUpdate={submitUpdate}
           onDelete={submitDelete}
           onClose={closeOverlay}
+          onCancelEdit={() => {
+            setSelectedDraft(latestEvent.current);
+            dirty.current = false;
+            changedFields.current.clear();
+            baseEvent.current = latestEvent.current;
+            setRevisionConflict(false);
+            setError("");
+            setConflicts([]);
+            setPreSaveWarning(false);
+          }}
         >
           {revisionConflict && (
-            <div className="calendar-notice" role="alert">
-              <p>
-                {t("Another version is available. Your draft has been kept.")}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (latestEvent.current) {
-                    setSelectedDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            revision: latestEvent.current!.revision,
-                          }
-                        : current,
-                    );
-                    setRevisionConflict(false);
-                    setError("");
-                  }
-                }}
-              >
-                {t("Keep draft and retry with latest revision")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDraft(latestEvent.current);
-                  dirty.current = false;
-                  setRevisionConflict(false);
-                  setError("");
-                }}
-              >
-                {t("Reload latest event")}
-              </button>
-            </div>
+            <EventRevisionNotice
+              draft={selectedDraft}
+              latest={latestEvent.current}
+              fields={conflictingFields}
+              disabled={loadingDetails || !detailsAvailable}
+              onMerge={() => {
+                if (!latestEvent.current || !baseEvent.current) return;
+                const base = baseEvent.current;
+                const latest = latestEvent.current;
+                const changed = new Set(changedFields.current);
+                setSelectedDraft((current) =>
+                  current
+                    ? rebaseDraft(base, current, latest, changed).draft
+                    : current,
+                );
+                baseEvent.current = latestEvent.current;
+                clearReview();
+                setRevisionConflict(false);
+                setError("");
+              }}
+              onReload={() => {
+                setSelectedDraft(latestEvent.current);
+                dirty.current = false;
+                changedFields.current.clear();
+                baseEvent.current = latestEvent.current;
+                clearReview();
+                setRevisionConflict(false);
+                setError("");
+              }}
+            />
           )}
           {conflicts.length > 0 && (
             <div role="status">
@@ -597,10 +665,34 @@ export function CalendarEventOverlay({
               ))}
             </div>
           )}
+          {preSaveWarning && (
+            <div className="calendar-notice" role="alert">
+              <p>{t("Review overlapping events before saving.")}</p>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => {
+                  acceptedConflicts.current = new Set(
+                    conflicts.map(
+                      (event) => (event as { id?: string }).id || "",
+                    ),
+                  );
+                  void (uiState.sidebarMode === "create"
+                    ? submitCreate()
+                    : submitUpdate());
+                }}
+              >
+                {t("Save with overlaps")}
+              </button>
+            </div>
+          )}
           <FindTime
             appId={runtimeAppId}
             draft={panelDraft}
             onSelect={setPanelDraft}
+            readOnly={Boolean(
+              panelDraft && eventIsReadOnly(panelDraft, calendars),
+            )}
           />
         </EventPanel>
       </div>

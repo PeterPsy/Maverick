@@ -532,6 +532,12 @@ export function validateDraft(event: DraftEvent | Event) {
   if (!event.startTime || Number.isNaN(event.startTime.getTime())) return t("Start time is required.")
   if (!event.endTime || Number.isNaN(event.endTime.getTime())) return t("End time is required.")
   if (event.endTime <= event.startTime) return t("End time must be after start time.")
+  if (event.reminders?.some(reminder => {
+    if (!reminder || typeof reminder !== "object") return false;
+    const item = reminder as Record<string, unknown>;
+    const minutes = item.minutes_before ?? item.minutesBefore;
+    return minutes !== undefined && (!Number.isInteger(minutes) || Number(minutes) < 0 || Number(minutes) > 40320);
+  })) return t("Reminder minutes must be a whole number from 0 to 40320.")
   return ""
 }
 

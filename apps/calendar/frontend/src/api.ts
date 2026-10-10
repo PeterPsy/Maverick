@@ -365,6 +365,7 @@ function toPayload(
   if (event.color !== undefined) payload.color = event.color;
   if (event.category !== undefined) payload.category = event.category;
   if (event.attendees !== undefined) payload.attendees = event.attendees;
+  if (event.attendee_details !== undefined) payload.attendee_details = event.attendee_details;
   if (event.tags !== undefined) payload.tags = event.tags;
   if (event.source !== undefined) payload.source = event.source;
   if (event.external_refs !== undefined) payload.external_refs = event.external_refs;

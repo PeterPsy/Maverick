@@ -194,7 +194,7 @@ def operations_manifest(app_id: str = "calendar") -> dict[str, Any]:
                 "action": "find_free_time",
                 "description": "Find open slots in a time window using current events as busy intervals.",
                 "required": ["start_after", "end_before"],
-                "optional": ["duration_minutes", "attendees", "attendee", "limit", "ignore_event_id"],
+                "optional": ["duration_minutes", "all_day", "duration_days", "attendees", "attendee", "limit", "ignore_event_id"],
                 "payload_profile": "compact_slots",
             },
             {

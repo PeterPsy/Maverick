@@ -86,3 +86,27 @@ def free_slots(busy, start, end, duration, limit, options):
             if len(result) >= limit:
                 return result
     return result
+
+
+def free_days(busy, start, end, days, limit, options):
+    """Whole civil days, independent of working hours and daylight-saving duration."""
+    zone = options["zone"]
+    day = start.astimezone(zone).date()
+    last = end.astimezone(zone).date()
+    if (last - day).days > 3660:
+        raise ValueError("Whole-day searches are limited to ten years.")
+    result = []
+    while day < last and len(result) < limit:
+        left = datetime.combine(day, time.min, zone)
+        right = datetime.combine(day + timedelta(days=days), time.min, zone)
+        if (
+            left >= start
+            and right <= end
+            and not any(
+                a - options["buffer"] < right and b + options["buffer"] > left
+                for a, b in busy
+            )
+        ):
+            result.append((left, right))
+        day += timedelta(days=1)
+    return result

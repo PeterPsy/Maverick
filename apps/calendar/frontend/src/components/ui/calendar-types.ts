@@ -1,3 +1,15 @@
+export interface AttendeeDetail {
+  email: string;
+  displayName?: string;
+  optional?: boolean;
+  responseStatus?: "accepted" | "declined" | "tentative" | "needsAction";
+  organizer?: boolean;
+  self?: boolean;
+}
+export interface Conference {
+  provider?: string;
+  entry_points?: Array<{ type: string; uri: string; label?: string }>;
+}
 export interface Event {
   id: string
   title: string
@@ -18,6 +30,8 @@ export interface Event {
   color: string
   category?: string
   attendees?: string[]
+  attendee_details?: AttendeeDetail[]
+  conference?: Conference
   tags?: string[]
   created_at?: string
   updated_at?: string

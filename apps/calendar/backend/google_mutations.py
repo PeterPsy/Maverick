@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from zoneinfo import ZoneInfo
 import hashlib
 from typing import Any
 
@@ -23,6 +22,12 @@ from google_provider import (
 )
 from google_records import normalize_calendar
 from google_event_mapping import google_event_payload
+from google_event_body import (
+    google_event_body as _google_event_body,
+    google_event_patch,
+    google_attendees,
+    merge_google_people,
+)
 from operations import (
     create_event,
     delete_event,
@@ -33,9 +38,9 @@ from operations import (
     update_event,
 )
 from request_inputs import idempotency_key_from_payload
-from recurrence import recurrence_rules, expand_events
+from recurrence import expand_events
 from store import read_state
-from time_values import iso_time, now_string
+from time_values import now_string
 
 REMOTE_MUTATION_FLAG = "remote_mutation"
 DEFAULT_GOOGLE_CALENDAR_ID = "primary"
@@ -229,6 +234,7 @@ def update_google_event(
         app_secret_errors=app_secret_errors,
         transport=transport,
     )
+    accepted_refs = current["external_refs"]
     destination = _create_ref(preview) if is_google_create_request(preview) else ref
     if destination["calendar_connection_id"] != ref["calendar_connection_id"]:
         raise CalendarOAuthError(
@@ -270,11 +276,30 @@ def update_google_event(
         )
         expected_revision = moved["revision"]
         ref = _remote_ref(moved)
+        accepted_refs = moved["external_refs"]
+    remote_patch = google_event_patch(current, preview)
+    if not remote_patch:
+        return update_event(
+            data_root,
+            event_id,
+            {**event_payload, "external_refs": accepted_refs},
+            conflict_policy=conflict_policy,
+            expected_revision=expected_revision,
+        )
+    if "attendees" in remote_patch:
+        fresh = get_google_event(
+            access_token=access_token,
+            calendar_id=ref["provider_calendar_id"],
+            event_id=ref["provider_event_id"],
+            transport=transport,
+        )
+        preview = merge_google_people(current, preview, fresh)
+        remote_patch["attendees"] = google_attendees(preview)
     remote = patch_event(
         access_token=access_token,
         calendar_id=ref["provider_calendar_id"],
         event_id=ref["provider_event_id"],
-        event=_google_event_body(preview),
+        event=remote_patch,
         etag=ref.get("etag", ""),
         transport=transport,
     )
@@ -511,77 +536,6 @@ def _calendar_for_ref(
     )
 
 
-def _google_event_body(event: dict[str, Any]) -> dict[str, Any]:
-    body: dict[str, Any] = {
-        "summary": event["title"],
-        "description": event.get("description") or "",
-        "location": event.get("location") or "",
-        "status": event.get("status") or "confirmed",
-        "transparency": event.get("transparency") or "opaque",
-        "start": _google_time(event["startTime"], event, "start"),
-        "end": _google_time(event["endTime"], event, "end"),
-    }
-    attendees = [
-        {"email": item}
-        for item in event.get("attendees") or []
-        if isinstance(item, str) and item.strip()
-    ]
-    body["attendees"] = attendees
-    if not (event.get("external_refs") or {}).get("recurring_event_id"):
-        body["recurrence"] = recurrence_rules(event.get("recurrence"))
-    reminders = _google_reminders(event.get("reminders"))
-    body["reminders"] = (
-        {"useDefault": True}
-        if event.get("reminders_use_default")
-        else {"useDefault": False, "overrides": reminders}
-    )
-    color_id = _google_color_id(str(event.get("color") or ""))
-    if color_id:
-        body["colorId"] = color_id
-    return body
-
-
-def _google_time(value: Any, event: dict[str, Any], _field: str) -> dict[str, str]:
-    timezone_name = str(event.get("timezone") or "UTC")
-    if event.get("all_day"):
-        return {
-            "date": iso_time(value, "event_time")
-            .astimezone(ZoneInfo(timezone_name))
-            .date()
-            .isoformat()
-        }
-    return {"dateTime": str(value), "timeZone": timezone_name}
-
-
-def _google_reminders(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    reminders: list[dict[str, Any]] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        method = str(item.get("method") or "").strip()
-        minutes = (
-            item.get("minutes_before")
-            if "minutes_before" in item
-            else item.get("minutesBefore")
-        )
-        if method and isinstance(minutes, int):
-            reminders.append({"method": method, "minutes": minutes})
-    return reminders
-
-
-def _google_color_id(color: str) -> str:
-    return {
-        "blue": "1",
-        "green": "2",
-        "purple": "3",
-        "red": "4",
-        "orange": "5",
-        "pink": "4",
-    }.get(color, "")
-
-
 def _local_payload_from_remote(
     remote_event: dict[str, Any],
     *,
@@ -595,6 +549,9 @@ def _local_payload_from_remote(
         or {}
     )
     local_payload = {**fallback, **remote_payload, "source": "google_calendar"}
+    for field in ("category", "tags"):
+        if field in fallback:
+            local_payload[field] = fallback[field]
     fallback_refs = normalize_external_refs(fallback.get("external_refs") or {})
     remote_refs = normalize_external_refs(remote_payload.get("external_refs") or {})
     local_payload["external_refs"] = {

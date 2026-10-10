@@ -121,6 +121,8 @@ def _merge_remote_events(
             "recurrence"
         ):
             payload["recurrence"]["exceptions"] = existing["recurrence"]["exceptions"]
+        for local_field in ("category", "tags"):
+            payload[local_field] = existing.get(local_field, payload.get(local_field))
         event = normalize_event(
             {**existing, **payload, "id": existing["id"]},
             created_at=existing.get("created_at"),

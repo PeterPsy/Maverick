@@ -5,9 +5,9 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { CalendarEventOverlay } from './calendar-event-overlay';
 import { notifyCalendarUiStateChanged, readCalendarUiState, writeCalendarUiState } from '@/calendar-ui-state';
 import type { Event } from './calendar-types';
-vi.mock('@/api', () => ({ CalendarApiError: class extends Error {}, getFullEvent: vi.fn(async () => null) }));
+vi.mock('@/api', () => ({ CalendarApiError: class extends Error { code: string; constructor(code: string, detail: string) { super(detail); this.code = code; } }, getFullEvent: vi.fn(async () => null), checkAvailability: vi.fn(async () => ({ conflicts: [] })) }));
 vi.mock('./find-time', () => ({ FindTime: () => null }));
-vi.mock('./calendar-event-panel', () => ({ EventPanel: (props: { draft: Event; setDraft: (patch: Partial<Event>) => void; onCreate: () => void; onClose: () => void }) => <div><span>{props.draft?.title} {props.draft?.location} {String(props.draft?.recurrence?.count || "")}</span><button onClick={() => props.setDraft({ title: 'My draft' })}>Edit</button><button onClick={props.onCreate}>Save</button><button onClick={props.onClose}>Close</button></div> }));
+vi.mock('./calendar-event-panel', () => ({ EventPanel: (props: { draft: Event; setDraft: (patch: Partial<Event>) => void; mode: string; onCreate: () => void; onUpdate: () => void; onClose: () => void; children?: import("react").ReactNode }) => <div><span>{props.draft?.title} {props.draft?.location} {String(props.draft?.recurrence?.count || "")}</span><button onClick={() => props.setDraft({ title: 'My draft' })}>Edit</button><button onClick={props.mode === "create" ? props.onCreate : props.onUpdate}>Save</button><button onClick={props.onClose}>Close</button>{props.children}</div> }));
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 const event: Event = { id: 'e', title: 'Original', startTime: new Date('2026-10-04T09:00Z'), endTime: new Date('2026-10-04T10:00Z'), color: 'blue', revision: 1 };
 it('preserves dirty drafts across refresh and prevents accidental closing', async () => {
@@ -19,7 +19,7 @@ it('preserves dirty drafts across refresh and prevents accidental closing', asyn
     await act(async () => root.render(<CalendarEventOverlay {...props} />));
     act(() => host.querySelector<HTMLButtonElement>('button')!.click());
     await act(async () => root.render(<CalendarEventOverlay {...props} events={[{ ...event, title: 'Changed elsewhere', revision: 2 }]} />));
-    expect(host.textContent).toContain('My draft'); expect(host.textContent).not.toContain('Changed elsewhere');
+    expect(host.textContent).toContain('My draft'); expect(host.querySelector('span')?.textContent).not.toContain('Changed elsewhere');
     window.confirm = vi.fn(() => false);
     act(() => host.querySelectorAll<HTMLButtonElement>('button')[2].click());
     expect(host.querySelector('[role=dialog]')).not.toBeNull();
@@ -73,5 +73,42 @@ it('merges untouched full metadata into a draft edited while details are loading
     act(() => host.querySelector<HTMLButtonElement>('button')!.click());
     await act(async () => resolveDetails({ ...event, location: 'Room 2', recurrence: { frequency: 'weekly', count: 4 } }));
     expect(host.textContent).toContain('My draft Room 2 4');
+  } finally { act(() => root.unmount()); }
+});
+
+it('rebases a rejected save without resending fields changed elsewhere', async () => {
+  const { getFullEvent, CalendarApiError, checkAvailability } = await import('@/api');
+  vi.mocked(getFullEvent).mockResolvedValueOnce({ ...event, location: 'Old room' }).mockResolvedValueOnce({ ...event, location: 'New room', revision: 2 });
+  vi.mocked(checkAvailability).mockResolvedValue({ conflicts: [] });
+  const update = vi.fn().mockRejectedValueOnce(new CalendarApiError('revision_conflict', 'Changed remotely', 409)).mockResolvedValueOnce({ ...event, title: 'My draft', location: 'New room', revision: 3 });
+  writeCalendarUiState('calendar', { sidebarMode: 'details', selectedEventId: 'e' });
+  const host = document.createElement('div'); const root = createRoot(host);
+  const props = { runtimeAppId: 'calendar', events: [event], connections: [], calendars: [], categories: [], availableTags: [], onCreateEvent: vi.fn(), onUpdateEvent: update, onDeleteEvent: vi.fn() };
+  try {
+    await act(async () => root.render(<CalendarEventOverlay {...props} />));
+    act(() => host.querySelectorAll<HTMLButtonElement>('button')[0].click());
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('button')[1].click());
+    act(() => Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Merge my changes with latest version')!.click());
+    expect(host.querySelector('span')?.textContent).toContain('New room');
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('button')[1].click());
+    expect(update.mock.calls[1][1]).toMatchObject({ title: 'My draft', revision: 2 });
+    expect(update.mock.calls[1][1]).not.toHaveProperty('location');
+  } finally { act(() => root.unmount()); }
+});
+it('requires overlap review before writing an event', async () => {
+  const { getFullEvent, checkAvailability } = await import('@/api');
+  vi.mocked(getFullEvent).mockResolvedValueOnce(event);
+  vi.mocked(checkAvailability).mockResolvedValue({ conflicts: [{ id: 'busy', title: 'Busy', startTime: '2026-10-04T09:00Z', endTime: '2026-10-04T10:00Z' }] });
+  const update = vi.fn().mockResolvedValue(event);
+  writeCalendarUiState('calendar', { sidebarMode: 'details', selectedEventId: 'e' });
+  const host = document.createElement('div'); const root = createRoot(host);
+  const props = { runtimeAppId: 'calendar', events: [event], connections: [], calendars: [], categories: [], availableTags: [], onCreateEvent: vi.fn(), onUpdateEvent: update, onDeleteEvent: vi.fn() };
+  try {
+    await act(async () => root.render(<CalendarEventOverlay {...props} />));
+    act(() => host.querySelectorAll<HTMLButtonElement>('button')[0].click());
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('button')[1].click());
+    expect(update).not.toHaveBeenCalled(); expect(host.textContent).toContain('Busy');
+    await act(async () => Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Save with overlaps')!.click());
+    expect(update).toHaveBeenCalledTimes(1);
   } finally { act(() => root.unmount()); }
 });

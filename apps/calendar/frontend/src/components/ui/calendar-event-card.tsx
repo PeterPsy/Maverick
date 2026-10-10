@@ -1,11 +1,12 @@
-import { t } from "@/preferences"
-import { useState } from "react"
-import { Clock } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
-import type { ColorClasses, Event } from "./calendar-types"
-import { formatTime } from "./calendar-utils"
+import { t } from "@/preferences";
+import { useState } from "react";
+import { Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import type { ColorClasses, Event } from "./calendar-types";
+import { civilDays } from "./event-editor-domain";
+import { formatTime } from "./calendar-utils";
 
 export function EventCard({
   event,
@@ -15,31 +16,52 @@ export function EventCard({
   getColorClasses,
   variant = "default",
 }: {
-  event: Event
-  onEventClick: (event: Event) => void
-  onDragStart: (event: Event) => void
-  onDragEnd: () => void
-  getColorClasses: (color: string) => ColorClasses
-  variant?: "default" | "compact" | "detailed"
+  event: Event;
+  onEventClick: (event: Event) => void;
+  onDragStart: (event: Event) => void;
+  onDragEnd: () => void;
+  getColorClasses: (color: string) => ColorClasses;
+  variant?: "default" | "compact" | "detailed";
 }) {
-  const [isHovered, setIsHovered] = useState(false)
-  const colorClasses = getColorClasses(event.color)
+  const [isHovered, setIsHovered] = useState(false);
+  const colorClasses = getColorClasses(event.color);
 
+  const source = String(event.external_refs?.provider_calendar_summary || "");
+  const context = (
+    <div className="calendar-event-card-context">
+      {event.location && <span>{event.location}</span>}
+      {source && <span>{source}</span>}
+      {event.attendees?.length ? (
+        <span>
+          {event.attendees.length} {t("Attendees")}
+        </span>
+      ) : null}
+    </div>
+  );
   const getDuration = () => {
-    const diff = event.endTime.getTime() - event.startTime.getTime()
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-    if (hours > 0) return `${hours}h ${minutes}m`
-    return `${minutes}m`
-  }
+    if (event.all_day) return `${civilDays(event)} ${t("days")}`;
+    const diff = event.endTime.getTime() - event.startTime.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
 
   if (variant === "compact") {
     return (
       <div
-        role="button" tabIndex={0} onFocus={() => setIsHovered(true)} onBlur={() => setIsHovered(false)}
-      aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
-      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEventClick(event) } }}
-      draggable
+        role="button"
+        tabIndex={0}
+        onFocus={() => setIsHovered(true)}
+        onBlur={() => setIsHovered(false)}
+        aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onEventClick(event);
+          }
+        }}
+        draggable
         onDragStart={() => onDragStart(event)}
         onDragEnd={onDragEnd}
         onClick={() => onEventClick(event)}
@@ -62,34 +84,72 @@ export function EventCard({
             <Card className="border-2 p-3 shadow-xl">
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <h4 className="font-semibold text-sm leading-tight">{event.title}</h4>
-                  <div className={cn("h-3 w-3 rounded-full flex-shrink-0", colorClasses.bg)} />
+                  <h4 className="font-semibold text-sm leading-tight">
+                    {event.title}
+                  </h4>
+                  <div
+                    className={cn(
+                      "h-3 w-3 rounded-full flex-shrink-0",
+                      colorClasses.bg,
+                    )}
+                  />
                 </div>
-                {event.description && <p className="text-xs text-muted-foreground line-clamp-2">{event.description}</p>}
+                {context}
+                {event.description && (
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    {event.description}
+                  </p>
+                )}
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  <span>{event.all_day ? t("All day") : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}</span>
+                  <span>
+                    {event.all_day
+                      ? t("All day")
+                      : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}
+                  </span>
                   <span className="text-[10px]">({getDuration()})</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {event.category && <Badge variant="secondary" className="text-[10px] h-5">{event.category}</Badge>}
-                  {event.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-[10px] h-5">{tag}</Badge>)}
+                  {event.category && event.category !== "Google Calendar" && (
+                    <Badge variant="secondary" className="text-[10px] h-5">
+                      {event.category}
+                    </Badge>
+                  )}
+                  {event.tags
+                    ?.filter((tag) => tag !== "google")
+                    .map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="text-[10px] h-5"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
                 </div>
               </div>
             </Card>
           </div>
         )}
       </div>
-    )
+    );
   }
 
   if (variant === "detailed") {
     return (
       <div
-        role="button" tabIndex={0} onFocus={() => setIsHovered(true)} onBlur={() => setIsHovered(false)}
-      aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
-      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEventClick(event) } }}
-      draggable
+        role="button"
+        tabIndex={0}
+        onFocus={() => setIsHovered(true)}
+        onBlur={() => setIsHovered(false)}
+        aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onEventClick(event);
+          }
+        }}
+        draggable
         onDragStart={() => onDragStart(event)}
         onDragEnd={onDragEnd}
         onClick={() => onEventClick(event)}
@@ -99,30 +159,56 @@ export function EventCard({
           "calendar-event-card--detailed cursor-pointer rounded-lg p-3 transition-all duration-300",
           colorClasses.bg,
           "text-white animate-in fade-in slide-in-from-left-2",
-          isHovered && "calendar-event-card--detailed-hover shadow-2xl ring-2 ring-white/50",
+          isHovered &&
+            "calendar-event-card--detailed-hover shadow-2xl ring-2 ring-white/50",
         )}
       >
         <div className="font-semibold">{event.title}</div>
-        {event.description && <div className="mt-1 text-sm opacity-90 line-clamp-2">{event.description}</div>}
+        {event.description && (
+          <div className="mt-1 text-sm opacity-90 line-clamp-2">
+            {event.description}
+          </div>
+        )}
         <div className="mt-2 flex items-center gap-2 text-xs opacity-80">
           <Clock className="h-3 w-3" />
-          {event.all_day ? t("All day") : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}
+          {event.all_day
+            ? t("All day")
+            : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}
         </div>
+        {context}
         {isHovered && (
           <div className="mt-2 flex flex-wrap gap-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
-            {event.category && <Badge variant="secondary" className="text-xs">{event.category}</Badge>}
-            {event.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
+            {event.category && event.category !== "Google Calendar" && (
+              <Badge variant="secondary" className="text-xs">
+                {event.category}
+              </Badge>
+            )}
+            {event.tags
+              ?.filter((tag) => tag !== "google")
+              .map((tag) => (
+                <Badge key={tag} variant="outline" className="text-xs">
+                  {tag}
+                </Badge>
+              ))}
           </div>
         )}
       </div>
-    )
+    );
   }
 
   return (
     <div
-      role="button" tabIndex={0} onFocus={() => setIsHovered(true)} onBlur={() => setIsHovered(false)}
+      role="button"
+      tabIndex={0}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
       aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
-      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEventClick(event) } }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onEventClick(event);
+        }
+      }}
       draggable
       onDragStart={() => onDragStart(event)}
       onDragEnd={onDragEnd}
@@ -147,18 +233,41 @@ export function EventCard({
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <h4 className="font-semibold leading-tight">{event.title}</h4>
-                <div className={cn("h-4 w-4 rounded-full flex-shrink-0", colorClasses.bg)} />
+                <div
+                  className={cn(
+                    "h-4 w-4 rounded-full flex-shrink-0",
+                    colorClasses.bg,
+                  )}
+                />
               </div>
-              {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
+              {event.description && (
+                <p className="text-sm text-muted-foreground">
+                  {event.description}
+                </p>
+              )}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>{event.all_day ? t("All day") : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}</span>
+                  <span>
+                    {event.all_day
+                      ? t("All day")
+                      : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}
+                  </span>
                   <span className="text-[10px]">({getDuration()})</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {event.category && <Badge variant="secondary" className="text-xs">{event.category}</Badge>}
-                  {event.tags?.map((tag) => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
+                  {event.category && event.category !== "Google Calendar" && (
+                    <Badge variant="secondary" className="text-xs">
+                      {event.category}
+                    </Badge>
+                  )}
+                  {event.tags
+                    ?.filter((tag) => tag !== "google")
+                    .map((tag) => (
+                      <Badge key={tag} variant="outline" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
                 </div>
               </div>
             </div>
@@ -166,5 +275,5 @@ export function EventCard({
         </div>
       )}
     </div>
-  )
+  );
 }

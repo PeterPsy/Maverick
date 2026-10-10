@@ -73,6 +73,8 @@ export interface CalendarEventPayload {
   color: string;
   category?: string;
   attendees?: string[];
+  attendee_details?: CalendarEvent['attendee_details'];
+  conference?: CalendarEvent['conference'];
   tags?: string[];
   created_at?: string;
   updated_at?: string;

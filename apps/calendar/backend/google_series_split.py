@@ -4,6 +4,8 @@ import hashlib
 from zoneinfo import ZoneInfo
 from event_records import normalize_event
 from google_mutations import _google_event_body, _remote_ref
+from google_event_body import google_event_patch
+from google_event_mapping import google_event_payload
 from google_oauth import CalendarOAuthError
 from google_provider import (
     insert_event,
@@ -211,7 +213,26 @@ def _copy_exceptions(token, calendar_id, series_id, master, exceptions, transpor
             },
             event_id=master["id"],
         )
-        body = _google_event_body(payload)
+        before = normalize_event(
+            {
+                **master,
+                **(
+                    google_event_payload(
+                        instance,
+                        connection={
+                            "id": master["external_refs"]["calendar_connection_id"]
+                        },
+                        calendar={
+                            "provider_calendar_id": calendar_id,
+                            "timezone": master["timezone"],
+                        },
+                    )
+                    or {}
+                ),
+            },
+            event_id=master["id"],
+        )
+        body = google_event_patch(before, payload)
         body.pop("recurrence", None)
         patch_event(
             access_token=token,

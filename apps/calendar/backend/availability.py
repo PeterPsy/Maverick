@@ -10,10 +10,10 @@ from calendar_visibility import filter_availability_events
 from errors import CalendarConflictError
 from event_records import normalize_event
 from request_inputs import participants_from_body
-from scalars import casefold_set, optional_int, string_list
+from scalars import casefold_set, optional_bool, optional_int, string_list
 from store import read_state
 from recurrence import expand_events
-from scheduling import free_slots, scheduling_options
+from scheduling import free_slots, free_days, scheduling_options
 from time_values import format_time, iso_time
 
 
@@ -116,16 +116,20 @@ def find_free_time(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         ignore_event_id=ignore_event_id,
     )
 
+    all_day = optional_bool(body.get("all_day"), default=False)
+    days = optional_int(body.get("duration_days"), field="duration_days", minimum=1, maximum=366) or 1
+    intervals = (free_days(busy, start_after, end_before, days, limit, options) if all_day
+                 else free_slots(busy, start_after, end_before, duration, limit, options))
     slots = [
         _slot(start, end)
-        for start, end in free_slots(
-            busy, start_after, end_before, duration, limit, options
-        )
+        for start, end in intervals
     ]
 
     return {
         "action": "find_free_time",
         "duration_minutes": duration_minutes,
+        "all_day": all_day,
+        "duration_days": days if all_day else None,
         "window": {
             "start_after": format_time(start_after),
             "end_before": format_time(end_before),

@@ -281,7 +281,8 @@ class CalendarIntegrityTest(unittest.TestCase):
         self.assertEqual(status, 200, result)
         self.assertEqual(methods[0][0], "POST")
         self.assertIn("/move?destination=secondary", methods[0][1])
-        self.assertIn("calendars/secondary/events", methods[1][1])
+        self.assertEqual(len(methods), 1, "Moving without edits must not issue a redundant PATCH")
+        self.assertEqual(result["event"]["external_refs"]["etag"], "new")
         self.assertEqual(
             result["event"]["external_refs"]["provider_calendar_id"], "secondary"
         )
@@ -650,6 +651,7 @@ class CalendarIntegrityTest(unittest.TestCase):
             if method == "GET":
                 return 200, master
             self.assertIn("/events/series", url)
+            self.assertEqual(request["json"], {"summary": "Renamed"})
             return 200, {**master, "summary": "Renamed"}
 
         oid = "series@20260528T090000Z"
@@ -673,6 +675,49 @@ class CalendarIntegrityTest(unittest.TestCase):
         )[1]["events"]
         self.assertEqual([e["title"] for e in rows], ["Renamed", "Special", "Renamed"])
         self.assertEqual(rows[1]["startTime"], "2026-06-05T11:00:00Z")
+
+    def test_google_series_classification_is_local_and_preserves_provider_metadata(self):
+        from event_records import normalize_event
+        from google_event_mapping import google_event_payload
+        from store import update_state
+
+        master = {
+            "id": "series",
+            "summary": "Series",
+            "etag": "master",
+            "recurrence": ["RRULE:FREQ=WEEKLY;COUNT=3"],
+            "start": {"dateTime": "2026-05-28T09:00:00Z"},
+            "end": {"dateTime": "2026-05-28T10:00:00Z"},
+            "attendees": [{"email": "guest@example.com", "responseStatus": "accepted"}],
+        }
+        event = normalize_event(
+            google_event_payload(
+                master,
+                connection={"id": "cal_conn_work"},
+                calendar={"timezone": "UTC", "provider_calendar_id": "primary"},
+            ),
+            event_id="series",
+        )
+        update_state(self.root, lambda state: {**state, "events": [event]})
+
+        def remote(method, url, request):
+            self.assertEqual(method, "GET", "Local classification must not write to Google")
+            return 200, master
+
+        status, result = self.action(
+            {
+                "action": "update",
+                "id": "series@20260528T090000Z",
+                "expected_revision": 1,
+                "recurrence_scope": "series",
+                "event": {"category": "Client work", "tags": ["client"]},
+            },
+            self.transport(remote),
+        )
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["event"]["category"], "Client work")
+        self.assertEqual(result["event"]["tags"], ["client"])
+        self.assertEqual(result["event"]["attendee_details"][0]["responseStatus"], "accepted")
 
     def test_google_future_edit_mirrors_trim_then_successor(self):
         from event_records import normalize_event

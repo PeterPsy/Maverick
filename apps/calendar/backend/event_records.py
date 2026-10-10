@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from event_people import attendee_details
 from zoneinfo import ZoneInfo
 
 from constants import (
@@ -141,6 +142,8 @@ def normalize_event(
             max_length=MAX_CATEGORY_LENGTH,
         ),
         "attendees": string_list(payload.get("attendees")),
+        "attendee_details": attendee_details(payload.get("attendee_details"), string_list(payload.get("attendees"))),
+        "conference": json_object(payload.get("conference"), "conference"),
         "tags": string_list(payload.get("tags")),
         "created_at": created_value,
         "updated_at": updated_value,

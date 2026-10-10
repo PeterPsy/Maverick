@@ -13,6 +13,10 @@ SERIES_FIELDS = (
     "description",
     "location",
     "attendees",
+    "attendee_details",
+    "conference",
+    "category",
+    "tags",
     "status",
     "transparency",
     "color",
@@ -87,12 +91,20 @@ def mirror_series(
     *,
     cut=None,
     exceptions=None,
+    local_fields=None,
 ):
     result = normalize_event(
-        google_event_payload(remote, connection=connection, calendar=calendar),
+        {
+            **google_event_payload(remote, connection=connection, calendar=calendar),
+            "category": master.get("category", "Google Calendar"),
+            "tags": master.get("tags", ["google"]),
+        },
         event_id=master["id"],
         revision=current["revision"] + 1,
     )
+    for field in ("category", "tags"):
+        if local_fields and field in local_fields:
+            result[field] = local_fields[field]
     ref = current["external_refs"]
     expected = {e["id"]: e for e in baseline if belongs(e, ref, series_id)}
     if exceptions is None:

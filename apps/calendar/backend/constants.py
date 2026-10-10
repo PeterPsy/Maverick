@@ -40,6 +40,8 @@ EVENT_FIELDS = {
     "color",
     "category",
     "attendees",
+    "attendee_details",
+    "conference",
     "tags",
     "status",
     "transparency",

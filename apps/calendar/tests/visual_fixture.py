@@ -1,6 +1,7 @@
 """Foreground-only authenticated visual fixture; never uses workspace data.
 
 Run from the Maverick root with .venv/bin/python -m apps.calendar.tests.visual_fixture.
+Open http://maverick.localhost:8000/app/calendar so isolated local frames can launch.
 The isolated account is calendar-visual-test / calendar-visual-fixture.
 Ctrl-C shuts down the backend scheduler and removes all temporary state.
 """
@@ -87,6 +88,13 @@ def main():
                 "title": "Evento 09:30–11:00",
                 "startTime": morning.isoformat(),
                 "endTime": (morning + timedelta(minutes=90)).isoformat(),
+                "location": "Sala riunioni · Milano",
+                "description": '<p>Agenda della riunione: <strong>pianificazione</strong>.</p><p>Documento: <a href="https://example.com/agenda">apri agenda</a>.</p>',
+                "organizer": "organizer@example.com",
+                "attendees": ["guest@example.com", "optional@example.com"],
+                "attendee_details": [{"email": "guest@example.com", "displayName": "Partecipante dimostrativo", "responseStatus": "accepted"}, {"email": "optional@example.com", "optional": True}],
+                "reminders": [{"method": "popup", "minutes_before": 10}, {"method": "popup", "minutes_before": 60}],
+                "conference": {"provider": "Google Meet", "entry_points": [{"type": "video", "uri": "https://meet.google.com/aaa-bbbb-ccc"}]},
             },
             {
                 "title": "Sovrapposizione 10:15",
@@ -96,7 +104,7 @@ def main():
             {
                 "title": "Giornata intera",
                 "startTime": today.date().isoformat(),
-                "endTime": (today + timedelta(days=1)).date().isoformat(),
+                "endTime": (today + timedelta(days=3)).date().isoformat(),
                 "all_day": True,
             },
             {
@@ -110,6 +118,13 @@ def main():
                 "startTime": (now + timedelta(minutes=15)).isoformat(),
                 "endTime": (now + timedelta(minutes=45)).isoformat(),
                 "reminders": [{"method": "popup", "minutes_before": 15}],
+            },
+            {
+                "title": "Calendario condiviso in sola lettura",
+                "startTime": (morning + timedelta(hours=7)).isoformat(),
+                "endTime": (morning + timedelta(hours=8)).isoformat(),
+                "source": "google_calendar",
+                "external_refs": {"provider": "google", "provider_event_id": "fixture-read-only", "provider_calendar_access_role": "reader", "provider_calendar_summary": "Calendario condiviso", "htmlLink": "https://calendar.google.com"},
             },
         ]
         for event in events:

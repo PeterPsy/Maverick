@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 from google_event_mapping import google_event_payload
+from google_event_body import google_event_patch, google_attendees, merge_google_people
 from google_mutations import (
     _connection_and_calendar,
     _ensure_writable_calendar,
-    _google_event_body,
     _remote_ref,
 )
 from google_oauth import CalendarOAuthError
@@ -65,6 +65,8 @@ def mutate_google_occurrence(
         google_event_payload(remote_master, connection=connection, calendar=calendar),
         event_id=current.get("series_id") or current["id"],
     )
+    for field in ("category", "tags"):
+        master[field] = current.get(field, master.get(field))
     scope = body.get("recurrence_scope", "occurrence")
     if not current.get("series_id") and not current["external_refs"].get(
         "recurring_event_id"
@@ -226,20 +228,30 @@ def mutate_google_occurrence(
                 data_root, body, action, "allow", body.get("expected_revision")
             )
         return current
-    remote_body = _google_event_body(candidate)
+    before = master if scope == "series" else current
+    remote_body = google_event_patch(before, candidate)
+    if "attendees" in remote_body:
+        candidate = merge_google_people(
+            before, candidate, remote_master if scope == "series" else remote
+        )
+        remote_body["attendees"] = google_attendees(candidate)
     if scope == "occurrence":
         remote_body.pop("recurrence", None)
-    remote = patch_event(
-        access_token=token,
-        calendar_id=ref["provider_calendar_id"],
-        event_id=remote_id,
-        event=remote_body,
-        etag=(
-            remote_master.get("etag", "")
-            if scope == "series"
-            else remote.get("etag", "")
-        ),
-        transport=transport,
+    remote = (
+        patch_event(
+            access_token=token,
+            calendar_id=ref["provider_calendar_id"],
+            event_id=remote_id,
+            event=remote_body,
+            etag=(
+                remote_master.get("etag", "")
+                if scope == "series"
+                else remote.get("etag", "")
+            ),
+            transport=transport,
+        )
+        if remote_body
+        else (remote_master if scope == "series" else remote)
     )
     if scope == "series":
         return _mirror_series(
@@ -251,12 +263,18 @@ def mutate_google_occurrence(
             series_remote_id,
             current,
             baseline["events"],
+            local_fields={field: candidate[field] for field in ("category", "tags")},
         )
     # Apply an exception to the master so bounded reads immediately reflect it.
     from recurrence_mutations import mutate_occurrence
 
     accepted = google_event_payload(remote, connection=connection, calendar=calendar)
     exception_patch = {key: accepted[key] for key in patch if key in accepted}
+    for field in ("category", "tags"):
+        if field in patch:
+            exception_patch[field] = candidate[field]
+    if "attendees" in remote_body:
+        exception_patch["attendee_details"] = accepted["attendee_details"]
     exception_patch.update(startTime=accepted["startTime"], endTime=accepted["endTime"])
     return mutate_occurrence(
         data_root,

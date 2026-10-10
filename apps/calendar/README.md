@@ -338,3 +338,53 @@ complete record. Saving waits for complete metadata, protecting provider recurre
 and reminders. Contextual creation also follows the visible day from the shell
 sidebar action. UI behavior is verified with component tests and the official
 frontend build, including the committed distribution assets.
+
+## Event reading, editing and provider metadata
+
+Opening an event shows a reading sheet with civil dates or zoned times, duration,
+calendar/account, write permissions, sync freshness, location, organizer, invitees,
+reminders and safe links to the provider or conference. HTML descriptions are rendered
+through an allowlist of React elements; scripts, embedded media and unsafe URL schemes
+are discarded. The original description remains unchanged for editing. Read-only
+calendars expose reading actions without save, delete or planning controls. Desktop
+and mobile dialogs scroll internally and keep their action footer reachable.
+
+Editing uses focused sections for scheduling, people, description, reminders,
+recurrence and local classification. The final day of an all-day event is inclusive
+in the UI and converted to an exclusive end date in API/provider writes. Toggling
+all-day on and off restores the previous clock and duration; moving the first day
+preserves civil-day duration across daylight-saving changes. Changing the timezone
+preserves civil dates for all-day events and the instant for timed events, with an
+explanation of the resulting clock change.
+
+The participant index `attendees` remains a list of strings for planning and filters.
+`attendee_details` contains structured provider metadata (email, display name,
+response status, optional/self/organizer/resource flags and response details).
+`conference` is a bounded read projection of provider entry points. Google invitee
+edits merge current remote attendee metadata before sending the replacement array;
+new local participants are annotations and do not send invitations. Google writes
+send only changed fields. Original provider color ids are retained, and a title edit
+does not resend invitees, reminders or colors. Category and tags belong to Maverick
+and survive accepted provider responses and subsequent sync. Existing mirrors obtain
+new read metadata on their next provider sync.
+
+Reminders have individual delivery and offset controls; changing one preserves the
+others. Google default reminders disable custom editing until explicitly overridden.
+Recurrence supports interval, weekly days, count or end date, as well as advanced
+rules. Editing ordinary repetition rules retains exclusions and local exceptions.
+Occurrence, future and series scope is explicit. Complex iCalendar patterns stay in
+the advanced editor rather than being flattened into a simpler recurrence.
+
+The editor checks known local conflicts before saving and asks the user to review
+actual overlaps. Revision recovery compares edited fields against the initial and
+latest versions, merges independent edits and identifies fields changed by both
+sides. Saves contain only edited fields plus the routing/revision metadata. The
+existing idempotent create, draft refresh protection and delayed delete undo remain.
+
+Time proposals use an explicit inclusive search-date interval and show the event's
+zone. Draft timing, invitee and preference changes invalidate results and cancel
+obsolete requests. `find_free_time` accepts `all_day: true` and `duration_days`
+(1–366) to find complete civil days without working-hour restrictions; its endpoints
+remain timezone-aware and exclusive. Timed planning continues to respect work hours,
+weekdays and buffers. Availability covers known local events, not complete invitee
+calendars; a successful check cannot rule out unseen remote changes.

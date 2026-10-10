@@ -76,6 +76,12 @@ def google_event_payload(
         ),
         "category": "Google Calendar",
         "attendees": [item for item in attendees if item],
+        "attendee_details": [
+            item
+            for item in remote_event.get("attendees") or []
+            if isinstance(item, dict) and item.get("email")
+        ][:50],
+        "conference": _conference(remote_event),
         "tags": ["google"],
         "source": "google_calendar",
         "external_refs": _external_refs(
@@ -148,8 +154,40 @@ def _external_refs(
         "recurring_event_id": remote_event.get("recurringEventId"),
         "original_start_time": remote_event.get("originalStartTime"),
         "event_type": remote_event.get("eventType") or "default",
+        "provider_color_id": remote_event.get("colorId"),
     }
     return {key: value for key, value in refs.items() if value not in (None, "")}
+
+
+def _conference(remote):
+    data = remote.get("conferenceData") or {}
+    points = [
+        {
+            "type": point.get("entryPointType", "video"),
+            "uri": str(point.get("uri") or "")[:2048],
+            "label": str(point.get("label") or "")[:160],
+        }
+        for point in data.get("entryPoints") or []
+        if isinstance(point, dict) and point.get("uri")
+    ][:2]
+    if not points and remote.get("hangoutLink"):
+        points = [
+            {
+                "type": "video",
+                "uri": str(remote["hangoutLink"])[:2048],
+                "label": "Google Meet",
+            }
+        ]
+    return (
+        {
+            "provider": str(
+                (data.get("conferenceSolution") or {}).get("name") or "Google Meet"
+            )[:160],
+            "entry_points": points,
+        }
+        if points
+        else {}
+    )
 
 
 def _reminders(value: Any) -> list[dict[str, Any]]:

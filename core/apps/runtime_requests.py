@@ -278,6 +278,7 @@ def _apply_one_dependency_backend_request(
             dependency_alias=dependency_alias,
             body=body,
             start_path=start_path,
+            actor_user_id=actor_user_id,
         )
         callback_result = _safe_dependency_backend_request_callback(
             state,
@@ -1157,6 +1158,7 @@ def _invoke_dependency_backend(
     start_path: Path,
     provider_app_id: str | None = None,
     user=None,
+    actor_user_id: str | None = None,
 ) -> dict[str, Any]:
     if not dependency_alias:
         raise AppHostingError("Dependency backend request requires dependency_alias.")
@@ -1237,7 +1239,7 @@ def _invoke_dependency_backend(
             requests=secret_requests,
             surface="backend",
             runtime_session_id="",
-            actor_user_id=None,
+            actor_user_id=actor_user_id or getattr(user, "user_id", None),
             observability_store=getattr(state, "observability_store", None),
             request_context={
                 "surface": "dependency_backend",
@@ -1257,6 +1259,7 @@ def _invoke_dependency_backend(
             "app_id": provider_id,
             "consumer_app_id": app_id,
             "dependency_alias": dependency_alias,
+            "user_id": actor_user_id or getattr(user, "user_id", None),
             "workspace_root": str(paths.root),
             "data_root": binding.data_root,
             "uploaded_storage_root": str(paths.uploaded_storage),
@@ -1495,6 +1498,7 @@ def _invoke_dependency_backend_request_callback(
             "surface": "dependency_backend_request_callback",
             "workspace_id": workspace_id,
             "app_id": app_id,
+            "user_id": actor_user_id,
             "workspace_root": str(paths.root),
             "data_root": data_root,
             "uploaded_storage_root": str(paths.uploaded_storage),

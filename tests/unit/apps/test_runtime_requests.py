@@ -88,8 +88,9 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 workspace_id="default",
                 app_id="sample-consumer",
                 dependency_alias="storage-local-path",
-                body={"action": "file.local_path.resolve"},
+                body={"action": "file.local_path.resolve", "user_id":"user:forged"},
                 start_path=Path(__file__).resolve().parents[3],
+                actor_user_id="user:reader",
             )
 
         payload = captured_payloads[-1]
@@ -100,8 +101,34 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         self.assertEqual(payload["app_id"], "storage")
         self.assertEqual(payload["consumer_app_id"], "sample-consumer")
         self.assertEqual(payload["dependency_alias"], "storage-local-path")
+        self.assertEqual(payload["user_id"], "user:reader")
+        self.assertEqual(payload["body"]["user_id"], "user:forged")
         self.assertTrue(str(payload["uploaded_storage_root"]).endswith("workspaces/default/storage/uploaded"))
         self.assertTrue(str(payload["generated_storage_root"]).endswith("workspaces/default/storage/generated"))
+
+    def test_dependency_callback_preserves_authenticated_actor(self) -> None:
+        state = self._state()
+        state.app_event_bus = None
+        parsed = SimpleNamespace(contract=SimpleNamespace(
+            capabilities=SimpleNamespace(data_events=[]),
+            hook_timeouts=SimpleNamespace(backend_seconds=30),
+        ))
+        with (
+            patch("core.api.sidecar_entrypoint_invocation.run_json_entrypoint_with_sidecars",return_value={"status_code":200,"json":{}}) as invoke,
+            patch.object(runtime_requests,"publish_declared_app_events"),
+            patch.object(runtime_requests,"apply_app_runtime_requests",return_value=[]),
+        ):
+            runtime_requests._invoke_dependency_backend_request_callback(
+                state,callback={"action":"dependency.completed","payload":{"user_id":"forged"}},
+                workspace_id="default",app_id="consumer",source_root=Path("/apps/consumer"),
+                backend_entrypoint="backend/app_backend.py",data_root="workspaces/default/data/consumer",parsed=parsed,
+                request={"body":{"user_id":"forged"}},request_id="request-one",dependency_alias="browser",
+                status="completed",provider_result={"status_code":200,"json":{}},error="",
+                start_path=Path(__file__).resolve().parents[3],actor_user_id="user:alice",
+            )
+        envelope = invoke.call_args.kwargs["payload"]
+        self.assertEqual(envelope["user_id"],"user:alice")
+        self.assertEqual(envelope["surface"],"dependency_backend_request_callback")
 
     def test_dependency_backend_passes_speech_provider_config(self) -> None:
         captured_payloads: list[dict[str, object]] = []
@@ -285,6 +312,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         )
 
         def fake_invoke_dependency_backend(*_args, **_kwargs):
+            self.assertEqual(_kwargs["actor_user_id"], "user:consumer")
             return {
                 "status_code": 200,
                 "dependency_provider_app_id": "storage",
@@ -302,6 +330,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 data_root="workspaces/default/data/sample-consumer",
                 parsed=parsed,
                 start_path=Path(__file__).resolve().parents[3],
+                actor_user_id="user:consumer",
             )
 
         self.assertEqual(runtime_results, [])

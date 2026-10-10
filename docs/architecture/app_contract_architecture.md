@@ -871,6 +871,13 @@ Apps that own runtime-linked metadata opt in separately with `permissions.runtim
 
 Apps may return `dependency_backend_requests` from backend, CLI, MCP, or hook results when they need to call the backend surface of a selected provider for one declared dependency alias. Each request includes a `dependency_alias`, optional `request_id`, app-owned `body`, and optional backend `callback`. The core resolves the consumer's selected provider for that alias, verifies that the selected candidate declares the required interface with the `backend` surface, invokes the provider-owned `surface=secret_selector` preflight with no delivered secrets, resolves only the grant-authorized secret requests declared by that preflight or by an explicit `_app_secret_request`, and then calls the provider backend with `surface=dependency_backend`. Public `dependency_backend_request_results` contain only status metadata and callback status; the provider payload is delivered only to the consumer's backend callback with `surface=dependency_backend_request_callback`. This is the generic app-to-app backend surface for cases such as a processing app resolving a Storage local path through the selected `file.local.path` provider; it is not limited to runtime system prompt materialization.
 
+Dependency provider calls and consumer callbacks receive the initiating authenticated
+`user_id` as a Core-stamped envelope field. Provider secret authorization uses the
+same actor. An app-owned body cannot select or override that identity, and a
+system hook without an initiating actor does not acquire user authority. This
+allows providers such as Browser to enforce user-owned connection leases across
+declared app dependencies without exposing passwords, cookies or connector secrets.
+
 This is the correct boundary for headless app-owned orchestration. For example, a future orchestration app can decide which workflow node is ready and return a runtime request for that node; the core only creates the runtime session/turn and calls that app back with the runtime identifiers. If the app later receives a terminal runtime event, the app decides whether to hand off, stop for a loop exit, or request the next runtime turn.
 
 Backend recovery may invoke a declared app hook such as `backend_recovery` on enabled apps. A hosted backend may also invoke a declared `background_tick` hook periodically for active workspaces. These hooks follow the same rule: they may return generic runtime requests, but all app-specific recovery, scheduling, and orchestration decisions remain inside the app backend.

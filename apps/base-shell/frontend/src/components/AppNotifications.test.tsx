@@ -261,63 +261,73 @@ describe("App notification inbox", () => {
     ).toBe(false);
   });
 
-  it("dispatches advertised actions to their provider and never reports completion after failure", async () => {
-    let fail = true,
-      done = false;
-    const fetchMock = vi.fn(async (_url: string, options: RequestInit) => {
-      const body = JSON.parse(String(options.body));
-      if (body.action === "notifications.action") {
-        expect(body).toMatchObject({ id: "reminder", action_id: "accept" });
-        if (fail) return new Response("{}", { status: 503 });
-        done = true;
+  it.each([
+    { invalidActions: [] },
+    { invalidActions: [null, false, 7, {}, { id: "invalid", label: 9 }] },
+  ])(
+    "dispatches valid actions alongside malformed entries $invalidActions and preserves failures",
+    async ({ invalidActions }) => {
+      let fail = true,
+        done = false;
+      const fetchMock = vi.fn(async (_url: string, options: RequestInit) => {
+        const body = JSON.parse(String(options.body));
+        if (body.action === "notifications.action") {
+          expect(body).toMatchObject({ id: "reminder", action_id: "accept" });
+          if (fail) return new Response("{}", { status: 503 });
+          done = true;
+          return new Response(
+            JSON.stringify({
+              notification: { ...notice, action_done: "Accettato", read: true },
+            }),
+          );
+        }
         return new Response(
           JSON.stringify({
-            notification: { ...notice, action_done: "Accettato", read: true },
+            notifications: [
+              {
+                ...notice,
+                action_done: done ? "Accettato" : undefined,
+                read: done,
+                actions: [
+                  ...invalidActions,
+                  { id: "accept", label: "Accetta", done: "Accettato" },
+                ],
+              },
+            ],
+            total: 1,
+            unread_total: done ? 0 : 1,
+            capabilities: { actions: true },
           }),
         );
-      }
-      return new Response(
-        JSON.stringify({
-          notifications: [
-            {
-              ...notice,
-              action_done: done ? "Accettato" : undefined,
-              read: done,
-              actions: [{ id: "accept", label: "Accetta", done: "Accettato" }],
-            },
-          ],
-          total: 1,
-          unread_total: done ? 0 : 1,
-          capabilities: { actions: true },
-        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      await act(async () =>
+        root.render(
+          <AppNotifications
+            apps={[provider]}
+            scope={scope}
+            onOpenApp={() => {}}
+            children={renderInbox}
+            placement="sidebar"
+          />,
+        ),
       );
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    await act(async () =>
-      root.render(
-        <AppNotifications
-          apps={[provider]}
-          scope={scope}
-          onOpenApp={() => {}}
-          children={renderInbox}
-          placement="sidebar"
-        />,
-      ),
-    );
-    await flush();
-    await click("Notifiche");
-    await click("Accetta");
-    expect(host.querySelector("[data-done]")).toBeNull();
-    expect(host.querySelector("[data-action]")).not.toBeNull();
-    expect(host.querySelector('[role="alert"]')).not.toBeNull();
-    fail = false;
-    await click("Accetta");
-    await flush();
-    expect(host.querySelector("[data-done]")?.textContent).toContain(
-      "Accettato",
-    );
-    expect(host.querySelector("[data-action]")).toBeNull();
-  });
+      await flush();
+      await click("Notifiche");
+      expect(host.querySelectorAll("[data-action]")).toHaveLength(1);
+      await click("Accetta");
+      expect(host.querySelector("[data-done]")).toBeNull();
+      expect(host.querySelector("[data-action]")).not.toBeNull();
+      expect(host.querySelector('[role="alert"]')).not.toBeNull();
+      fail = false;
+      await click("Accetta");
+      await flush();
+      expect(host.querySelector("[data-done]")?.textContent).toContain(
+        "Accettato",
+      );
+      expect(host.querySelector("[data-action]")).toBeNull();
+    },
+  );
 
   it("retains only failed cards when bulk dismissal partially fails", async () => {
     let removed = false;

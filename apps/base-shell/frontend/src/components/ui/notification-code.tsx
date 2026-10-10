@@ -104,7 +104,7 @@ export function CodeDetail({
           ref={slotsRef}
           role="img"
           aria-label={`Codice ${digits.join(" ")}`}
-          className="flex items-center gap-1"
+          className="flex max-w-full flex-wrap items-center gap-1"
         >
           {digits.map((digit, i) => (
             <React.Fragment key={i}>
@@ -113,7 +113,7 @@ export function CodeDetail({
               )}
               <span
                 className={cx(
-                  "grid h-8 w-6 place-items-center rounded-md border border-border bg-background font-mono text-base font-semibold text-foreground",
+                  "grid h-8 w-6 shrink-0 place-items-center rounded-md border border-border bg-background font-mono text-base font-semibold text-foreground",
                   expired && "opacity-40",
                 )}
               >

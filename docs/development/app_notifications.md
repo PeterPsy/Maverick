@@ -82,6 +82,10 @@ namespaces them and merges providers by `created_at`, falling back to
   updated public `notification` with optional `action_done` when appropriate,
   and publish the resource event. Unsupported actions are hidden.
 
+The shell filters malformed action entries once and uses that same list for
+rendering and dispatch. Each valid entry needs string `id` and `label` fields;
+an invalid entry must not block the remaining valid actions.
+
 The shell only removes a card after successful dismissal and only shows action
 completion confirmed by the provider. Failed writes preserve the card and offer
 retry. “Chiudi visibili” dismisses the displayed rows; it does not silently
@@ -108,6 +112,8 @@ malformed kinds display a generic card with the app's title/body/navigation.
 
 Use absolute `expires_at` for real codes so closing/reopening or replaying a
 card cannot extend its expiry. Producers choose safe, useful preview content.
+Codes support up to 20 characters; the detail wraps into additional rows when
+needed so every character remains readable at narrow viewport widths.
 Never expose credentials or hidden private fields merely to fill a detail.
 Calendar is the current built-in provider: it produces real calendar detail,
 trusted-user read receipts, and idempotent dismissal. Its domain has no inbox
@@ -125,8 +131,9 @@ Existing shell primitives stay in `frontend/src/ui`.
 React 19 and TypeScript already exist. `components.json`, the `@` alias,
 Tailwind's Vite plugin, and app-local theme mapping are installed. Feed styles
 live in `frontend/src/styles/notification-feed.css`, imported separately by `main.tsx`;
-utilities scan `components/ui` and omit the global Preflight reset according to
-the [Tailwind integration guidance](https://tailwindcss.com/docs/preflight#disabling-preflight).
+utilities scan `components/ui` and the `AppNotifications.tsx` adapter (including
+the registry logo's `object-contain`) and omit the global Preflight reset
+according to the [Tailwind integration guidance](https://tailwindcss.com/docs/preflight#disabling-preflight).
 Lucide supplies glyphs; app identity images come from the registry. No stock
 photos or context providers are required.
 
@@ -136,12 +143,16 @@ provided eight-kind sample and autoplay loop are kept in
 `live-notification-feed.demo.tsx`; demo data and decorative backgrounds are not
 mounted in the product. Production autoplay stays off. New arrivals animate,
 reduced motion shows final detail immediately, and mobile touch retains visible
-dismiss controls. The popover lives in the browser top layer and supports
-keyboard focus, Escape, outside dismissal, and viewport constraints.
+dismiss controls. Same-id calendar date updates restart the decorative sheet
+animation so the replacement sheets reveal the current date. The popover lives
+in the browser top layer and supports keyboard focus, Escape, outside dismissal,
+and viewport constraints.
 
 Verify arrivals while another app is active, repeated events/reconnect, provider
 disablement, desktop/mobile (including 320px), light/dark themes, read-all beyond
 a page, duplicate ids across providers, unsupported capabilities, failed writes,
-actor/workspace isolation, and opening the app through `open_params`. Do not
-claim a producer is integrated until it emits a real notification through this
-surface.
+actor/workspace isolation, same-id calendar date changes after arrival, codes of
+6/8/20 characters with per-character clipping checks, rectangular registry logos,
+malformed entries alongside valid actions, and opening the app through
+`open_params`. Do not claim a producer is integrated until it emits a real
+notification through this surface.

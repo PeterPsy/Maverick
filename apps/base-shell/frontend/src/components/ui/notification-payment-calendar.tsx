@@ -199,7 +199,7 @@ export function CalendarDetail({
     );
     return () =>
       [...tears, ...pops].forEach((animation) => animation?.cancel());
-  }, [play, animate, delay]);
+  }, [play, animate, delay, event]);
   return (
     <div data-detail="calendar" className="flex items-center gap-3">
       <div

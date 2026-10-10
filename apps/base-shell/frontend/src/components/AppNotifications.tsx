@@ -48,6 +48,15 @@ export function AppNotifications({
         inbox,
         notice,
         key: noticeKey(inbox.appId, notice.id),
+        actions:
+          inbox.capabilities.actions && Array.isArray(notice.actions)
+            ? notice.actions.filter(
+                (action) =>
+                  action &&
+                  typeof action.id === "string" &&
+                  typeof action.label === "string",
+              )
+            : [],
       })),
     )
     .sort(
@@ -56,7 +65,7 @@ export function AppNotifications({
         a.key.localeCompare(b.key),
     );
   const visible = notices.slice(0, limit);
-  const items = [...visible].reverse().map(({ inbox, notice, key }) =>
+  const items = [...visible].reverse().map(({ inbox, notice, key, actions }) =>
     notificationPresentation(
       {
         id: key,
@@ -88,15 +97,7 @@ export function AppNotifications({
               {inbox.logo.value}
             </span>
           ) : undefined,
-        actions:
-          inbox.capabilities.actions && Array.isArray(notice.actions)
-            ? notice.actions.filter(
-                (action) =>
-                  action &&
-                  typeof action.id === "string" &&
-                  typeof action.label === "string",
-              )
-            : undefined,
+        actions,
       },
       notice.presentation,
     ),
@@ -164,7 +165,7 @@ export function AppNotifications({
             }}
             onAction={(id, label, actionId) => {
               const entry = visible.find((value) => value.key === id);
-              const action = entry?.notice.actions?.find(
+              const action = entry?.actions.find(
                 (value) => value.id === actionId && value.label === label,
               );
               if (!entry?.inbox.capabilities.actions || !action) return;

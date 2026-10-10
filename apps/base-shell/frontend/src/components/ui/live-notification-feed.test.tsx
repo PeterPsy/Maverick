@@ -41,6 +41,52 @@ const advance = (ms: number) =>
     await vi.advanceTimersByTimeAsync(ms);
   });
 
+it("animates replacement calendar sheets after a same-id date update", async () => {
+  const animate = vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation);
+  const originalAnimate = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "animate",
+  );
+  Object.defineProperty(HTMLElement.prototype, "animate", {
+    configurable: true,
+    value: animate,
+  });
+  try {
+    const calendar: LiveNotification = {
+      id: "calendar",
+      kind: "calendar",
+      app: "Calendar",
+      title: "Appointment",
+      date: "2026-10-15",
+    };
+    await act(async () => root.render(<LiveNotificationFeed items={[]} />));
+    await act(async () =>
+      root.render(<LiveNotificationFeed items={[calendar]} />),
+    );
+    const previous = Array.from(host.querySelector("[data-sheets]")!.children);
+    expect(previous.every((sheet) => animate.mock.contexts.includes(sheet))).toBe(
+      true,
+    );
+    await advance(1500);
+    await act(async () =>
+      root.render(
+        <LiveNotificationFeed items={[{ ...calendar, date: "2026-10-20" }]} />,
+      ),
+    );
+    expect(host.querySelector('[aria-label="2026-10-20"]')).not.toBeNull();
+    const current = Array.from(host.querySelector("[data-sheets]")!.children);
+    expect(current).toHaveLength(4);
+    expect(current.every((sheet) => !previous.includes(sheet))).toBe(true);
+    expect(current.every((sheet) => animate.mock.contexts.includes(sheet))).toBe(
+      true,
+    );
+  } finally {
+    if (originalAnimate)
+      Object.defineProperty(HTMLElement.prototype, "animate", originalAnimate);
+    else Reflect.deleteProperty(HTMLElement.prototype, "animate");
+  }
+});
+
 it("replays appended demo arrivals, pauses for focus and restarts the loop", async () => {
   await act(async () =>
     root.render(

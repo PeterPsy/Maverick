@@ -12,12 +12,19 @@ vi.mock('react-dom/client', async (original) => {
   return { ...actual, createRoot: vi.fn(actual.createRoot) };
 });
 
-it('toggles real sidebar checkboxes cumulatively, including rapid clicks, without refetching', async () => {
+it.each(['gmail', 'imap_smtp'])('toggles sidebar filters without refetching and continues bounded %s sync', async (provider) => {
+  vi.resetModules();
+  vi.clearAllMocks();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  const accounts = [{ id: 'a', provider: 'gmail', email_address: 'a@example.com', display_name: 'Account A', status: 'connected' }];
+  const accounts = [{ id: 'a', provider, email_address: 'a@example.com', display_name: 'Account A', status: 'connected' }];
   vi.mocked(readMailDisplay).mockResolvedValue({ items: accounts });
   vi.mocked(callBackend).mockImplementation(async (params) => {
     if (params.action === 'threads.sync') {
+      if (provider === 'imap_smtp') {
+        return params.continue_cursor
+          ? { sync: { synced_messages: 0, checked_flag_messages: 15, has_more: false } }
+          : { sync: { synced_messages: 1, checked_flag_messages: 24, has_more: true } };
+      }
       return params.continue_cursor
         ? { sync: { synced_threads: 15, has_more: false } }
         : { sync: { synced_threads: 25, has_more: true } };

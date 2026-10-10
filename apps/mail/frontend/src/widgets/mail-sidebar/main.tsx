@@ -64,6 +64,7 @@ type SyncPayload = {
     has_more?: boolean;
     synced_messages?: number;
     synced_threads?: number;
+    checked_flag_messages?: number;
   };
 };
 
@@ -299,8 +300,9 @@ function MailSidebarWidget() {
         ...connectionSecretRequest(targetConnection)
       });
       let synced = recent.sync?.synced_messages ?? recent.sync?.synced_threads ?? 0;
+      let checkedFlags = recent.sync?.checked_flag_messages ?? 0;
       let hasMore = Boolean(recent.sync?.has_more);
-      if (targetConnection.provider === 'gmail' && hasMore) {
+      if (hasMore) {
         const backfill = await callBackend<SyncPayload>({
           action: MAIL_BACKEND_ACTIONS.threadsSync,
           connection_id: targetConnection.id,
@@ -309,13 +311,14 @@ function MailSidebarWidget() {
           ...connectionSecretRequest(targetConnection)
         });
         synced += backfill.sync?.synced_messages ?? backfill.sync?.synced_threads ?? 0;
+        checkedFlags += backfill.sync?.checked_flag_messages ?? 0;
         hasMore = Boolean(backfill.sync?.has_more);
       }
       const refreshed = await refresh({ preserveNotice: true });
       if (refreshed) {
         setNotice(hasMore
-          ? `Synced ${synced} messages. Sync again to continue loading older mail.`
-          : `Account sync completed (${synced} messages checked).`);
+          ? `Synced ${synced} messages. Sync again to continue loading mail and updating its status.`
+          : `Account sync completed (${synced + checkedFlags} messages checked).`);
       } else {
         setNotice('Sync completed. Refresh the view if the list is stale.');
       }

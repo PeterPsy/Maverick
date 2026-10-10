@@ -35,7 +35,8 @@ On narrow screens, opening a thread or draft replaces the list with the reader;
 the close control restores the retained list and its filters.
 
 The Drafts mailbox combines provider-synchronized draft threads with Mail's own
-local, unsent draft records. Local drafts are read through the live-only
+local drafts, including pending, partial and uncertain submission results.
+Local drafts are read through the live-only
 `drafts.list` and `drafts.get` backend actions, are never written into the PWA
 display cache, and open in a clearly labeled no-send preview. Draft counters add
 both sources, while `drafts.create` remains local-only and never sends or
@@ -108,8 +109,21 @@ The recent high-water UID and historical `backfill_before` boundary are separate
 Head refreshes fetch new UIDs; `continue_cursor=true` also loads older UIDs newest
 first without skipping them. Folder turns rotate across batches, `has_more` covers
 both backfill and queued updates, and `persist_cursor=false` preserves cursors.
-UID inventories reconcile deletions and UIDVALIDITY resets; bounded flag fetches
-refresh already-cached read/starred state. Thread labels, unread state,
+UID inventories reconcile deletions and UIDVALIDITY resets. Folder selection
+requires the real IMAP UIDVALIDITY response code and a valid, positive 32-bit
+value; absent or invalid values fail before using that folder's UIDs. Read-state
+mutations, moves and attachment reads also check the cached UIDVALIDITY before
+using a cached UID, and require synchronization when it changed.
+`max_threads` is the shared UID work budget for message fetches and cached flag
+refreshes, including a reconnect attempt. Each call inventories at most 10
+folders per attempt (fewer with a smaller budget), rotating across calls. Flag
+sweeps persist their upper UID boundary and last checked UID; pages contain at
+most 200 UIDs and consume only the remaining budget. Message and flag work share
+the budget, alternating when it is one UID. `has_more` includes uninspected
+folders and unfinished flag sweeps. Unchanged flags cause no message, thread or
+search-index writes. The sidebar performs one bounded continuation batch for
+either provider, and sync notices distinguish pending updates from completion.
+Thread labels, unread state,
 participants and date/snippet are aggregated from every remaining message. Sync
 uses BODY.PEEK with a 32 MiB message limit, so reading does not mark mail seen.
 Attachment fetches reject known oversize attachments before opening a connection,
@@ -150,6 +164,11 @@ SMTP results expose accepted recipients and refused addresses with SMTP codes.
 inbox delivery. `local_warnings` report subsequent local failures separately.
 A crash between claiming/submitting and recording the result can leave `sending`;
 Mail conservatively blocks another attempt until provider evidence is reconciled.
+The draft reader displays the persisted delivery state. Partial results list
+accepted and refused recipients with SMTP refusal codes; `unknown` explicitly
+states that acceptance is unconfirmed and the message may already have been
+submitted. `sending` also remains pending, including after a crash. These states
+are never presented as an unsent draft.
 
 The HTML iframe has a dedicated CSP denying scripts, connections, frames, objects,
 forms and base-URL changes. Inline style and image sources are allowed for the
@@ -189,7 +208,8 @@ The regression suite uses temporary databases, simulated providers and a local
 TLS server. For desktop/mobile verification without mailbox access, run
 `python3 apps/mail/tests/mail_ui_fixture_server.py --port 8000` and open
 `http://maverick.localhost:8000/apps/mail/` in the approved development inspector.
-The fixture serves 251 synthetic threads, 205 drafts and a wide HTML message;
+The fixture serves 251 synthetic threads, 205 drafts (including partial, unknown
+and sending states with simulated recipient outcomes), and a wide HTML message;
 all backend mutations return 405. Stop the fixture server after verification.
 Frontend build tools include Vitest 4.1.11 and patched transitive dependencies.
 

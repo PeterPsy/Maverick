@@ -69,6 +69,7 @@ class TransportSecurityTest(unittest.TestCase):
         deleted = {99}
         client = Mock(capabilities=(b"UIDPLUS",))
         client.select.return_value = ("OK", [])
+        client.response.return_value = ("UIDVALIDITY", [b"42"])
         def uid(command, value, *args):
             if command == "MOVE":
                 return "NO", []
@@ -78,7 +79,7 @@ class TransportSecurityTest(unittest.TestCase):
                 deleted.discard(int(value))
             return "OK", []
         client.uid.side_effect = uid
-        imap_smtp._move_message(client, "INBOX", 7, "Trash")
+        imap_smtp._move_message(client, "INBOX", 7, "Trash", expected_uidvalidity="42")
         self.assertEqual(deleted, {99})
         client.expunge.assert_not_called()
         client.uid.assert_any_call("EXPUNGE", "7")
@@ -86,8 +87,9 @@ class TransportSecurityTest(unittest.TestCase):
     def test_unsupported_safe_move_does_not_copy_or_delete(self):
         client = Mock(capabilities=())
         client.select.return_value = ("OK", [])
+        client.response.return_value = ("UIDVALIDITY", [b"42"])
         client.uid.return_value = ("NO", [])
         with self.assertRaisesRegex(ValueError, "MOVE or UIDPLUS"):
-            imap_smtp._move_message(client, "INBOX", 7, "Trash")
+            imap_smtp._move_message(client, "INBOX", 7, "Trash", expected_uidvalidity="42")
         self.assertEqual(client.uid.call_count, 1)
         client.expunge.assert_not_called()

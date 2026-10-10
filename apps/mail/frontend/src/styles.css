@@ -1054,6 +1054,45 @@ p {
   font-size: 0.78rem;
 }
 
+.draft-reader__status[data-state="partially_sent"],
+.draft-reader__status[data-state="unknown"],
+.draft-reader__status[data-state="sending"] {
+  color: var(--maverick-warning);
+}
+
+.draft-reader__status[data-state="failed"] {
+  color: var(--maverick-danger);
+}
+
+.draft-reader .message-meta div {
+  grid-template-columns: 4.2rem minmax(0, 1fr);
+}
+
+.draft-delivery {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: var(--maverick-control-radius);
+  background: var(--mail-control);
+  color: var(--maverick-text-muted);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.draft-delivery h2 {
+  margin: 0 0 4px;
+  color: var(--maverick-text);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.draft-delivery ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .reader-view-actions,
 .reader-thread-actions {
   display: inline-flex;

@@ -120,15 +120,19 @@ class ImapSmtpProvider:
         connection_id = _required_string(connection_id, "connection_id")
         settings = _connection_settings(data_root, connection_id)
         password = _imap_password(app_secrets)
-        from .imap_sync import sync_mailbox
+        from .imap_sync import SyncBudget, sync_mailbox
+        max_work = _bounded_int(max_threads, 100, 1, 2000)
+        budget = SyncBudget(max_work)
         for attempt in range(2):
             try:
-                return sync_mailbox(self, data_root, connection_id, settings, password,
-                                    max_total=_bounded_int(max_threads, 100, 1, 2000),
-                                    continue_cursor=continue_cursor, persist_cursor=persist_cursor)
+                result = sync_mailbox(self, data_root, connection_id, settings, password,
+                                      budget=budget,
+                                      continue_cursor=continue_cursor, persist_cursor=persist_cursor)
+                result["work_units"] = max_work - budget.remaining
+                return result
             except (imaplib.IMAP4.abort, TimeoutError, ConnectionError):
-                if attempt:
-                    raise ProviderError("IMAP read failed after reconnecting", code="provider_connection_failed") from None
+                if attempt or not budget.remaining:
+                    raise ProviderError("IMAP read could not complete within the sync attempt budget", code="provider_connection_failed") from None
                 time.sleep(0.1)
 
     def send_draft(
@@ -216,9 +220,7 @@ class ImapSmtpProvider:
             for message in thread.get("messages", []):
                 folder, uid = _message_location(message)
                 if folder and uid:
-                    typ, _ = client.select(f'"{folder}"', readonly=False)
-                    if str(typ).upper() != "OK":
-                        raise ProviderError("IMAP folder selection failed", code="provider_protocol_error")
+                    _select_folder(client, folder, readonly=False, expected_uidvalidity=_message_uidvalidity(message))
                     typ, _ = client.uid("STORE", str(uid), "+FLAGS.SILENT" if read else "-FLAGS.SILENT", r"(\Seen)")
                     if str(typ).upper() != "OK":
                         raise ProviderError("IMAP read-state update failed", code="provider_protocol_error")
@@ -258,7 +260,7 @@ class ImapSmtpProvider:
             for message in thread.get("messages", []):
                 folder, uid = _message_location(message)
                 if folder and uid:
-                    _move_message(client, folder, uid, target_folder["name"])
+                    _move_message(client, folder, uid, target_folder["name"], expected_uidvalidity=_message_uidvalidity(message))
         labels = set(str(item).lower() for item in thread.get("labels", []))
         labels.update(add_values)
         labels.difference_update(remove_values)
@@ -303,10 +305,11 @@ class ImapSmtpProvider:
         if not folder or not uid:
             return {**metadata, "status": "invalid_payload", "detail": "Attachment location metadata is unavailable."}
         thread = get_thread(data_root, str(attachment["thread_id"]), max_body_chars=200)
+        cached_message = next(message for message in thread["messages"] if message["id"] == attachment["message_id"])
         settings = _connection_settings(data_root, str(thread["connection_id"]))
         with self._imap(settings) as client:
             _imap_login(client, str(settings["username"]), _imap_password(app_secrets))
-            client.select(f'"{folder}"', readonly=True)
+            _select_folder(client, folder, readonly=True, expected_uidvalidity=_message_uidvalidity(cached_message))
             try:
                 raw = _fetch_message_bytes(client, uid, max_bytes=max_bytes * 2 + 1024 * 1024)
             except ValueError:
@@ -784,13 +787,25 @@ def _refused_recipients(refused):
 
 
 def _uidvalidity(client: object) -> str:
+    typ, rows = client.response("UIDVALIDITY")
     try:
-        typ, rows = client.response("UIDVALIDITY")
-        if str(typ).upper() == "OK" and rows:
-            return str(rows[0].decode("ascii") if isinstance(rows[0], bytes) else rows[0])
-    except Exception:
-        pass
-    return ""
+        values = {int(value.decode("ascii") if isinstance(value, bytes) else str(value)) for value in rows or []}
+    except (ValueError, UnicodeError):
+        values = set()
+    if str(typ).upper() != "UIDVALIDITY" or len(values) != 1 or not 0 < next(iter(values)) <= 0xFFFFFFFF:
+        raise ProviderError("IMAP UIDVALIDITY is missing or invalid; this folder cannot be synchronized safely", code="provider_uidvalidity_missing")
+    return str(values.pop())
+
+
+def _select_folder(client, folder, *, readonly=True, expected_uidvalidity=None):
+    quoted = '"' + folder.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    typ, _ = client.select(quoted, readonly=readonly)
+    if str(typ).upper() != "OK":
+        raise ProviderError("IMAP folder selection failed", code="provider_protocol_error")
+    validity = _uidvalidity(client)
+    if expected_uidvalidity is not None and validity != expected_uidvalidity:
+        raise ProviderError("IMAP UIDVALIDITY changed; synchronize the mailbox before using cached UIDs", code="provider_uidvalidity_changed")
+    return validity
 
 
 def _uid_values(data: object) -> list[int]:
@@ -842,13 +857,18 @@ def _message_location(message: object) -> tuple[str, int | None]:
     if not isinstance(message, dict):
         return "", None
     provider_message_id = str(message.get("provider_message_id") or "")
-    parts = provider_message_id.split(":")
+    parts = provider_message_id.rsplit(":", 2)
     if len(parts) < 3:
         return "", None
     try:
         return parts[0], int(parts[-1])
     except ValueError:
         return parts[0], None
+
+
+def _message_uidvalidity(message):
+    parts = str(message.get("provider_message_id") or "").rsplit(":", 2)
+    return parts[1] if len(parts) == 3 else ""
 
 
 def _attachment_location(value: str) -> tuple[str, int | None, int]:
@@ -968,10 +988,8 @@ def _folder_by_canonical(folders: list[dict[str, str]], canonical: str) -> dict[
     return next((folder for folder in folders if folder.get("canonical") == canonical), None)
 
 
-def _move_message(client: object, source_folder: str, uid: int, target_folder: str) -> None:
-    typ, _ = client.select(f'"{source_folder}"', readonly=False)
-    if str(typ).upper() != "OK":
-        raise ValueError("IMAP server rejected the source folder")
+def _move_message(client: object, source_folder: str, uid: int, target_folder: str, *, expected_uidvalidity: str) -> None:
+    _select_folder(client, source_folder, readonly=False, expected_uidvalidity=expected_uidvalidity)
     try:
         typ, _data = client.uid("MOVE", str(uid), f'"{target_folder}"')
     except imaplib.IMAP4.error:

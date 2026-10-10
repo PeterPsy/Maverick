@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "b3c479e8004673657eafa730f2c92099388a9964e9d038aba4ef538ca60dbcda",
+  "build_id": "89fbf50256c43a9784b3846fb0e4539f1daa062eb0da73c22f0a6ea0dbbf5024",
   "entrypoints": [
     "index.html",
     "widgets/mail-sidebar/index.html",
@@ -8,14 +8,14 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-DZK62E-S.css",
-      "sha256": "5a7793da930b7bdd57e39fb1a52f25482dd7e3aa970ded70bfc335126a564bd6",
-      "size_bytes": 23910
+      "path": "assets/app-C2BPDCtI.css",
+      "sha256": "872614c83d6045f7fe6c162776dc6d9ef1e35483a22da492a8a2b08fbb8ff40f",
+      "size_bytes": 24625
     },
     {
-      "path": "assets/app-VA9oXj5u.js",
-      "sha256": "4032fe69cb9f90ba04172f7eee40ef62c63a9ddc70c2784125d2300bbfcdb5c0",
-      "size_bytes": 41231
+      "path": "assets/app-C2xu6OwW.js",
+      "sha256": "ed6b5e71906f1943dc81f7c8da57552ec5694ce9836cebffb8edd00b969ea3cc",
+      "size_bytes": 42995
     },
     {
       "path": "assets/createLucideIcon-CwCer74m.js",
@@ -38,9 +38,9 @@
       "size_bytes": 35577
     },
     {
-      "path": "assets/widgets/mail-sidebar/index-KLEpH-R4.js",
-      "sha256": "59c7b97760214d830e5f54c7e0060b55b18d77eed7c393ad61eefd0de04ed5eb",
-      "size_bytes": 142515
+      "path": "assets/widgets/mail-sidebar/index-D65n3Hcw.js",
+      "sha256": "6c7a77af1237a434f788cb79d039e066d0c0501883bfb427fc0ad637846de99b",
+      "size_bytes": 142584
     },
     {
       "path": "assets/widgets/mail-sidebar-footer/index-CR-QvGq2.js",
@@ -51,12 +51,12 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "128a8ba0ec38c8df96cee10a9eb5fedea583329f61a016770f8278241bef09ca",
+      "sha256": "80573fd0b874793818fc364be435b2a7dd811f3ababf3b934251fb3027b1dd58",
       "size_bytes": 599
     },
     {
       "path": "widgets/mail-sidebar/index.html",
-      "sha256": "04cab9a779e7daf57819998f5214916b0803e87b7c90b4071d624e7f5401b7b5",
+      "sha256": "71a33e7c41eb949cc9ee230d090a7e9d11949a36a217e568038e43b029d824aa",
       "size_bytes": 645
     },
     {

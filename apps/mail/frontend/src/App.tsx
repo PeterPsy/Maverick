@@ -73,6 +73,7 @@ type SyncPayload = {
     synced_messages?: number;
     synced_threads?: number;
     synced_at?: string;
+    has_more?: boolean;
   };
 };
 
@@ -1109,7 +1110,9 @@ export function App() {
         ...connectionSecretRequest(connection)
       });
       const synced = payload.sync?.synced_messages ?? payload.sync?.synced_threads ?? 0;
-      setNotice(synced > 0 ? `Synced ${synced} message${synced === 1 ? '' : 's'}.` : 'Sync completed. No new messages found.');
+      setNotice(payload.sync?.has_more
+        ? `Synced ${synced} message${synced === 1 ? '' : 's'}. More mail updates remain.`
+        : synced > 0 ? `Synced ${synced} message${synced === 1 ? '' : 's'}.` : 'Sync completed. No new messages found.');
       await loadThreads();
     } catch (error) {
       setNotice((error as Error).message);

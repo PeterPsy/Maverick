@@ -2,6 +2,7 @@
 
 from email.message import EmailMessage
 from io import BytesIO
+import imaplib
 from pathlib import Path
 import sys
 import tempfile
@@ -39,15 +40,22 @@ class FakeImap:
         self.folders = {"INBOX": set(range(1, 31)), "Sent": {1}}
         self.folder = "INBOX"
         self.validity = "42"
+        self.debug = 0
+        self.untagged_responses = {}
+        self.calls = []
+        self.message_version = ""
 
     def login(self, *args): return "OK", []
     def list(self): return "OK", [f'(\\HasNoChildren) "/" "{name}"'.encode() for name in self.folders]
     def select(self, folder, readonly=True):
         self.folder = folder.strip('"')
+        self.untagged_responses["UIDVALIDITY"] = [self.validity.encode()] if self.validity else [None]
         return "OK", []
-    def response(self, code): return "OK", [self.validity.encode()]
+    response = imaplib.IMAP4.response
+    _untagged_response = imaplib.IMAP4._untagged_response
     def logout(self): return "OK", []
     def uid(self, command, *args):
+        self.calls.append((self.folder, command, args))
         if command == "SEARCH":
             ids = self.folders[self.folder]
             if args[1] == "UID":
@@ -55,7 +63,7 @@ class FakeImap:
             return "OK", [" ".join(map(str, sorted(ids))).encode()]
         if args[1] == "(UID FLAGS)":
             return "OK", [f'1 (UID {uid} FLAGS (\\Seen))'.encode() for uid in args[0].split(",")]
-        return "OK", [(b"1 (FLAGS ())", mime(f"{self.folder}-{args[0]}"))]
+        return "OK", [(b"1 (FLAGS ())", mime(f"{self.folder}-{args[0]}{self.message_version}"))]
 
 
 class SyncRegressionTest(unittest.TestCase):
@@ -68,6 +76,51 @@ class SyncRegressionTest(unittest.TestCase):
             for provider in ("gmail", "imap_smtp"):
                 db.execute("INSERT INTO connections(id, provider, email_address, display_name, status, settings_json, created_at, updated_at) VALUES (?, ?, 'me@example.com', 'Me', 'connected', ?, ?, ?)", (provider, provider, '{"username":"me@example.com"}', now_timestamp(), now_timestamp()))
         self.secrets = {"mailbox-password": "fake", "gmail-oauth-client-id": "fake", "gmail-oauth-client-secret": "fake", "gmail-refresh-token": "fake"}
+
+    def test_uidvalidity_reset_replaces_reused_uids(self):
+        client = FakeImap()
+        client.folders = {"INBOX": {7}}
+        provider = ImapSmtpProvider(imap_factory=lambda _: client)
+        provider.sync_incremental(self.root, "imap_smtp", app_secrets=self.secrets, max_threads=1)
+        old = list_threads(self.root, {"connection_id": "imap_smtp"})[0]
+        client.validity, client.message_version = "99", "-replacement"
+        provider.sync_incremental(self.root, "imap_smtp", app_secrets=self.secrets, max_threads=1)
+        new = list_threads(self.root, {"connection_id": "imap_smtp"})
+        self.assertEqual(len(new), 1)
+        self.assertNotEqual(new[0]["id"], old["id"])
+        self.assertIn("replacement", new[0]["subject"])
+        self.assertEqual(get_thread(self.root, new[0]["id"])["messages"][0]["provider_message_id"], "INBOX:99:7")
+        with self.assertRaises(ValueError):
+            get_thread(self.root, old["id"])
+
+    def test_missing_uidvalidity_preserves_cached_messages_and_cursor(self):
+        client = FakeImap()
+        client.folders = {"INBOX": {7}}
+        provider = ImapSmtpProvider(imap_factory=lambda _: client)
+        provider.sync_incremental(self.root, "imap_smtp", app_secrets=self.secrets, max_threads=1)
+        with connect(self.root) as db:
+            previous = db.execute("SELECT cursor FROM sync_state WHERE connection_id='imap_smtp'").fetchone()[0]
+        client.validity = ""
+        client.calls.clear()
+        with self.assertRaisesRegex(ValueError, "UIDVALIDITY"):
+            provider.sync_incremental(self.root, "imap_smtp", app_secrets=self.secrets, max_threads=1)
+        self.assertFalse(client.calls)
+        with connect(self.root) as db:
+            self.assertEqual(db.execute("SELECT cursor FROM sync_state WHERE connection_id='imap_smtp'").fetchone()[0], previous)
+            self.assertEqual(db.execute("SELECT provider_message_id FROM messages").fetchone()[0], "INBOX:42:7")
+
+    def test_stale_uidvalidity_blocks_read_state_mutation(self):
+        client = FakeImap()
+        client.folders = {"INBOX": {7}}
+        provider = ImapSmtpProvider(imap_factory=lambda _: client)
+        provider.sync_incremental(self.root, "imap_smtp", app_secrets=self.secrets, max_threads=1)
+        thread = list_threads(self.root, {"connection_id": "imap_smtp"})[0]
+        client.validity = "99"
+        client.calls.clear()
+        with self.assertRaisesRegex(ValueError, "UIDVALIDITY"):
+            provider.mark_read(self.root, thread["id"], app_secrets=self.secrets)
+        self.assertFalse(any(command == "STORE" for _, command, _ in client.calls))
+        self.assertTrue(get_thread(self.root, thread["id"])["unread"])
 
     def test_imap_backfill_visits_all_uids_and_folders_without_skips(self):
         client = FakeImap()

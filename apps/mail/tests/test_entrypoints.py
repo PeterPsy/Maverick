@@ -360,7 +360,7 @@ class MailServiceTest(unittest.TestCase):
                 return "OK", [b"1"]
 
             def response(self, code: str):
-                return "OK", [b"42"]
+                return "UIDVALIDITY", [b"42"]
 
             def uid(self, command: str, *args):
                 if command == "SEARCH":
@@ -515,7 +515,7 @@ class MailServiceTest(unittest.TestCase):
                 return "OK", [b"2"]
 
             def response(self, code: str):
-                return "OK", [b"42"]
+                return "UIDVALIDITY", [b"42"]
 
             def uid(self, command: str, *args):
                 if command == "SEARCH":

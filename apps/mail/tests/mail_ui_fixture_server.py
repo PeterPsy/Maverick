@@ -25,6 +25,11 @@ DRAFTS = [{
     "to": [{"email": "recipient@example.com"}], "body_text": "Synthetic draft. Never sent.",
     "status": "draft", "created_at": "2026-10-10T12:00:00Z", "updated_at": "2026-10-10T12:00:00Z",
 } for index in range(205)]
+for index, status in enumerate(("partially_sent", "unknown", "sending")):
+    DRAFTS[index].update(status=status, body_text="Synthetic delivery outcome for UI verification.")
+DRAFTS[0].update(to=[{"email": "accepted@example.com"}, {"email": "refused@example.com"}],
+                 send_result={"status": "partially_sent", "accepted_recipients": ["accepted@example.com"],
+                              "refused_recipients": {"refused@example.com": {"smtp_code": 550}}})
 
 
 def thread_by_id(thread_id):

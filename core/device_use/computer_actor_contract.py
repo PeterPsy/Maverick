@@ -40,7 +40,9 @@ cannot authorize new input. Verify each input, reusing observe_after when it giv
 a fresh observation. Follow only the native failure's declared recovery: refresh
 the same app's window list after a recoverable read failure; after uncertain input,
 use only the same engine/app's read-only observation route until a fresh image
-proves the intended effect. Stop if that effect is absent or ambiguous. Never
+proves the intended effect. For a closed companion tab, the native tab inventory
+can prove its absence without an image of the nonexistent page.
+Stop if that effect is absent or ambiguous. Never
 replay uncertain input, including after receiving a new receipt. Escalate ambiguous targets,
 missing exact text, changed requirements or decisions beyond the subtask.
 Finish with the required JSON result and concise observed evidence. Use completed

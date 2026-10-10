@@ -79,3 +79,59 @@ class ComputerActorRecoveryTests(unittest.TestCase):
         self.assertFalse(self.recovery.permits("mac_peekaboo", {**typing, "point_x": 0.0, "details": True}))
         self.assertTrue(self.recovery.permits("mac_peekaboo", {**typing, "point_x": 0.1}))
         self.assertTrue(self.recovery.permits("mac_peekaboo", {**typing, "text": "Other prepared text"}))
+
+    def test_companion_recovery_is_bound_to_one_tab_and_requires_a_fresh_image(self):
+        for code in ("MC-COMPANION-03", "MC-COMPANION-04"):
+            with self.subTest(code=code):
+                recovery = ComputerActorRecovery("com.apple.Safari")
+                key = {"action": "keypress", "tab_id": "A", "key": "Return", "observation_id": "old"}
+                self.assertTrue(recovery.record("mac_browser", key, self.result(code)))
+                self.assertFalse(recovery.permits("mac_browser", {"action": "list_tabs"}))
+                self.assertFalse(recovery.permits("mac_browser", {"action": "observe", "tab_id": "B"}))
+                read = {"action": "observe", "tab_id": "A"}
+                self.assertTrue(recovery.permits("mac_browser", read))
+                recovery.record("mac_browser", read, self.result("no image", True))
+                self.assertFalse(recovery.permits("mac_browser", key))
+                recovery.record("mac_browser", read, self.result("fresh", True, b"jpeg"))
+                self.assertEqual(recovery.permits("mac_browser", {**key, "observation_id": "new", "observe_after": True}),
+                                 code == "MC-COMPANION-03")
+
+    def test_unknown_tab_after_uncertain_creation_cannot_be_recreated_automatically(self):
+        self.assertFalse(self.recovery.record("mac_browser", {"action": "open_tab", "url": "about:blank"},
+                                             self.result("MC-COMPANION-04")))
+
+    def test_uncertain_close_only_settles_when_inventory_proves_tab_absent(self):
+        close = {"action": "close_tab", "tab_id": "A"}
+        self.recovery.record("mac_browser", close, self.result("MC-COMPANION-04"))
+        read = {"action": "list_tabs"}
+        self.assertTrue(self.recovery.permits("mac_browser", read))
+        self.recovery.record("mac_browser", read, self.result(
+            '{"execution_environment":"parallel_companion","tabs":[{"tab_id":"A"}]}', True))
+        self.assertIsNotNone(self.recovery.pending)
+        self.recovery.record("mac_browser", read, self.result(
+            '{"execution_environment":"parallel_companion","tabs":[]}', True))
+        self.assertIsNone(self.recovery.pending)
+        self.assertTrue(self.recovery.completion_verified)
+        self.assertFalse(self.recovery.permits("mac_browser", close))
+
+    def test_invalid_inventory_or_blind_input_cannot_verify_completion(self):
+        for text in ("not json", "[]", '{"execution_environment":"other","tabs":[]}',
+                     '{"execution_environment":"parallel_companion","tabs":[{}]}'):
+            self.recovery.record("mac_browser", {"action": "list_tabs"}, self.result(text, True))
+            self.assertFalse(self.recovery.completion_verified)
+        inventory = '{"execution_environment":"parallel_companion","tabs":[]}'
+        self.recovery.record("mac_browser", {"action": "list_tabs"}, self.result(inventory, True))
+        self.assertTrue(self.recovery.completion_verified)
+        self.recovery.record("mac_browser", {"action": "click", "tab_id": "A"}, self.result(inventory, True))
+        self.assertFalse(self.recovery.completion_verified)
+
+    def test_companion_replay_identity_normalizes_default_input_values(self):
+        for original, repeated in (
+            ({"action": "keypress", "key": "Return"}, {"action": "keypress", "key": "Return", "shift": False}),
+            ({"action": "scroll", "direction": "down"},
+             {"action": "scroll", "direction": "down", "amount": 300, "x": 0.5, "y": 0.5}),
+        ):
+            recovery = ComputerActorRecovery("com.apple.Safari")
+            recovery.record("mac_browser", {**original, "tab_id": "A"}, self.result("MC-COMPANION-04"))
+            recovery.record("mac_browser", {"action": "observe", "tab_id": "A"}, self.result("fresh", True, b"jpeg"))
+            self.assertFalse(recovery.permits("mac_browser", {**repeated, "tab_id": "A", "observe_after": True}))

@@ -136,8 +136,9 @@ class CodexComputerActor:
                     output = self._validated_output(self.transport.output)
                     if output["status"] == "completed" and recovery.pending is not None:
                         output = self._result("blocked", "computer_actor_recovery_unverified", steps)
-                    elif output["status"] == "completed" and last_image is None:
-                        output = self._result("needs_decision", "computer_actor_completion_unverified", steps)
+                    elif output["status"] == "completed" and not recovery.completion_verified:
+                        output = self._result("needs_decision", "computer_actor_completion_unverified", steps,
+                                              output["evidence"])
                     output["evidence"] = recovery.evidence(output["evidence"])
                     return {**output, "steps": steps}, last_image
                 if event["kind"] != "call":

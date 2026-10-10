@@ -32,7 +32,13 @@ def emit_usage():
 def next_call():
     global step
     actions = ["observe_app", "click", "observe_app"]
-    if mode in {"refresh", "refresh-no-list"}:
+    if mode.startswith("browser-close"):
+        actions = ["observe", "close_tab", "list_tabs"]
+    elif mode.startswith("browser-"):
+        actions = ["observe", "keypress", "observe", "scroll", "observe"]
+        if mode == "browser-replay":
+            actions[3] = "keypress"
+    elif mode in {"refresh", "refresh-no-list"}:
         actions = ["observe_app", "list_windows", "observe", "click", "observe_app"]
         if mode == "refresh-no-list":
             actions.pop(1)
@@ -41,7 +47,8 @@ def next_call():
         if mode in {"uncertain-other-app", "uncertain-other-engine"}:
             actions = ["observe_app", "click", "observe_app"]
     if step >= len(actions):
-        output = {"status": "completed", "summary": "Subtask complete", "evidence": "Latest screen shows the target."}
+        evidence = "Native tab inventory excludes the closed tab." if mode.startswith("browser-close") else "Latest screen shows the target."
+        output = {"status": "completed", "summary": "Subtask complete", "evidence": evidence}
         if mode == "invalid":
             output["status"] = "invented"
         notify("item/completed", {"turnId": turn_id, "item": {
@@ -57,6 +64,16 @@ def next_call():
     if mode == "uncertain-other-engine" and step == 2:
         tool, action = "mac_computer", "observe"
     arguments = {"action": action, "bundle_id": bundle, "snapshot": "snapshot-" + str(step)}
+    if mode.startswith("browser-"):
+        tool = "mac_browser"
+        arguments = {"action": action, "tab_id": "other" if mode == "browser-other-tab" and step == 2 else "test-tab",
+                     "observation_id": "receipt-" + str(step)}
+        if action == "keypress":
+            arguments.update(key="Return", observe_after=step == 3)
+            if step == 3:
+                arguments["shift"] = False
+        if action == "scroll":
+            arguments.update(direction="down", amount=300)
     if action == "click":
         arguments["element"] = "B1"
     if step == 3:

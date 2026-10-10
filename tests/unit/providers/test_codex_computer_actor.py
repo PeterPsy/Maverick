@@ -106,6 +106,55 @@ class CodexComputerActorTests(unittest.TestCase):
         output, _jpeg = self.run_actor("invalid")
         self.assertEqual(output["status"], "needs_decision")
 
+    def browser_invoke(self, tool, arguments, call_id):
+        self.calls.append((tool, arguments, call_id))
+        text = json.dumps({"execution_environment": "parallel_companion", "tabs": [{"tab_id": "remaining"}]})
+        return DeviceUseResult("invocation", call_id, {"success": True, "contentItems": [
+            {"type": "inputText", "text": text}]},
+            b"fresh-browser" if arguments["action"] == "observe" else None, None, 1.0)
+
+    def test_closed_tab_inventory_is_verified_completion_without_final_image(self):
+        self.invoke = self.browser_invoke
+        output, jpeg = self.run_actor("browser-close")
+        self.assertEqual(output["status"], "completed")
+        self.assertEqual(output["evidence"], "Native tab inventory excludes the closed tab.")
+        self.assertIsNone(jpeg)
+        self.assertEqual([call[1]["action"] for call in self.calls], ["observe", "close_tab", "list_tabs"])
+
+    def test_unverified_completion_retains_observed_evidence_for_the_planner(self):
+        self.invoke = lambda tool, args, cid: DeviceUseResult("test", cid, {"success": True}, None, None, 1)
+        output, _ = self.run_actor("browser-close")
+        self.assertEqual(output["status"], "needs_decision")
+        self.assertEqual(output["evidence"], "Native tab inventory excludes the closed tab.")
+
+    def test_uncertain_tab_closure_is_verified_by_inventory_without_replay(self):
+        self.invoke = self.browser_invoke
+        self.fail_native_call(2, "MC-COMPANION-04")
+        output, jpeg = self.run_actor("browser-close-recovery")
+        self.assertEqual(output["status"], "completed")
+        self.assertIsNone(jpeg)
+        self.assertIn("MC-COMPANION-04", output["evidence"])
+        self.assertEqual([call[1]["action"] for call in self.calls], ["observe", "close_tab", "list_tabs"])
+
+    def test_companion_uncertainty_observes_same_tab_and_never_replays_return(self):
+        self.invoke = self.browser_invoke
+        self.fail_native_call(2, "MC-COMPANION-04")
+        output, jpeg = self.run_actor("browser-recovery")
+        self.assertEqual(output["status"], "completed")
+        self.assertEqual(jpeg, b"fresh-browser")
+        self.assertIn("MC-COMPANION-04", output["evidence"])
+        self.assertEqual([call[1]["action"] for call in self.calls], ["observe", "keypress", "observe", "scroll", "observe"])
+
+    def test_companion_recovery_blocks_other_tabs_and_return_with_a_new_receipt(self):
+        for mode, count in (("browser-replay", 3), ("browser-other-tab", 2)):
+            with self.subTest(mode=mode):
+                self.calls.clear()
+                self.invoke = self.browser_invoke
+                self.fail_native_call(2, "MC-COMPANION-04")
+                output, _ = self.run_actor(mode)
+                self.assertEqual(output["summary"], "computer_actor_recovery_action_denied")
+                self.assertEqual(len(self.calls), count)
+
     def test_timeout_does_not_dispatch_or_retry_native_input(self):
         output, _jpeg = self.run_actor("wait", timeout_seconds=0.05)
         self.assertEqual(output["summary"], "computer_actor_time_budget")
@@ -141,7 +190,7 @@ class CodexComputerActorTests(unittest.TestCase):
             if omit_verification_image and len(self.calls) > index:
                 return DeviceUseResult("invocation", call_id, {"success": True}, None, None, 1)
             # Exact-window observations carry the same verified image as observe_app.
-            if arguments["action"] == "observe":
+            if tool == "mac_peekaboo" and arguments["action"] == "observe":
                 return DeviceUseResult("invocation", call_id, result.result, b"fresh-window", None, 1)
             return result
 

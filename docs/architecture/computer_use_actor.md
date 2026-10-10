@@ -61,6 +61,18 @@ recovery permits a fresh observation through the same engine and app. Refusals,
 unknown failures, engine/app changes during recovery and unverified completion
 remain blocked. Final evidence preserves recovered native failure codes.
 
+Companion `MC-COMPANION-03/04` recovery is restricted to a read-only observation
+of the exact affected tab. A successful image unlocks distinct actions;
+`MC-COMPANION-04` also fences replay of the uncertain input even with a new
+receipt or changed observation options. An uncertain tab creation without a
+known target remains blocked. Native post-input capture failures are classified
+as uncertain effects, never as proof that input was not sent. Completion requires
+fresh image evidence or a validated native companion tab inventory, which can
+verify a closed tab's absence without a screenshot of a nonexistent page.
+After an uncertain close, that inventory is also an allowed recovery read and
+settles the pending effect only when it proves the exact tab is absent.
+Unverified completion retains the operator's evidence for the planner to assess.
+
 Actor usage has an internal attribution scoped to the parent session and provider
 thread. It contributes to delegated and total usage, while the main model's context
 meter remains unchanged. Chat folds internal worker consumption into its ordinary

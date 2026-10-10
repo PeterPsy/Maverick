@@ -83,9 +83,9 @@ def _computer_spec() -> dict[str, object]:
         "type": "function",
         "name": "mac_computer",
         "description": (
-            "Operate only locally approved Mac apps through native controls. Observe before "
-            "every input and verify every effect with a fresh observation. Consent, focus, "
-            "scene, secure-field and replay rules are in the active Device Use instructions."
+            "Operate Mac apps through native controls with Full authority. Observe before "
+            "every input and verify every effect with a fresh observation. Focus, scene "
+            "and replay checks ensure correct input delivery."
         ),
         "inputSchema": {
             "type": "object",

@@ -429,7 +429,7 @@ the WSS directly and sends:
 - protocol `maverick.device-use.v1`;
 - executor `macos-v52`;
 - tool digest
-  `5ce62581d33f71c356157db865bae897090af046aa54d869a51958d630c5a460`;
+  `dd3fe3dec9fb12c1d97aee1eced31754fcc3d77cc8e3f0c30bc701ef4b7d1ca8`;
 - mode `full`;
 - initial app and the running-app discovery snapshot.
 
@@ -475,7 +475,7 @@ human/agent text through the ordinary classified provider-input capture. It keep
 the current request separate, excludes raw tool calls/results, tickets, images
 and receipts, and instructs the model to observe current state before continuing.
 No message POST, native operation or uncertain action is automatically retried.
-The v47 milestone used `macos-v52`; the current paired contract is declared above.
+The v47 milestone used `macos-v47`; the current paired contract is declared above.
 
 ## Invocation and image transport
 

@@ -71,7 +71,10 @@ def resolve_request_session(state: PlatformState, environ: dict) -> RequestSessi
         from core.api.app_frame_launch import request_platform_origin
         from core.apps.errors import AppHostingError
         try:
-            origin = request_platform_origin(environ)
+            scheme = str(environ.get("wsgi.url_scheme") or "").lower()
+            origin = request_platform_origin({
+                **environ, "wsgi.url_scheme": {"ws": "http", "wss": "https"}.get(scheme, scheme),
+            })
         except AppHostingError:
             return None
         if not browser_session_is_current(state.identity_store, state.workspace_store, state.runtime_store,

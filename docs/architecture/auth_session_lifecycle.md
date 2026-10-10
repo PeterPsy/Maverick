@@ -21,8 +21,11 @@ Browser Lab delegation creates a separate four-hour session with optional
 `browser_login_generation` bindings. These fields are unset on ordinary human
 sessions. Delegated sessions never renew. Every platform and app-frame request
 requires the exact platform origin, live runtime owner, unchanged current
-workspace and digest of active human login IDs. Human logout/password reset,
-login-generation changes, runtime termination or expiry invalidate delegation.
+workspace and digest of active human login IDs.
+WebSocket verification maps `ws`/`wss` to the corresponding exact HTTP/HTTPS
+platform origin so the same bounded login covers live app and runtime streams.
+Human logout/password reset, login-generation changes, runtime termination or
+expiry invalidate delegation.
 Logging out the temporary browser revokes only its own app-frame sessions; it
 preserves human cookies, device sessions and other temporary browsers.
 

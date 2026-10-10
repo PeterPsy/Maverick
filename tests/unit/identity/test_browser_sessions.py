@@ -104,6 +104,16 @@ class BrowserSessionTests(unittest.TestCase):
         with patch.dict("os.environ", {"MAVERICK_SIDECAR_PLATFORM_ORIGIN": "", "MAVERICK_API_BASE": "http://127.0.0.1:8123"}):
             self.assertEqual(platform_browser_origin(), "http://maverick.localhost:8123")
 
+    def test_websocket_authentication_uses_the_equivalent_http_origin(self):
+        state = SimpleNamespace(identity_store=self.identity, runtime_store=self.runtime_store, workspace_store=object())
+        for scheme, origin, host in (("ws", "http://maverick.localhost:8014", "maverick.localhost:8014"),
+                                    ("wss", "https://maverick.example", "maverick.example")):
+            self.identity.save_auth_session(replace(self.session, browser_origin=origin))
+            env = {"HTTP_COOKIE": f"maverick_session={self.session.session_id}", "wsgi.url_scheme": scheme, "HTTP_HOST": host}
+            with patch("core.api.session_api._now", return_value=self.now), patch("core.api.session_api.resolve_active_workspace_for_user", return_value=self.workspace):
+                self.assertIsNotNone(resolve_request_session(state, env), scheme)
+                self.assertIsNone(resolve_request_session(state, {**env, "HTTP_HOST": "another.example"}), scheme)
+
 
 if __name__ == "__main__":
     unittest.main()

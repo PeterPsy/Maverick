@@ -31,6 +31,7 @@ export function ThreadRow({
   expandedThreadId,
   expandedThreadTitle,
   isSelected,
+  isShellMobileLayout,
   multiAgentThreadIds,
   onCloseExpandedThread,
   onMoveThread,
@@ -54,6 +55,7 @@ export function ThreadRow({
   expandedThreadId: string | null;
   expandedThreadTitle: string;
   isSelected: boolean;
+  isShellMobileLayout: boolean;
   multiAgentThreadIds: ReadonlySet<string>;
   onCloseExpandedThread: () => void;
   onMoveThread: (thread: ChatThread, projectId: string | null) => Promise<void>;
@@ -119,6 +121,9 @@ export function ThreadRow({
     writeChatThreadDragData(event.dataTransfer, chatThreadDragPayload(thread));
     attachChatThreadDragImage(event, threadLabel);
     setIsDragging(true);
+    if (isShellMobileLayout) {
+      window.parent.postMessage({ type: "maverick.shell.sidebar.close" }, "*");
+    }
   }
 
   return (

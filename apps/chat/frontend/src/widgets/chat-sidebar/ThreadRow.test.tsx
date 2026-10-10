@@ -40,10 +40,10 @@ describe("ThreadRow", () => {
     root = null;
     container?.remove();
     container = null;
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
-  async function renderThreadRow(item: ChatThread) {
+  async function renderThreadRow(item: ChatThread, isShellMobileLayout = false) {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -54,6 +54,7 @@ describe("ThreadRow", () => {
           expandedThreadId={null}
           expandedThreadTitle=""
           isSelected={false}
+          isShellMobileLayout={isShellMobileLayout}
           multiAgentThreadIds={new Set(["multi-thread"])}
           onCloseExpandedThread={vi.fn()}
           onMoveThread={vi.fn()}
@@ -154,8 +155,9 @@ describe("ThreadRow", () => {
     expect(container?.querySelector(".bs-chat-list__source-badge")).toBeNull();
   });
 
-  it("publishes a copy-only Chat reference when a sidebar row is dragged", async () => {
-    await renderThreadRow(thread());
+  it.each([false, true])("publishes a copy-only Chat reference and closes only the mobile sidebar (mobile: %s)", async (isShellMobileLayout) => {
+    await renderThreadRow(thread(), isShellMobileLayout);
+    const postMessage = vi.spyOn(window.parent, "postMessage");
     const row = container?.querySelector<HTMLDivElement>(".bs-chat-list__item");
     const payloads = new Map<string, string>();
     const dataTransfer = {
@@ -181,6 +183,11 @@ describe("ThreadRow", () => {
     });
     expect(dataTransfer.setDragImage).toHaveBeenCalledOnce();
     expect(row?.classList.contains("is-dragging")).toBe(true);
+    if (isShellMobileLayout) {
+      expect(postMessage).toHaveBeenCalledExactlyOnceWith({ type: "maverick.shell.sidebar.close" }, "*");
+    } else {
+      expect(postMessage).not.toHaveBeenCalled();
+    }
 
     await act(async () => {
       row?.dispatchEvent(new Event("dragend", { bubbles: true }));

@@ -19,6 +19,7 @@ export function ProjectSection({
   expandedThreadId,
   expandedThreadTitle,
   isPending,
+  isShellMobileLayout,
   multiAgentThreadIds,
   onCancelProjectDeletion,
   onCancelProjectEdit,
@@ -53,6 +54,7 @@ export function ProjectSection({
   expandedThreadId: string | null;
   expandedThreadTitle: string;
   isPending: boolean;
+  isShellMobileLayout: boolean;
   multiAgentThreadIds: ReadonlySet<string>;
   onCancelProjectDeletion: () => void;
   onCancelProjectEdit: () => void;
@@ -147,6 +149,7 @@ export function ProjectSection({
                 expandedThreadId={expandedThreadId}
                 expandedThreadTitle={expandedThreadTitle}
                 isSelected={selectedThreadIds.has(thread.thread_id)}
+                isShellMobileLayout={isShellMobileLayout}
                 key={thread.thread_id}
                 multiAgentThreadIds={multiAgentThreadIds}
                 onCloseExpandedThread={onCloseExpandedThread}

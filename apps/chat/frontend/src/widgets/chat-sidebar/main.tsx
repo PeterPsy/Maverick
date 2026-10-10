@@ -92,6 +92,7 @@ function ChatSidebarWidget() {
                 expandedThreadId={sidebar.expandedThreadId}
                 expandedThreadTitle={sidebar.expandedThreadTitle}
                 isPending={sidebar.isPending}
+                isShellMobileLayout={sidebar.isShellMobileLayout}
                 key={section.id}
                 multiAgentThreadIds={sidebar.multiAgentThreadIds}
                 onCancelProjectDeletion={sidebar.cancelProjectDeletion}

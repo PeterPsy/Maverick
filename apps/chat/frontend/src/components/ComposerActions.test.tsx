@@ -7,14 +7,14 @@ import { ComposerActions } from "./ComposerActions";
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
-async function renderActions(canSend = true) {
+async function renderActions(canSend = true, hasDraft = true, canStopTurn = true) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   const onSubmit = vi.fn();
   const onStopTurn = vi.fn();
   await act(async () => {
-    root!.render(<ComposerActions canSend={canSend} canStopTurn onSubmit={onSubmit} onStopTurn={onStopTurn} />);
+    root!.render(<ComposerActions canSend={canSend} canStopTurn={canStopTurn} hasDraft={hasDraft} onSubmit={onSubmit} onStopTurn={onStopTurn} />);
   });
   return { onSubmit, onStopTurn };
 }
@@ -30,7 +30,7 @@ describe("composer action activation", () => {
   for (const label of ["Send message", "Stop chat"]) {
     for (const pointerType of ["mouse", "touch"]) {
       it(`activates ${label} on click after ${pointerType} down`, async () => {
-        const { onSubmit, onStopTurn } = await renderActions();
+        const { onSubmit, onStopTurn } = await renderActions(true, label === "Send message");
         const button = container!.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
         const pointerDown = new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerType });
 
@@ -47,13 +47,28 @@ describe("composer action activation", () => {
     }
 
     it(`keeps ${label} focusable independently of pointer handling`, async () => {
-      await renderActions();
+      await renderActions(true, label === "Send message");
       const button = container!.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
 
       button.focus();
 
       expect(document.activeElement).toBe(button);
       expect(button.type).toBe("button");
+    });
+  }
+
+  for (const [canStopTurn, hasDraft, canSend, label, disabled] of [
+    [false, false, false, "Send message", true],
+    [true, false, false, "Stop chat", false],
+    [true, true, true, "Send message", false],
+    [true, true, false, "Send message", true],
+  ] as const) {
+    it(`shows one ${label} action with running=${canStopTurn} draft=${hasDraft} sendable=${canSend}`, async () => {
+      await renderActions(canSend, hasDraft, canStopTurn);
+      const buttons = container!.querySelectorAll<HTMLButtonElement>(".chatapp-composer__icon-action");
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0].getAttribute("aria-label")).toBe(label);
+      expect(buttons[0].disabled).toBe(disabled);
     });
   }
 

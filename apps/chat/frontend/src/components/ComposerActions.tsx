@@ -3,45 +3,36 @@ import type { ReactNode } from "react";
 export function ComposerActions({
   canSend,
   canStopTurn,
+  hasDraft,
   dictationControl,
   onStopTurn,
   onSubmit,
 }: {
   canSend: boolean;
   canStopTurn: boolean;
+  hasDraft: boolean;
   dictationControl?: ReactNode;
   onStopTurn: () => void;
   onSubmit: () => void;
 }) {
+  const isStop = canStopTurn && !hasDraft;
   return (
     <div className="chatapp-composer__actions">
-      {canStopTurn ? (
-        <button
-          aria-label="Stop chat"
-          className="chatapp-composer__icon-action is-stop"
-          onClick={onStopTurn}
-          title="Stop chat"
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            stop_circle
-          </span>
-          <span className="chatapp-composer__stop-label">Stop chat</span>
-        </button>
-      ) : null}
       {dictationControl}
       <button
-        aria-label="Send message"
-        className="chatapp-composer__icon-action is-send"
-        disabled={!canSend}
-        onClick={onSubmit}
-        title="Send"
+        aria-label={isStop ? "Stop chat" : "Send message"}
+        className={`chatapp-composer__icon-action ${isStop ? "is-stop" : "is-send"}`}
+        disabled={!isStop && !canSend}
+        onClick={isStop ? onStopTurn : onSubmit}
+        title={isStop ? "Stop chat" : "Send"}
         type="button"
       >
         <span aria-hidden="true" className="material-symbols-rounded">
-          send
+          {isStop ? "stop_circle" : "send"}
         </span>
-        <span className="chatapp-composer__send-label">Send</span>
+        <span className={isStop ? "chatapp-composer__stop-label" : "chatapp-composer__send-label"}>
+          {isStop ? "Stop chat" : "Send"}
+        </span>
       </button>
     </div>
   );

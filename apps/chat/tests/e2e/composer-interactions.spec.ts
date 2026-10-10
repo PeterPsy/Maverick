@@ -87,13 +87,17 @@ for (const { label, width, touch, widget } of [
 
     test("sends and stops on the first click with utilities open and the editor unfocused", async ({ page }) => {
       const composer = await openFixture(page, width, widget);
+      await expect(composer.getByRole("button", { name: "Stop chat" })).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Send message" })).toHaveCount(0);
       await composer.getByRole("textbox").fill("A saved draft");
+      await expect(composer.getByRole("button", { name: "Stop chat" })).toHaveCount(0);
       await page.getByTestId("outside").click();
       const utility = composer.getByRole("button", { name: "Composer utilities" });
       await activate(page, utility, touch);
       await activate(page, composer.getByRole("button", { name: "Send message" }), touch);
       await expect(page.getByTestId("sent")).toHaveText("1");
       await expect(composer.getByRole("textbox")).toHaveText("");
+      await expect(composer.getByRole("button", { name: "Send message" })).toHaveCount(0);
       await activate(page, utility, touch);
       await activate(page, composer.getByRole("button", { name: "Stop chat" }), touch);
       await expect(page.getByTestId("stopped")).toHaveText("1");

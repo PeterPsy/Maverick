@@ -316,6 +316,16 @@ popup receivers and camera requests remain denied. The opt-in signed Mac
 regression records a short in-memory clip from a distinct HTTPS iframe and
 verifies recorder bytes and track shutdown. See native `docs/native-chat-speech.md`.
 
+Chat attachment selection is also independent of Device Use. In macOS 0.2.9 (60),
+the native WebKit UI delegate implements `runOpenPanelWith` using an asynchronous
+`NSOpenPanel` sheet. It accepts the platform and exact connected app-frame origins
+registered by the authenticated top document; popup receivers are excluded.
+WebKit receives only the files selected by the user and keeps its ordinary HTML
+file-upload path. Cancellation, teardown, navigation and removed isolated frames
+cannot deliver a stale selection. The composer exposes one primary action:
+an active turn with an empty draft shows Stop; text or attachments replace it
+with Send so same-turn steering remains available.
+
 The composer exposes one **PC use** toggle beside Research and the other
 composer utilities. It shares their icon-button style, `aria-pressed` state and
 active label:

@@ -373,6 +373,7 @@ export function ChatComposer({
               <ComposerActions
                 canSend={!disabled && !hasInvalidAttachments(attachments) && Boolean(value.trim() || attachments.length)}
                 canStopTurn={canStopTurn}
+                hasDraft={Boolean(value.trim() || attachments.length)}
                 dictationControl={
                   <ComposerDictationButton
                     chunkedDictationSupported={transcriptionChunkedDictationSupported}

@@ -86,9 +86,9 @@ describe("mobile chat composer layout", () => {
 
   it("keeps the send button as an explicit click action", () => {
     const composerSource = readFileSync(resolve(currentDir, "../components/ComposerActions.tsx"), "utf8");
-    const sendButton = composerSource.match(/className="chatapp-composer__icon-action is-send"[\s\S]*?<\/button>/)?.[0] || "";
+    const sendButton = composerSource.match(/<button[\s\S]*?<\/button>/)?.[0] || "";
 
-    expect(sendButton).toContain("onClick={onSubmit}");
+    expect(sendButton).toContain("onClick={isStop ? onStopTurn : onSubmit}");
     expect(sendButton).toContain('type="button"');
     expect(sendButton).not.toContain('type="submit"');
   });

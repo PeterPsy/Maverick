@@ -52,6 +52,12 @@ Clarify or infer these before implementation. If any requirement is still produc
 - expected verification: unit tests, frontend build, smoke tests, CLI/MCP invocation, runtime checks
 - whether the official App SDK template should be used: `minimal`, `frontend-backend`, `agent-tool`, `data-app`, or `widget`
 
+## App Sidebar Choice
+
+Choose `presentation.sidebar_enabled` deliberately for every workspace frontend. The default is true (canonical contracts omit true): use app-owned `shell.sidebar.primary` and optional `shell.sidebar.footer` widgets when the app needs shell sidebar navigation or contextual actions. Set `"sidebar_enabled": false` for a self-contained canvas/editor, and keep navigation and actions inside its main frontend. Widget absence alone does not disable the sidebar.
+
+With false, Base Shell keeps the app rail, suppresses detail-panel hover/focus/open requests and fixed-panel spacing, and exposes workspace/app settings and branding/theme/global sidebar preferences through two compact rail menus above/below the desktop shortcuts. On mobile the header menu exposes the same controls. Do not reimplement these generic controls in the app or add app-id exceptions to the shell. Verify rail/menu keyboard and touch access, mobile layout, and switching back to an enabled app with the saved fixed/overlay preference. Existing apps stay enabled unless their contract opts out; Design Studio declares false.
+
 ## App Icon Is Part Of The App
 
 The icon is part of a user-facing app's product quality, not optional polish. Do not ship a new frontend app with Maverick's generic fallback icon.

@@ -47,9 +47,10 @@ describe("Sidebar mobile layout contract", () => {
     expect(sidebarSource).toContain("bs-sidebar__mobile-chat-footer-row");
     expect(sidebarSource).toContain("bs-sidebar__mobile-chat-theme-switcher");
     expect(sidebarSource).toContain("{!isMobileLayout ? (");
-    expect(sidebarSource).toContain('label="Dark mode"');
-    expect(sidebarSource).toContain('label="Light mode"');
-    expect(sidebarSource).toContain('label="System mode"');
+    const themeSource = readSource("components/ThemeModeSwitcher.tsx");
+    expect(themeSource).toContain('label="Dark mode"');
+    expect(themeSource).toContain('label="Light mode"');
+    expect(themeSource).toContain('label="System mode"');
     expect(mobileChatFooterRule).toContain("grid-template-columns: minmax(0, 1fr) auto;");
     expect(mobileChatFooterRule).toContain("align-items: end;");
     expect(mobileChatThemeRule).toContain("height: 2.65rem;");
@@ -93,10 +94,10 @@ describe("Sidebar desktop layout contract", () => {
 
     expect(logoSource).toContain('SIDEBAR_LOGO_DARK_SRC = "/apps/base-shell/sidebar-logo.svg"');
     expect(logoSource).toContain('SIDEBAR_LOGO_LIGHT_SRC = "/apps/base-shell/sidebar-logo-black.svg"');
-    expect(sidebarSource).toContain("const logoSrc = sidebarLogoSrc(shellTheme);");
-    expect(sidebarSource).toContain('className="bs-sidebar__desktop-logo"');
-    expect(sidebarSource).toContain("src={logoSrc}");
-    expect(sidebarSource).toContain('className="bs-sidebar__control-cluster"');
+    const controlsSource = readSource("components/SidebarShellControls.tsx");
+    expect(controlsSource).toContain('className="bs-sidebar__desktop-logo"');
+    expect(controlsSource).toContain("src={sidebarLogoSrc(shellTheme)}");
+    expect(controlsSource).toContain('className="bs-sidebar__control-cluster"');
     expect(sidebarSource).toContain("{!isMobileLayout ? (");
     expect(sidebarStyles).toContain(".bs-sidebar__desktop-logo");
     expect(sidebarStyles).toContain("flex: 1 1 0;");
@@ -153,7 +154,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(appShellSource).toContain("shellTheme={shellTheme}");
     expect(headerSource).toContain("const logoSrc = sidebarLogoSrc(shellTheme);");
     expect(headerSource).toContain("src={logoSrc}");
-    expect(headerSource).toContain('aria-label={isSidebarOpen ? "Chiudi sidebar" : "Apri sidebar"}');
+    expect(headerSource).toContain('aria-label={sidebarLabel}');
     expect(headerSource).toContain('aria-label={isPinnedAppsOpen ? "Chiudi applicazioni pinnate" : "Apri applicazioni pinnate"}');
     expect(headerSource).toContain('aria-label="Nuova chat"');
     expect(headerSource).toContain('"Apri chat contestuale"');

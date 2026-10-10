@@ -36,6 +36,7 @@ export type AppRegistryItem = {
   frontend_role: "workspace" | "supporting" | "none" | string;
   frontend_launchable: boolean;
   frontend_resumable?: boolean;
+  sidebar_enabled?: boolean;
   backend_mount: string;
 };
 
@@ -493,6 +494,7 @@ export function normalizeAppRegistryItem(value: unknown): AppRegistryItem {
     frontend_role: stringField(item.frontend_role, "none"),
     frontend_launchable: item.frontend_launchable === true,
     frontend_resumable: item.frontend_resumable === true,
+    sidebar_enabled: item.sidebar_enabled !== false,
     backend_mount: stringField(item.backend_mount),
   };
 }

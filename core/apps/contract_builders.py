@@ -189,9 +189,14 @@ def build_app_presentation(
     *,
     frontend_role: str = "none",
     frontend_resumable: bool = False,
+    sidebar_enabled: bool = True,
 ) -> AppPresentationDeclaration:
     """Build one app presentation declaration for shell-facing UI semantics."""
-    return AppPresentationDeclaration(frontend_role=frontend_role, frontend_resumable=frontend_resumable)
+    return AppPresentationDeclaration(
+        frontend_role=frontend_role,
+        frontend_resumable=frontend_resumable,
+        sidebar_enabled=sidebar_enabled,
+    )
 
 def build_app_permissions(
     *,

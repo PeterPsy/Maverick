@@ -142,6 +142,7 @@ class AppPresentationDeclaration:
 
     frontend_role: AppFrontendRole
     frontend_resumable: bool = False
+    sidebar_enabled: bool = True
 
 
 @dataclass(frozen=True)

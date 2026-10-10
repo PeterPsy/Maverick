@@ -73,11 +73,68 @@ describe("Sidebar widget mount gate", () => {
     });
   });
 
+  it("keeps the rail but suppresses sidebar widgets, resize and hover/focus opening for opted-out apps", async () => {
+    const open = vi.fn();
+    const canvas = { ...app("canvas"), sidebar_enabled: false };
+    await renderSidebar(root, primaryActionStateChange, { apps: [canvas], activeAppId: "canvas",
+      pinnedAppIds: ["canvas"], isOpen: true, isPinned: true, mode: "fixed", onOpenSidebar: open });
+    const sidebar = container.querySelector<HTMLElement>(".bs-sidebar")!;
+    await act(async () => {
+      sidebar.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      container.querySelector<HTMLButtonElement>(".bs-sidebar__rail-button")!.focus();
+    });
+    expect(open).not.toHaveBeenCalled();
+    expect(sidebar.classList.contains("is-closed")).toBe(true);
+    expect(sidebar.classList.contains("bs-sidebar--rail")).toBe(true);
+    expect(container.querySelector(".bs-sidebar__rail")).not.toBeNull();
+    expect(container.querySelector(".bs-sidebar__resize-handle")).toBeNull();
+    expect(widgetSlotMock).not.toHaveBeenCalled();
+    expect(primaryActionStateChange).toHaveBeenCalledWith({ available: false, label: "", preferredSurface: "app" });
+  });
+
+  it("exposes workspace, app settings, theme and mode through the two rail menus", async () => {
+    const settings = vi.fn();
+    const theme = vi.fn();
+    const mode = vi.fn();
+    await renderSidebar(root, primaryActionStateChange, { apps: [{ ...app("canvas"), sidebar_enabled: false }],
+      activeAppId: "canvas", onOpenAppSettings: settings, onThemeModeChange: theme, onModeChange: mode });
+    const top = container.querySelector<HTMLButtonElement>('button[aria-label="Controlli workspace"]')!;
+    await act(async () => top.focus());
+    expect(top.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector('select[aria-label="Workspace"]')).not.toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Impostazioni di canvas"]')!.click());
+    expect(settings).toHaveBeenCalledOnce();
+    await act(async () => top.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(top.getAttribute("aria-expanded")).toBe("false");
+    const bottom = container.querySelector<HTMLButtonElement>('button[aria-label="Controlli Maverick"]')!;
+    await act(async () => bottom.focus());
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Light mode"]')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Sidebar fissa"]')!.click());
+    expect(theme).toHaveBeenCalledWith("light");
+    expect(mode).toHaveBeenCalledWith("fixed");
+    expect(widgetSlotMock).not.toHaveBeenCalled();
+  });
+
+  it("provides compact mobile controls without opening the sidebar or mounting widgets", async () => {
+    await renderSidebar(root, primaryActionStateChange, { apps: [{ ...app("canvas"), sidebar_enabled: false }],
+      activeAppId: "canvas", isMobileLayout: true, isOpen: true });
+    expect(container.querySelector('.bs-sidebar__rail-menu--mobile select[aria-label="Workspace"]')).not.toBeNull();
+    expect(container.querySelector('.bs-sidebar__rail-menu--mobile button[aria-label="Light mode"]')).not.toBeNull();
+    expect(container.querySelector('.bs-sidebar')?.classList.contains("is-closed")).toBe(true);
+    expect(widgetSlotMock).not.toHaveBeenCalled();
+  });
+
   it("mounts primary and footer widgets when the detail layer is open", async () => {
     await renderSidebar(root, primaryActionStateChange, { isOpen: true, isPinned: false });
 
     expect(widgetSlotMock).toHaveBeenCalledTimes(2);
     expect(widgetSlotMountMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits for app metadata before mounting sidebar widgets from a saved fixed preference", async () => {
+    await renderSidebar(root, primaryActionStateChange, { apps: [], isLoading: true, isOpen: true, isPinned: true });
+    expect(widgetSlotMock).not.toHaveBeenCalled();
+    expect(container.querySelector(".bs-sidebar")?.classList.contains("is-closed")).toBe(true);
   });
 
   it("mounts primary and footer widgets in the first opening render", () => {

@@ -8,6 +8,7 @@ import { MaverickHttpError } from "../src/api";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
 import { revokeShellAuthorization, shellCacheLifecycle, shellRetryCoordinator } from "../src/pwaCacheRuntime";
+import { SHELL_SESSION_STORAGE_KEY } from "../src/theme";
 
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
@@ -74,6 +75,8 @@ vi.mock("../src/components/Sidebar", () => ({
     onReorderPinnedApps,
     onOpenAppSettings,
     onOpenApp,
+    onOpenSidebar,
+    isPinned,
     onWorkspaceChange,
     pinnedAppIds,
     workspaces,
@@ -83,6 +86,8 @@ vi.mock("../src/components/Sidebar", () => ({
     onReorderPinnedApps: (appIds: string[]) => Promise<void>;
     onOpenAppSettings: () => void;
     onOpenApp: (appId: string) => void;
+    onOpenSidebar: () => void;
+    isPinned: boolean;
     onWorkspaceChange: (workspaceId: string) => Promise<void>;
     pinnedAppIds: string[];
     workspaces: WorkspaceItem[];
@@ -91,11 +96,14 @@ vi.mock("../src/components/Sidebar", () => ({
       data-apps-loading={String(isLoading)}
       data-pinned-apps={JSON.stringify(pinnedAppIds)}
       data-testid="sidebar"
+      data-sidebar-pinned={String(isPinned)}
       data-workspace-count={String(workspaces.length)}
       data-workspaces-loading={String(isWorkspacesLoading)}
     >
       <button data-testid="app-settings" onClick={onOpenAppSettings} type="button" />
       <button data-testid="open-mail" onClick={() => onOpenApp("mail")} type="button" />
+      <button data-testid="open-chat" onClick={() => onOpenApp("chat")} type="button" />
+      <button data-testid="open-sidebar" onClick={onOpenSidebar} type="button" />
       <button data-testid="reorder-pins" onClick={() => void onReorderPinnedApps(["mail", "crm", "chat"])} type="button" />
       <button data-testid="switch-workspace" onClick={() => void onWorkspaceChange("other")} type="button" />
     </aside>
@@ -158,6 +166,35 @@ describe("AppShell bootstrap", () => {
       await Promise.resolve();
     });
   }
+
+  it("suppresses saved fixed-panel spacing and open requests for an opted-out app, restoring the preference on return", async () => {
+    window.history.replaceState(null, "", "/app/mail");
+    window.localStorage.setItem(SHELL_SESSION_STORAGE_KEY, JSON.stringify({ activeAppId: "mail", sidebarMode: "fixed", isSidebarOpen: true }));
+    api.listApps.mockResolvedValue({ items: [app("chat"), { ...app("mail"), sidebar_enabled: false }] });
+    await renderShell();
+    const shell = () => container.querySelector(".bs-shell")!;
+    expect(shell().classList.contains("is-sidebar-mode-rail")).toBe(true);
+    expect(shell().classList.contains("is-sidebar-open")).toBe(false);
+    expect(container.querySelector('[data-testid="sidebar"]')?.getAttribute("data-sidebar-pinned")).toBe("false");
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="open-sidebar"]')!.click());
+    expect(shell().classList.contains("is-sidebar-open")).toBe(false);
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="open-chat"]')!.click());
+    expect(shell().classList.contains("is-sidebar-mode-fixed")).toBe(true);
+    expect(container.querySelector('[data-testid="sidebar"]')?.getAttribute("data-sidebar-pinned")).toBe("true");
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="open-mail"]')!.click());
+    expect(shell().classList.contains("is-sidebar-mode-rail")).toBe(true);
+    expect(shell().classList.contains("is-sidebar-open")).toBe(false);
+    window.localStorage.removeItem(SHELL_SESSION_STORAGE_KEY);
+  });
+
+  it("uses the sidebar declaration of the resolved fallback app when the requested app is unavailable", async () => {
+    window.history.replaceState(null, "", "/app/unavailable");
+    window.localStorage.setItem(SHELL_SESSION_STORAGE_KEY, JSON.stringify({ sidebarMode: "fixed" }));
+    api.listApps.mockResolvedValue({ items: [{ ...app("mail"), sidebar_enabled: false }] });
+    await renderShell();
+    expect(container.querySelector(".bs-shell")?.classList.contains("is-sidebar-mode-rail")).toBe(true);
+    window.localStorage.removeItem(SHELL_SESSION_STORAGE_KEY);
+  });
 
   it("preserves the selected chat and its URL on a document reload", async () => {
     window.history.replaceState(null, "", "/app/chat/threads/quarantined-thread?thread_id=quarantined-thread");

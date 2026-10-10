@@ -121,6 +121,12 @@ When the search is in the main app iframe, use the Storage pattern:
 
 Place it in an overlay/topbar only when the app has a large scrollable work area. Keep action buttons to the right in a compact `.topbar-actions` group.
 
+## App Sidebar Choice
+
+Choose `presentation.sidebar_enabled` deliberately for every workspace frontend. The default is true (canonical contracts omit true): use app-owned `shell.sidebar.primary` and optional `shell.sidebar.footer` widgets when the app needs shell sidebar navigation or contextual actions. Set `"sidebar_enabled": false` for a self-contained canvas/editor, and keep navigation and actions inside its main frontend. Widget absence alone does not disable the sidebar.
+
+With false, Base Shell keeps the app rail, suppresses detail-panel hover/focus/open requests and fixed-panel spacing, and exposes workspace/app settings and branding/theme/global sidebar preferences through two compact rail menus above/below the desktop shortcuts. On mobile the header menu exposes the same controls. Do not reimplement these generic controls in the app or add app-id exceptions to the shell. Verify rail/menu keyboard and touch access, mobile layout, and switching back to an enabled app with the saved fixed/overlay preference. Existing apps stay enabled unless their contract opts out; Design Studio declares false.
+
 ## Sidebar Widgets In Base Shell
 
 If the app needs internal navigation, filters, folders, projects, or object lists, declare app-owned widgets in `app_contract.json` instead of putting shell-specific sidebar code in `base-shell`:

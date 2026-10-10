@@ -12,6 +12,7 @@
     "pretest": "node ../../scripts/check-node-runtime.mjs",
     "test": "vitest run",
     "test:browser-permissions": "node --test tests/iframe-microphone-cross-origin.test.mjs",
+    "test:sidebar-presentation": "node --test tests/sidebar-presentation.browser.test.mjs",
     "test:service-worker": "node --test tests/service-worker-v2.test.mjs tests/frontend-precache-build.test.mjs tests/file-cache-broker-cross-origin.test.mjs tests/vite-isolated-assets-cross-origin.test.mjs tests/pwa-metrics-browser.test.mjs"
   },
   "dependencies": {

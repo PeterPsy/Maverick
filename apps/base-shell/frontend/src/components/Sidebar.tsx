@@ -15,13 +15,13 @@ import { clampSidebarDetailsWidth, DEFAULT_SIDEBAR_DETAILS_WIDTH_PX } from "../s
 import type { SidebarMode } from "../session";
 import type { ShellThemeMode, ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_MODE, DEFAULT_SHELL_THEME_STATE } from "../theme";
-import { AppLogo } from "./AppLogo";
-import { BrandMark } from "./BrandMark";
 import { SidebarAppRail } from "./SidebarAppRail";
-import { sidebarLogoSrc } from "./sidebarLogo";
 import { WidgetSlot } from "./WidgetSlot";
 import type { WidgetPrimaryActionState } from "./WidgetSlot";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { SidebarHeader } from "./SidebarHeader";
+import { SidebarShellControls } from "./SidebarShellControls";
+import { SidebarRailMenu } from "./SidebarRailMenu";
+import { ThemeModeSwitcher } from "./ThemeModeSwitcher";
 
 type TrackedSwipe = SidebarSwipePoint & {
   id: number;
@@ -97,16 +97,17 @@ export function Sidebar({
   const [isRailReordering, setIsRailReordering] = useState(false);
   const [isResizeActive, setIsResizeActive] = useState(false);
   const [resizeHandleY, setResizeHandleY] = useState("50%");
-  const logoSrc = sidebarLogoSrc(shellTheme);
   const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
   const settingsApp = visibleAppsById.get(SETTINGS_APP_ID) || null;
   const isInitialLoading = isLoading && railApps.length === 0;
-  const isDetailLayerOpen = isOpen || isPinned;
+  const sidebarEnabled = activeApp ? activeApp.sidebar_enabled !== false : !isLoading;
+  const isDetailLayerOpen = sidebarEnabled && (isOpen || isPinned);
   const [hasMountedDetailWidgets, setHasMountedDetailWidgets] = useState(isDetailLayerOpen);
   const [mountedWidgetAppIds, setMountedWidgetAppIds] = useState<string[]>(activeAppId ? [activeAppId] : []);
-  const renderedWidgetAppIds = activeAppId && !mountedWidgetAppIds.includes(activeAppId) ? [...mountedWidgetAppIds, activeAppId] : mountedWidgetAppIds;
+  const visitedWidgetAppIds = activeAppId && !mountedWidgetAppIds.includes(activeAppId) ? [...mountedWidgetAppIds, activeAppId] : mountedWidgetAppIds;
+  const renderedWidgetAppIds = visitedWidgetAppIds.filter((appId) => visibleAppsById.get(appId)?.sidebar_enabled !== false);
   const shouldMountDetailWidgets = hasMountedDetailWidgets || isDetailLayerOpen;
   const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;
   const sidebarFooterSlot = shouldMountDetailWidgets ? renderedWidgetAppIds.map((appId) => (
@@ -143,7 +144,7 @@ export function Sidebar({
   }, [activeAppId]);
 
   useEffect(() => {
-    if (shouldMountDetailWidgets) {
+    if (sidebarEnabled && shouldMountDetailWidgets) {
       return;
     }
     onPrimaryActionStateChange({
@@ -151,10 +152,10 @@ export function Sidebar({
       label: "",
       preferredSurface: "app",
     });
-  }, [onPrimaryActionStateChange, shouldMountDetailWidgets]);
+  }, [onPrimaryActionStateChange, shouldMountDetailWidgets, sidebarEnabled]);
 
   function handlePointerEnter() {
-    if (isMobileLayout) {
+    if (isMobileLayout || !sidebarEnabled) {
       return;
     }
     if (!isPinned) {
@@ -163,7 +164,7 @@ export function Sidebar({
   }
 
   function handlePointerLeave(event: ReactMouseEvent<HTMLElement>) {
-    if (isMobileLayout) {
+    if (isMobileLayout || !sidebarEnabled) {
       return;
     }
     if (isRailReordering || isResizeActive || resizeDragRef.current) {
@@ -175,7 +176,7 @@ export function Sidebar({
   }
 
   function handleFocus() {
-    if (isMobileLayout) {
+    if (isMobileLayout || !sidebarEnabled) {
       return;
     }
     if (!isPinned) {
@@ -184,7 +185,7 @@ export function Sidebar({
   }
 
   function handleBlur(event: ReactFocusEvent<HTMLElement>) {
-    if (isMobileLayout) {
+    if (isMobileLayout || !sidebarEnabled) {
       return;
     }
     if (isRailReordering || isResizeActive || resizeDragRef.current) {
@@ -284,7 +285,7 @@ export function Sidebar({
   }
 
   function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (isMobileLayout) {
+    if (isMobileLayout || !sidebarEnabled) {
       return;
     }
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home") {
@@ -302,7 +303,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`bs-sidebar bs-sidebar--${mode} ${isDetailLayerOpen ? "is-open" : "is-closed"} ${isRailReordering ? "is-rail-reordering" : ""} ${isResizeActive ? "is-resizing" : ""}`}
+      className={`bs-sidebar ${sidebarEnabled ? "" : "bs-sidebar--disabled"} bs-sidebar--${sidebarEnabled ? mode : "rail"} ${isDetailLayerOpen ? "is-open" : "is-closed"} ${isRailReordering ? "is-rail-reordering" : ""} ${isResizeActive ? "is-resizing" : ""}`}
       aria-label="Workspace navigation"
       onBlur={handleBlur}
       onFocus={handleFocus}
@@ -316,6 +317,11 @@ export function Sidebar({
     >
       {!isMobileLayout ? (
         <div className="bs-sidebar__rail" aria-label="Applications">
+          {!sidebarEnabled ? <SidebarRailMenu icon="workspaces" label="Controlli workspace" placement="top">
+            <SidebarHeader activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} isLoading={isLoading}
+              isWorkspacesLoading={isWorkspacesLoading} onOpenAppSettings={onOpenAppSettings}
+              onWorkspaceChange={onWorkspaceChange} workspaces={workspaces} />
+          </SidebarRailMenu> : null}
           <SidebarAppRail
             activeAppId={activeAppId}
             appsToRender={railApps}
@@ -327,36 +333,32 @@ export function Sidebar({
             onReorderPinnedApps={onReorderPinnedApps}
             settingsApp={settingsApp}
           />
+          {!sidebarEnabled ? <SidebarRailMenu icon="tune" label="Controlli Maverick" placement="bottom">
+            <SidebarShellControls mode={mode} onModeChange={onModeChange} onThemeModeChange={onThemeModeChange}
+              shellTheme={shellTheme} themeMode={themeMode} />
+          </SidebarRailMenu> : null}
         </div>
       ) : null}
 
+      {!sidebarEnabled && isMobileLayout ? <SidebarRailMenu icon="workspaces" label="Controlli workspace" placement="mobile"
+        open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+        <SidebarHeader activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} isLoading={isLoading}
+          isWorkspacesLoading={isWorkspacesLoading} onOpenAppSettings={onOpenAppSettings}
+          onWorkspaceChange={onWorkspaceChange} workspaces={workspaces} />
+        <SidebarShellControls mode={mode} onModeChange={onModeChange} onThemeModeChange={onThemeModeChange}
+          shellTheme={shellTheme} themeMode={themeMode} />
+      </SidebarRailMenu> : null}
       <div className="bs-sidebar__details" aria-hidden={!isDetailLayerOpen}>
         <div className="bs-sidebar__top-overlay">
-          <div className="bs-sidebar__header">
-            {activeApp ? (
-              <AppLogo app={activeApp} className="bs-sidebar__brand-mark" />
-            ) : isLoading ? (
-              <span className="bs-sidebar__brand-mark bs-sidebar__brand-mark-skeleton" aria-hidden="true" />
-            ) : (
-              <BrandMark className="bs-sidebar__brand-mark" />
-            )}
-            <WorkspaceSwitcher
-              activeWorkspaceId={activeWorkspaceId}
-              isLoading={isWorkspacesLoading}
-              onWorkspaceChange={onWorkspaceChange}
-              workspaces={workspaces}
-            />
-            <button
-              aria-label={activeApp ? `Impostazioni di ${activeApp.name}` : "Impostazioni app"}
-              title={activeApp ? `Impostazioni di ${activeApp.name}` : "Impostazioni app"}
-              className="bs-sidebar__app-settings"
-              disabled={!activeApp || isLoading}
-              onClick={onOpenAppSettings}
-              type="button"
-            >
-              <span aria-hidden="true" className="material-symbols-rounded">settings</span>
-            </button>
-          </div>
+          {sidebarEnabled ? <SidebarHeader
+            activeApp={activeApp}
+            activeWorkspaceId={activeWorkspaceId}
+            isLoading={isLoading}
+            isWorkspacesLoading={isWorkspacesLoading}
+            onOpenAppSettings={onOpenAppSettings}
+            onWorkspaceChange={onWorkspaceChange}
+            workspaces={workspaces}
+          /> : null}
 
         </div>
 
@@ -393,40 +395,15 @@ export function Sidebar({
             sidebarFooterSlot
           )}
 
-          {!isMobileLayout ? (
-            <div className="bs-sidebar__shell-controls">
-              <img alt="" aria-hidden="true" className="bs-sidebar__desktop-logo" src={logoSrc} />
-              <div className="bs-sidebar__control-cluster">
-                <ThemeModeSwitcher onThemeModeChange={onThemeModeChange} themeMode={themeMode} />
-                <div className="bs-sidebar__mode-switcher" aria-label="Sidebar mode">
-                  <button
-                    aria-label="Solo app in overlay"
-                    aria-pressed={mode === "rail"}
-                    className={`bs-sidebar__mode-button ${mode === "rail" ? "is-active" : ""}`}
-                    onClick={() => onModeChange("rail")}
-                    title="Solo app in overlay"
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="material-symbols-rounded">dock_to_left</span>
-                  </button>
-                  <button
-                    aria-label="Sidebar fissa"
-                    aria-pressed={mode === "fixed"}
-                    className={`bs-sidebar__mode-button ${mode === "fixed" ? "is-active" : ""}`}
-                    onClick={() => onModeChange("fixed")}
-                    title="Sidebar fissa"
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="material-symbols-rounded">left_panel_close</span>
-                  </button>
-                </div>
-                {!isPinned ? (
-                  <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
-                    <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
-                  </button>
-                ) : null}
-              </div>
-            </div>
+          {!isMobileLayout && sidebarEnabled ? (
+            <SidebarShellControls
+              mode={mode}
+              onModeChange={onModeChange}
+              onThemeModeChange={onThemeModeChange}
+              shellTheme={shellTheme}
+              themeMode={themeMode}
+              onClose={sidebarEnabled && !isPinned ? onClose : undefined}
+            />
           ) : null}
         </div>
       </div>
@@ -447,70 +424,6 @@ export function Sidebar({
         </button>
       ) : null}
     </aside>
-  );
-}
-
-function ThemeModeSwitcher({
-  className = "",
-  onThemeModeChange,
-  themeMode,
-}: {
-  className?: string;
-  onThemeModeChange: (mode: ShellThemeMode) => void;
-  themeMode: ShellThemeMode;
-}) {
-  const classNames = ["bs-sidebar__theme-switcher", className].filter(Boolean).join(" ");
-  return (
-    <div className={classNames} aria-label="Theme mode">
-      <ThemeModeButton
-        active={themeMode === "dark"}
-        icon="dark_mode"
-        label="Dark mode"
-        mode="dark"
-        onThemeModeChange={onThemeModeChange}
-      />
-      <ThemeModeButton
-        active={themeMode === "light"}
-        icon="light_mode"
-        label="Light mode"
-        mode="light"
-        onThemeModeChange={onThemeModeChange}
-      />
-      <ThemeModeButton
-        active={themeMode === "system"}
-        icon="desktop_windows"
-        label="System mode"
-        mode="system"
-        onThemeModeChange={onThemeModeChange}
-      />
-    </div>
-  );
-}
-
-function ThemeModeButton({
-  active,
-  icon,
-  label,
-  mode,
-  onThemeModeChange,
-}: {
-  active: boolean;
-  icon: string;
-  label: string;
-  mode: ShellThemeMode;
-  onThemeModeChange: (mode: ShellThemeMode) => void;
-}) {
-  return (
-    <button
-      aria-label={label}
-      aria-pressed={active}
-      className={`bs-sidebar__mode-button ${active ? "is-active" : ""}`}
-      onClick={() => onThemeModeChange(mode)}
-      title={label}
-      type="button"
-    >
-      <span aria-hidden="true" className="material-symbols-rounded">{icon}</span>
-    </button>
   );
 }
 

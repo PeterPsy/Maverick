@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from dataclasses import replace
 import tempfile
 import unittest
@@ -267,6 +269,10 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             self._write_frontend_app(repo_root / "apps" / "vendor-records")
+            contract_path = repo_root / "apps" / "vendor-records" / "app_contract.json"
+            contract = json.loads(contract_path.read_text())
+            contract["presentation"]["sidebar_enabled"] = False
+            contract_path.write_text(json.dumps(contract))
             with patch.dict(
                 "os.environ",
                 {
@@ -307,6 +313,7 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(registry_item["mount_app_id"], "records-mount")
         self.assertEqual(registry_item["frontend_mount"], "/apps/records-mount/")
         self.assertEqual(registry_item["frontend_role"], "workspace")
+        self.assertFalse(registry_item["sidebar_enabled"])
         self.assertTrue(registry_item["frontend_launchable"])
         self.assertEqual(direct_frontend_status, 403)
         self.assertEqual(

@@ -50,6 +50,7 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         "presentation": {
             "frontend_role": parsed.contract.presentation.frontend_role,
             **({"frontend_resumable": True} if parsed.contract.presentation.frontend_resumable else {}),
+            **({"sidebar_enabled": False} if not parsed.contract.presentation.sidebar_enabled else {}),
         },
         "permissions": {
             "secrets": {

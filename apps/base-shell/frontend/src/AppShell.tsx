@@ -119,7 +119,10 @@ export function AppShell() {
   });
   const [mobilePrimaryActionRequestId, setMobilePrimaryActionRequestId] = useState(0);
   const isMobileLayout = useMobileLayout();
-  const isSidebarPinned = sidebarMode === "fixed" && !isMobileLayout;
+  const registryActiveApp = preferredActiveApp(apps, activeAppId);
+  const sidebarDisabled = registryActiveApp?.sidebar_enabled === false;
+  const sidebarEnabled = registryActiveApp ? !sidebarDisabled : !isLoading;
+  const isSidebarPinned = sidebarEnabled && sidebarMode === "fixed" && !isMobileLayout;
   const isChatAppActive = activeAppId === CHAT_APP_ID;
   const isFloatingChatFixed = floatingChatMode === "fixed-right" && !isMobileLayout && !isChatAppActive;
   const sidebarCloseTimerRef = useRef<number | null>(null);
@@ -215,7 +218,7 @@ export function AppShell() {
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
   const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
-  const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount, isMobileLayout);
+  const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount + (sidebarEnabled ? 0 : 2), isMobileLayout);
   const shellTheme = useMemo(() => createShellThemeState(themeMode, systemColorScheme), [systemColorScheme, themeMode]);
   const shellStyle = useMemo(() => {
     const style: CSSProperties & {
@@ -248,6 +251,7 @@ export function AppShell() {
   }
 
   function openSidebar() {
+    if (!sidebarEnabled) return;
     closeMobileChatPanel();
     clearSidebarClosing();
     setIsMobilePinnedAppsOpen(false);
@@ -260,7 +264,7 @@ export function AppShell() {
       setIsSidebarOpen(true);
       return;
     }
-    if (isMobileLayout && isSidebarOpen) {
+    if (sidebarEnabled && isMobileLayout && isSidebarOpen) {
       clearSidebarClosing();
       setIsSidebarClosing(true);
       sidebarCloseTimerRef.current = window.setTimeout(() => {
@@ -272,6 +276,12 @@ export function AppShell() {
   }
 
   function toggleMobileSidebar() {
+    if (!sidebarEnabled) {
+      closeMobileChatPanel();
+      setIsMobilePinnedAppsOpen(false);
+      setIsSidebarOpen((current) => !current);
+      return;
+    }
     if (isSidebarOpen) {
       closeSidebar();
       return;
@@ -572,6 +582,14 @@ export function AppShell() {
   }, [isMobileLayout, isSidebarOpen, isSidebarPinned]);
 
   useEffect(() => {
+    if (sidebarDisabled) {
+      clearSidebarClosing();
+      setIsSidebarOpen(false);
+      setIsSidebarResizing(false);
+    }
+  }, [activeAppId, sidebarDisabled, isMobileLayout]);
+
+  useEffect(() => {
     if (!isMobileLayout) {
       clearMobileChatClosing();
       setIsMobileChatOpen(false);
@@ -639,7 +657,6 @@ export function AppShell() {
     return () => window.removeEventListener("message", handleShellCommand);
   }, [frameScope]);
 
-  const registryActiveApp = preferredActiveApp(apps, activeAppId);
   const provisionalActiveApp = useMemo(
     () => (isLoading && activeAppId ? provisionalMountedApp(activeAppId) : null),
     [activeAppId, isLoading],
@@ -781,7 +798,7 @@ export function AppShell() {
 
   function handleSidebarModeChange(nextMode: SidebarMode) {
     setSidebarMode(nextMode);
-    if (nextMode === "fixed" && !isMobileLayout) {
+    if (sidebarEnabled && nextMode === "fixed" && !isMobileLayout) {
       openSidebar();
     } else {
       clearSidebarClosing();
@@ -931,7 +948,7 @@ export function AppShell() {
 
   return (
     <main
-      className={`bs-shell is-sidebar-mode-${sidebarMode} ${isSidebarOpen ? "is-sidebar-open" : ""} ${isSidebarClosing ? "is-sidebar-closing" : ""} ${isSidebarResizing ? "is-sidebar-resizing" : ""} ${isFloatingChatFixed ? "is-floating-chat-fixed" : ""} ${isFloatingChatResizing ? "is-floating-chat-resizing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
+      className={`bs-shell is-sidebar-mode-${sidebarEnabled ? sidebarMode : "rail"} ${sidebarEnabled && isSidebarOpen ? "is-sidebar-open" : ""} ${sidebarEnabled && isSidebarClosing ? "is-sidebar-closing" : ""} ${sidebarEnabled && isSidebarResizing ? "is-sidebar-resizing" : ""} ${isFloatingChatFixed ? "is-floating-chat-fixed" : ""} ${isFloatingChatResizing ? "is-floating-chat-resizing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
       style={shellStyle}
     >
       {isMobileLayout ? (

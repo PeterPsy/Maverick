@@ -4,6 +4,11 @@ Design Studio is the Maverick host identity for an unchanged official
 [OpenDesign](https://github.com/nexu-io/open-design) installation. It is not a
 fork, overlay, or replacement editor.
 
+Design Studio declares `presentation.sidebar_enabled: false`: Maverick keeps
+the app rail and exposes shell controls in compact rail menus, leaving the
+OpenDesign canvas free of a Maverick detail sidebar. On mobile, the shell
+header menu provides those controls.
+
 ## Native product boundary
 
 The initial release is `ghcr.io/nexu-io/od:0.16.1`, pinned by manifest digest

@@ -38,12 +38,15 @@ export function MobileShellHeader({
 }) {
   const actionLabel = primaryActionLabel || "Azione principale";
   const logoSrc = sidebarLogoSrc(shellTheme);
+  const sidebarLabel = activeApp?.sidebar_enabled === false
+    ? (isSidebarOpen ? "Chiudi controlli workspace" : "Apri controlli workspace")
+    : (isSidebarOpen ? "Chiudi sidebar" : "Apri sidebar");
 
   return (
     <header className="bs-mobile-shell-header" aria-label="Mobile shell navigation">
       <div className="bs-mobile-shell-header__leading">
         <button
-          aria-label={isSidebarOpen ? "Chiudi sidebar" : "Apri sidebar"}
+          aria-label={sidebarLabel}
           aria-pressed={isSidebarOpen}
           className={`bs-mobile-shell-header__button bs-mobile-shell-header__menu ${isSidebarOpen ? "is-open" : ""}`}
           onClick={onToggleSidebar}

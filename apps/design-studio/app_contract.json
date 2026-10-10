@@ -62,7 +62,8 @@
     "platform_roles": null
   },
   "presentation": {
-    "frontend_role": "workspace"
+    "frontend_role": "workspace",
+    "sidebar_enabled": false
   },
   "permissions": {
     "secrets": {

@@ -4,6 +4,14 @@ import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
 import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
 
 describe("base-shell api normalization", () => {
+  it("preserves the app sidebar opt-out and defaults other apps to enabled", () => {
+    const payload = normalizeAppRegistryPayload({ items: [
+      { app_id: "canvas", sidebar_enabled: false },
+      { app_id: "chat" },
+      { app_id: "files", sidebar_enabled: true },
+    ] });
+    expect(payload.items.map((item) => item.sidebar_enabled)).toEqual([false, true, true]);
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

@@ -70,7 +70,7 @@ def parse_visibility_section(payload: dict[str, object]) -> AppVisibilityDeclara
 
 
 def parse_presentation_section(payload: dict[str, object], *, has_frontend_entrypoint: bool) -> AppPresentationDeclaration:
-    _reject_unexpected_fields(payload, {"frontend_role", "frontend_resumable"}, label="presentation")
+    _reject_unexpected_fields(payload, {"frontend_role", "frontend_resumable", "sidebar_enabled"}, label="presentation")
     role = _expect_string(payload, "frontend_role")
     if role not in {"workspace", "supporting", "none"}:
         raise AppContractValidationError("`presentation.frontend_role` must be workspace, supporting, or none.")
@@ -81,7 +81,12 @@ def parse_presentation_section(payload: dict[str, object], *, has_frontend_entry
     resumable = _expect_bool(payload, "frontend_resumable", default=False)
     if resumable and role != "workspace":
         raise AppContractValidationError("Only workspace frontends can declare frontend_resumable.")
-    return AppPresentationDeclaration(frontend_role=role, frontend_resumable=resumable)
+    sidebar_enabled = _expect_bool(payload, "sidebar_enabled", default=True)
+    return AppPresentationDeclaration(
+        frontend_role=role,
+        frontend_resumable=resumable,
+        sidebar_enabled=sidebar_enabled,
+    )
 
 
 def parse_lifecycle_section(payload: dict[str, object]) -> AppLifecycleDeclaration:

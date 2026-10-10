@@ -48,6 +48,7 @@ Do not declare surfaces that are not implemented.
 - if the contract declares `view_surfaces`, the app should implement real view state actions such as `view_filter`, `set_view_filter`, `set_custom_view`, and `clear_custom_view`
 - frontend apps must contain a `package.json` with a real `build` script and a declared frontend artifact root; no-op scripts that only check `frontend/dist` do not satisfy the contract
 - frontend apps must set `presentation.frontend_role` to `workspace` when the frontend is user-openable, or `supporting` when the frontend only supports a platform/plugin workflow
+- choose `presentation.sidebar_enabled` for workspace frontends: default true enables app-owned `shell.sidebar.primary`/`shell.sidebar.footer` widgets; false keeps only the shell app rail and moves generic shell controls to compact rail menus (the header menu on mobile). Apps choosing false must provide navigation and contextual actions in their main frontend. The canonical contract omits true and preserves false; widget absence alone does not disable the sidebar.
 - if app writes emit `app_events`, mounted frontend and widget surfaces should consume `maverick.app.data-changed` or `maverick.widget.data-changed` so users do not need manual refreshes
 
 The contract is not documentation-only metadata. It is an executable promise to the rest of Maverick.

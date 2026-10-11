@@ -39,6 +39,17 @@ IDs remain observation-specific, and the operator must resolve targets anew.
 Immediate post-input captures can precede asynchronous UI updates. Same-target
 read-only observations allow that state to settle without replaying the input;
 an unchanged immediate capture alone is not proof the mutation failed.
+Native structured controls, expected effects and completion checks may supply
+`{"ax": {...}, "pixel": {...}}` instead of a flat predicate. Both branches
+describe the same intended target/effect explicitly; there are no implicit label
+aliases. Every pixel branch must include its own normalized region. The current
+capture selects exactly one branch, both before input and during pending-effect
+verification, so a change of representation does not restart the sequence.
+Pixels still authorize clicks only; target ambiguity, exact-window identity,
+OCR confidence and pending-effect replay fences remain unchanged. A `text`
+expectation is a separate, exact-text-only schema, never combined with other keys.
+AX popup and radio buttons are eligible targets only when native metadata marks
+them actionable. Disabled and ambiguous controls remain rejected.
 Its catalog always includes native computer, Peekaboo and companion-browser tools.
 Actor instructions
 retain native UI rules while omitting workspace, project and code guidance that
@@ -550,3 +561,19 @@ remain unverified. These planned-task successes do not establish general
 reliability, comparative speed or per-trial cost. The verified Storage report and
 bounded audit/usage data are under
 `storage/generated/pc-use-benchmark/2026-10-11-reconnect-evaluation.{md,json}`.
+
+## Corrections after the reconnected evaluation (2026-10-11)
+
+The schema and runtime now support explicit AX/pixel selector pairs, including
+pending effects and completion checks. Focused regression tests change modes
+before and after input, reject partial or nested alternatives, preserve ambiguity
+checks and prevent a matching button label from verifying the display. Schema
+tests ensure combined `text`/`role` expectations are rejected consistently by
+the published contract and validator.
+
+MaverickMac's bounded detailed AX projection now puts popup, combo and editable
+controls before ordinary actions and container groups. Compact projection still
+prioritizes display values. Oversized records are skipped whole without hiding
+later targets of the same role. Truncated detailed metadata keeps its incomplete
+marker and does not recommend repeating the same detailed request. This change
+addresses the Settings menu omission without increasing the observation budget.

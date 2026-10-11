@@ -38,6 +38,66 @@ class ComputerPixelProgressTests(unittest.TestCase):
     def read(self, result):
         self.progress.record('mac_peekaboo', {'action': 'observe', 'bundle_id': BUNDLE, 'window_id': 42}, result)
 
+    def mode_plan(self):
+        step = {**STEP,
+                'control': {'ax': {'identifier': 'Seven'}, 'pixel': STEP['control']},
+                'expect': {'ax': {'role': 'statictext', 'value': '7'}, 'pixel': STEP['expect']}}
+        return validate_actor_task({'objective': 'Same exact window in either mode',
+            'completion_criterion': 'Display seven', 'steps': [step], 'completion_check': step['expect']})
+
+    def ax_observation(self, generation=1, value='0', *, duplicate=False):
+        from tests.unit.device_use.test_computer_task_progress import observation, BUNDLE as AX_BUNDLE
+        result = observation(generation, value, duplicate=duplicate)
+        result.result['contentItems'][0]['text'] = result.result['contentItems'][0]['text'].replace(AX_BUNDLE, BUNDLE)
+        return result
+
+    def test_mode_changes_before_and_after_dispatch_use_explicit_predicates(self):
+        for before_pixel, after_pixel in [(False, True), (True, False)]:
+            with self.subTest(before_pixel=before_pixel, after_pixel=after_pixel):
+                self.progress = ComputerTaskProgress(self.mode_plan())
+                self.read(self.ax_observation() if before_pixel else pixel_observation())
+                # The planner's previous representation cannot bind the input.
+                self.read(pixel_observation(2) if before_pixel else self.ax_observation(2))
+                tool, args = self.progress.prepare({'step_index': 0})
+                self.assertEqual(args['action'], 'click_point' if before_pixel else 'click')
+                self.assertEqual(args['snapshot'], 'px1_2' if before_pixel else 'ps1_2')
+                result = pixel_observation(3, '7') if after_pixel else self.ax_observation(3, '7')
+                self.progress.record(tool, args, result)
+                self.assertEqual(self.progress.index, 1)
+                self.assertTrue(self.progress.complete())
+                self.assertEqual(len(self.progress.history), 1)
+
+    def test_mode_change_cannot_verify_button_or_replay_pending_input(self):
+        self.progress = ComputerTaskProgress(self.mode_plan())
+        self.read(self.ax_observation())
+        self.progress.prepare({'step_index': 0})
+        self.read(pixel_observation(2))
+        self.assertEqual(self.progress.index, 0)
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'effect_pending'):
+            self.progress.prepare({'step_index': 0})
+        self.read(self.ax_observation(3, '7'))
+        self.assertTrue(self.progress.complete())
+
+    def test_current_ax_branch_still_rejects_ambiguous_targets(self):
+        self.progress = ComputerTaskProgress(self.mode_plan())
+        self.read(self.ax_observation(duplicate=True))
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'target_ambiguous'):
+            self.progress.prepare({'step_index': 0})
+        self.assertIsNone(self.progress.pending)
+
+    def test_representation_contract_rejects_partial_nested_and_unscoped_predicates(self):
+        valid = self.mode_plan()['steps'][0]
+        for control in [{'ax': {'identifier': 'Seven'}},
+                        {'ax': {'identifier': 'Seven'}, 'pixel': {'label': '7'}},
+                        {'ax': valid['control'], 'pixel': STEP['control']},
+                        {**valid['control'], 'label': '7'}]:
+            with self.subTest(control=control), self.assertRaises(ValueError):
+                validate_actor_task({'objective': 'x', 'completion_criterion': 'y',
+                                     'steps': [{**valid, 'control': control}]})
+        with self.assertRaises(ValueError):
+            validate_actor_task({'objective': 'x', 'completion_criterion': 'y',
+                'steps': [{**valid, 'tool': 'mac_browser', 'window_id': None}]})
+
     def test_only_locally_recognized_label_center_becomes_a_window_click(self):
         self.read(pixel_observation())
         tool, args = self.progress.prepare({'step_index': 0})

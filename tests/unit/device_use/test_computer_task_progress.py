@@ -104,6 +104,39 @@ class ComputerTaskProgressTests(unittest.TestCase):
         progress.record('mac_peekaboo', read, fixture.invoke('mac_peekaboo', read, 'settle'))
         self.assertEqual(progress.index, 1)
 
+    def test_popup_buttons_are_actionable_but_disabled_or_duplicate_menus_are_not(self):
+        result = observation()
+        result.result['contentItems'][0]['text'] += (
+            'AXPopUpButton (2 found):\n'
+            '  elem_70 - "Decision model" - value: "GPT-6-Luna" - identifier: operatorModel\n'
+            '  elem_71 - "Disabled" - [not actionable]\n')
+        observed = native_observation(result, 'mac_peekaboo', {})
+        self.assertEqual(observed.resolve({'role': 'popupbutton', 'identifier': 'operatorModel'}).element, 'elem_70')
+        with self.assertRaisesRegex(ValueError, 'target_missing'):
+            observed.resolve({'label': 'Disabled'})
+        self.assertTrue(observed.verifies({'role': 'popupbutton', 'value': 'GPT-6-Luna'}))
+
+    def test_schema_and_validator_agree_on_exact_text_and_representation_shapes(self):
+        from jsonschema import Draft202012Validator
+        from core.device_use.computer_task_progress import EXPECTATION_SCHEMA, SELECTOR_SCHEMA, validate_selector
+        region = {'x': 0, 'y': 0, 'width': 1, 'height': 0.2}
+        for expected, schema, cases in [
+            (True, EXPECTATION_SCHEMA, [({'text': 'Saved'}, True), ({'text': 'Saved', 'role': 'statictext'}, False),
+                ({'region': region}, False), ({'ax': {'text': 'Saved'}, 'pixel': {'label': 'Saved', 'region': region}}, True),
+                ({'ax': {'text': 'Saved'}, 'pixel': {'label': 'Saved'}}, False)]),
+            (False, SELECTOR_SCHEMA, [({'role': 'button'}, False), ({'label': 'Save'}, True),
+                ({'ax': {'identifier': 'Save'}, 'pixel': {'label': 'Save', 'region': region}}, True),
+                ({'ax': {'identifier': 'Save'}}, False)])]:
+            validator = Draft202012Validator(schema)
+            for value, accepted in cases:
+                with self.subTest(expected=expected, value=value):
+                    self.assertEqual(validator.is_valid(value), accepted)
+                    if accepted:
+                        self.assertEqual(validate_selector(value, expected=expected), value)
+                    else:
+                        with self.assertRaises(ValueError):
+                            validate_selector(value, expected=expected)
+
     def test_duplicates_and_missing_images_fail_before_dispatch(self):
         self.read(observation(duplicate=True))
         with self.assertRaisesRegex(DeviceUseUnavailableError, 'target_ambiguous'):

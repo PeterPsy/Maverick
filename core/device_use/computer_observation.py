@@ -15,6 +15,11 @@ def role_name(value):
     return str(value).removeprefix('AX').replace('_', '').lower()
 
 
+def current_selector(selector, *, pixels_only):
+    """Choose only the explicitly supplied predicate for this capture mode."""
+    return selector['pixel' if pixels_only else 'ax'] if 'ax' in selector else selector
+
+
 def normalized_region(value):
     if (not isinstance(value, dict) or set(value) != {'x', 'y', 'width', 'height'}
         or any(type(number) not in {int, float} or not math.isfinite(number) for number in value.values())
@@ -64,12 +69,14 @@ class NativeObservation:
     pixels_only: bool = False
 
     def resolve(self, selector):
+        selector = current_selector(selector, pixels_only=self.pixels_only)
         matches = [control for control in self.controls if control.actionable and control.matches(selector)]
         if len(matches) != 1:
             raise ValueError('computer_actor_target_ambiguous' if matches else 'computer_actor_target_missing')
         return matches[0]
 
     def verifies(self, expectation):
+        expectation = current_selector(expectation, pixels_only=self.pixels_only)
         if self.pixels_only and 'region' not in expectation:
             return False
         if set(expectation) == {'text'}:
@@ -144,7 +151,9 @@ def native_observation(result, tool, arguments):
             identifier = re.search(r'\bidentifier:\s*(.*?)(?:\s+-\s+|$)', line)
             controls.append(NativeControl(match[1], match[2], role,
                 identifier[1].strip() if identifier else '', value[1] if value else None,
-                '[not actionable]' not in line and role_name(role) in {'button', 'textfield', 'textarea', 'menuitem', 'checkbox', 'combobox'}))
+                '[not actionable]' not in line and role_name(role) in {
+                    'button', 'textfield', 'textarea', 'menuitem', 'checkbox', 'combobox',
+                    'popupbutton', 'radiobutton'}))
             continue
         # Compact, line-oriented native fixtures and future receipt projections.
         match = re.match(r'\s*(elem_[\w-]+)\s*-\s*(\w+)\s*-\s*label:\s*(.*?)(?:\s+-\s+|$)', line)

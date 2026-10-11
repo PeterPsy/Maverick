@@ -1,10 +1,10 @@
 """Runtime-owned steps and effect checks for bounded UI tasks."""
 
-from core.device_use.computer_observation import native_observation, normalized_region
+from core.device_use.computer_observation import current_selector, native_observation, normalized_region
 from core.device_use.errors import DeviceUseUnavailableError
 
 
-SELECTOR_SCHEMA = {
+FLAT_SELECTOR_SCHEMA = {
     'type': 'object', 'additionalProperties': False, 'minProperties': 1,
     'properties': {**{key: {'type': 'string', 'minLength': 1, 'maxLength': 200}
                    for key in ('label', 'identifier', 'role', 'value')},
@@ -13,10 +13,30 @@ SELECTOR_SCHEMA = {
             'required': ['x', 'y', 'width', 'height'], 'properties': {
                 **{key: {'type': 'number', 'minimum': 0, 'exclusiveMaximum': 1} for key in ('x', 'y')},
                 **{key: {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 1} for key in ('width', 'height')}}}},
+    'anyOf': [{'required': ['label']}, {'required': ['identifier']}],
 }
-EXPECTATION_SCHEMA = {**SELECTOR_SCHEMA,
-    'description': 'Expected visible effect. Prefer exact label/identifier/role/value selectors. text matches an exact visible control label, value, label: value, or standalone line, never a substring.', 'properties': {
-    **SELECTOR_SCHEMA['properties'], 'text': {'type': 'string', 'minLength': 1, 'maxLength': 500}}}
+FLAT_EXPECTATION_SCHEMA = {key: value for key, value in FLAT_SELECTOR_SCHEMA.items() if key != 'anyOf'}
+FLAT_EXPECTATION_SCHEMA['anyOf'] = [{'required': [key]} for key in ('label', 'identifier', 'role', 'value')]
+TEXT_EXPECTATION_SCHEMA = {
+    'type': 'object', 'additionalProperties': False, 'required': ['text'],
+    'properties': {'text': {'type': 'string', 'minLength': 1, 'maxLength': 500}},
+}
+
+
+def representation_schema(ax, pixel):
+    return {'type': 'object', 'additionalProperties': False, 'required': ['ax', 'pixel'],
+            'description': 'Explicit alternatives for the same native control/effect. The current capture selects ax or pixel; neither branch is an alias or fallback. Pixel predicates require region.',
+            'properties': {'ax': ax, 'pixel': {**pixel, 'required': ['region']}}}
+
+
+SELECTOR_SCHEMA = {'anyOf': [FLAT_SELECTOR_SCHEMA,
+    representation_schema(FLAT_SELECTOR_SCHEMA, FLAT_SELECTOR_SCHEMA)]}
+FLAT_EFFECT_SCHEMA = {'anyOf': [FLAT_EXPECTATION_SCHEMA, TEXT_EXPECTATION_SCHEMA]}
+EXPECTATION_SCHEMA = {
+    'description': 'Expected visible effect. Exact selectors or text alone (exact label, value, label: value, or standalone line). Native ax/pixel alternatives allow representation changes; each pixel effect needs its own region.',
+    'anyOf': [FLAT_EXPECTATION_SCHEMA, TEXT_EXPECTATION_SCHEMA,
+              representation_schema(FLAT_EFFECT_SCHEMA, FLAT_EXPECTATION_SCHEMA)],
+}
 STEP_SCHEMA = {
     'type': 'object', 'additionalProperties': False,
     'required': ['tool', 'target', 'action', 'control', 'expect'],
@@ -41,6 +61,15 @@ SEMANTIC_TOOL = {
 
 
 def validate_selector(value, *, expected=False):
+    if isinstance(value, dict) and set(value) == {'ax', 'pixel'}:
+        if any(not isinstance(branch, dict) or 'ax' in branch or 'pixel' in branch
+               for branch in value.values()):
+            raise ValueError('computer_actor_selector_invalid')
+        ax = validate_selector(value['ax'], expected=expected)
+        pixel = validate_selector(value['pixel'], expected=expected)
+        if 'region' not in pixel:
+            raise ValueError('computer_actor_selector_invalid')
+        return {'ax': ax, 'pixel': pixel}
     keys = {'label', 'identifier', 'role', 'value', 'region'} | ({'text'} if expected else set())
     if (not isinstance(value, dict) or not value or set(value) - keys
         or any(not isinstance(item, str) or not item or len(item) > (500 if key == 'text' else 200)
@@ -64,8 +93,11 @@ def validate_step(value, prepared_text):
     if 'window_id' in value and (value['tool'] != 'mac_peekaboo'
         or type(value['window_id']) is not int or not 1 <= value['window_id'] <= 4294967295):
         raise ValueError('computer_actor_step_invalid')
-    return {**value, 'control': validate_selector(value['control']),
-            'expect': validate_selector(value['expect'], expected=True)}
+    control = validate_selector(value['control'])
+    expect = validate_selector(value['expect'], expected=True)
+    if value['tool'] != 'mac_peekaboo' and ('ax' in control or 'ax' in expect):
+        raise ValueError('computer_actor_step_invalid')
+    return {**value, 'control': control, 'expect': expect}
 
 
 class ComputerTaskProgress:
@@ -101,7 +133,9 @@ class ComputerTaskProgress:
             raise DeviceUseUnavailableError('computer_actor_exact_window_required')
         if observed.pixels_only and step['action'] != 'click':
             raise DeviceUseUnavailableError('computer_actor_pixel_text_click_only')
-        if observed.pixels_only and ('region' not in step['control'] or 'region' not in step['expect']):
+        if observed.pixels_only and (
+            'region' not in current_selector(step['control'], pixels_only=True)
+            or 'region' not in current_selector(step['expect'], pixels_only=True)):
             raise DeviceUseUnavailableError('computer_actor_pixel_region_required')
         try:
             control = observed.resolve(step['control'])

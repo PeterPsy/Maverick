@@ -31,7 +31,11 @@ expected effects. Pin window_id when selecting one native window. Pixel-only
 observations may include locally recognized image_text labels; supply normalized
 region rectangles for both the click label and its expected effect, keeping the
 display region distinct from button labels. They authorize clicks only, never
-typing or keyboard focus. A plan-required response has sent no input: provide the plan
+typing or keyboard focus. A native selector or expected effect can instead supply
+both ax and pixel predicates for the same target. The runtime chooses only the
+current capture mode, including after input; both pixel predicates need regions.
+text expectations stand alone and cannot be combined with role/value/region.
+A plan-required response has sent no input: provide the plan
 instead of repeating the same unplanned request. A configured recovery model can
 handle unplanned navigation before input starts.
 Delegate several ordinary UI steps together, not one tool call per click. The tool

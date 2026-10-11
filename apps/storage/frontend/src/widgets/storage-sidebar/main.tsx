@@ -15,6 +15,7 @@ import {
 import { FileCard } from '../../components/ui/file-card-collections';
 import { DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, currentStorageAppId, disconnectDriveConnection, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter, syncDriveConnection } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
+import { driveConnectionStatus } from '../../lib/driveConnectionStatus';
 import { useStorageReadLifecycle } from '../../hooks/useStorageReadLifecycle';
 import { loadCatalogSummary, loadDirectoryChildren } from '../../storageApi';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
@@ -310,13 +311,6 @@ function buildDriveTreeNodes(connections: DriveConnection[], cache: DriveChildre
 function driveConnectionLabel(connection: DriveConnection) {
   const account = connection.account_email || connection.display_name;
   return account || 'Google Drive';
-}
-
-function driveConnectionStatus(connection: DriveConnection): FolderTreeNode['status'] {
-  if (connection.status !== 'connected') {
-    return connection.status;
-  }
-  return connection.credential?.secret_ref && connection.credential?.status === 'active' ? 'connected' : 'reconnect_required';
 }
 
 function GoogleDriveIcon({ className, ...props }: SVGProps<SVGSVGElement>) {

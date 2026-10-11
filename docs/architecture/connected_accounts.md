@@ -167,3 +167,9 @@ importing metadata does not create or broaden a grant.
 Account UI uses email as the primary identity and the display name as secondary
 copy. Inline sender and calendar destination labels use `email (name)` when the
 name differs. Account IDs continue to drive all operations and selections.
+
+Storage's sidebar uses the connected status of a valid Core-managed account
+projection rather than requiring an app-owned Vault credential reference. Its
+provider requests still require the matching invocation-scoped Core handle;
+withdrawn account authority remains unavailable, and manual Drive connections
+retain their local credential metadata check.

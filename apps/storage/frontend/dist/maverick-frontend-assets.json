@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "ac589752bde57d362d1a72eeb50a68953ab455710c0242547bc9887074f94a84",
+  "build_id": "a4fc8990d7281b87f9cccd0afe28104b757dcf6a143da6e8bc371767fa322773",
   "entrypoints": [
     "index.html",
     "widgets/file-preview/index.html",
@@ -74,9 +74,9 @@
       "size_bytes": 427679
     },
     {
-      "path": "assets/widgets/storage-sidebar/index-BKUah59V.js",
-      "sha256": "37f35e3c7f7b85888830d18d022bd6e347310639d2f90feb7751804edec42f27",
-      "size_bytes": 30095
+      "path": "assets/widgets/storage-sidebar/index-DPKf0LlI.js",
+      "sha256": "19f70aea0c95da816bb9641892b69ef17af8bfc00767332b8a52f915ec27c6b0",
+      "size_bytes": 30285
     },
     {
       "path": "assets/widgets/storage-sidebar-footer/index-CK-tH4Lt.js",
@@ -107,7 +107,7 @@
     },
     {
       "path": "widgets/storage-sidebar/index.html",
-      "sha256": "2418126a5982a1641bf3fae4d03abae8f69b3971723fbd78f5f87a27c44870fc",
+      "sha256": "561a4a0031ae199c40b346be07c2ea8b35ce5762d7eb174fae081863ce1d527a",
       "size_bytes": 906
     },
     {

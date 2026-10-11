@@ -33,11 +33,11 @@
     "browser": {
       "cli": {
         "descriptor_sha256": "5975554e6d022ed3491f525d69ef616fd679a0896e6b37b529da69331a2be505",
-        "execution_sha256": "c8a8118f5b0746c0f59554602f1393e04565ba128ac70b3bf7bad9f54fc067a9"
+        "execution_sha256": "06f9f4969ed9e5ef2e790b4f5f65e2676f5f4d8bb05ace5fa6e98215172fdc11"
       },
       "mcp": {
         "descriptor_sha256": "fd2cfff1c873acbfb3780ce90994ff47933f28413c695f3dc4e2f498e8e05a72",
-        "execution_sha256": "44cf4f970573946d489c3c273ad49b02d892f4469a117976a3bd500b32749646"
+        "execution_sha256": "394948b91abccd5665863346d54d366965f2089a4bb6d95c1e364a881ee455dc"
       }
     },
     "calendar": {

@@ -8,6 +8,7 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {createInterface} from "node:readline";
+import {request} from "node:http";
 import {observe} from "../companion/dom-actions.mjs";
 import {analyzeVideo} from "../companion/workflows.mjs";
 
@@ -26,14 +27,24 @@ try {
   server.stderr.on("data",chunk=>process.stderr.write(chunk));
   const lines=createInterface({input:server.stdout});
   const info=await Promise.race([new Promise(resolve=>lines.once("line",line=>resolve(JSON.parse(line)))),new Promise((_,reject)=>setTimeout(()=>reject(new Error("fixture_server_timeout")),10000))]);
-  const origin=`http://127.0.0.1:${info.port}`;
-  const frameOrigin=`http://localhost:${info.port}`;
-  const api=async body=>{const response=await fetch(`${origin}/api/apps/browser/backend`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const result=await response.json();assert(response.ok,JSON.stringify(result));return result;};
+  const origin=`http://maverick.localhost:${info.port}`;
+  const transport=`http://127.0.0.1:${info.port}`;
+  const frameOrigin=`http://af-0123456789abcdef01234567.sidecars.maverick.localhost:${info.port}`;
+  // Node's fetch rewrites Host; send the exact virtual host to the local fixture.
+  const fixtureFetch=(url,options={})=>new Promise((resolve,reject)=>{
+    const req=request(url.replace(origin,transport).replace(frameOrigin,transport),{method:options.method || "GET",headers:{...options.headers,Host:new URL(url).host,
+      ...(options.body ? {"Content-Length":Buffer.byteLength(options.body)} : {})}},response=>{
+      const chunks=[];response.on("data",chunk=>chunks.push(chunk));response.on("error",reject);
+      response.on("end",()=>resolve(new Response(Buffer.concat(chunks),{status:response.statusCode,headers:response.headers})));
+    });
+    req.on("error",reject);req.end(options.body);
+  });
+  const api=async body=>{const response=await fixtureFetch(`${origin}/api/apps/browser/backend`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const result=await response.json();assert(response.ok,JSON.stringify(result));return result;};
   const extension=path.join(temporary,"extension");cpSync(path.join(root,"frontend/public/companion"),extension,{recursive:true});
   // Only the fixture manifest pre-grants hosts, avoiding the permission dialog.
   // The production package still has no permanent host permissions.
   const manifest=JSON.parse(readFileSync(path.join(extension,"manifest.json")));
-  manifest.host_permissions=["https://www.instagram.com/*","http://localhost/*"];
+  manifest.host_permissions=["https://www.instagram.com/*","http://*.localhost/*","http://localhost/*","http://127.0.0.1/*"];
   writeFileSync(path.join(extension,"manifest.json"),JSON.stringify(manifest));
   execFileSync("espeak-ng",["-w",path.join(temporary,"voice.wav"),"Maverick browser reads video and records audio locally."]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc=size=320x180:rate=12","-i",path.join(temporary,"voice.wav"),"-t","5","-vf","format=yuv420p","-af","apad","-c:v","libx264","-threads","1","-c:a","aac","-movflags","+faststart",path.join(temporary,"video.mp4")]);
@@ -41,18 +52,15 @@ try {
   const media=readFileSync(path.join(temporary,"video.mp4"));
   const endedMedia=readFileSync(path.join(temporary,"ended.mp4"));
   context=await chromium.launchPersistentContext(path.join(temporary,"profile"),{headless:true,channel:"chromium",ignoreDefaultArgs:["--mute-audio"],viewport:{width:1000,height:800},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,"--enable-unsafe-extension-debugging","--autoplay-policy=no-user-gesture-required"]});
-  assert.equal((await fetch(`${origin}/apps/browser/?connector=1`)).status,403);
-  assert.equal((await fetch(`${origin}/apps/browser/maverick-browser-companion.zip`)).status,403);
-  assert.equal((await fetch(`${frameOrigin}/apps/browser/?connector=1`)).status,401);
-  const setup=await context.newPage(); await setup.goto(`${frameOrigin}/__test/authorize`);
-  await setup.waitForSelector("#url");
-  const connectorAddress=await setup.locator("#url").inputValue();
-  assert.equal(new URL(connectorAddress).origin,frameOrigin);
-  assert.equal(await setup.locator("#download").getAttribute("href"),`${frameOrigin}/apps/browser/maverick-browser-companion.zip`);
+  assert.equal((await fixtureFetch(`${origin}/apps/browser/?connector=1`)).status,403);
+  assert.equal((await fixtureFetch(`${frameOrigin}/apps/browser/?connector=1`)).status,401);
+  assert.equal((await context.cookies()).length,0,"Chrome starts without any Maverick or iframe session");
+  const setup=await context.newPage(); await setup.goto(`${origin}/__test/download`);
+  const connectorAddress=`${origin}/app/browser?connector=1`;
   const downloadPromise=setup.waitForEvent("download");
-  await setup.locator("#download").click();
+  await setup.getByRole("link",{name:"Download Companion"}).click();
   const download=await downloadPromise;assert.equal(await download.failure(),null);
-  assert(readFileSync(await download.path()).equals(readFileSync(path.join(root,"frontend/public/maverick-browser-companion.zip"))));
+  assert(readFileSync(await download.path()).equals(readFileSync(path.join(root,"frontend/package/maverick-browser-companion.zip"))));
   await setup.close();
   await context.route("https://www.instagram.com/**",route=>{
     if(route.request().url().includes("fixture-media.mp4"))return route.fulfill({contentType:"video/mp4",body:media});
@@ -85,19 +93,25 @@ try {
   await wait(()=>popupEvaluate("typeof document.querySelector('#share')?.onclick === 'function'"));
   await popupEvaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
   await wait(async()=>{
-    const page=context.pages().find(page=>page.url().startsWith(`${frameOrigin}/apps/browser/`));if(page)return page;
+    const page=context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));if(page)return page;
     const status=await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"");
     if(status && !status.startsWith("Tab shared"))throw new Error(`share_failed: ${status}`);
-    return context.pages().find(page=>page.url().startsWith(`${frameOrigin}/apps/browser/`));
+    return context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));
   }).catch(async error=>{
     console.error(JSON.stringify({phase:"sharing",popup_status:await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"closed"),worker_state:await worker.evaluate(async()=>({contexts:await chrome.runtime.getContexts({}),binding:await chrome.storage.session.get("binding")}))}));
     throw error;
   });
-  const connector=context.pages().find(page=>page.url().startsWith(`${frameOrigin}/apps/browser/`));
+  const connectorWindow=context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));
+  await connectorWindow.getByRole("button",{name:"Sign in as fixture user"}).click();
+  await wait(()=>connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
+  const connector=connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`));
+  await connector.waitForSelector("#connect:visible");
+  await wait(async()=> (await worker.evaluate(()=>chrome.storage.session.get("binding"))).binding?.connectorDocumentId);
+  assert.equal(await connector.locator("#url").inputValue(),connectorAddress);
   assert.equal(await connector.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),"light");
-  const consoleErrors=[];connector.on("pageerror",e=>consoleErrors.push(e.message));
+  const consoleErrors=[];connectorWindow.on("pageerror",e=>consoleErrors.push(e.message));
   await browser.send("Target.detachFromTarget",{sessionId});
-  await connector.bringToFront();
+  await connectorWindow.bringToFront();
   await connector.locator("#connect").click();
   const connection=await wait(async()=> (await api({action:"companion.overview"})).connections.find(c=>c.status === "connected"));
   console.log(JSON.stringify({phase:"chrome-connected"}));
@@ -138,7 +152,7 @@ try {
   } finally {await endedPage.close();}
   const analyzed=await run("video.analyze",{frame_count:3,max_seconds:4,include_audio:true,save_evidence:true});
   assert.equal(analyzed.frames.length,3);assert(analyzed.frames.every(f=>f.storage?.file_id && !f.base64));assert(analyzed.audio.storage?.file_id);assert(analyzed.audio.size_bytes>5000);assert.equal(analyzed.transcription.status,"unavailable");
-  const capturedAudio=await fetch(`${origin}/__test/media?operation_id=${analyzed.operation_id}`);assert(capturedAudio.ok);
+  const capturedAudio=await fixtureFetch(`${origin}/__test/media?operation_id=${analyzed.operation_id}`);assert(capturedAudio.ok);
   writeFileSync(path.join(tmpdir(),"maverick-browser-captured.webm"),Buffer.from(await capturedAudio.arrayBuffer()));
   const cancelled=await api({action:"video.analyze",session_id:connection.session_id,frame_count:1,max_seconds:4,include_audio:true,save_evidence:false});
   await wait(()=>worker.evaluate(async()=>{const status=await chrome.runtime.sendMessage({target:"offscreen",action:"status"});return status?.recording;}));
@@ -154,12 +168,12 @@ try {
   assert.equal(consoleErrors.length,0,consoleErrors.join("\n"));
   // Native frontend at desktop and mobile sizes; no horizontal overflow.
   for(const viewport of [{width:1280,height:800},{width:390,height:844}]) {
-    await connector.setViewportSize(viewport);assert(await connector.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-    await connector.screenshot({path:path.join(tmpdir(),`maverick-browser-ui-${viewport.width}.png`)});
+    await connectorWindow.setViewportSize(viewport);assert(await connector.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await connectorWindow.screenshot({path:path.join(tmpdir(),`maverick-browser-ui-${viewport.width}.png`)});
   }
   // Exercise the agent-owned MCP surface through real Chrome/queue/Storage boundaries.
   const mcp=async(tool_name,arguments_={})=>{
-    const response=await fetch(`${origin}/__test/connectors/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},
+    const response=await fixtureFetch(`${origin}/__test/connectors/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({tool_name,arguments:arguments_})});
     const result=await response.json();assert(response.ok,JSON.stringify(result));return result;
   };
@@ -192,13 +206,13 @@ try {
   const exportedRun=(await mcp('connectors_run_get',{id:exporting.run.id})).run;
   assert.equal(exportedRun.status,'completed',JSON.stringify(exportedRun));
   assert(exportedRun.result.file.file_id);
-  const exported=await fetch(`${origin}/${exportedRun.result.file.workspace_relative_path}`);
+  const exported=await fixtureFetch(`${origin}/${exportedRun.result.file.workspace_relative_path}`);
   assert(exported.ok);assert((await exported.text()).includes('Instagram acceptance collection'));
-  assert.equal((await fetch(`${origin}/apps/platform-connectors/`)).status,404);
+  assert.equal((await fixtureFetch(`${origin}/apps/platform-connectors/`)).status,404);
   assert.equal(consoleErrors.length,0,consoleErrors.join('\n'));
   await instagram.goto("https://www.instagram.com/accounts/login/");
   await wait(async()=>{const overview=await api({action:"companion.overview"});return overview.connections.find(c=>c.session_id === connection.session_id)?.status === "revoked";});
-  console.log(JSON.stringify({status:"passed",real_chromium:true,isolated_connector_cookie:true,isolated_download_verified:true,...mediaSummary,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,connectors_mcp_workflow:true,connectors_frontend_absent:true,scope_revocation:true,browser_desktop_mobile_layout:true,instagram_access_verified:false}));
+  console.log(JSON.stringify({status:"passed",real_chromium:true,fresh_chrome_login:true,exact_connector_document:true,anonymous_download_verified:true,...mediaSummary,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,connectors_mcp_workflow:true,connectors_frontend_absent:true,scope_revocation:true,browser_desktop_mobile_layout:true,instagram_access_verified:false}));
 }finally {
   if(context)await context.close();
   if(server.exitCode === null && server.signalCode === null){const exited=new Promise(resolve=>server.once("exit",resolve));server.kill("SIGTERM");await exited;}

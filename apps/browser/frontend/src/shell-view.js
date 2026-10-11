@@ -27,7 +27,7 @@ export function mountShell(connectorMode) {
           <ol class="setup-steps">
             <li><strong>Install Companion</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. Reload it after an update.</p></li>
             <li><strong>Share a tab</strong><p>Open a supported platform in Chrome, sign in there and choose Share in the extension. Paste this connector address.</p></li>
-            <li><strong>Connect to Maverick</strong><p>Press Connect in the window opened by the extension. Keep that window open while your tab is shared.</p></li>
+            <li><strong>Connect to Maverick</strong><p>Sign in to Maverick in the Chrome window opened by the extension, if asked. Press Connect selected tab and keep that window open while your tab is shared.</p></li>
           </ol>
           <label for="url">Connector address</label>
           <div class="copy"><input id="url" readonly spellcheck="false"><button id="copy" class="secondary">Copy address</button></div>

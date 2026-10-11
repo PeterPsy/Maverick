@@ -1856,13 +1856,17 @@ plugin. It leaves HTML/CSS on the declared `/apps/<app_id>/` mount and emits
 lazy module-preload dependencies, worker URLs, and imported media relative to
 the platform-origin module through `import.meta.url`, never relative to the
 isolated document. Public build outputs include safe script/module, style,
-image, audio/video, font, PDF, and WebAssembly types; one-year immutability still
+image, audio/video, font, PDF, ZIP packages, and WebAssembly types; one-year immutability still
 requires an exact manifest record. This is the normative browser-cache path for
 app bundles. The shell service worker cannot control a document on another
 origin, so app artifacts use their verified HTTP cache policy rather than a
 shell-owned runtime Cache API entry. Source maps and source-like extensions such
 as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `.py`, and `.env` must not be
 treated as public static assets or SPA fallback routes.
+Downloadable source/extension packages must be emitted below `assets/` and
+contain only public app build content, never workspace data or credentials.
+Their platform-origin URLs remain accessible before login and across browser
+profiles; authenticated app documents still require isolated frame bootstrap.
 Workspace-local editable backend entrypoints are additionally workspace-admin
 gated until a dedicated app backend sandbox/governance model is available.
 

@@ -130,6 +130,7 @@ _PUBLIC_STATIC_EXTENSIONS = {
     ".webp",
     ".woff",
     ".woff2",
+    ".zip",
 }
 _PUBLIC_APP_STATIC_MANIFEST = {
     "app-icon-lightcolor.png",

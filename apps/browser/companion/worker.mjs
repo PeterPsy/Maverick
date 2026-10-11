@@ -1,14 +1,20 @@
-import {boundedCommand,connectorUrl,platformUrl,platformForUrl,sameConnector} from "./scope.mjs";
+import {boundedCommand,connectorUrl,platformUrl,platformForUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
+import {attachConnectorFrame} from "./connector-frame.mjs";
 import {observe} from "./dom-actions.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
 
 let busy=null;
 let lastScreenshotAt=0;
+let attaching;
 const activationGenerations=new Map();
 chrome.tabs.onActivated.addListener(event=>{activationGenerations.set(event.windowId,(activationGenerations.get(event.windowId) || 0)+1);});
 chrome.windows.onRemoved.addListener(id=>activationGenerations.delete(id));
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const binding=async()=> (await chrome.storage.session.get("binding")).binding;
+const attach=b=>{
+  if(attaching)return attaching;
+  attaching=attachConnectorFrame(b,binding).finally(()=>{attaching=null;});return attaching;
+};
 async function capture(action,parameters={}) {
   const result=await chrome.runtime.sendMessage({target:"offscreen",action,parameters});
   if(!result || result.error)throw new Error(result?.error || "capture_unavailable");return result;
@@ -117,12 +123,12 @@ async function share(message) {
     await capture("start",{streamId});
     const window=await chrome.windows.create({url:url.href,type:"popup",width:1040,height:850});
     const connector=window.tabs[0];
-    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,platform:platformForUrl(tab.url)}});
+    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:platformForUrl(tab.url)}});
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
     await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#5665df"});
     // A tab may finish loading before onUpdated observes the stored binding.
     const loaded=await chrome.tabs.get(connector.id);
-    if(loaded.status === "complete")await chrome.scripting.executeScript({target:{tabId:connector.id},files:["content.js"]});
+    if(loaded.status === "complete")await chrome.scripting.executeScript({target:{tabId:connector.id,frameIds:[0]},files:["shell-bridge.js"]});
     return {status:"shared"};
   } catch(error) {await stop();throw error;}
 }
@@ -136,6 +142,11 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     if(message.action === "stop" && sender.url === chrome.runtime.getURL("popup.html"))return stop();
     const b=await binding();
     if(!b || !sender.tab || !sameConnector(sender.tab,b))throw new Error("connector_scope_required");
+    if(message.action === "connector.refresh") {
+      if(sender.frameId !== 0 || sender.url !== sender.tab.url)throw new Error("connector_scope_required");
+      return attach(b);
+    }
+    if(!sameConnectorFrame(sender,b))throw new Error("connector_scope_required");
     if(message.action === "stop")return stop();
     if(message.action === "cancel") {
       if(busy?.id === message.command?.operation_id)busy.cancelled=true;
@@ -153,7 +164,7 @@ chrome.tabs.onUpdated.addListener(async (id,change,tab)=>{
   const b=await binding();if(!b)return;
   if(id===b.tabId && change.url) {try{platformUrl(change.url,b.platform);}catch{await stop("tab_left_platform_scope");}}
   if(id===b.connectorTabId && change.url && !sameConnector(tab,b))await stop("connector_left_browser");
-  if(id===b.connectorTabId && change.status === "complete" && sameConnector(tab,b))await chrome.scripting.executeScript({target:{tabId:id},files:["content.js"]}).catch(()=>stop("connector_injection_failed"));
+  if(id===b.connectorTabId && change.status === "complete" && sameConnector(tab,b))await chrome.scripting.executeScript({target:{tabId:id,frameIds:[0]},files:["shell-bridge.js"]}).catch(()=>stop("connector_injection_failed"));
 });
 chrome.alarms.onAlarm.addListener(async alarm=>{
   if(alarm.name !== "connector-wake")return;
@@ -161,7 +172,8 @@ chrome.alarms.onAlarm.addListener(async alarm=>{
   try {
     const connector=await chrome.tabs.get(b.connectorTabId);
     if(!sameConnector(connector,b))return stop("connector_left_browser");
-    await chrome.tabs.sendMessage(b.connectorTabId,{target:"connector",action:"wake"});
+    const result=await attach(b);
+    if(result.status === "attached")await chrome.tabs.sendMessage(b.connectorTabId,{target:"connector",action:"wake"},{documentId:result.binding.connectorDocumentId});
   } catch {await stop("connector_unavailable");}
 });
 // Alarm persistence is not assumed across worker suspension or extension reload.

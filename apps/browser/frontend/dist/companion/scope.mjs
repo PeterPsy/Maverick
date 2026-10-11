@@ -30,14 +30,36 @@ export function platformUrl(value,expectedPlatform=null) {
 
 export function connectorUrl(value) {
   const url = new URL(value);
-  if (url.username || url.password || !(url.protocol === "https:" || url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) throw new Error("secure_connector_url_required");
-  if (url.pathname !== "/apps/browser/" && url.pathname !== "/apps/browser/index.html") throw new Error("browser_connector_url_required");
-  const theme = url.searchParams.get("maverick_theme"), scheme = url.searchParams.get("maverick_color_scheme");
+  if (url.username || url.password || !(url.protocol === "https:" || url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname.endsWith(".localhost")))) throw new Error("secure_connector_url_required");
+  if (url.pathname !== "/app/browser") throw new Error("browser_connector_url_required");
+  const domain = url.searchParams.get("frame_domain");
+  if (domain && (!/^[a-z0-9.-]+$/u.test(domain) || domain.split(".").some(part => !part || part.startsWith("-") || part.endsWith("-")))) throw new Error("invalid_frame_domain");
   url.search = "?connector=1";
-  if (["light", "dark"].includes(theme)) url.searchParams.set("maverick_theme", theme);
-  if (["light", "dark"].includes(scheme)) url.searchParams.set("maverick_color_scheme", scheme);
+  if (domain) url.searchParams.set("frame_domain", domain);
   url.hash = "";
   return url;
+}
+
+export function connectorOrigins(url) {
+  if (url.protocol === "https:") return [url.origin + "/*", `https://*.sidecars.${url.searchParams.get("frame_domain") || url.hostname}/*`];
+  return [url.origin + "/*", "http://localhost/*", "http://127.0.0.1/*", "http://*.localhost/*"];
+}
+
+export function connectorFrameUrl(value, origin, domain) {
+  try {
+    const url = new URL(value), platform = new URL(origin);
+    const local = platform.protocol === "http:" && ["localhost", "127.0.0.1"].includes(platform.hostname);
+    const host = url.hostname;
+    const isolated = /^af-[a-f0-9]{24}$/u.test(host.split(".")[0]) && host.slice(host.indexOf(".")) === `.sidecars.${domain || platform.hostname}`;
+    if (url.username || url.password || url.protocol !== platform.protocol || url.port !== platform.port || !(isolated || local && ["localhost", "127.0.0.1"].includes(host))) return false;
+    return ["/apps/browser/", "/apps/browser/index.html"].includes(url.pathname);
+  } catch { return false; }
+}
+
+export function sameConnectorFrame(sender, binding) {
+  return sameConnector(sender.tab, binding) && sender.frameId === binding.connectorFrameId
+    && sender.documentId === binding.connectorDocumentId && Boolean(binding.connectorDocumentId)
+    && connectorFrameUrl(sender.url, binding.origin, binding.frameDomain) && new URL(sender.url).origin === binding.connectorFrameOrigin;
 }
 
 export function sameConnector(tab, binding) {

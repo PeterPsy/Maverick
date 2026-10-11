@@ -48,8 +48,10 @@ try {
   await frame.waitForSelector("#url");
   await frame.waitForFunction(() => document.querySelector("#tab-count").textContent === "0");
   assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
-  assert.equal(new URL(await frame.locator("#url").inputValue()).origin, isolated);
-  assert.equal(await frame.locator("#download").getAttribute("href"), `${isolated}/apps/browser/maverick-browser-companion.zip`);
+  assert.equal(await frame.locator("#url").inputValue(), `${platform}/app/browser?connector=1`);
+  const archiveUrl = await frame.locator("#download").getAttribute("href");
+  assert.equal(new URL(archiveUrl).origin, platform);
+  assert.match(new URL(archiveUrl).pathname, /^\/apps\/browser\/assets\/maverick-browser-companion-[\w-]+\.zip$/u);
   // Native downloads are verified against the HTTP server in companion.e2e;
   // route interception cannot fulfill Chromium's browser-process download.
   const archive = await frame.evaluate(async () => {
@@ -57,8 +59,11 @@ try {
     return {status: response.status, bytes: [...new Uint8Array(await response.arrayBuffer())]};
   });
   assert.equal(archive.status, 200);
-  assert(Buffer.from(archive.bytes).equals(readFileSync(resolve(dist, "maverick-browser-companion.zip"))));
+  assert(Buffer.from(archive.bytes).equals(readFileSync(resolve(dist, new URL(archiveUrl).pathname.replace("/apps/browser/", "")))));
   const send = message => page.evaluate(({message, isolated}) => document.querySelector("iframe").contentWindow.postMessage(message, isolated), {message, isolated});
+  await send({type: "maverick.app.navigate", app_id: "browser", params: {connector: "1"}});
+  await frame.waitForFunction(() => !document.querySelector("#connector-actions").hidden);
+  assert.equal(await frame.locator("#setup").getAttribute("open"), "");
   await send({type: "maverick.shell.theme-changed", theme: {effective: "dark", color_scheme: "dark", mode: "dark"}});
   await frame.waitForFunction(() => document.documentElement.dataset.maverickTheme === "dark");
   await frame.evaluate(() => window.postMessage({type: "maverick.shell.theme-changed", theme: {effective: "light"}}, location.origin));

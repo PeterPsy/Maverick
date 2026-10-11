@@ -2,6 +2,7 @@
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import html
 import mimetypes
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[3]
 APP = ROOT / "apps/browser"
@@ -19,6 +21,8 @@ from service import handle_action
 TEMPORARY = TemporaryDirectory()
 WORKSPACE = Path(TEMPORARY.name)
 DEPENDENCIES = {"dependencies": [{"alias": "storage-file-content-write", "status": "resolved", "selected_provider_app_ids": ["storage"]}]}
+TICKETS = set()
+FRAME_LABEL = "af-0123456789abcdef01234567"
 
 
 def storage_request(request):
@@ -85,14 +89,26 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
-        if self.headers.get("Host", "").startswith("localhost:") and "fixture_frame=authorized" not in self.headers.get("Cookie", ""):
+        isolated = self.headers.get("Host", "").startswith("af-")
+        if isolated and self.path != "/__test/bootstrap" and "fixture_frame=authorized" not in self.headers.get("Cookie", ""):
             self.send_error(401); return
         if self.path == "/.well-known/maverick-app-frame-session":
             self.send_response(204); self.end_headers(); return
         length = int(self.headers.get("Content-Length", "0"))
         if not 0 < length <= 8 * 1024 * 1024:
             self.send_error(413); return
-        body = json.loads(self.rfile.read(length))
+        raw = self.rfile.read(length)
+        if self.path == "/__test/login":
+            self.send_response(303); self.send_header("Set-Cookie", "fixture_platform=authorized; Path=/; HttpOnly; SameSite=Strict")
+            self.send_header("Location", "/app/browser?connector=1"); self.end_headers(); return
+        if self.path == "/__test/bootstrap":
+            ticket = parse_qs(raw.decode()).get("ticket", [""])[0]
+            if not isolated or ticket not in TICKETS:
+                self.send_error(403); return
+            TICKETS.remove(ticket)
+            self.send_response(303); self.send_header("Set-Cookie", "fixture_frame=authorized; Path=/; HttpOnly; SameSite=Strict")
+            self.send_header("Location", "/apps/browser/?maverick_theme=light"); self.end_headers(); return
+        body = json.loads(raw)
         if self.path == "/api/apps/browser/backend":
             status,response = browser_request(body)
         elif self.path == "/api/apps/platform-connectors/backend":
@@ -106,12 +122,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlsplit(self.path)
-        isolated = self.headers.get("Host", "").startswith("localhost:")
-        if parsed.path == "/__test/authorize" and isolated:
-            self.send_response(303)
-            self.send_header("Set-Cookie", "fixture_frame=authorized; Path=/; HttpOnly; SameSite=Strict")
-            self.send_header("Location", "/apps/browser/?maverick_theme=light")
-            self.end_headers(); return
+        isolated = self.headers.get("Host", "").startswith("af-")
+        origin = f"http://maverick.localhost:{self.server.server_port}"
+        frame_origin = f"http://{FRAME_LABEL}.sidecars.maverick.localhost:{self.server.server_port}"
+        if parsed.path in {"/app/browser", "/__test/download"}:
+            if parsed.path == "/__test/download":
+                archive = next((APP / "frontend/dist/assets").glob("maverick-browser-companion-*.zip"))
+                body = f'<a href="/apps/browser/assets/{archive.name}" download="maverick-browser-companion.zip">Download Companion</a>'
+            elif "fixture_platform=authorized" not in self.headers.get("Cookie", ""):
+                body = '<h1>Sign in to Maverick</h1><form action="/__test/login" method="post"><input type="hidden" name="fixture" value="1"><button>Sign in as fixture user</button></form>'
+            else:
+                ticket = uuid4().hex; TICKETS.add(ticket)
+                bootstrap = f'<form method="post" action="{frame_origin}/__test/bootstrap"><input type="hidden" name="ticket" value="{ticket}"></form><script>document.querySelector("form").submit()</script>'
+                body = f'<iframe id="browser" title="Browser" srcdoc="{html.escape(bootstrap, quote=True)}" style="border:0;width:100%;height:100vh"></iframe><script>document.querySelector("iframe").addEventListener("load",()=>document.querySelector("iframe").contentWindow.postMessage({{type:"maverick.app.navigate",app_id:"browser",params:{{connector:"1"}}}},"{frame_origin}"));</script>'
+            content = f'<!doctype html><html><head><title>Maverick fixture</title></head><body style="margin:0">{body}</body></html>'.encode()
+            self.send_response(200); self.send_header("Content-Type", "text/html"); self.send_header("Content-Length", str(len(content)))
+            self.end_headers(); self.wfile.write(content); return
         if parsed.path.startswith("/apps/browser/") and not parsed.path.startswith("/apps/browser/assets/"):
             if not isolated:
                 self.send_error(403, "app_frame_isolation_required"); return
@@ -140,10 +166,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404); return
         content = path.read_bytes()
         if path.suffix == ".html":
-            origin = f"http://127.0.0.1:{self.server.server_port}"
-            content = content.decode().replace('<head>', f'<head><script>window.__MAVERICK_PLATFORM_ORIGIN__={json.dumps(origin)}</script>').replace('"/apps/browser/assets/', f'"{origin}/apps/browser/assets/').encode()
+            content = content.decode().replace('<head>', f'<head><script>window.__MAVERICK_PLATFORM_ORIGIN__={json.dumps(origin)};window.__MAVERICK_APP_FRAME_CONTEXT__={{app_id:"browser"}}</script>').replace('"/apps/browser/assets/', f'"{origin}/apps/browser/assets/').encode()
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", f"http://localhost:{self.server.server_port}")
+        self.send_header("Access-Control-Allow-Origin", frame_origin)
         self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "application/octet-stream")
         self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
 

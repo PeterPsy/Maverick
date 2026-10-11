@@ -7,6 +7,8 @@ import {execFileSync} from "node:child_process";
 const source=dirname(fileURLToPath(import.meta.url));
 writeFileSync(join(source,"platforms.mjs"),`// Generated from platforms.json by the Companion build.\nexport const platforms=${readFileSync(join(source,"platforms.json"),"utf8")};\n`);
 const target=join(source,"../frontend/public/companion");
+const packageRoot=join(source,"../frontend/package");
+mkdirSync(packageRoot,{recursive:true});
 rmSync(target,{recursive:true,force:true});mkdirSync(target,{recursive:true});
 for(const name of readdirSync(source).sort()) {
   if(name === "build.mjs" || name.endsWith(".test.mjs"))continue;
@@ -17,8 +19,9 @@ writeFileSync(join(target,"reader.js"),`globalThis.maverickBrowserRead=${collect
 execFileSync("python3",["-c",[
   "import pathlib,sys,zipfile",
   "root=pathlib.Path(sys.argv[1])",
-  "with zipfile.ZipFile(root.parent/'maverick-browser-companion.zip','w',zipfile.ZIP_DEFLATED) as archive:",
+  "with zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED) as archive:",
   " for path in sorted(root.iterdir()):",
   "  info=zipfile.ZipInfo('maverick-browser-companion/'+path.name,date_time=(2026,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16",
   "  archive.writestr(info,path.read_bytes())",
-].join("\n"),target]);
+].join("\n"),target,join(packageRoot,"maverick-browser-companion.zip")]);
+rmSync(join(target,"../maverick-browser-companion.zip"),{force:true});

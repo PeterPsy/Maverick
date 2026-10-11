@@ -7,9 +7,10 @@ import {createRecords, label, timestamp} from "./records.js";
 import {showResult} from "./result-view.js";
 import {createLab} from "./lab.js";
 import {createPlatformState} from "./platform-state.js";
+import companionArchiveUrl from "../package/maverick-browser-companion.zip?url";
 
 const launchParams = new URLSearchParams(location.search);
-const connectorMode = launchParams.get("connector") === "1";
+let connectorMode = launchParams.get("connector") === "1";
 mountShell(connectorMode);
 const $ = selector => document.querySelector(selector);
 let platformOrigin = location.origin;
@@ -18,14 +19,13 @@ try {
   if (["http:", "https:"].includes(origin.protocol) && origin.origin === supplied) platformOrigin = origin.origin;
 } catch { /* Standalone connector window. */ }
 $("#connectors-link").href = new URL("/app/platform-connectors", platformOrigin).href;
-// Both routes require the authenticated app-frame cookie, not the platform host.
-const connectorUrl = new URL("/apps/browser/?connector=1", location.origin);
-for (const name of ["maverick_theme", "maverick_color_scheme", "maverick_theme_mode"]) {
-  const value = launchParams.get(name);
-  if (value) connectorUrl.searchParams.set(name, value);
-}
+// Chrome signs in through the shell and receives its own fresh isolated frame.
+const connectorUrl = new URL("/app/browser?connector=1", platformOrigin);
+const frameDomain = location.hostname.match(/^af-[a-f0-9]{24}\.sidecars\.(.+)$/u)?.[1];
+if (frameDomain && frameDomain !== connectorUrl.hostname) connectorUrl.searchParams.set("frame_domain", frameDomain);
 $("#url").value = connectorUrl.href;
-$("#download").href = new URL("/apps/browser/maverick-browser-companion.zip", location.origin).href;
+$("#download").href = new URL(companionArchiveUrl, platformOrigin).href;
+$("#download").target = "_blank"; $("#download").rel = "noopener noreferrer";
 const platform = createPlatformState(platformOrigin, () => {
   if (platform.visible()) void loop.refresh(); else loop.pause();
 });
@@ -122,6 +122,11 @@ $("#stop").onclick = () => run($("#stop"), {run: async () => { await connector.s
 window.addEventListener("message", event => {
   if (event.source !== window.parent || event.origin !== platformOrigin) return;
   const message = event.data;
+  if (message?.type === "maverick.app.navigate" && message.app_id === "browser" && ["1", true].includes(message.params?.connector)) {
+    connectorMode = true; $("#setup").open = true; $("#connector-actions").hidden = false;
+    $("#setup summary strong").textContent = "Connect your selected tab";
+    $("#status").textContent = "Ready to connect the tab selected in the extension.";
+  }
   if (message?.type === "maverick.app.data-changed" && message.owner_app_id === "browser" && ["companion", "state"].includes(message.resource)) void loop.refresh();
 });
 window.addEventListener("pagehide", event => { if (event.persisted) loop.pause(); else loop.stop(); });

@@ -12,8 +12,9 @@ required. Browser's isolated Playwright Lab remains available for public researc
 and authorized Maverick development inspection.
 
 The user shares one already authenticated supported platform tab from the extension popup.
-The popup requests optional permissions for the selected platform and the chosen Maverick
-origin, then opens a dedicated authenticated Browser connector window. Chrome 120
+The popup requests optional permissions for the selected platform, chosen Maverick
+origin and its isolated app-frame namespace, then opens the stable
+`/app/browser?connector=1` shell route in a dedicated connector window. Chrome 120
 or later is required. The connector uses ordinary Core-hosted backend calls and a
 scoped content-script channel. Passwords, cookies, browser history, raw CDP,
 selectors and arbitrary caller scripts are never exposed to agent tools.
@@ -33,11 +34,21 @@ Browser Lab with public-page reading, health and individual session closure.
 The existing shell/App Store `language` glyph owns Browser's native icon
 presentation; no Browser-specific platform rendering branch or raster override
 is added. The app header uses an inline vector and the favicon an app-owned SVG.
-Companion download and connector addresses are resolved against the current
-isolated app origin, not the platform origin serving immutable JS bundles.
-The dedicated connector window reuses the HttpOnly, SameSite=Strict app-frame
-cookie in the same Chrome profile and remains bound to its exact tab/origin/path
-by Companion. Sign-in/workspace changes require copying a current address.
+Companion 0.4.1 packages its reproducible ZIP as a Vite-imported, hashed public
+asset under `/apps/browser/assets/`, with immutable manifest/cache metadata.
+Download uses the platform origin and requires no login or app-frame cookie.
+The copied connector address uses the stable platform shell route, never an
+expiring isolated-frame host. A fresh Chrome profile signs in normally; the
+shell obtains its own authenticated Browser frame. Desktop-app cookies are not
+transferred to Chrome. The selected Chrome workspace owns the connection.
+Native `maverick.app.navigate` parameters enable Connect controls in that frame.
+Companion binds the connector tab and probes only app identity across its frames.
+Exactly one Core-generated Browser frame with the chosen platform origin is
+required; commands then require that frame's exact origin, frame id and document
+id. A shell observer retries after sign-in and iframe replacement, with the
+30-second alarm as a wake-up fallback. Other tabs, app frames, shell documents
+and replaced connector documents cannot issue commands. Installations whose
+app-frame domain differs from the platform host retain it in `frame_domain`.
 
 Overview polling opens one SQLite transaction, sweeps leases once and selects
 operation metadata without media/input payloads. Pending counts cover all the
@@ -71,17 +82,19 @@ it does not request another app's protected media routes. Collections expose
 items, per-page progress, stop reasons and coverage independently of raw JSON.
 
 Management verification includes 74 Python tests (including the built document
-and ZIP through Core's real ASGI app-frame bootstrap/authorization), 39 Node
+and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 41 Node
 tests, an offline
 Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
 public-page form, 320/390px layout, image/video/collection rendering and blob
-cleanup), a cross-origin shell fixture with platform-served bundles, protected
-document/ZIP routes, light first paint while the bundle is held pending,
+cleanup), a cross-origin shell fixture with platform-served bundles, a protected
+document and public hashed ZIP, light first paint while the bundle is held pending,
 initial/live themes and hidden-frame polling, and the real
 Chromium/MV3 Companion fixture with Connectors and scope revocation. The latter
-requires an isolated-origin Strict cookie, rejects platform document/download
-links and compares the downloaded archive with the built package before testing
-the extension's exact-window connection. Authenticated Maverick
+starts with no Maverick cookies, downloads the archive before login and compares
+it with the built package. The user then signs in through the shell, bootstraps
+an isolated-origin Strict cookie and attaches Companion to the exact Browser
+document. Direct platform app documents and unbootstrapped private frames are
+rejected. Authenticated Maverick
 inspection verified desktop/mobile hosting, a public-page read with automatic
 cleanup, sidebar suppression and the native globe in the rail and App Store.
 Review corrections were additionally checked on the mounted app: the isolated

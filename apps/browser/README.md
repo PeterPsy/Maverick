@@ -13,16 +13,20 @@ then load its folder with Chrome's “Load unpacked” developer-mode action. Co
 the connector address displayed by Browser. Use Chrome 120 or later. Open a supported platform page in Chrome, log in directly if needed, and use the extension popup to share
 that tab. Paste the connector address there. In the dedicated Browser window
 opened by the extension, press “Connect” and keep the window open during work.
-Download and connector links use Browser's isolated origin, whose HttpOnly
-app-frame cookie authenticates the dedicated window in the same Chrome profile.
-The platform's `/apps/browser/` document and ZIP routes require isolation and
-must not be used as setup links. Copy a fresh address from the mounted app after
-signing in again or changing workspace. Theme parameters follow the connector.
+Sign in to Maverick in that Chrome window if prompted, and select the workspace
+you want to connect. The stable `/app/browser?connector=1` shell address creates
+a fresh authenticated isolated Browser frame in Chrome; it works even when the
+original Maverick app uses another browser profile or the desktop application.
+The hashed Companion ZIP is a public, immutable build asset under
+`/apps/browser/assets/` and requires no Maverick cookie. Private iframe URLs
+are never copied as connector addresses.
 
 Sharing is explicit and limited to one tab. Passwords, cookies, browser history,
 forms, social writes and caller JavaScript are outside the tool surface. The
-extension requests optional access to the selected Maverick origin and the selected platform;
-only the selected tab and exact connector window can execute its fixed commands.
+extension requests optional access to the selected Maverick origin, its isolated
+frame namespace and the selected platform. It probes only app identity in the
+selected connector window and attaches to one exact Browser frame/document;
+other tabs, shell frames and replaced documents cannot execute its fixed commands.
 Closing either tab, leaving approved platform routes, or revoking sharing stops
 capture. Reloading the connector requires a fresh user-owned connection.
 Frame captures may bring the shared platform window to the foreground.

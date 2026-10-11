@@ -153,6 +153,8 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertTrue(is_public_app_static_asset("assets/app.js"))
         self.assertTrue(is_public_app_static_asset("assets/app-abc123.js"))
         self.assertTrue(is_public_app_static_asset("assets/app-abc12345.js"))
+        self.assertTrue(is_public_app_static_asset("assets/companion-abc12345.zip"))
+        self.assertFalse(is_public_app_static_asset("companion.zip"))
 
     def test_filename_shape_alone_never_grants_immutable_caching(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

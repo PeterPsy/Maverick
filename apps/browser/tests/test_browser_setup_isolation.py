@@ -20,7 +20,7 @@ from tests.integration.app_hosting.sidecar_browser_origin_support import Sidecar
 
 
 class BrowserSetupIsolationTests(SidecarBrowserOriginTestSupport, unittest.TestCase):
-    def test_built_companion_and_connector_require_the_authenticated_isolated_origin(self):
+    def test_archive_is_public_while_browser_document_requires_fresh_frame_authority(self):
         asyncio.run(self._assert_setup_routes())
 
     async def _assert_setup_routes(self):
@@ -41,11 +41,15 @@ class BrowserSetupIsolationTests(SidecarBrowserOriginTestSupport, unittest.TestC
             app = PlatformAsgiHost(state)
             host = "maverick.localhost:8000"
             cookie = await self._login(app, host=host)
-            paths = ["/apps/browser/", "/apps/browser/maverick-browser-companion.zip"]
-            for path in paths:
-                status, body, _headers = await self._invoke(app, host=host, path=path, headers={"cookie": cookie})
-                self.assertEqual(status, 403)
-                self.assertIn(b"app_frame_isolation_required", body)
+            archive = next(built.glob("assets/maverick-browser-companion-*.zip"))
+            status, body, headers = await self._invoke(app, host=host, path=f"/apps/browser/assets/{archive.name}")
+            self.assertEqual(status, 200)
+            self.assertEqual(body, archive.read_bytes())
+            self.assertIn("application/zip", headers["content-type"])
+            self.assertIn("immutable", headers["cache-control"])
+            status, body, _headers = await self._invoke(app, host=host, path="/apps/browser/", headers={"cookie": cookie})
+            self.assertEqual(status, 403)
+            self.assertIn(b"app_frame_isolation_required", body)
             status, body, _headers = await self._invoke(app, host=host, path=APP_FRAME_LAUNCH_PATH,
                 method="POST", body=json.dumps({"app_id": "browser", "path": "/apps/browser/?connector=1"}).encode(),
                 headers={"cookie": cookie, "origin": f"http://{host}", "content-type": "application/json"})
@@ -60,18 +64,13 @@ class BrowserSetupIsolationTests(SidecarBrowserOriginTestSupport, unittest.TestC
             self.assertIn("HttpOnly", headers["set-cookie"])
             self.assertIn("SameSite=Strict", headers["set-cookie"])
             frame_cookie = headers["set-cookie"].split(";", 1)[0]
-            for path in paths:
-                status, _body, _headers = await self._invoke(app, host=frame_host, path=path)
-                self.assertEqual(status, 401)
-                status, body, headers = await self._invoke(app, host=frame_host, path=path,
-                    headers={"cookie": frame_cookie}, scope_extra={"query_string": b"connector=1"})
-                self.assertEqual(status, 200)
-                if path.endswith(".zip"):
-                    self.assertEqual(body, (built / "maverick-browser-companion.zip").read_bytes())
-                    self.assertIn("application/zip", headers["content-type"])
-                else:
-                    self.assertIn(b"__MAVERICK_PLATFORM_ORIGIN__", body)
-                    self.assertIn(f'http://{host}/apps/browser/assets/'.encode(), body)
+            status, _body, _headers = await self._invoke(app, host=frame_host, path="/apps/browser/")
+            self.assertEqual(status, 401)
+            status, body, _headers = await self._invoke(app, host=frame_host, path="/apps/browser/",
+                headers={"cookie": frame_cookie}, scope_extra={"query_string": b"connector=1"})
+            self.assertEqual(status, 200)
+            self.assertIn(b"__MAVERICK_PLATFORM_ORIGIN__", body)
+            self.assertIn(f'http://{host}/apps/browser/assets/'.encode(), body)
 
 
 if __name__ == "__main__":

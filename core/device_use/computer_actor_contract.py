@@ -26,6 +26,10 @@ You remain responsible for the user conversation, planning, exact source/destina
 identity, content, business/creative decisions and final quality. Give the tool one
 bounded UI subtask, a verifiable completion criterion, and all relevant constraints.
 Supply exact prepared_text values when entering content; the operator must not author it.
+For predictable labelled sequences supply steps with exact control selectors and
+expected effects. A plan-required response has sent no input: provide the plan
+instead of repeating the same unplanned request. A configured recovery model can
+handle unplanned navigation before input starts.
 Delegate several ordinary UI steps together, not one tool call per click. The tool
 returns completed, needs_decision or blocked with observed evidence. Only accept
 completion supported by that evidence. Read-only UI observations and structured
@@ -111,11 +115,15 @@ def planner_device_use_tools(execution_mode="delegated"):
 
 def actor_device_use_tools(task=None):
     tools = [tool for tool in device_use_dynamic_tools() if tool["name"] in UI_TOOLS]
+    semantic = SEMANTIC_TOOL
     if task and task.get("steps"):
         for tool in tools:
             reads = PLANNER_UI_ACTIONS[tool["name"]]
             tool["inputSchema"]["properties"]["action"]["enum"] = sorted(reads)
-    return tools + [SEMANTIC_TOOL]
+        semantic = {**SEMANTIC_TOOL, 'inputSchema': {'type': 'object', 'additionalProperties': False,
+            'required': ['step_index'], 'properties': {
+                'step_index': {'type': 'integer', 'minimum': 0, 'maximum': len(task['steps']) - 1}}}}
+    return tools + [semantic]
 
 
 def actor_device_use_instructions(binding):

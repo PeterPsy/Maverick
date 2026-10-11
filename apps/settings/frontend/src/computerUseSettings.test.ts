@@ -70,6 +70,7 @@ describe('PC use decision model settings', () => {
     expect(state.modelId).toBe('gpt-6-luna');
     expect((document.getElementById('settings-computer-use-effort') as HTMLSelectElement).value).toBe('low');
     expect((document.getElementById('settings-computer-use-save') as HTMLButtonElement).disabled).toBe(true);
+    expect(document.body.textContent).toContain('Choose a recovery model');
   });
 
   it('saves the chosen model and effort through the dedicated workspace endpoint', async () => {

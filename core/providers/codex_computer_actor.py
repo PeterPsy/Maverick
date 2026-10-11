@@ -11,7 +11,7 @@ from core.device_use.computer_actor_contract import (
     ACTOR_GUIDANCE, ACTOR_OUTPUT_SCHEMA, COMPUTER_ACTOR_EFFORT,
     COMPUTER_ACTOR_MODEL, actor_device_use_instructions, actor_device_use_tools,
 )
-from core.device_use.errors import DeviceUseError
+from core.device_use.errors import DeviceUseError, DeviceUseUnavailableError
 from core.device_use.computer_actor_recovery import ComputerActorRecovery
 from core.device_use.computer_task_progress import ComputerTaskProgress
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime
@@ -177,22 +177,23 @@ class CodexComputerActor:
                 if params.get("tool") not in {t["name"] for t in tools}:
                     return self._result("blocked", "computer_actor_tool_denied", steps), last_image
                 tool, arguments = params.get("tool"), params.get("arguments")
-                if tool == "ui_action":
-                    try:
+                try:
+                    if tool == "ui_action":
                         tool, arguments = progress.prepare(arguments)
-                    except DeviceUseError as error:
-                        validation_failures += 1
-                        if validation_failures > 3:
-                            return self._result("needs_decision", error.reason_code, steps), last_image
-                        # Validation has not dispatched input. Return a bounded,
-                        # actionable rejection so the model can observe first.
-                        self.transport.write_result(payload['id'], {'success': False,
-                            'error': error.reason_code, 'input_dispatched': False,
-                            'runtime_progress': progress.state(),
-                            'instruction': 'Observe the exact target with your own tool to obtain a fresh receipt. If an effect is pending, read that target without replaying input.'})
-                        continue
-                elif not progress.permits(tool, arguments):
-                    return self._result("needs_decision", "computer_actor_step_mismatch", steps), last_image
+                    elif not progress.permits(tool, arguments):
+                        raise DeviceUseUnavailableError('computer_actor_step_mismatch')
+                except DeviceUseError as error:
+                    validation_failures += 1
+                    if validation_failures > 3:
+                        return self._result("needs_decision", error.reason_code, steps), last_image
+                    # Validation has not dispatched input. Return a bounded,
+                    # actionable rejection so the model can correct its call.
+                    correction = {'error': error.reason_code, 'input_dispatched': False,
+                        'runtime_progress': progress.state(),
+                        'instruction': 'Observe the exact target with your own tool for a fresh receipt. Planned tasks use ui_action with only step_index equal to verified_steps; raw input is denied. If an effect is pending, read that target without replaying input.'}
+                    self.transport.write_result(payload['id'], {'success': False,
+                        'contentItems': [{'type': 'inputText', 'text': json.dumps(correction, ensure_ascii=False)}]})
+                    continue
                 if not recovery.permits(tool, arguments):
                     return self._result("blocked", "computer_actor_recovery_action_denied", steps,
                                         recovery.evidence("")), last_image
@@ -222,7 +223,8 @@ class CodexComputerActor:
                                     + json.dumps(progress.state(), ensure_ascii=False)}]}],
                     }, timeout=20)
                     observations += 1
-                self.transport.write_result(payload["id"], result.result)
+                self.transport.write_result(payload["id"], {**result.result,
+                    'contentItems': result.result.get('contentItems') or []})
                 if observations >= max_observations:
                     return self._result("needs_decision", "computer_actor_context_checkpoint", steps), last_image
             return self._result("blocked", "computer_actor_cancelled", steps), last_image

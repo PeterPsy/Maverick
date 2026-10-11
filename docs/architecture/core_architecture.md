@@ -310,7 +310,7 @@ Each bounded task captures the selection; operator changes apply to the next tas
 Optional structured steps resolve exact current labels/identifiers and advance
 only after their expected effect is observed. Compact progress permits bounded
 context renewal for planned tasks. Recovery-model handoff shares the original
-budget and replay fences, and requires a verified step boundary.
+budget and replay fences, and requires a pre-input or verified step boundary.
 Screenshots and native receipt text enter the private history together without
 turn steering. Completion requires fresh evidence and an explicit full-criterion
 attestation; the planner still verifies that evidence against its original task.

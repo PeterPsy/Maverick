@@ -98,7 +98,7 @@ class RuntimeUsageSurfaceTests(unittest.TestCase):
     def test_turn_includes_only_its_internal_operator_usage(self):
         state = SimpleNamespace(runtime_store=self.runtime, usage_store=self.usage, provider_registry=None)
         worker = {"usage_worker": "computer_actor", "provider_id": "codex", "model_id": "gpt-6-luna",
-                  "source": "codex_computer_actor:operator", "semantics": "incremental",
+                  "source": "computer_actor:codex:operator", "semantics": "incremental",
                   "input_tokens": 180, "output_tokens": 20, "total_tokens": 200, "token_accuracy": "exact"}
         ingest_runtime_usage(state, session_id="session-1", turn_id="turn-1", observed_at=fixtures.NOW,
                              payload={**worker, "usage_id": "operator-one"})

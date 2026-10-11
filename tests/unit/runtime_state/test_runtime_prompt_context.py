@@ -17,6 +17,7 @@ class RuntimePromptContextTest(unittest.TestCase):
         workspace = self.root / "workspace"
         (workspace / "project").mkdir(parents=True)
         self.session = SimpleNamespace(
+            session_id='prompt-context-test',
             workspace_id="example", workspace_root=str(workspace),
             workdir=str(workspace / "project"), effective_mode="sandbox",
             system_prompt=None,

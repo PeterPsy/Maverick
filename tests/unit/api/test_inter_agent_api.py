@@ -84,7 +84,7 @@ class InterAgentApiSupport(AppReferenceApiTestSupport, unittest.TestCase):
                 protocol_version="maverick.device-use.v1",
                 executor_contract="macos-v43",
                 tool_contract_digest="digest",
-                mode="on",
+                mode="full",
                 initial_app="com.apple.Safari",
                 approved_apps=("com.apple.Safari",),
                 created_at=datetime(2026, 6, 16, 12, 0, tzinfo=UTC),

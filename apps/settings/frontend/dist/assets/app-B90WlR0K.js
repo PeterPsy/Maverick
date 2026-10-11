@@ -18,6 +18,7 @@ import{i as Du,P as Eh,a as $h,s as $m,D as Ah,b as wh}from"./pages-DUQjEraw.js"
       <div><p class="settings-kicker">Models</p><h2 id="settings-computer-use-title">PC use decision model</h2></div>
     </div>
     <p class="settings-card-copy">Use the chat model directly or a separate interface operator. Reconnect PC use after changing execution mode. Operator model changes apply to the next UI task.</p>
+    ${s.modelId==="gpt-6-luna"&&s.effort==="low"&&s.executionMode==="delegated"?'<p class="settings-card-copy">Luna Low uses planned UI steps. Choose a recovery model for tasks that need broader navigation.</p>':""}
     <div class="settings-platform-provider-forms">
       <label class="settings-platform-field settings-platform-field-wide"><span>UI execution</span>
         <select id="settings-computer-use-mode" ${$?"disabled":""}>

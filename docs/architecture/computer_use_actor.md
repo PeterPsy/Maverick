@@ -56,7 +56,7 @@ outcome. The operator does not compose content or make business/creative decisio
 Ambiguous input cannot be replayed. Cancellation, parent-turn completion, lease
 revocation, owner changes and user corrections fence further actor calls and stop
 active inference. Actor failure never transparently replays writes. A configured
-recovery model can continue only at a verified structured-step boundary, with no
+recovery model can continue only before input or at a verified structured-step boundary, with no
 pending effect or recovery. It shares the task's budget, progress and replay fences;
 its actual model, timing and reason are included in attempt metrics. Catalog
 availability is checked before launching.
@@ -157,6 +157,14 @@ actionable corrections to acquire its own observation. Planned tasks renew the
 private context after eight images, preserving progress and recovery state;
 unplanned tasks keep their history because restarting them could duplicate input.
 The same operator process is reused, without giving the model full chat history.
+Luna `low` requires a structured plan; its action schema exposes only `step_index`
+when a plan exists. Raw-input/semantic validation errors are recoverable before
+dispatch, with bounded corrections. An unplanned request dispatches no input
+and returns `computer_actor_plan_required`, or routes to the configured recovery
+model before inference. The exploratory goal-level evaluation still failed on
+Calculator despite successful form/menu runs, so prompting alone does not admit
+Luna Low to broad navigation. Recovery after input remains limited to verified
+structured boundaries; exhausted budgets cannot launch another process.
 
 `scripts/eval_pc_use_benchmark.py` compares a Sol `medium` planner executing
 directly, the same planner delegating to Sol `medium`, and the same planner

@@ -160,6 +160,9 @@ for line in sys.stdin:
         if mode != "wait":
             next_call()
     elif method is None and str(request.get("id", "")).startswith("native-"):
+        tool_result = request['result']
+        assert isinstance(tool_result.get('success'), bool)
+        assert isinstance(tool_result.get('contentItems'), list), 'Dynamic tool replies require contentItems even for rejected pre-dispatch validation.'
         if mode == 'paired-image' and step in {1, 3}:
             assert injected, 'Receipt and image must arrive before the tool resumes.'
             injected = False

@@ -177,6 +177,13 @@ class ComputerActorTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_actor_task(value)
 
+    def test_planned_semantic_tool_exposes_only_the_step_index(self):
+        tools = actor_device_use_tools({'steps': [object(), object()]})
+        semantic = next(tool for tool in tools if tool['name'] == 'ui_action')['inputSchema']
+        self.assertEqual(semantic['required'], ['step_index'])
+        self.assertEqual(set(semantic['properties']), {'step_index'})
+        self.assertEqual(semantic['properties']['step_index']['maximum'], 1)
+
 
 class ComputerActorRegistryTests(unittest.TestCase):
     def test_new_connection_pins_mode_before_session_persistence(self):

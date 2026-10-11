@@ -119,6 +119,25 @@ class ComputerTaskExecutionTests(unittest.TestCase):
     def actor(self, model):
         return Mock(model_id=model, reasoning_effort='low')
 
+    def test_unplanned_luna_low_task_does_not_run_inference_or_input(self):
+        client = self.actor('gpt-6-luna')
+        output, _ = execute_computer_task(client, {'objective': 'navigate'}, binding=SimpleNamespace(initial_app=BUNDLE),
+            invoke=Mock(), active=lambda: True, usage_sink=Mock())
+        self.assertEqual(output['summary'], 'computer_actor_plan_required')
+        self.assertEqual(output['steps'], 0)
+        client.run.assert_not_called()
+
+    def test_unplanned_luna_low_routes_to_configured_sol_before_input(self):
+        client, fallback = self.actor('gpt-6-luna'), self.actor('gpt-6.1-sol')
+        fallback.run.return_value = ({'status': 'completed', 'summary': 'done', 'steps': 2}, b'jpeg')
+        output, _ = execute_computer_task(client, {'objective': 'navigate'}, binding=SimpleNamespace(initial_app=BUNDLE),
+            invoke=Mock(), active=lambda: True, usage_sink=Mock(), fallback_factory=lambda: fallback)
+        client.run.assert_not_called()
+        self.assertTrue(output['fallback_used'])
+        self.assertEqual(output['attempts'][0]['reason'], 'computer_actor_plan_required')
+        self.assertEqual(output['steps'], 2)
+        fallback.close.assert_called_once()
+
     def test_handoff_reuses_verified_progress_and_counts_both_attempts(self):
         first, second = self.actor('luna'), self.actor('sol')
         two_steps = task()
@@ -154,3 +173,25 @@ class ComputerTaskExecutionTests(unittest.TestCase):
         execute_computer_task(client, task(), binding=SimpleNamespace(initial_app=BUNDLE),
             invoke=Mock(), active=lambda: True, usage_sink=Mock(), fallback_factory=fallback)
         fallback.assert_not_called()
+
+    def test_plan_can_handoff_at_first_boundary_when_no_input_was_sent(self):
+        first, second = self.actor('luna'), self.actor('sol')
+        def reject(task, **kwargs):
+            kwargs['progress'].observation = native_observation(observation(), 'mac_peekaboo', {})
+            return {'status': 'needs_decision', 'summary': 'computer_actor_step_mismatch', 'steps': 1}, b'jpeg'
+        first.run.side_effect = reject
+        second.run.return_value = ({'status': 'completed', 'summary': 'done', 'steps': 2}, b'jpeg')
+        result, _ = execute_computer_task(first, task(), binding=SimpleNamespace(initial_app=BUNDLE),
+            invoke=Mock(), active=lambda: True, usage_sink=Mock(), fallback_factory=lambda: second)
+        self.assertTrue(result['fallback_used'])
+
+    def test_model_reported_difficulty_can_handoff_only_at_a_safe_boundary(self):
+        first, second = self.actor('luna'), self.actor('sol')
+        def difficulty(task, **kwargs):
+            kwargs['progress'].observation = native_observation(observation(), 'mac_peekaboo', {})
+            return {'status': 'blocked', 'summary': 'Could not resolve the current control', 'steps': 1}, b'jpeg'
+        first.run.side_effect = difficulty
+        second.run.return_value = ({'status': 'completed', 'summary': 'done', 'steps': 2}, b'jpeg')
+        result, _ = execute_computer_task(first, task(), binding=SimpleNamespace(initial_app=BUNDLE),
+            invoke=Mock(), active=lambda: True, usage_sink=Mock(), fallback_factory=lambda: second)
+        self.assertTrue(result['fallback_used'])

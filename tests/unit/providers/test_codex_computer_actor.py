@@ -138,6 +138,14 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertEqual(output['summary'], 'computer_actor_fresh_observation_required')
         self.assertEqual(self.calls, [])
 
+    def test_planned_task_rejects_raw_input_without_dispatch(self):
+        output, _ = self.actor.run({'objective': 'normal', 'completion_criterion': 'Submitted',
+            'steps': [{'tool': 'mac_peekaboo', 'target': 'com.apple.Safari', 'action': 'click',
+                       'control': {'label': 'Submit'}, 'expect': {'text': 'Submitted'}}]},
+            invoke=self.invoke, active=lambda: True, usage_sink=self.usage.append)
+        self.assertEqual(output['summary'], 'computer_actor_criterion_not_met')
+        self.assertEqual([call[1]['action'] for call in self.calls], ['observe_app', 'observe_app'])
+
     def test_interrupted_task_does_not_leak_queued_events_into_the_next_task(self):
         first, _ = self.run_actor(max_steps=1)
         self.assertEqual(first["status"], "needs_decision")

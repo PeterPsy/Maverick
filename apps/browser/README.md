@@ -59,8 +59,9 @@ once per minute. Connection starts are deduplicated; stopping during setup revok
 any late lease instead of resurrecting sharing.
 An operation becoming terminal between its status read and progress update
 cancels/drains that worker task without revoking sharing or queued observations.
-The initial `maverick_theme`/`maverick_color_scheme` parameters and authenticated
-parent `maverick.shell.theme-changed` messages apply the platform's effective
+An inline head script applies the initial `maverick_theme`/`maverick_color_scheme`
+parameters before the first paint, including when the app bundle loads slowly.
+Authenticated parent `maverick.shell.theme-changed` messages update the effective
 theme. Media object URLs are released when a result closes; technical JSON
 omits the encoded bytes already displayed by the image/audio view.
 

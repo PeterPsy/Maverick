@@ -8,12 +8,15 @@ import {fileURLToPath} from "node:url";
 const dist = fileURLToPath(new URL("../frontend/dist/", import.meta.url));
 const platform = "https://platform-fixture.test", isolated = "https://isolated-fixture.test";
 let reads = 0;
+let releaseBundle;
+const bundleReady = new Promise(resolve => { releaseBundle = resolve; });
 const browser = await chromium.launch({headless: true});
 try {
   const context = await browser.newContext({acceptDownloads: true});
   await context.route("**/*", async route => {
     const request = route.request(), url = new URL(request.url());
     const cors = {"Access-Control-Allow-Origin": isolated};
+    if (url.origin === platform && url.pathname.endsWith(".js")) await bundleReady;
     if (url.origin === platform && url.pathname === "/app/browser") return route.fulfill({contentType: "text/html", body:
       `<iframe src="${isolated}/apps/browser/?maverick_theme=light&maverick_color_scheme=light" style="width:100%;height:800px"></iframe>`});
     if (url.origin === platform && !url.pathname.startsWith("/apps/browser/assets/")) return route.fulfill({status: 403, body: "app_frame_isolation_required"});
@@ -32,8 +35,16 @@ try {
   const page = await context.newPage(), errors = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.clock.install();
-  await page.goto(`${platform}/app/browser`);
-  const frame = page.frame({url: url => url.origin === isolated});
+  const frameNavigation = page.waitForEvent("framenavigated", frame => frame.url().startsWith(isolated));
+  await page.goto(`${platform}/app/browser`, {waitUntil: "commit"});
+  const frame = await frameNavigation;
+  await frame.waitForFunction(() => document.styleSheets.length && document.querySelector("#app"));
+  assert.equal(await frame.evaluate(() => document.documentElement.dataset.maverickTheme), "light");
+  assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
+  assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), "rgb(247, 248, 251)", "The light background must render while the app bundle is still pending");
+  assert.equal(await frame.locator("#url").count(), 0, "The app bundle has not executed yet");
+  assert.equal(reads, 0);
+  releaseBundle();
   await frame.waitForSelector("#url");
   await frame.waitForFunction(() => document.querySelector("#tab-count").textContent === "0");
   assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
@@ -72,5 +83,5 @@ try {
   await frame.waitForFunction(() => document.documentElement.dataset.maverickTheme === "light");
   assert.deepEqual(errors, []);
   await context.close();
-  process.stdout.write("Browser platform fixture passed: isolated download/address, initial/live theme, authenticated parent messages, hidden-frame pause and resume.\n");
+  process.stdout.write("Browser platform fixture passed: isolated download/address, light first paint with delayed bundle, initial/live theme, authenticated parent messages, hidden-frame pause and resume.\n");
 } finally { await browser.close(); }

@@ -47,8 +47,9 @@ Reads are serialized, concurrent invalidations
 coalesce into one trailing read, hidden documents and shell-hidden frames pause
 and failures back off. The frontend consumes authenticated parent
 `maverick.app.visibility-changed` events and refreshes immediately on return;
-data invalidations cannot restart reads while hidden. Initial shell theme
-parameters and `maverick.shell.theme-changed` events apply the effective theme.
+data invalidations cannot restart reads while hidden. An inline HTML head script
+applies initial shell theme parameters before the first paint, independently of
+bundle loading; `maverick.shell.theme-changed` events update the effective theme.
 Visible views refresh at 3 seconds for pending operations, 10 seconds for active
 Chrome connections and 30 seconds when idle; Lab uses 30 seconds. Chrome transport
 continues its independent heartbeat while management is hidden, renewing its
@@ -75,7 +76,8 @@ tests, an offline
 Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
 public-page form, 320/390px layout, image/video/collection rendering and blob
 cleanup), a cross-origin shell fixture with platform-served bundles, protected
-document/ZIP routes, initial/live themes and hidden-frame polling, and the real
+document/ZIP routes, light first paint while the bundle is held pending,
+initial/live themes and hidden-frame polling, and the real
 Chromium/MV3 Companion fixture with Connectors and scope revocation. The latter
 requires an isolated-origin Strict cookie, rejects platform document/download
 links and compares the downloaded archive with the built package before testing

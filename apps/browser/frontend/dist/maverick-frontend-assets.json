@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "bf3a25c6aabc6eb4fc714d96b4b15fd52ca6cb96c0f170c3b7df742daaec8c17",
+  "build_id": "59bd59dbd4a5ba19677f01072baf9777f933b55aafc007a7cbe443f34278d1a7",
   "entrypoints": [
     "companion/offscreen.html",
     "companion/popup.html",
@@ -8,14 +8,14 @@
   ],
   "immutable": [
     {
+      "path": "assets/index-B1dyjj01.js",
+      "sha256": "0f364044fb24ab5a96857eda571adc68bc182ef9bd02cadb7181b90be1e075b2",
+      "size_bytes": 26704
+    },
+    {
       "path": "assets/index-B979AdFI.css",
       "sha256": "c82d62b6531ab0cced40808862eb15b22a737520599b232ec8c23127e511226a",
       "size_bytes": 8614
-    },
-    {
-      "path": "assets/index-BC_0s-Ar.js",
-      "sha256": "3bb81be8d5af5e520c87089202c26b9e659a7e044a82a6e7816649ca63290bdf",
-      "size_bytes": 26810
     }
   ],
   "revalidated": [
@@ -96,8 +96,8 @@
     },
     {
       "path": "index.html",
-      "sha256": "97c911a20630e24ca25fb6b38ee692aa1f7957299b6e83a44b7c2439096eba60",
-      "size_bytes": 429
+      "sha256": "d4f8b6927b52a78322cbee3aa41d22ae8e2f3cd6d7038ddbe28f4511b8d3b261",
+      "size_bytes": 901
     },
     {
       "path": "maverick-browser-companion.zip",

@@ -7,8 +7,6 @@ export function createPlatformState(platformOrigin, onVisibility) {
     document.documentElement.dataset.maverickTheme = value;
     document.documentElement.style.colorScheme = value;
   };
-  const params = new URLSearchParams(location.search);
-  theme(params.get("maverick_theme") || params.get("maverick_color_scheme") || "dark");
   window.addEventListener("message", event => {
     if (event.source !== window.parent || event.origin !== platformOrigin) return;
     const message = event.data;

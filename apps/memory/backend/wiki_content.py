@@ -8,6 +8,7 @@ import re
 import sqlite3
 
 from sources import source_snapshot
+from evidence_numbers import normalized_numeric_text
 
 
 SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
@@ -37,7 +38,12 @@ def compiled_markdown(node: sqlite3.Row, refs: list[sqlite3.Row], relationships:
 def claim_texts(node: sqlite3.Row) -> list[str]:
     summary, body = str(node["summary"] or "").strip(), str(node["body_text"] or "").strip()
     parts = [body] if summary and summary in body else list(dict.fromkeys(part for part in (summary, body) if part))
-    candidates = [item.strip() for part in parts for item in SENTENCE_PATTERN.split(part) if item.strip()]
+    candidates = []
+    for part in parts:
+        # Splitting a malformed decimal such as "-. 5" would turn its pieces
+        # into apparently valid assertions. Keep the original unverified text.
+        sentences = SENTENCE_PATTERN.split(part) if normalized_numeric_text(part) is not None else [part]
+        candidates.extend(item.strip() for item in sentences if item.strip())
     if not candidates and node["title"]:
         candidates = [str(node["title"]).strip()]
     return list(dict.fromkeys(candidates))

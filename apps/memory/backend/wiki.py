@@ -12,6 +12,7 @@ from errors import MemoryValidationError
 from fact_updates import reconcile_ingested_fact
 from lint import refresh_node_lint
 from sources import prepare_source_snapshots, sync_sources, source_version_body
+from source_references import external_refs_for_nodes
 from wiki_content import compile_input_hash, compiled_markdown
 from wiki_citations import replace_claims
 from wiki_queries import compiled_payload_for_node
@@ -107,8 +108,7 @@ def _active_node(db: sqlite3.Connection, node_id: str) -> sqlite3.Row:
 
 
 def _external_refs(db: sqlite3.Connection, node_id: str) -> list[sqlite3.Row]:
-    return list(db.execute("""SELECT r.* FROM external_refs r LEFT JOIN sources s ON s.external_ref_id = r.id
-        WHERE r.node_id = ? AND (s.id IS NULL OR s.status = 'active') ORDER BY r.created_at""", (node_id,)))
+    return external_refs_for_nodes(db, [node_id])
 
 
 def _relationships(db: sqlite3.Connection, node_id: str) -> list[sqlite3.Row]:
@@ -370,4 +370,4 @@ def compile_source_aware_input_hash(
         )
         for source in sorted(sources, key=lambda item: str(item.get("id") or ""))
     ]
-    return sha256("\n".join(["support-v5", base_hash, *source_parts]).encode("utf-8")).hexdigest()
+    return sha256("\n".join(["support-v6", base_hash, *source_parts]).encode("utf-8")).hexdigest()

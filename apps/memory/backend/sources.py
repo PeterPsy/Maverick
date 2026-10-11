@@ -11,6 +11,7 @@ from chunking import chunk_source_body
 from content_store import canonical_body, read_body, write_body
 from database import connect, json_text, new_id, row_payload
 from source_current import observe_version
+from source_references import external_refs_for_nodes
 from source_chunk_index import delete_source_chunk_fts_for_version, upsert_source_chunk_fts
 from storage_sources import (
     INGEST_PREVIEW_METADATA_KEYS,
@@ -105,8 +106,7 @@ def prepare_source_snapshots(data_root: Path, node_id: str) -> dict[str, dict[st
 
     snapshots: dict[str, dict[str, Any]] = {}
     with connect(data_root) as db:
-        refs = list(db.execute("""SELECT r.* FROM external_refs r LEFT JOIN sources s ON s.external_ref_id = r.id
-            WHERE r.node_id = ? AND (s.id IS NULL OR s.status = 'active') ORDER BY r.created_at""", (node_id,)))
+        refs = external_refs_for_nodes(db, [node_id])
     for ref in refs:
         snapshots[str(ref["id"])] = source_snapshot(ref, data_root, include_remote_preview=True)
     return snapshots

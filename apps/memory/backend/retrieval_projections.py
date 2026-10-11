@@ -6,6 +6,7 @@ from pathlib import Path
 from database import row_payload
 from lint import computed_page_freshness, source_state_for_page
 from storage_reference_payloads import storage_reference_payload
+from source_references import external_refs_for_nodes
 
 
 def compact_projections(db: sqlite3.Connection, node_ids: list[str], *, data_root: Path) -> dict[str, dict]:
@@ -13,9 +14,7 @@ def compact_projections(db: sqlite3.Connection, node_ids: list[str], *, data_roo
         return {}
     marks = ",".join("?" for _ in node_ids)
     result = {node_id: {"provenance": [], "storage_references": [], "compiled": {}} for node_id in node_ids}
-    refs = [row_payload(row) or {} for row in db.execute(
-        f"""SELECT r.* FROM external_refs r LEFT JOIN sources s ON s.external_ref_id = r.id
-        WHERE r.node_id IN ({marks}) AND (s.id IS NULL OR s.status = 'active') ORDER BY r.created_at""", node_ids)]
+    refs = [row_payload(row) or {} for row in external_refs_for_nodes(db, node_ids)]
     ref_by_id = {ref["id"]: ref for ref in refs}
     for ref in refs:
         projection = result[ref["node_id"]]

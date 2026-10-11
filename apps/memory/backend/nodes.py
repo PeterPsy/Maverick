@@ -192,7 +192,7 @@ def get_node_with_details(db: sqlite3.Connection, node_id: str, *, data_root: Pa
     node["external_refs"] = [item for item in refs if item is not None]
     node["outgoing_edges"] = [item for item in outgoing if item is not None]
     node["incoming_edges"] = [item for item in incoming if item is not None]
-    node.update(compiled_payload_for_node(db, node_id, data_root=data_root))
+    node.update(compiled_payload_for_node(db, node_id, data_root=data_root, include_removed_refs=True))
     return node
 
 

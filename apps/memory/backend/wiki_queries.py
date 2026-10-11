@@ -98,6 +98,7 @@ def compiled_payload_for_node(
     node_id: str,
     *,
     data_root: Path | None = None,
+    include_removed_refs: bool = False,
 ) -> dict[str, Any]:
     page = row_payload(db.execute("SELECT * FROM wiki_pages WHERE node_id = ? AND status = 'active'", (node_id,)).fetchone())
     sources = [row_payload(row) or {} for row in db.execute("""SELECT s.* FROM node_source_links nl
@@ -116,7 +117,7 @@ def compiled_payload_for_node(
         "claims": claims,
         "citations": citations,
         "sources": sources,
-        "storage_references": storage_references_for_node(db, node_id),
+        "storage_references": storage_references_for_node(db, node_id, include_removed=include_removed_refs),
         "lint_findings": lint_findings_for_node(db, node_id),
     }
 

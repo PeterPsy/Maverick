@@ -7,45 +7,40 @@ from typing import Any
 from urllib.parse import quote
 
 from database import row_payload
+from source_references import external_ref_by_id, external_refs_for_nodes
 
 
 STORAGE_REF_KINDS = {"workspace_file", "local_storage_file", "remote_storage_file"}
 
 
-def storage_references_for_node(db: sqlite3.Connection, node_id: str) -> list[dict[str, Any]]:
+def storage_references_for_node(db: sqlite3.Connection, node_id: str, *, include_removed: bool = False) -> list[dict[str, Any]]:
     references = []
-    for row in db.execute(
-        """
-        SELECT *
-        FROM external_refs
-        WHERE node_id = ?
-          AND (ref_kind IN ('workspace_file', 'local_storage_file', 'remote_storage_file')
-               OR owning_app_id = 'storage')
-        ORDER BY created_at
-        """,
-        (node_id,),
-    ):
-        reference = storage_reference_payload(row_payload(row) or {})
+    for row in external_refs_for_nodes(db, [node_id], include_removed=include_removed):
+        reference = storage_reference_payload(row_payload(row) or {}, include_removed=include_removed)
         if reference:
             references.append(reference)
     return references
 
 
 def storage_reference_for_citation(db: sqlite3.Connection, citation: dict[str, Any]) -> dict[str, Any] | None:
+    source_id = str(citation.get("source_id") or "").strip()
+    source = db.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone() if source_id else None
+    if source is not None and source["status"] != "active":
+        return None
     external_ref_id = str(citation.get("external_ref_id") or "").strip()
     if external_ref_id:
-        row = db.execute("SELECT * FROM external_refs WHERE id = ?", (external_ref_id,)).fetchone()
+        row = external_ref_by_id(db, external_ref_id)
         reference = storage_reference_payload(row_payload(row) or {}) if row is not None else None
         if reference:
             return reference
-    source_id = str(citation.get("source_id") or "").strip()
-    if source_id:
-        row = db.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
-        return storage_reference_payload(row_payload(row) or {}) if row is not None else None
+    if source is not None:
+        return storage_reference_payload(row_payload(source) or {})
     return None
 
 
-def storage_reference_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+def storage_reference_payload(payload: dict[str, Any], *, include_removed: bool = False) -> dict[str, Any] | None:
+    if not include_removed and payload.get("status", "active") != "active":
+        return None
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     ref_kind = str(payload.get("ref_kind") or payload.get("source_kind") or "").strip()
     owning_app_id = str(payload.get("owning_app_id") or "").strip()

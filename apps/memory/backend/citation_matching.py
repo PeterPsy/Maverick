@@ -7,6 +7,7 @@ import math
 import re
 
 from evidence_support import support_relation
+from evidence_numbers import normalized_numeric_text
 
 
 TOKEN_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)*", re.UNICODE)
@@ -123,6 +124,10 @@ def lexical_quote(claim: str, sentences: list[SentenceSpan]) -> EvidenceMatch | 
 
 
 def sentence_spans(text: str) -> list[SentenceSpan]:
+    # Numeric validation must precede sentence extraction so an unsupported
+    # expression cannot be truncated into a seemingly supporting passage.
+    if normalized_numeric_text(text) is None:
+        return [SentenceSpan(text=text.strip())] if text.strip() else []
     spans: list[SentenceSpan] = []
     for match in SENTENCE_PATTERN.finditer(text):
         raw = match.group(0)

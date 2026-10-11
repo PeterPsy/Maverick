@@ -12,6 +12,7 @@ from database import connect, ensure_schema, normalize_limit, record_event, row_
 from errors import MemoryValidationError
 from source_retrieval import citations_for_chunk, chunk_freshness as source_chunk_freshness, chunk_summary
 from storage_reference_payloads import storage_references_for_node
+from source_references import external_refs_for_nodes
 from wiki_queries import compact_compiled_payload
 from retrieval_projections import compact_projections
 from search_candidates import ranked_candidates, query_expression, query_terms, scope_sql
@@ -266,7 +267,7 @@ def memory_node_result(
         "source_chunk_matches": list(node.get("source_chunk_matches") or []),
         "provenance": projection["provenance"] if projection is not None else [
             row_payload(row) or {}
-            for row in db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node_id,))
+            for row in external_refs_for_nodes(db, [node_id])
         ],
         "storage_references": projection["storage_references"] if projection is not None else storage_references_for_node(db, node_id),
         "compiled": compiled,

@@ -500,3 +500,27 @@ Its success exit code requires both `completed` and the correct actual fixture
 display. It prints the dispatched labels and observed values, so an incorrect
 sequence cannot be hidden by a plausible completion summary. This provider
 evaluation is explicit and is not part of the deterministic unit suite.
+
+## Physical acceptance of pixel plans and compact text (2026-10-11)
+
+Core commit `375b5748` passed 117 focused runtime/provider/API tests. Native
+commit `a7239f4` passed 277 Swift tests and all 17 signed physical-host cases in
+workflow `38140046407`, then installed and opened MaverickMac 0.3.4 (65).
+The requested Calculator's exact pixel capture and local text, including `=`,
+were verified on its active desktop. This run did not request off-desktop
+acceptance and must not be counted as an off-desktop input test.
+
+Before installation, Luna low executed the actual Calculator's `17×23` sequence
+in two structured subtasks: four verified steps in 22,598.4 ms and three in
+30,259.385 ms. The result was 391. The second subtask returned `needs_decision`
+because its final compact read omitted the result, even though a subsequent
+detailed AX read confirmed it. This observed failure motivated display-first
+compact text and explicit completion/completeness state; it is not a successful
+post-fix benchmark or evidence of a speedup.
+
+The installed native update disconnected Device Use. After Core activation,
+health returned HTTP 200 with a new backend process, while fresh native inventory
+and foreground observations reported the executor unavailable. Post-install
+clicks, off-desktop input, multiple windows and matched model comparisons remain
+pending reconnection. Storage preserves the report and measured audit snapshots
+under `storage/generated/pc-use-benchmark/2026-10-11-pixel-plan-{notes.md,audit.json}`.

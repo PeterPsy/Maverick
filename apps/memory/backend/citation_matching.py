@@ -7,11 +7,10 @@ import math
 import re
 
 from evidence_support import support_relation
-from evidence_numbers import normalized_numeric_text
+from evidence_propositions import proposition_texts
 
 
 TOKEN_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)*", re.UNICODE)
-SENTENCE_PATTERN = re.compile(r"\S.*?(?:[.!?](?=\s|$)|(?=\n{2,})|$)", re.DOTALL)
 
 STOPWORDS = {
     "a",
@@ -124,18 +123,7 @@ def lexical_quote(claim: str, sentences: list[SentenceSpan]) -> EvidenceMatch | 
 
 
 def sentence_spans(text: str) -> list[SentenceSpan]:
-    # Numeric validation must precede sentence extraction so an unsupported
-    # expression cannot be truncated into a seemingly supporting passage.
-    if normalized_numeric_text(text) is None:
-        return [SentenceSpan(text=text.strip())] if text.strip() else []
-    spans: list[SentenceSpan] = []
-    for match in SENTENCE_PATTERN.finditer(text):
-        raw = match.group(0)
-        stripped = raw.strip()
-        if not stripped:
-            continue
-        spans.append(SentenceSpan(text=stripped))
-    return spans
+    return [SentenceSpan(text=part) for part in proposition_texts(text)]
 
 
 def source_window_quote(window: list[SentenceSpan]) -> str:

@@ -9,9 +9,9 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from evidence_numbers import NUMBER_PATTERN, canonical_number, is_number, normalized_numeric_text
+from evidence_numbers import IDENTIFIER_PATTERN, NUMBER_PATTERN, canonical_number, is_number, normalized_numeric_text
 
-TOKEN = re.compile(NUMBER_PATTERN + r"|[^\W\d_]+(?:'[^\W\d_]+)?|>=|<=|!=|[><=≥≤≠±%€$£]", re.UNICODE)
+TOKEN = re.compile(IDENTIFIER_PATTERN + '|' + NUMBER_PATTERN + r"|[^\W\d_]+(?:'[^\W\d_]+)?|>=|<=|!=|[><=≥≤≠±%€$£]", re.UNICODE)
 NEGATIONS = {"non", "no", "not", "never", "mai", "senza", "without", "neither", "nessuno", "cannot", "can't", "isn't", "doesn't", "won't"}
 UNCERTAIN = {"if", "unless", "maybe", "might", "could", "perhaps", "se", "forse", "potrebbe", "ipotetico"}
 ARTICLES = {"the", "a", "an", "il", "lo", "la", "i", "gli", "le", "un", "uno", "una"}

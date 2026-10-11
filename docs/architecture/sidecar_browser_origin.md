@@ -266,6 +266,14 @@ are opaque hashes and do not directly encode a user, workspace, app, or session
 identifier, but the number and timing of issuances remain observable metadata.
 Deployments that cannot accept that metadata use `external_wildcard`.
 
+Managed issuance persists a per-installation, per-CA retry deadline after an
+ACME/client failure. Rate-limit responses honor their reported retry date, bounded
+to seven days; ordinary failures back off for one minute. The issuance lock checks
+published valid certificates before this deadline, so existing covered sessions
+continue working. New sessions fail closed during backoff without repeating an
+ACME order for each app frame. The record contains only a timestamp and survives
+backend restarts. Wildcard mode bypasses exact issuance and its backoff.
+
 The installer renders the four core environment values above and adds a
 dedicated Nginx wildcard router that explicitly strips any upstream
 `X-Frame-Options` value.

@@ -25,6 +25,10 @@ from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes as cryptography_hashes, serialization
 
 
+from core.shared.browser_origin_tls_backoff import (
+    clear_issuance_backoff, issuance_retry_at, record_issuance_failure,
+)
+
 EXTERNAL_WILDCARD_TLS_MODE = "external_wildcard"
 MANAGED_EXACT_TLS_MODE = "managed_exact"
 SUPPORTED_TLS_MODES = frozenset({EXTERNAL_WILDCARD_TLS_MODE, MANAGED_EXACT_TLS_MODE})
@@ -143,6 +147,9 @@ def ensure_browser_origin_tls(
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         if all(_published_host_is_current(resolved, host) for host in requested):
             return
+        retry_at = issuance_retry_at(resolved.private_root, resolved.installation_domain, resolved.acme_ca)
+        if retry_at is not None and retry_at > datetime.now(timezone.utc):
+            raise BrowserOriginTlsError("Managed browser-origin certificate issuance is temporarily unavailable.")
         _issue_and_publish(
             resolved,
             requested=requested,
@@ -241,12 +248,14 @@ def _issue_and_publish(
         else:
             run_command(command)
     except (OSError, subprocess.SubprocessError) as error:
+        record_issuance_failure(settings.private_root, settings.installation_domain, settings.acme_ca, error)
         raise BrowserOriginTlsError("Managed browser-origin certificate issuance failed.") from error
 
     pair = _validated_pair(lineage_certificate, lineage_private_key)
     if not set(desired).issubset(pair.names) or pair.not_valid_after <= datetime.now(timezone.utc):
         raise BrowserOriginTlsError("Managed browser-origin certificate did not cover every requested name.")
     _publish_pair(settings, pair=pair)
+    clear_issuance_backoff(settings.private_root, settings.installation_domain, settings.acme_ca)
 
 
 def _certbot_command(

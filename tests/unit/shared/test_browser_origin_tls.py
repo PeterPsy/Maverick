@@ -8,10 +8,14 @@ import subprocess
 import tempfile
 import unittest
 
+from unittest.mock import patch
+
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
+
+from core.shared.browser_origin_tls_backoff import issuance_retry_at, record_issuance_failure
 
 from core.shared.browser_origin_tls import (
     BrowserOriginTlsError,
@@ -155,6 +159,38 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
             )
             self.assertFalse(certificate_path.exists())
             self.assertFalse(private_key_path.exists())
+
+    def test_ca_retry_date_defers_new_sessions_but_keeps_valid_hosts_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = self._settings(Path(temp_dir))
+            ensure_browser_origin_tls([self.app_host], group_key="existing-session", settings=settings,
+                run_command=lambda command: self._write_lineage(settings, command))
+            retry_at = (datetime.now(timezone.utc) + timedelta(hours=2)).replace(microsecond=0)
+            error = subprocess.CalledProcessError(1, ["certbot"], stderr=(
+                "too many certificates; retry after " + retry_at.strftime("%Y-%m-%d %H:%M:%S UTC")).encode())
+            def fail(_command):
+                raise error
+            with self.assertRaises(BrowserOriginTlsError):
+                ensure_browser_origin_tls([self.other_host], group_key="new-session", settings=settings, run_command=fail)
+            self.assertEqual(issuance_retry_at(settings.private_root, settings.installation_domain, settings.acme_ca), retry_at)
+            def never_issue(_command):
+                self.fail("Rate-limited sessions must not create another ACME order")
+            with self.assertRaisesRegex(BrowserOriginTlsError, "temporarily unavailable"):
+                ensure_browser_origin_tls([self.other_host], group_key="another-session", settings=settings, run_command=never_issue)
+            ensure_browser_origin_tls([self.app_host], group_key="existing-session", settings=settings, run_command=never_issue)
+            with patch("core.shared.browser_origin_tls.issuance_retry_at", return_value=retry_at - timedelta(hours=3)):
+                ensure_browser_origin_tls([self.other_host], group_key="new-session", settings=settings,
+                    run_command=lambda command: self._write_lineage(settings, command))
+            self.assertIsNone(issuance_retry_at(settings.private_root, settings.installation_domain, settings.acme_ca))
+
+    def test_ordinary_failures_back_off_briefly_and_other_cas_are_independent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            now = datetime.now(timezone.utc)
+            record_issuance_failure(root, self.domain, "ca-one", TimeoutError(), now=now)
+            self.assertEqual(issuance_retry_at(root, self.domain, "ca-one"), now + timedelta(minutes=1))
+            self.assertIsNone(issuance_retry_at(root, self.domain, "ca-two"))
+            self.assertIsNone(issuance_retry_at(root, "another.example.test", "ca-one"))
 
     def _settings(self, root: Path, *, mode: str = "managed_exact") -> BrowserOriginTlsSettings:
         return BrowserOriginTlsSettings(

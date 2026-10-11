@@ -9,7 +9,7 @@ from core.api.device_use_reconnection import reconnect_device_use_session
 from core.device_use.computer_actor_contract import (
     COMPUTER_INTERACT_TOOL, planner_action_allowed, planner_device_use_tools,
 )
-from core.device_use.computer_actor_registry import invoke_computer_actor
+from core.device_use.computer_actor_registry import invoke_computer_actor, computer_execution_mode
 from core.device_use.errors import DeviceUseError
 from core.device_use.runtime_registry import device_use_service_for_session
 from core.runtime.workspace_api_token import validate_workspace_api_token_lifecycle
@@ -119,7 +119,7 @@ def handle_device_use_api(
                 "description": tool["description"],
                 "inputSchema": tool["inputSchema"],
             }
-            for tool in planner_device_use_tools()
+            for tool in planner_device_use_tools(computer_execution_mode(auth[0]))
         ]
         return json_response(start_response, {"tools": tools})
 
@@ -191,7 +191,7 @@ def handle_device_use_api(
         call_id = str(body.get("call_id") or f"call_{uuid4().hex[:12]}").strip()
 
         try:
-            if tool_name != COMPUTER_INTERACT_TOOL and not planner_action_allowed(tool_name, arguments):
+            if not planner_action_allowed(tool_name, arguments, computer_execution_mode(session_id)):
                 return json_response(start_response, {"error": "computer_actor_delegation_required",
                     "is_error": True, "result": {"success": False, "contentItems": [
                         {"type": "inputText", "text": "Delegate UI input through computer_interact."}]}},

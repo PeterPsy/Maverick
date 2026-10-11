@@ -12,14 +12,14 @@ _LOCK = threading.Lock()
 
 
 def register_device_use_session(
-    session_id: str, service: DeviceUseService, *, activation_id: str, state=None
+    session_id: str, service: DeviceUseService, *, activation_id: str, state=None, workspace_id=None
 ) -> None:
     """Make the ephemeral executor available to the live provider adapter."""
     with _LOCK:
         _SERVICES[str(session_id)] = (service, activation_id)
     if state is not None:
         from core.device_use.computer_actor_registry import register_computer_actor
-        register_computer_actor(state, str(session_id), activation_id)
+        register_computer_actor(state, str(session_id), activation_id, workspace_id=workspace_id)
 
 
 def unregister_device_use_session(session_id: str) -> None:

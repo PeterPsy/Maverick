@@ -27,15 +27,20 @@ def handle_computer_actor_settings(state, context, environ, start_response):
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     body = read_json_body(environ)
-    if (not isinstance(body, dict) or set(body) - {"workspace_id", "provider_id", "model_id", "reasoning_effort"}
+    if (not isinstance(body, dict) or set(body) - {"workspace_id", "provider_id", "model_id", "reasoning_effort",
+                                               "execution_mode", "fallback_model_id", "fallback_reasoning_effort"}
         or body.get("workspace_id") != context.workspace_id
         or not all(isinstance(body.get(key), str) and body[key].strip() for key in ("provider_id", "model_id"))
-        or (body.get("reasoning_effort") is not None and not isinstance(body["reasoning_effort"], str))):
+        or any(body.get(key) is not None and not isinstance(body[key], str) for key in
+               ("reasoning_effort", "execution_mode", "fallback_model_id", "fallback_reasoning_effort"))):
         return json_response(start_response, {"error": "computer_use_selection_invalid"}, status="400 Bad Request")
     try:
         configure_computer_actor(state.provider_store, workspace_id=context.workspace_id,
             provider_id=body["provider_id"].strip(), model_id=body["model_id"].strip(),
-            reasoning_effort=(body.get("reasoning_effort") or "").strip() or None)
+            reasoning_effort=(body.get("reasoning_effort") or "").strip() or None,
+            execution_mode=body.get("execution_mode", "delegated"),
+            fallback_model_id=body.get("fallback_model_id") or None,
+            fallback_reasoning_effort=body.get("fallback_reasoning_effort") or None)
     except ProviderSelectionError as error:
         return json_response(start_response, {"error": str(error)}, status="400 Bad Request")
     return json_response(start_response, computer_actor_settings(state, context))

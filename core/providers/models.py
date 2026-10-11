@@ -236,6 +236,9 @@ class ProviderTaskSelection:
     reasoning_effort: str | None
     created_at: datetime
     updated_at: datetime
+    execution_mode: str = "delegated"
+    fallback_model_id: str | None = None
+    fallback_reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,14 +1,19 @@
 """Internal UI delegation, separate from the frozen native wire contract."""
 
+import json
+
 from core.device_use.contract import (
     DEVICE_USE_COMPANION_GUIDANCE,
     DEVICE_USE_EFFICIENCY_GUIDANCE, DEVICE_USE_FULL_INSTRUCTIONS,
     device_use_dynamic_tools, device_use_instructions,
 )
+from core.device_use.computer_task_progress import (
+    EXPECTATION_SCHEMA, SEMANTIC_TOOL, STEP_SCHEMA, validate_selector, validate_step,
+)
 
 
-COMPUTER_ACTOR_MODEL = "gpt-6-luna"
-COMPUTER_ACTOR_EFFORT = "low"
+COMPUTER_ACTOR_MODEL = "gpt-6.1-sol"
+COMPUTER_ACTOR_EFFORT = "medium"
 COMPUTER_INTERACT_TOOL = "computer_interact"
 UI_TOOLS = frozenset({"mac_computer", "mac_peekaboo", "mac_browser"})
 PLANNER_UI_ACTIONS = {
@@ -64,10 +69,21 @@ Before finishing, compare the original criterion with the latest observed state.
 Use needs_decision for
 ambiguity, and blocked for a native refusal or an unverified uncertain effect.
 Return ordinary recovery diagnostics rather than hiding them. No user commentary."""
+ACTOR_GUIDANCE += """\nFor labelled controls prefer ui_action with an exact label or identifier, an
+expected observable effect, and the current tool/target. If the task contains
+steps, call ui_action only with step_index equal to runtime_progress.verified_steps;
+the runtime resolves the current target and owns step advancement. While
+effect_pending is true, only observe the same target to settle it. Once the
+expected effect is verified, continue the next distinct step even if the native
+dispatch label is dispatched_unverified. Never treat dispatch alone as effect
+verification. The fixed objective stays in the initial task; subsequent messages
+carry current progress. Resume from verified progress, never restart a sequence."""
 
 
-def planner_device_use_tools():
+def planner_device_use_tools(execution_mode="delegated"):
     tools = device_use_dynamic_tools()
+    if execution_mode == "direct":
+        return tools
     for tool in tools:
         allowed = PLANNER_UI_ACTIONS.get(tool["name"])
         if allowed is not None:
@@ -85,14 +101,21 @@ def planner_device_use_tools():
                 "constraints": {"type": "string", "maxLength": 4000},
                 "prepared_text": {"type": "array", "maxItems": 16,
                                   "items": {"type": "string", "maxLength": 4000}},
+                "steps": {"type": "array", "maxItems": 32, "items": STEP_SCHEMA},
+                "completion_check": EXPECTATION_SCHEMA,
             },
         },
     })
     return tools
 
 
-def actor_device_use_tools():
-    return [tool for tool in device_use_dynamic_tools() if tool["name"] in UI_TOOLS]
+def actor_device_use_tools(task=None):
+    tools = [tool for tool in device_use_dynamic_tools() if tool["name"] in UI_TOOLS]
+    if task and task.get("steps"):
+        for tool in tools:
+            reads = PLANNER_UI_ACTIONS[tool["name"]]
+            tool["inputSchema"]["properties"]["action"]["enum"] = sorted(reads)
+    return tools + [SEMANTIC_TOOL]
 
 
 def actor_device_use_instructions(binding):
@@ -103,14 +126,19 @@ def actor_device_use_instructions(binding):
         f"Native mode=full; applications_visible_at_activation={','.join(binding.approved_apps)}; initial_app={binding.initial_app}."))
 
 
-def planner_device_use_instructions(binding):
+def planner_device_use_instructions(binding, execution_mode="delegated"):
     return device_use_instructions(
         mode=binding.mode, approved_apps=binding.approved_apps,
         initial_app=binding.initial_app,
-    ) + "\n\n" + PLANNER_GUIDANCE
+    ) + ("\n\n" + PLANNER_GUIDANCE if execution_mode != "direct" else
+         "\n\nExecute UI actions directly in this conversation using the native tools. "
+         "There is no second decision model. Observe before input, verify its effect, "
+         "and never replay uncertain input. Keep the original task and completion criterion explicit.")
 
 
-def planner_action_allowed(tool_name, arguments):
+def planner_action_allowed(tool_name, arguments, execution_mode="delegated"):
+    if execution_mode == "direct":
+        return tool_name != COMPUTER_INTERACT_TOOL
     allowed = PLANNER_UI_ACTIONS.get(tool_name)
     return allowed is None or arguments.get("action") in allowed
 
@@ -128,7 +156,7 @@ ACTOR_OUTPUT_SCHEMA = {
 
 
 def validate_actor_task(arguments):
-    if not isinstance(arguments, dict) or set(arguments) - {"objective", "completion_criterion", "constraints", "prepared_text"}:
+    if not isinstance(arguments, dict) or set(arguments) - {"objective", "completion_criterion", "constraints", "prepared_text", "steps", "completion_check"}:
         raise ValueError("computer_interact_arguments_invalid")
     task = {}
     for key, limit in (("objective", 4000), ("completion_criterion", 2000), ("constraints", 4000)):
@@ -142,4 +170,13 @@ def validate_actor_task(arguments):
         or sum(len(value) for value in prepared) > 8000):
         raise ValueError("computer_interact_prepared_text_invalid")
     task["prepared_text"] = prepared
+    if "steps" in arguments:
+        steps = arguments["steps"]
+        if not isinstance(steps, list) or len(steps) > 32:
+            raise ValueError("computer_actor_steps_invalid")
+        task["steps"] = [validate_step(step, prepared) for step in steps]
+    if "completion_check" in arguments:
+        task["completion_check"] = validate_selector(arguments["completion_check"], expected=True)
+    if len(json.dumps(task, ensure_ascii=False)) > 24000:
+        raise ValueError("computer_actor_task_too_large")
     return task

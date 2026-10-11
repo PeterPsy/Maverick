@@ -19,7 +19,7 @@ from core.device_use.computer_actor_registry import (
 
 class ComputerActorTests(unittest.TestCase):
     def setUp(self):
-        self.binding = SimpleNamespace(activation_id="activation", workspace_id="default", owner_user_id="owner")
+        self.binding = SimpleNamespace(activation_id="activation", workspace_id="default", owner_user_id="owner", initial_app="com.apple.Safari")
         self.session = SimpleNamespace(device_use_binding=self.binding, workspace_id="default", owner_user_id="owner", status="running")
         self.turn = SimpleNamespace(session_id="parent", status="active", input_text="Original task",
                                     cancellation_requested_at=None)
@@ -28,13 +28,13 @@ class ComputerActorTests(unittest.TestCase):
         self.service = Mock()
         self.service.binding_connected.return_value = True
         self.service.invoke.return_value = DeviceUseResult("native", "native-call", {"success": True}, b"jpeg", None, 1)
-        self.client = Mock(cancelled=threading.Event())
+        self.client = Mock(cancelled=threading.Event(), model_id="gpt-6.1-sol", reasoning_effort="medium")
         self.client.run.side_effect = self.operator_run
         self.factory = Mock(return_value=self.client)
         self.actor = ComputerInteraction(SimpleNamespace(runtime_store=self.store, usage_store=None,
             runtime_event_bus=None, device_use_service=self.service), "parent", "activation", client_factory=self.factory)
 
-    def operator_run(self, task, *, invoke, active, usage_sink):
+    def operator_run(self, task, *, invoke, active, usage_sink, **_kwargs):
         self.assertTrue(active())
         invoke("mac_peekaboo", {"action": "observe_app"}, "call-1")
         return {"status": "completed", "summary": "Done", "evidence": "Verified", "steps": 1}, b"jpeg"
@@ -98,7 +98,7 @@ class ComputerActorTests(unittest.TestCase):
 
     def test_user_correction_during_operator_work_fences_next_action(self):
         current = ["Latest task"]
-        def run(task, *, invoke, active, usage_sink):
+        def run(task, *, invoke, active, usage_sink, **_kwargs):
             current[0] = "New user correction"
             self.assertFalse(active())
             with self.assertRaises(DeviceUseAuthorizationError):
@@ -127,7 +127,7 @@ class ComputerActorTests(unittest.TestCase):
         self.service.stop_activation.assert_not_called()
 
     def test_operator_cannot_author_text_not_supplied_by_the_planner(self):
-        def run(task, *, invoke, active, usage_sink):
+        def run(task, *, invoke, active, usage_sink, **_kwargs):
             with self.assertRaisesRegex(DeviceUseAuthorizationError, "computer_actor_unprepared_text"):
                 invoke("mac_peekaboo", {"action": "type", "text": "Invented content"}, "call-1")
             return {"status": "needs_decision", "summary": "Exact text needed", "evidence": "", "steps": 0}, None
@@ -145,7 +145,7 @@ class ComputerActorTests(unittest.TestCase):
     def test_new_subtask_does_not_clear_the_cancelled_previous_subtasks_guard(self):
         guards = []
 
-        def run(task, *, invoke, active, usage_sink):
+        def run(task, *, invoke, active, usage_sink, **_kwargs):
             guards.append(active)
             if len(guards) == 1:
                 self.actor.cancel()
@@ -168,7 +168,7 @@ class ComputerActorTests(unittest.TestCase):
                       ["inputSchema"]["properties"]["action"]["enum"])
         self.assertFalse(planner_action_allowed("mac_browser", {"action": "type_text"}))
         self.assertTrue(planner_action_allowed("mac_project", {"action": "generate_srt"}))
-        self.assertEqual({tool["name"] for tool in actor_device_use_tools()}, {"mac_computer", "mac_peekaboo", "mac_browser"})
+        self.assertEqual({tool["name"] for tool in actor_device_use_tools()}, {"mac_computer", "mac_peekaboo", "mac_browser", "ui_action"})
 
     def test_invalid_or_unbounded_task_is_rejected(self):
         for value in ({}, {"objective": "x", "completion_criterion": "y", "model": "other"},
@@ -179,6 +179,22 @@ class ComputerActorTests(unittest.TestCase):
 
 
 class ComputerActorRegistryTests(unittest.TestCase):
+    def test_new_connection_pins_mode_before_session_persistence(self):
+        from core.device_use.computer_actor_registry import computer_execution_mode
+        from core.providers.models import ProviderTaskSelection
+        from datetime import UTC, datetime
+        provider_store, runtime_store = Mock(), Mock()
+        now = datetime.now(UTC)
+        provider_store.get_task_provider_selection.return_value = ProviderTaskSelection(
+            'default', 'computer_use', 'codex', 'gpt-6.1-sol', 'medium', now, now, 'direct')
+        state = SimpleNamespace(provider_store=provider_store, runtime_store=runtime_store)
+        self.addCleanup(cancel_computer_actor, 'new-session-test', forget=True)
+        register_computer_actor(state, 'new-session-test', 'activation', workspace_id='default')
+        runtime_store.get_session.assert_not_called()
+        self.assertEqual(computer_execution_mode('new-session-test'), 'direct')
+        provider_store.get_task_provider_selection.return_value = None
+        self.assertEqual(computer_execution_mode('new-session-test'), 'direct')
+
     def test_provider_retirement_closes_idle_process_but_keeps_controller_for_reuse(self):
         controller = Mock(activation_id="activation")
         self.addCleanup(cancel_computer_actor, "registry-test", forget=True)

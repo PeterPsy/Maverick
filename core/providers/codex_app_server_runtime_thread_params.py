@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.device_use.computer_actor_contract import planner_device_use_tools, planner_device_use_instructions
+from core.device_use.computer_actor_registry import computer_execution_mode
 from core.providers.codex_prompt_budget import (
     CODEX_EXPLICIT_BASE_INSTRUCTIONS,
     CODEX_EXPLICIT_PROJECT_DOC_MAX_BYTES,
@@ -127,6 +128,7 @@ def codex_thread_params(
         params["config"]["project_doc_max_bytes"] = CODEX_EXPLICIT_PROJECT_DOC_MAX_BYTES
     binding = getattr(session, "device_use_binding", None)
     if binding is not None:
+        ui_mode = computer_execution_mode(session.session_id)
         execution_binding = getattr(session, "execution_binding", None)
         model_id = str(getattr(execution_binding, "model_id", "") or "").strip()
         if not model_id:
@@ -135,10 +137,10 @@ def codex_thread_params(
             "model": model_id,
             "modelProvider": "openai",
             "ephemeral": False,
-            "dynamicTools": planner_device_use_tools(),
+            "dynamicTools": planner_device_use_tools(ui_mode),
             "developerInstructions": "\n\n".join(filter(None, (
                 params["developerInstructions"],
-                planner_device_use_instructions(binding),
+                planner_device_use_instructions(binding, ui_mode),
             ))),
         })
         # Native dynamic calls require the bundled host, alongside the ordinary

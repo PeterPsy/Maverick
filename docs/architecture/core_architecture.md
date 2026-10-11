@@ -294,12 +294,18 @@ Recommended split:
 
 The private planner/operator split is described in
 `docs/architecture/computer_use_actor.md`. PC use adds the internal
-`computer_interact` tool to every admitted native provider. The selected model
-keeps the conversation, content and planning; a separate, non-visible operator
-context chooses and verifies UI actions. Its workspace-scoped provider/model/effort
-selection is configured in Settings and defaults to Codex Luna `low`. Only Codex
-has an executable operator adapter today. Each bounded task captures the selection;
-changes replace the operator at the next task without changing the chat model.
+`computer_interact` tool in delegated mode; direct mode exposes native UI input
+to the selected chat model without starting an operator. Settings persists the
+workspace execution mode, operator and optional recovery selection. Mode is pinned
+at native connection registration and changes require reconnection. In delegated
+mode the chat model keeps conversation, content and planning; a private operator
+chooses and verifies UI actions. The default operator is Codex GPT-6.1-Sol `medium`;
+existing saved choices are retained. Only Codex has an executable operator adapter.
+Each bounded task captures the selection; operator changes apply to the next task.
+Optional structured steps resolve exact current labels/identifiers and advance
+only after their expected effect is observed. Compact progress permits bounded
+context renewal for planned tasks. Recovery-model handoff shares the original
+budget and replay fences, and requires a verified step boundary.
 Screenshots and native receipt text enter the private history together without
 turn steering. Completion requires fresh evidence and an explicit full-criterion
 attestation; the planner still verifies that evidence against its original task.

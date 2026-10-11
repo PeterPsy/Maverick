@@ -57,6 +57,23 @@ class ComputerActorApiTests(unittest.TestCase):
         self.assertEqual(payload["error"], "computer_actor_delegation_required")
         self.service.invoke.assert_not_called()
 
+    def test_pinned_direct_mode_uses_native_boundary_without_an_operator(self):
+        self.service.invoke.return_value = DeviceUseResult('native', 'call', {'success': True}, None, None, 1)
+        with patch('core.api.device_use_api.computer_execution_mode', return_value='direct'), patch(
+            'core.api.device_use_api.invoke_computer_actor') as actor:
+            status, _ = self.request('mac_browser', arguments={'action': 'click'})
+        self.assertEqual(status, '200 OK')
+        actor.assert_not_called()
+        self.service.invoke.assert_called_once()
+        self.assertEqual(self.service.invoke.call_args.kwargs['runtime_session_id'], 'parent')
+
+    def test_direct_mode_cannot_accidentally_launch_a_second_model(self):
+        with patch('core.api.device_use_api.computer_execution_mode', return_value='direct'), patch(
+            'core.api.device_use_api.invoke_computer_actor') as actor:
+            status, _ = self.request()
+        self.assertEqual(status, '403 Forbidden')
+        actor.assert_not_called()
+
     def test_operator_failure_does_not_revoke_the_parent_lease(self):
         with patch("core.api.device_use_api.invoke_computer_actor",
                    side_effect=DeviceUseUnavailableError("computer_actor_unavailable")):

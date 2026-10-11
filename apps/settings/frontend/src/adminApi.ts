@@ -650,6 +650,9 @@ export type ComputerUseSettings = {
   provider_id: string;
   model_id: string;
   reasoning_effort: string | null;
+  execution_mode?: 'direct' | 'delegated';
+  fallback_model_id?: string | null;
+  fallback_reasoning_effort?: string | null;
   can_configure: boolean;
   available: boolean;
   unavailable_reason: string | null;

@@ -1095,6 +1095,7 @@ def _create_session(
                 resolved_session_id, state.device_use_service,
                 activation_id=device_binding.activation_id,
                 state=state,
+                workspace_id=device_binding.workspace_id,
             )
             device_registered = True
         session = create_runtime_session(

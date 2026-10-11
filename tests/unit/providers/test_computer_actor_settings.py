@@ -31,6 +31,7 @@ class CatalogAdapter:
             input_modalities=modalities) for model, label, modalities in (
                 ('gpt-6-luna', 'Luna', ['text', 'image']),
                 ('gpt-6-sol', 'Sol', ['text', 'image']),
+                ('gpt-6.1-sol', 'Sol 6.1', ['text', 'image']),
                 ('text-only', 'Text only', ['text']))]
 
     def validate_model_settings(self, model, effort):
@@ -53,9 +54,9 @@ class ComputerActorSettingsTests(unittest.TestCase):
         values.update(overrides)
         return configure_computer_actor(self.store, **values)
 
-    def test_default_is_luna_low_without_changing_chat_or_hosted_selection(self):
+    def test_default_is_sol_mid_without_changing_chat_or_hosted_selection(self):
         selection = computer_actor_selection(self.store, 'workspace-a')
-        self.assertEqual((selection.provider_id, selection.model_id, selection.reasoning_effort), ('codex', 'gpt-6-luna', 'low'))
+        self.assertEqual((selection.provider_id, selection.model_id, selection.reasoning_effort), ('codex', 'gpt-6.1-sol', 'medium'))
         self.assertIsNone(self.store.get_provider_selection('workspace-a'))
         self.assertIsNone(self.store.get_hosted_provider_selection(workspace_id='workspace-a', profile='fast_model'))
 
@@ -63,9 +64,27 @@ class ComputerActorSettingsTests(unittest.TestCase):
         selected = self.configure()
         self.assertEqual(computer_actor_selection(self.store, 'workspace-a'), selected)
         self.assertEqual(selected.reasoning_effort, 'low')
-        self.assertEqual(computer_actor_selection(self.store, 'workspace-b').model_id, 'gpt-6-luna')
+        self.assertEqual(computer_actor_selection(self.store, 'workspace-b').model_id, 'gpt-6.1-sol')
         changed = self.configure(reasoning_effort='medium')
         self.assertEqual(changed.created_at, selected.created_at)
+
+    def test_execution_mode_and_recovery_selection_are_persisted(self):
+        selection = self.configure(model_id='gpt-6-luna', execution_mode='delegated',
+            fallback_model_id='gpt-6.1-sol', fallback_reasoning_effort='medium')
+        self.assertEqual(selection.fallback_model_id, 'gpt-6.1-sol')
+        self.assertEqual(computer_actor_settings_payload(self.store, 'workspace-a')['execution_mode'], 'delegated')
+        selection = self.configure(execution_mode='direct')
+        self.assertEqual(selection.execution_mode, 'direct')
+        self.assertIsNone(selection.fallback_model_id)
+
+    def test_invalid_modes_and_recovery_models_do_not_overwrite_selection(self):
+        saved = self.configure()
+        for kwargs in [{'execution_mode': 'bad'}, {'fallback_model_id': 'text-only', 'fallback_reasoning_effort': 'medium'},
+                       {'fallback_model_id': 'gpt-6-sol', 'fallback_reasoning_effort': 'medium'},
+                       {'execution_mode': 'direct', 'fallback_model_id': 'gpt-6-luna', 'fallback_reasoning_effort': 'medium'}]:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ProviderSelectionError):
+                self.configure(**kwargs)
+        self.assertEqual(computer_actor_selection(self.store, 'workspace-a'), saved)
 
     def test_unsupported_provider_model_and_effort_are_rejected_before_persistence(self):
         for values in ({'provider_id': 'jev'}, {'model_id': 'gpt-6-luna-decision'},
@@ -86,7 +105,7 @@ class ComputerActorSettingsTests(unittest.TestCase):
     def test_catalog_excludes_text_only_models_and_factory_passes_selection(self):
         selected = self.configure()
         payload = computer_actor_settings_payload(self.store, 'workspace-a')
-        self.assertEqual([m['model_id'] for m in payload['providers'][0]['models']], ['gpt-6-luna', 'gpt-6-sol'])
+        self.assertEqual([m['model_id'] for m in payload['providers'][0]['models']], ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol'])
         with patch('core.providers.computer_actor_factory.CodexComputerActor') as actor:
             create_computer_actor('session', 'binding', selection=selected)
             actor.assert_called_once_with('session', 'binding', selection=selected)
@@ -135,7 +154,7 @@ class ComputerActorSettingsTests(unittest.TestCase):
     def test_api_read_and_save_return_actual_selected_model(self):
         status, payload = self.api()
         self.assertEqual(status, '200 OK')
-        self.assertEqual(payload['reasoning_effort'], 'low')
+        self.assertEqual(payload['reasoning_effort'], 'medium')
         status, payload = self.api('POST', {'workspace_id': 'workspace-a', 'provider_id': 'codex',
             'model_id': 'gpt-6-sol', 'reasoning_effort': 'medium'})
         self.assertEqual(status, '200 OK')

@@ -4,11 +4,13 @@ import hashlib
 import json
 import threading
 import time
+from dataclasses import replace
 from uuid import uuid4
 
 from core.device_use.computer_actor_contract import UI_TOOLS, validate_actor_task
 from core.device_use.errors import DeviceUseAuthorizationError, DeviceUseUnavailableError
 from core.device_use.models import DeviceUseResult
+from core.device_use.computer_task_execution import execute_computer_task
 from core.providers.computer_actor_factory import create_computer_actor
 from core.providers.computer_actor_settings import computer_actor_selection
 from core.runtime.execution_events import RuntimeExecutionEvent
@@ -16,7 +18,7 @@ from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputR
 
 
 class ComputerInteraction:
-    def __init__(self, state, session_id, activation_id, *, client_factory=create_computer_actor):
+    def __init__(self, state, session_id, activation_id, *, workspace_id=None, client_factory=create_computer_actor):
         self.state = state
         self.session_id = session_id
         self.activation_id = activation_id
@@ -26,6 +28,12 @@ class ComputerInteraction:
         self.selection_key = None
         self.cancelled = threading.Event()
         self.cancellation_lock = threading.Lock()
+        # New-session registration precedes persistence. Pin from the verified
+        # binding's workspace instead of reading an as-yet nonexistent session.
+        if workspace_id is None:
+            workspace_id = state.runtime_store.get_session(session_id).workspace_id
+        self.execution_mode = computer_actor_selection(
+            getattr(state, "provider_store", None), workspace_id).execution_mode
 
     def cancel(self, *, close=False):
         with self.cancellation_lock:
@@ -49,6 +57,8 @@ class ComputerInteraction:
         recorder = _RuntimeTurnOutputRecorder(self.state, session_id=self.session_id, turn_id=turn_id)
         durations = []
         user_waits = []
+        task_started = time.monotonic()
+        deadline = task_started + 180
         try:
             session = self.state.runtime_store.get_session(self.session_id)
             service = self.state.device_use_service
@@ -85,7 +95,6 @@ class ComputerInteraction:
                 except Exception as error:
                     raise DeviceUseUnavailableError("computer_actor_unavailable") from error
             task_call_prefix = "actor_" + uuid4().hex
-            deadline = time.monotonic() + 180
 
             def invoke(tool_name, native_arguments, actor_call_id):
                 if (tool_name not in UI_TOOLS or not isinstance(native_arguments, dict)
@@ -109,9 +118,18 @@ class ComputerInteraction:
                 user_waits.append(result.native_user_wait_ms)
                 return result
 
-            output, jpeg = self.client.run(task, invoke=invoke, active=active,
+            fallback_model = getattr(selection, 'fallback_model_id', None)
+            def fallback_factory():
+                return self.client_factory(session, binding, selection=replace(selection,
+                    model_id=fallback_model, reasoning_effort=selection.fallback_reasoning_effort,
+                    fallback_model_id=None, fallback_reasoning_effort=None))
+
+            output, jpeg = execute_computer_task(self.client, task, binding=binding, invoke=invoke, active=active,
+                fallback_factory=fallback_factory if fallback_model else None,
+                timeout_seconds=max(0.01, deadline - time.monotonic()),
                 usage_sink=lambda payload: recorder.record(RuntimeExecutionEvent(
                     event_type="runtime.usage.reported", payload=payload)))
+            output['task_elapsed_ms'] = round((time.monotonic() - task_started) * 1000, 3)
             if not active():
                 output = {"status": "blocked", "summary": "computer_actor_parent_changed",
                           "evidence": "", "steps": output.get("steps", 0)}

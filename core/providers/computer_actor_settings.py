@@ -33,7 +33,11 @@ def computer_actor_model_options(adapter):
             if "image" in option.input_modalities]
 
 
-def configure_computer_actor(store, *, workspace_id, provider_id, model_id, reasoning_effort):
+def configure_computer_actor(store, *, workspace_id, provider_id, model_id, reasoning_effort,
+                            execution_mode="delegated", fallback_model_id=None,
+                            fallback_reasoning_effort=None):
+    if execution_mode not in {"direct", "delegated"}:
+        raise ProviderSelectionError("computer_use_execution_mode_invalid")
     adapter = computer_actor_adapter(provider_id)
     option = next((item for item in computer_actor_model_options(adapter) if item.model_id == model_id), None)
     if option is None:
@@ -43,15 +47,27 @@ def configure_computer_actor(store, *, workspace_id, provider_id, model_id, reas
     if effort and effort not in {item.effort for item in option.supported_reasoning_efforts}:
         raise ProviderSelectionError("computer_use_reasoning_unavailable")
     model, effort = adapter.validate_model_settings(model_id, effort)
+    if fallback_model_id:
+        fallback = next((item for item in computer_actor_model_options(adapter)
+                         if item.model_id == fallback_model_id), None)
+        if (fallback is None or fallback_model_id == model_id or execution_mode == "direct"
+            or fallback_reasoning_effort not in {item.effort for item in fallback.supported_reasoning_efforts}):
+            raise ProviderSelectionError("computer_use_fallback_invalid")
+        adapter.validate_model_settings(fallback_model_id, fallback_reasoning_effort)
+    elif fallback_reasoning_effort:
+        raise ProviderSelectionError("computer_use_fallback_invalid")
     previous = store.get_task_provider_selection(workspace_id=workspace_id, task_kind=COMPUTER_USE_TASK)
     now = datetime.now(UTC)
     return store.save_task_provider_selection(ProviderTaskSelection(
         workspace_id, COMPUTER_USE_TASK, provider_id, model, effort,
         previous.created_at if previous else now, now,
+        execution_mode, fallback_model_id, fallback_reasoning_effort,
     ))
 
 
 def validate_computer_actor_selection(selection):
+    if selection.execution_mode not in {"delegated", "direct"}:
+        raise ProviderSelectionError("computer_use_execution_mode_invalid")
     adapter = computer_actor_adapter(selection.provider_id)
     option = next((item for item in computer_actor_model_options(adapter) if item.model_id == selection.model_id), None)
     if option is None:
@@ -60,6 +76,13 @@ def validate_computer_actor_selection(selection):
     if (supported and selection.reasoning_effort not in supported) or (not supported and selection.reasoning_effort):
         raise ProviderSelectionError("computer_use_reasoning_unavailable")
     adapter.validate_model_settings(selection.model_id, selection.reasoning_effort)
+    if selection.fallback_model_id:
+        fallback = next((item for item in computer_actor_model_options(adapter)
+                         if item.model_id == selection.fallback_model_id), None)
+        if (fallback is None or selection.execution_mode != "delegated"
+            or selection.fallback_model_id == selection.model_id
+            or selection.fallback_reasoning_effort not in {item.effort for item in fallback.supported_reasoning_efforts}):
+            raise ProviderSelectionError("computer_use_fallback_invalid")
 
 
 def computer_actor_settings_payload(store, workspace_id, *, can_configure=False):
@@ -75,6 +98,9 @@ def computer_actor_settings_payload(store, workspace_id, *, can_configure=False)
         "workspace_id": workspace_id,
         "provider_id": selection.provider_id, "model_id": selection.model_id,
         "reasoning_effort": selection.reasoning_effort, "can_configure": can_configure,
+        "execution_mode": selection.execution_mode,
+        "fallback_model_id": selection.fallback_model_id,
+        "fallback_reasoning_effort": selection.fallback_reasoning_effort,
         "available": available, "unavailable_reason": None if available else "computer_use_model_unavailable",
         "providers": [{"provider_id": "codex", "label": "Codex", "models": [asdict(option) for option in options]}],
     }

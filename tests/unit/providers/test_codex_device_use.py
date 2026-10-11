@@ -58,6 +58,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
     def test_mac_tools_extend_the_ordinary_workspace_thread(self):
         params = codex_thread_params(
             session=SimpleNamespace(
+                session_id="runtime",
                 device_use_binding=self.binding,
                 execution_binding=SimpleNamespace(model_id="gpt-5.6-sol"),
                 system_prompt="Use the official Maverick app surfaces.",
@@ -83,6 +84,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
     def test_full_mode_instructions_remove_native_authority_limits(self):
         params = codex_thread_params(
             session=SimpleNamespace(
+                session_id="runtime",
                 device_use_binding=replace(self.binding, mode="full"),
                 execution_binding=SimpleNamespace(model_id="gpt-5.6-terra"),
             ),

@@ -62,7 +62,7 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertEqual([call[1]["action"] for call in self.calls], ["observe_app", "click", "observe_app"])
         self.assertEqual(jpeg, b"fresh-jpeg")
         self.assertNotIn("PRIVATE_ACTOR", json.dumps(output))
-        self.assertTrue(all(item["model_id"] == "gpt-6-luna" for item in self.usage))
+        self.assertTrue(all(item["model_id"] == "gpt-6.1-sol" for item in self.usage))
         self.assertTrue(all(item["context_tokens"] is None for item in self.usage))
 
     def test_selected_model_and_effort_reach_protocol_and_usage(self):
@@ -118,6 +118,25 @@ class CodexComputerActorTests(unittest.TestCase):
         output, _jpeg = self.run_actor(max_steps=1)
         self.assertEqual(output["summary"], "computer_actor_step_budget")
         self.assertEqual(len(self.calls), 1)
+
+    def test_context_checkpoint_releases_old_images_and_next_task_can_run(self):
+        output, _ = self.run_actor(max_observations=1)
+        self.assertEqual(output['summary'], 'computer_actor_context_checkpoint')
+        self.calls.clear()
+        output, _ = self.run_actor()
+        self.assertEqual(output['status'], 'completed')
+        self.assertEqual(len(self.calls), 3)
+
+    def test_semantic_action_before_observation_recovers_without_input(self):
+        output, _ = self.run_actor('semantic-before-observation')
+        self.assertEqual(output['status'], 'completed')
+        self.assertEqual([call[1]['action'] for call in self.calls], ['observe_app', 'click', 'observe_app'])
+
+    def test_repeated_semantic_validation_errors_are_bounded(self):
+        output, _ = self.run_actor('semantic-rejection-limit')
+        self.assertEqual(output['status'], 'needs_decision')
+        self.assertEqual(output['summary'], 'computer_actor_fresh_observation_required')
+        self.assertEqual(self.calls, [])
 
     def test_interrupted_task_does_not_leak_queued_events_into_the_next_task(self):
         first, _ = self.run_actor(max_steps=1)

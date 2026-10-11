@@ -1,13 +1,19 @@
 # Internal computer-use operator
 
 PC use retains one visible conversation and the user's selected planner model.
-Every admitted native provider exposes `computer_interact` for bounded UI tasks.
+In delegated mode admitted native providers expose `computer_interact` for bounded UI tasks.
 The Core-owned operator uses a separate provider context selected in Settings
-under **PC use decision model**, defaulting to Codex `gpt-6-luna` / `low`.
+under **PC use decision model**, defaulting to Codex `gpt-6.1-sol` / `medium`.
 It is not a Chat thread or an inter-agent board participant.
 Only read-only UI tools and structured project, code and calendar capabilities
 remain directly available to the planner. Native UI input is brokered by Core
 through the original activation/session/turn authority, never a copied Mac lease.
+Settings also offers direct UI execution by the selected chat model. Direct mode
+exposes the complete native tool catalog and rejects `computer_interact`, so the
+single-model baseline cannot accidentally start a second model. Connection
+registration pins the mode from the verified binding's workspace before new
+session persistence; changing mode requires reconnection. Saved operator models
+are retained when the default changes.
 
 The operator has only native UI tools, an attested isolated credential home and
 the existing process sandbox exposing only its private operator directory. The
@@ -21,8 +27,8 @@ cannot cross tasks. Its output and reasoning never become Chat messages. Normal
 native operation evidence and aggregated usage remain on the owning conversation.
 Each screenshot and its textual native receipt are paired in one raw history
 message through Codex `thread/inject_items` while the dynamic tool is pending.
-The unchanged bounded task card accompanies each image to keep the original
-objective and completion criterion explicit. Native receipt and target lines are
+The objective and completion criterion are supplied once at context start; each
+image carries compact runtime progress and the last two verified effects. Native receipt and target lines are
 injected verbatim, with result metadata separate, rather than JSON-escaped inside
 one string; line boundaries and current target IDs remain readable.
 The tool reply follows only after injection is acknowledged. This does not steer
@@ -49,8 +55,11 @@ still required, and the planner must assess whether it proves the requested
 outcome. The operator does not compose content or make business/creative decisions.
 Ambiguous input cannot be replayed. Cancellation, parent-turn completion, lease
 revocation, owner changes and user corrections fence further actor calls and stop
-active inference. Actor failure does not transparently replay writes or silently
-switch models/providers. Catalog availability is checked before launching.
+active inference. Actor failure never transparently replays writes. A configured
+recovery model can continue only at a verified structured-step boundary, with no
+pending effect or recovery. It shares the task's budget, progress and replay fences;
+its actual model, timing and reason are included in attempt metrics. Catalog
+availability is checked before launching.
 Codex same-turn corrections also send the existing native turn-end control frame
 to invalidate old observation receipts. Already dispatched operations remain
 subject to native cancellation and outcome verification; Core never replays them.
@@ -107,7 +116,8 @@ the direct/delegated split and main-model context, and exclude other turns and
 inter-agent participants. The same projection serves document and SQLite stores.
 Deleting the owning runtime also removes its private usage streams.
 The workspace-scoped `provider_task_selections` collection persists the operator's
-provider, model and reasoning effort under task kind `computer_use`. This selection
+provider, model, reasoning effort, execution mode and optional recovery model/effort
+under task kind `computer_use`. This selection
 is independent of the conversation model and hosted-provider profiles. Settings
 projects it through `/api/settings/platform` and owns the authenticated
 `GET`/`POST /api/settings/computer-use` route. Mutations use the existing provider
@@ -129,6 +139,45 @@ or require an OpenAI API key.
 Tests cover protocol routing, image delivery, authority, bounded outputs, usage
 stream isolation, cancellation and provider-independent tool projection. Performance
 claims require a measured matched task; model choice alone is not a speedup result.
+
+## Structured progress and matched evaluation (2026-10-11)
+
+`computer_interact` accepts optional `steps` (at most 32) and `completion_check`.
+Each step names an engine/target, click/type/replace action, exact control selector
+and observable expected effect. Text must match `prepared_text`. Runtime-owned
+`ui_action` resolves a unique actionable control in a fresh, image-bearing receipt;
+it never guesses coordinates or reuses old element ids. Planned tasks cannot
+bypass it with raw native input. Pending effects admit only same-target reads;
+three unverified reads return a concrete failure without replaying input.
+An already-visible predicate requires a later read, rather than treating dispatch
+as proof. Native recovery and original parent authority remain enforced.
+
+Rejected semantic validation has not sent input: the model gets up to three
+actionable corrections to acquire its own observation. Planned tasks renew the
+private context after eight images, preserving progress and recovery state;
+unplanned tasks keep their history because restarting them could duplicate input.
+The same operator process is reused, without giving the model full chat history.
+
+`scripts/eval_pc_use_benchmark.py` compares a Sol `medium` planner executing
+directly, the same planner delegating to Sol `medium`, and the same planner
+delegating to Luna `low` with Sol recovery. All variants receive identical goals,
+initial state and 180-second budgets on rendered Calculator, form, menu and
+asynchronous-save fixtures. Element ids change on each observation and effects
+settle on later reads. An independent state validator requires both Calculator
+results, exact form fields, a closed menu, and a persisted title after close/reopen.
+Model completion claims alone do not pass. This is an authenticated model/transport
+benchmark, not a physical Mac bridge benchmark.
+
+Elapsed time includes planner/operator startup, verification and cleanup. Provider
+usage counts every fresh stream once, separates cached/uncached input and reasoning,
+attributes actual models, and includes failures/handoffs in time/tokens per success.
+No currency cost or pure inference time is inferred from wall-clock duration.
+Order rotates between repetitions. Raw output is a temporary measurement artifact;
+user reports are delivered through Storage. Run explicitly with:
+
+```bash
+python3 scripts/eval_pc_use_benchmark.py --repetitions 3 --timeout 180 --output /tmp/pc-use-benchmark.json
+```
 
 Implementation verification on 2026-10-08 includes 165 focused passing tests for
 provider routing, private JSON-RPC, native lease/turn authority, steering, MCP,

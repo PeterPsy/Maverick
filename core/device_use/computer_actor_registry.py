@@ -9,12 +9,20 @@ _ACTORS = {}
 _LOCK = threading.Lock()
 
 
-def register_computer_actor(state, session_id, activation_id):
+def computer_execution_mode(session_id):
+    """Pin the tool surface to this connection, never to a caller argument."""
+    with _LOCK:
+        actor = _ACTORS.get(str(session_id))
+    mode = getattr(actor, "execution_mode", "delegated") if actor is not None else "delegated"
+    return mode if mode in {"direct", "delegated"} else "delegated"
+
+
+def register_computer_actor(state, session_id, activation_id, *, workspace_id=None):
     from core.device_use.computer_actor import ComputerInteraction
 
     with _LOCK:
         previous = _ACTORS.pop(session_id, None)
-        _ACTORS[session_id] = ComputerInteraction(state, session_id, activation_id)
+        _ACTORS[session_id] = ComputerInteraction(state, session_id, activation_id, workspace_id=workspace_id)
     if previous is not None:
         previous.cancel(close=True)
 

@@ -49,6 +49,7 @@ class _CodexAppServerRuntime:
     server_request_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=16))
     server_request_thread: threading.Thread | None = None
     device_use_binding: DeviceUseSessionBinding | None = None
+    device_use_execution_mode: str = "delegated"
     research: bool = False
     current_runtime_turn_id: str | None = None
     current_task_text: str = ""

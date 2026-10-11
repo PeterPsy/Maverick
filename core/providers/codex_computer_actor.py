@@ -13,6 +13,7 @@ from core.device_use.computer_actor_contract import (
 )
 from core.device_use.errors import DeviceUseError
 from core.device_use.computer_actor_recovery import ComputerActorRecovery
+from core.device_use.computer_task_progress import ComputerTaskProgress
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime
 from core.providers.codex_app_server_runtime_thread_params import codex_research_config
 from core.providers.codex_app_server_runtime_transport import _send_request
@@ -84,7 +85,8 @@ class CodexComputerActor:
         terminate_runtime_process(self.process, timeout_seconds=0)
         unregister_runtime_process(self.runtime.session_id, self.process)
 
-    def run(self, task, *, invoke, active, usage_sink, max_steps=64, timeout_seconds=180):
+    def run(self, task, *, invoke, active, usage_sink, max_steps=64, timeout_seconds=180,
+            progress=None, recovery=None, max_observations=None, instructions=None, tools=None):
         config = codex_research_config()
         config["web_search"] = "disabled"
         config["features"]["code_mode"] = False
@@ -94,13 +96,21 @@ class CodexComputerActor:
         last_image = None
         steps = 0
         completed = False
-        recovery = ComputerActorRecovery(self.binding.initial_app)
+        recovery = recovery or ComputerActorRecovery(self.binding.initial_app)
+        progress = progress or ComputerTaskProgress(task)
+        progress.observation = None
+        observations = 0
+        validation_failures = 0
+        # Only a runtime-owned plan can resume safely in a fresh context. An
+        # unplanned task keeps its history rather than risking duplicated input.
+        if max_observations is None:
+            max_observations = 8 if progress.steps else max_steps + 1
         self.transport.output = ""
         self.transport.usage_sink = usage_sink
         self.transport.thread_id = None
         self.transport.turn_id = None
         scope = actor_device_use_instructions(self.binding)
-        tools = actor_device_use_tools()
+        tools = tools or actor_device_use_tools(task)
         try:
             if not active() or self.cancelled.is_set():
                 return self._result("blocked", "computer_actor_cancelled", steps), None
@@ -108,8 +118,8 @@ class CodexComputerActor:
                 "model": self.model_id, "modelProvider": "openai", "ephemeral": True,
                 "allowProviderModelFallback": False,
                 "approvalPolicy": "never", "sandbox": "read-only", "environments": [],
-                "baseInstructions": ACTOR_GUIDANCE,
-                "developerInstructions": scope + "\n\n" + ACTOR_GUIDANCE,
+                "baseInstructions": instructions or ACTOR_GUIDANCE,
+                "developerInstructions": scope,
                 "config": config, "dynamicTools": tools,
             }, timeout=20).get("thread", {})
             thread_id = str(thread.get("id") or "")
@@ -122,7 +132,7 @@ class CodexComputerActor:
                 "threadId": thread_id, "model": self.model_id,
                 "effort": self.reasoning_effort, "approvalPolicy": "never",
                 "sandboxPolicy": {"type": "readOnly"}, "environments": [],
-                "input": [{"type": "text", "text": json.dumps(task, ensure_ascii=False)}],
+                "input": [{"type": "text", "text": json.dumps({**task, "runtime_progress": progress.state()}, ensure_ascii=False)}],
                 "outputSchema": ACTOR_OUTPUT_SCHEMA,
             }, timeout=20).get("turn", {})
             turn_id = str(turn.get("id") or self.transport.turn_id or "")
@@ -151,6 +161,9 @@ class CodexComputerActor:
                     elif output["status"] == "completed" and not recovery.completion_verified:
                         output = self._result("needs_decision", "computer_actor_completion_unverified", steps,
                                               output["evidence"])
+                    elif output["status"] == "completed" and not progress.complete():
+                        output = self._result("needs_decision", "computer_actor_criterion_not_met", steps,
+                                              output["evidence"])
                     output["evidence"] = recovery.evidence(output["evidence"])
                     return {**output, "steps": steps}, last_image
                 if event["kind"] != "call":
@@ -163,14 +176,36 @@ class CodexComputerActor:
                     return self._result("needs_decision", "computer_actor_step_budget", steps), last_image
                 if params.get("tool") not in {t["name"] for t in tools}:
                     return self._result("blocked", "computer_actor_tool_denied", steps), last_image
-                if not recovery.permits(params.get("tool"), params.get("arguments")):
+                tool, arguments = params.get("tool"), params.get("arguments")
+                if tool == "ui_action":
+                    try:
+                        tool, arguments = progress.prepare(arguments)
+                    except DeviceUseError as error:
+                        validation_failures += 1
+                        if validation_failures > 3:
+                            return self._result("needs_decision", error.reason_code, steps), last_image
+                        # Validation has not dispatched input. Return a bounded,
+                        # actionable rejection so the model can observe first.
+                        self.transport.write_result(payload['id'], {'success': False,
+                            'error': error.reason_code, 'input_dispatched': False,
+                            'runtime_progress': progress.state(),
+                            'instruction': 'Observe the exact target with your own tool to obtain a fresh receipt. If an effect is pending, read that target without replaying input.'})
+                        continue
+                elif not progress.permits(tool, arguments):
+                    return self._result("needs_decision", "computer_actor_step_mismatch", steps), last_image
+                if not recovery.permits(tool, arguments):
                     return self._result("blocked", "computer_actor_recovery_action_denied", steps,
                                         recovery.evidence("")), last_image
                 native_started = True
                 last_image = None
-                result = invoke(params.get("tool"), params.get("arguments"), params.get("callId"))
+                result = invoke(tool, arguments, params.get("callId"))
+                validation_failures = 0
                 steps += 1
                 last_image = result.image_jpeg
+                if not recovery.record(tool, arguments, result):
+                    return self._result("blocked", "computer_actor_native_failure", steps,
+                                        json.dumps(result.result, ensure_ascii=False)[:3000]), last_image
+                progress.record(tool, arguments, result)
                 if last_image is not None:
                     # Current Codex dynamic-tool image items are not reliably visual
                     # model input. Inject the paired receipt/image into history while
@@ -183,13 +218,13 @@ class CodexComputerActor:
                                 + _native_observation_text(result.result)},
                                 {"type": "input_image", "image_url": "data:image/jpeg;base64,"
                                     + base64.b64encode(last_image).decode("ascii"), "detail": "high"},
-                                {"type": "input_text", "text": "Original bounded task, unchanged:\n"
-                                    + json.dumps(task, ensure_ascii=False)}]}],
+                                {"type": "input_text", "text": "Runtime task progress (native success does not alone verify an effect):\n"
+                                    + json.dumps(progress.state(), ensure_ascii=False)}]}],
                     }, timeout=20)
+                    observations += 1
                 self.transport.write_result(payload["id"], result.result)
-                if not recovery.record(params.get("tool"), params.get("arguments"), result):
-                    return self._result("blocked", "computer_actor_native_failure", steps,
-                                        json.dumps(result.result, ensure_ascii=False)[:3000]), last_image
+                if observations >= max_observations:
+                    return self._result("needs_decision", "computer_actor_context_checkpoint", steps), last_image
             return self._result("blocked", "computer_actor_cancelled", steps), last_image
         except DeviceUseError as error:
             return self._result("blocked", error.reason_code, steps), last_image

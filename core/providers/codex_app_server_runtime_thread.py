@@ -15,6 +15,7 @@ from core.providers.codex_app_server_runtime_resume import (
     resume_error_is_missing_thread,
 )
 from core.providers.codex_app_server_runtime_thread_params import codex_thread_params as _thread_params
+from core.device_use.computer_actor_registry import computer_execution_mode
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
 from core.providers.codex_app_server_device_use_requests import (
@@ -77,6 +78,7 @@ def _ensure_runtime(
                 or f"{session.runtime_root}/codex-home"
             ),
             device_use_binding=getattr(session, "device_use_binding", None),
+            device_use_execution_mode=computer_execution_mode(session.session_id),
             research=runtime_session_is_research(session),
         )
         runtime.reader_thread = threading.Thread(target=_reader_loop, args=(runtime,), daemon=True, name=f"codex-app-server-{session.session_id}")

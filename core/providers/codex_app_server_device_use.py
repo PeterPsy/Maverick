@@ -57,7 +57,7 @@ def process_device_use_request(runtime, payload: dict[str, Any], *, authority: D
     event_payload["turn_id"] = runtime_turn_id
     _emit(runtime, "runtime.tool_call.started", event_payload)
     try:
-        if tool_name != COMPUTER_INTERACT_TOOL and not planner_action_allowed(tool_name, arguments):
+        if not planner_action_allowed(tool_name, arguments, getattr(runtime, "device_use_execution_mode", "delegated")):
             _send_tool_failure(runtime, request_id, "Delegate UI input through computer_interact.")
             _emit(runtime, "runtime.tool_call.failed", {**event_payload, "status": "failed",
                   "failure_reason_code": "computer_actor_delegation_required"})

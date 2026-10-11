@@ -35,6 +35,36 @@ function setup(initial = selection()) {
 }
 
 describe('PC use decision model settings', () => {
+  it('clears recovery when switching to direct UI execution', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => selection({ execution_mode: 'direct' }) });
+    vi.stubGlobal('fetch', fetch);
+    const { state, controller } = setup(selection({ fallback_model_id: 'gpt-6-sol', fallback_reasoning_effort: 'medium' }));
+    const mode = document.getElementById('settings-computer-use-mode') as HTMLSelectElement;
+    mode.value = 'direct'; mode.dispatchEvent(new Event('change'));
+    expect(state.fallbackModelId).toBe('');
+    expect((document.getElementById('settings-computer-use-model') as HTMLSelectElement).disabled).toBe(true);
+    await controller.save();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ execution_mode: 'direct', fallback_model_id: null, fallback_reasoning_effort: null });
+  });
+
+  it('saves a distinct recovery model at medium effort', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => selection({ fallback_model_id: 'gpt-6-sol', fallback_reasoning_effort: 'medium' }) });
+    vi.stubGlobal('fetch', fetch);
+    const { controller, state } = setup();
+    const recovery = document.getElementById('settings-computer-use-fallback') as HTMLSelectElement;
+    expect([...recovery.options].map(option => option.value)).toEqual(['', 'gpt-6-sol']);
+    recovery.value = 'gpt-6-sol'; recovery.dispatchEvent(new Event('change'));
+    await controller.save();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ fallback_model_id: 'gpt-6-sol', fallback_reasoning_effort: 'medium' });
+    expect(state.fallbackEffort).toBe('medium');
+  });
+
+  it('allows repairing an unavailable saved operator before saving direct mode', () => {
+    const { state, render } = setup(selection({ available: false, model_id: 'removed' }));
+    state.executionMode = 'direct'; render();
+    expect((document.getElementById('settings-computer-use-model') as HTMLSelectElement).disabled).toBe(false);
+  });
+
   it('shows Luna low as the saved model and disables an unchanged save', () => {
     const { state } = setup();
     expect(state.modelId).toBe('gpt-6-luna');
@@ -55,7 +85,8 @@ describe('PC use decision model settings', () => {
     await controller.save();
     expect(fetch.mock.calls[0][0]).toBe('/api/settings/computer-use');
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ workspace_id: 'default', provider_id: 'codex',
-      model_id: 'gpt-6-sol', reasoning_effort: 'medium' });
+      model_id: 'gpt-6-sol', reasoning_effort: 'medium', execution_mode: 'delegated',
+      fallback_model_id: null, fallback_reasoning_effort: null });
     expect(state.saving).toBe(false);
     expect(state.modelId).toBe('gpt-6-sol');
     expect(notify).toHaveBeenCalledWith('PC use decision model updated.');

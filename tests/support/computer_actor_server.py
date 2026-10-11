@@ -33,6 +33,10 @@ def emit_usage():
 def next_call():
     global step
     actions = ["observe_app", "click", "observe_app"]
+    if mode == 'semantic-before-observation':
+        actions.insert(0, 'ui_action')
+    elif mode == 'semantic-rejection-limit':
+        actions = ['ui_action'] * 4
     if mode.startswith("browser-close"):
         actions = ["observe", "close_tab", "list_tabs"]
     elif mode.startswith("browser-"):
@@ -66,6 +70,10 @@ def next_call():
     if mode == "uncertain-other-engine" and step == 2:
         tool, action = "mac_computer", "observe"
     arguments = {"action": action, "bundle_id": bundle, "snapshot": "snapshot-" + str(step)}
+    if action == 'ui_action':
+        tool = 'ui_action'
+        arguments = {'tool': 'mac_peekaboo', 'target': bundle, 'action': 'click',
+                     'control': {'label': 'Submit'}, 'expect': {'text': 'Submitted'}}
     if mode.startswith("browser-"):
         tool = "mac_browser"
         arguments = {"action": action, "tab_id": "other" if mode == "browser-other-tab" and step == 2 else "test-tab",
@@ -101,7 +109,7 @@ for line in sys.stdin:
     if method == "initialize":
         result = {"codexHome": os.environ["CODEX_HOME"]}
     elif method == "thread/start":
-        assert params["model"] in {"gpt-6-luna", "gpt-6-sol"}
+        assert params["model"] in {"gpt-6-luna", "gpt-6-sol", "gpt-6.1-sol"}
         thread_model = params["model"]
         assert params.get("allowProviderModelFallback") is False
         assert params["config"]["features"]["shell_tool"] is False
@@ -138,7 +146,9 @@ for line in sys.stdin:
         assert content[1]['image_url'].startswith('data:image/jpeg;base64,')
         assert content[1]['detail'] == 'high'
         assert content[2]['type'] == 'input_text'
-        assert json.loads(content[2]['text'].split('\n', 1)[1])['objective'] == mode
+        assert 'Runtime task progress' in content[2]['text']
+        assert 'verified_steps' in json.loads(content[2]['text'].split('\n', 1)[1])
+        assert 'objective' not in content[2]['text']
         injected = True
     send({"id": request.get("id"), "result": result})
     if method == "turn/interrupt":

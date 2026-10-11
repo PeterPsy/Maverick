@@ -1,0 +1,156 @@
+"""Semantic targets, delayed effects and verified model handoff boundaries."""
+
+from types import SimpleNamespace
+import unittest
+from unittest.mock import Mock
+
+from core.device_use.computer_actor_contract import validate_actor_task
+from core.device_use.computer_observation import native_observation
+from core.device_use.computer_task_execution import execute_computer_task
+from core.device_use.computer_task_progress import ComputerTaskProgress
+from core.device_use.errors import DeviceUseUnavailableError
+from core.device_use.models import DeviceUseResult
+
+
+BUNDLE = 'com.example.fixture'
+STEP = {'tool': 'mac_peekaboo', 'target': BUNDLE, 'action': 'click',
+        'control': {'identifier': 'Seven'}, 'expect': {'role': 'statictext', 'value': '7'}}
+
+
+def observation(generation=1, value='0', *, duplicate=False, success=True, image=True):
+    text = (f'snapshot=ps1_{generation}; bundle_id={BUNDLE}; window_id=42\n'
+            f'AXButton (2 found):\n  elem_{generation * 10} - "7" - identifier: Seven\n'
+            f'AXStaticText (1 found):\n  elem_{generation * 10 + 1} - "\u200e{value}" - value: "\u200e{value}" - [not actionable]\n')
+    if duplicate:
+        text += f'AXButton (1 found):\n  elem_999 - "7" - identifier: Seven\n'
+    return DeviceUseResult('fixture', 'call', {'success': success, 'contentItems': [
+        {'type': 'inputText', 'text': text}]}, b'jpeg' if image else None, None, 1)
+
+
+def task():
+    return validate_actor_task({'objective': 'Press seven', 'completion_criterion': 'Display seven', 'steps': [STEP]})
+
+
+class ComputerTaskProgressTests(unittest.TestCase):
+    def setUp(self):
+        self.progress = ComputerTaskProgress(task())
+
+    def read(self, result):
+        self.progress.record('mac_peekaboo', {'action': 'observe_app', 'bundle_id': BUNDLE}, result)
+
+    def test_resolves_changing_ids_from_the_latest_receipt(self):
+        self.read(observation(1))
+        self.read(observation(2))
+        tool, args = self.progress.prepare({'step_index': 0})
+        self.assertEqual((tool, args['element'], args['snapshot']), ('mac_peekaboo', 'elem_20', 'ps1_2'))
+        self.assertTrue(args['observe_after'])
+
+    def test_pending_capture_does_not_advance_or_authorize_another_input(self):
+        self.read(observation())
+        self.progress.prepare({'step_index': 0})
+        self.read(observation(2, '0'))
+        self.assertEqual(self.progress.index, 0)
+        self.assertFalse(self.progress.complete())
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'effect_pending'):
+            self.progress.prepare({'step_index': 0})
+        self.assertFalse(self.progress.permits('mac_peekaboo', {'action': 'click', 'bundle_id': BUNDLE}))
+        self.read(observation(3, '7'))
+        self.assertEqual(self.progress.index, 1)
+        self.assertTrue(self.progress.complete())
+
+    def test_button_label_is_not_a_display_value(self):
+        self.read(observation())
+        self.assertFalse(self.progress.observation.verifies({'role': 'statictext', 'value': '7'}))
+        self.assertTrue(self.progress.observation.verifies({'identifier': 'Seven'}))
+
+    def test_duplicates_and_missing_images_fail_before_dispatch(self):
+        self.read(observation(duplicate=True))
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'target_ambiguous'):
+            self.progress.prepare({'step_index': 0})
+        self.read(observation(image=False))
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'fresh_observation_required'):
+            self.progress.prepare({'step_index': 0})
+
+    def test_skipped_steps_and_raw_inputs_cannot_bypass_the_plan(self):
+        self.read(observation())
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'step_mismatch'):
+            self.progress.prepare({'step_index': 1})
+        self.assertFalse(self.progress.permits('mac_peekaboo', {'action': 'click'}))
+
+    def test_three_unverified_reads_stop_without_replay(self):
+        self.read(observation())
+        self.progress.prepare({'step_index': 0})
+        self.read(observation(2))
+        self.read(observation(3))
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'effect_not_verified'):
+            self.read(observation(4))
+        self.assertIsNotNone(self.progress.pending)
+
+    def test_only_explicit_pre_dispatch_failure_clears_the_pending_effect(self):
+        self.read(observation())
+        self.progress.prepare({'step_index': 0})
+        for text, pending in [('MC-PEEKABOO-21: uncertain', True),
+                              ('MC-INTEGRATION-01: nessuna azione inviata. Full resta attivo', False)]:
+            failed = DeviceUseResult('fixture', 'call', {'success': False, 'contentItems': [
+                {'type': 'inputText', 'text': text}]}, None, None, 1)
+            self.progress.record('mac_peekaboo', {'action': 'click', 'bundle_id': BUNDLE}, failed)
+            self.assertEqual(self.progress.pending is not None, pending)
+
+    def test_failed_verification_read_does_not_clear_previously_dispatched_input(self):
+        self.read(observation())
+        self.progress.prepare({'step_index': 0})
+        failed = DeviceUseResult('fixture', 'read', {'success': False, 'contentItems': [
+            {'type': 'inputText', 'text': 'MC-INTEGRATION-01: nessuna azione inviata. Full resta attivo'}]}, None, None, 1)
+        self.read(failed)
+        self.assertIsNotNone(self.progress.pending)
+        self.assertFalse(self.progress.complete())
+        with self.assertRaisesRegex(DeviceUseUnavailableError, 'effect_pending'):
+            self.progress.prepare({'step_index': 0})
+
+    def test_unprepared_text_and_oversized_plans_are_rejected(self):
+        base = {'objective': 'x', 'completion_criterion': 'y'}
+        for extra in [{'steps': [STEP] * 33}, {'steps': [{**STEP, 'action': 'replace', 'text': 'invented'}]},
+                      {'completion_check': {'text': 'Saved', 'value': '1'}}]:
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                validate_actor_task({**base, **extra})
+
+
+class ComputerTaskExecutionTests(unittest.TestCase):
+    def actor(self, model):
+        return Mock(model_id=model, reasoning_effort='low')
+
+    def test_handoff_reuses_verified_progress_and_counts_both_attempts(self):
+        first, second = self.actor('luna'), self.actor('sol')
+        two_steps = task()
+        two_steps['steps'] = [STEP, STEP]
+        recovery_seen = []
+        def run_first(task, **kwargs):
+            progress = kwargs['progress']
+            progress.index = 1
+            progress.observation = native_observation(observation(2, '7'), 'mac_peekaboo', {})
+            recovery_seen.append(kwargs['recovery'])
+            return {'status': 'needs_decision', 'summary': 'computer_actor_step_mismatch', 'steps': 3}, b'jpeg'
+        def run_second(task, **kwargs):
+            self.assertEqual(kwargs['progress'].index, 1)
+            self.assertIs(kwargs['recovery'], recovery_seen[0])
+            self.assertLessEqual(kwargs['max_steps'], 61)
+            self.assertLessEqual(kwargs['timeout_seconds'], 180)
+            return {'status': 'completed', 'summary': 'done', 'steps': 2}, b'jpeg'
+        first.run.side_effect, second.run.side_effect = run_first, run_second
+        output, _ = execute_computer_task(first, two_steps, binding=SimpleNamespace(initial_app=BUNDLE),
+            invoke=Mock(), active=lambda: True, usage_sink=Mock(), fallback_factory=lambda: second)
+        self.assertTrue(output['fallback_used'])
+        self.assertEqual(output['steps'], 5)
+        self.assertEqual([item['model_id'] for item in output['attempts']], ['luna', 'sol'])
+        second.close.assert_called_once()
+
+    def test_uncertain_or_incomplete_step_cannot_launch_another_model(self):
+        client, fallback = self.actor('luna'), Mock()
+        def run(task, **kwargs):
+            kwargs['progress'].index = 1
+            kwargs['progress'].pending = STEP
+            return {'status': 'needs_decision', 'summary': 'computer_actor_step_mismatch', 'steps': 2}, None
+        client.run.side_effect = run
+        execute_computer_task(client, task(), binding=SimpleNamespace(initial_app=BUNDLE),
+            invoke=Mock(), active=lambda: True, usage_sink=Mock(), fallback_factory=fallback)
+        fallback.assert_not_called()

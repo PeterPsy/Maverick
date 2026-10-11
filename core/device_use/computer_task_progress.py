@@ -113,6 +113,7 @@ class ComputerTaskProgress:
         self.history = []
         self.completion_check = task.get('completion_check')
         self.effect_was_present = False
+        self.detailed_windows = set()
 
     def prepare(self, arguments):
         if self.pending is not None:
@@ -143,6 +144,8 @@ class ComputerTaskProgress:
             raise DeviceUseUnavailableError(str(error)) from error
         if step['tool'] == 'mac_peekaboo':
             native = {'bundle_id': step['target'], 'snapshot': observed.receipt, 'observe_after': True}
+            if (observed.target, observed.window_id) in self.detailed_windows:
+                native['details'] = True
             if observed.pixels_only:
                 native.update(action='click_point', point_x=control.x, point_y=control.y)
             else:
@@ -173,11 +176,23 @@ class ComputerTaskProgress:
             return False
         return True
 
+    def observation_arguments(self, tool, arguments):
+        # A compact read of a deep web view can remove the controls just
+        # resolved by a detailed read. Preserve the escalation for this exact
+        # planned window, including across model/context checkpoints.
+        if (self.steps and tool == 'mac_peekaboo' and arguments.get('action') == 'observe'
+            and (arguments.get('bundle_id'), arguments.get('window_id')) in self.detailed_windows):
+            return {**arguments, 'details': True}
+        return arguments
+
     def record(self, tool, arguments, result):
         self.last_tool = tool
         self.last_target = arguments.get('bundle_id') or arguments.get('tab_id')
         observed = native_observation(result, tool, arguments)
         self.observation = observed
+        if (self.steps and observed and tool == 'mac_peekaboo' and observed.window_id is not None
+            and (arguments.get('details') is True or not observed.text_complete)):
+            self.detailed_windows.add((observed.target, observed.window_id))
         if result.result.get('success') is False:
             texts = '\n'.join(item.get('text', '') for item in result.result.get('contentItems', []) if isinstance(item, dict))
             # A failed verification read being pre-dispatch does not undo the
@@ -213,8 +228,7 @@ class ComputerTaskProgress:
                  'next_input_allowed': self.pending is None,
                  'last_tool': self.last_tool, 'last_target': self.last_target,
                  'completion_verified': self.complete(),
-                 'observation_text_complete': bool(self.observation and
-                     'observation_text_complete=false' not in self.observation.text)}
+                 'observation_text_complete': bool(self.observation and self.observation.text_complete)}
         if self.steps and self.index < len(self.steps):
             state['current_step'] = self.steps[self.index]
         if self.pending:

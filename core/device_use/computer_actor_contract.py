@@ -93,6 +93,12 @@ expected effect is verified, continue the next distinct step even if the native
 dispatch label is dispatched_unverified. Never treat dispatch alone as effect
 verification. The fixed objective stays in the initial task; subsequent messages
 carry current progress. Resume from verified progress, never restart a sequence."""
+ACTOR_GUIDANCE += """\nA pre-dispatch raw-input rejection does not consume a fresh observation. Use
+ui_action with the current step_index rather than replacing a detailed receipt
+with a compact read. When a target is missing from an incomplete AX tree or OCR
+projection, observe the exact planned window with details=true before stopping.
+An observe_app read cannot verify a pending effect on a pinned window; use observe
+with that window_id. Missing controls never authorize guessed clicks."""
 
 
 def planner_device_use_tools(execution_mode="delegated"):

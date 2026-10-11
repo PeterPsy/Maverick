@@ -138,6 +138,27 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertEqual(output['summary'], 'computer_actor_fresh_observation_required')
         self.assertEqual(self.calls, [])
 
+    def test_planned_detail_is_preserved_at_the_native_boundary(self):
+        def invoke(tool, arguments, call_id):
+            self.calls.append((tool, arguments, call_id))
+            text = 'snapshot=ps1_current; bundle_id=com.apple.Safari; window_id=42\n'
+            if arguments.get('action') == 'click':
+                text += 'AXStaticText (1 found):\n  elem_2 - "Submitted" - value: "Submitted"\n'
+            elif arguments.get('details') is True:
+                text += 'AXButton (1 found):\n  elem_1 - "Submit"\n'
+            else:
+                text += 'Warning: AX tree truncated at depth 8.\n'
+            return DeviceUseResult('fixture', call_id, {'success': True, 'contentItems': [
+                {'type': 'inputText', 'text': text}]}, b'fresh-jpeg', None, 1)
+
+        output, _ = self.actor.run({'objective': 'planned-detail', 'completion_criterion': 'Submitted',
+            'steps': [{'tool': 'mac_peekaboo', 'target': 'com.apple.Safari', 'window_id': 42,
+                       'action': 'click', 'control': {'label': 'Submit'}, 'expect': {'text': 'Submitted'}}]},
+            invoke=invoke, active=lambda: True, usage_sink=self.usage.append)
+        self.assertEqual(output['status'], 'completed')
+        self.assertEqual([call[1]['action'] for call in self.calls], ['observe', 'observe', 'click'])
+        self.assertTrue(all(call[1]['details'] for call in self.calls))
+
     def test_planned_task_rejects_raw_input_without_dispatch(self):
         output, _ = self.actor.run({'objective': 'normal', 'completion_criterion': 'Submitted',
             'steps': [{'tool': 'mac_peekaboo', 'target': 'com.apple.Safari', 'action': 'click',

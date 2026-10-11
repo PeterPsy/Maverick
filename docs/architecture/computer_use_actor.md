@@ -592,3 +592,24 @@ physical task using the new representation pairs therefore remain unverified;
 the synthetic mode-change regressions and managed native acceptance are not
 substitutes for those checks. No saved model selection or latency benchmark
 was changed by this correction.
+
+### Detailed observations remain scoped to the planned window
+
+Planned tasks retain detailed Peekaboo reads once that exact app/window has
+requested details or returned an incomplete AX/OCR projection. Later explicit
+same-window reads and post-input captures retain `details=true`, including across
+context checkpoints. This does not change receipts, replay fences or capture-mode
+selection, and does not extend to another window, app or an unplanned task.
+`observation_text_complete` accounts for native AX depth/element truncation and
+incomplete local OCR as well as the bounded text-projection marker. Pre-dispatch
+validation guidance permits use of an existing fresh receipt and requests a
+detailed exact-window read when the target is missing, without replaying input.
+
+The physical build 67 acceptance read Settings successfully in a long chat,
+opened Platform settings, and opened/closed Decision model while retaining Luna
+low. A later compact depth-8 read omitted the web controls; the detailed read
+retained them. After the window moved off the active desktop, native capture
+returned pixel-only OCR and the planned pixel click did not yield a verifiable
+menu opening. That input was not repeated. The remaining menu and cross-desktop
+input acceptance is separate from the successful AX menu check and from these
+backend regression tests.

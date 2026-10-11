@@ -33,6 +33,8 @@ def emit_usage():
 def next_call():
     global step
     actions = ["observe_app", "click", "observe_app"]
+    if mode == 'planned-detail':
+        actions = ['observe', 'observe', 'ui_action']
     if mode == 'root-delegation-failure':
         actions = ['observe_app', 'delegate', 'observe_app']
     if mode == 'semantic-before-observation':
@@ -72,6 +74,10 @@ def next_call():
     if mode == "uncertain-other-engine" and step == 2:
         tool, action = "mac_computer", "observe"
     arguments = {"action": action, "bundle_id": bundle, "snapshot": "snapshot-" + str(step)}
+    if mode == 'planned-detail' and action == 'observe':
+        arguments = {'action': 'observe', 'bundle_id': bundle, 'window_id': 42}
+        if step == 0:
+            arguments['details'] = True
     if action == 'delegate':
         tool = 'computer_interact'
         arguments = {'objective': 'select', 'completion_criterion': 'selected'}
@@ -79,6 +85,8 @@ def next_call():
         tool = 'ui_action'
         arguments = {'tool': 'mac_peekaboo', 'target': bundle, 'action': 'click',
                      'control': {'label': 'Submit'}, 'expect': {'text': 'Submitted'}}
+        if mode == 'planned-detail':
+            arguments = {'step_index': 0}
     if mode.startswith("browser-"):
         tool = "mac_browser"
         arguments = {"action": action, "tab_id": "other" if mode == "browser-other-tab" and step == 2 else "test-tab",

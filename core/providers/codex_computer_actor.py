@@ -182,6 +182,7 @@ class CodexComputerActor:
                         tool, arguments = progress.prepare(arguments)
                     elif not progress.permits(tool, arguments):
                         raise DeviceUseUnavailableError('computer_actor_step_mismatch')
+                    arguments = progress.observation_arguments(tool, arguments)
                 except DeviceUseError as error:
                     validation_failures += 1
                     if validation_failures > 3:
@@ -190,7 +191,7 @@ class CodexComputerActor:
                     # actionable rejection so the model can correct its call.
                     correction = {'error': error.reason_code, 'input_dispatched': False,
                         'runtime_progress': progress.state(),
-                        'instruction': 'Observe the exact target with your own tool for a fresh receipt. Planned tasks use ui_action with only step_index equal to verified_steps; raw input is denied. If an effect is pending, read that target without replaying input.'}
+                        'instruction': 'Planned tasks use ui_action with only step_index equal to verified_steps; raw input is denied. Use the current fresh observation when available. If the target is missing or the receipt is stale, observe the exact planned window with details=true. If an effect is pending, read that exact window without replaying input.'}
                     self.transport.write_result(payload['id'], {'success': False,
                         'contentItems': [{'type': 'inputText', 'text': json.dumps(correction, ensure_ascii=False)}]})
                     continue

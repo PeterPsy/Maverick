@@ -68,6 +68,12 @@ class NativeObservation:
     fresh: bool = True
     pixels_only: bool = False
 
+    @property
+    def text_complete(self):
+        return not any(marker in self.text for marker in (
+            'observation_text_complete=false', 'pixel_text_complete=false',
+            'Warning: AX tree truncated'))
+
     def resolve(self, selector):
         selector = current_selector(selector, pixels_only=self.pixels_only)
         matches = [control for control in self.controls if control.actionable and control.matches(selector)]

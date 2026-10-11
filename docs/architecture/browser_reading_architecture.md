@@ -201,6 +201,13 @@ closes the action popup before granting Chrome's native permission dialog and
 requires sharing and authenticated auto-connect to continue after that one click.
 The normal fixture separately verifies reuse from Chat and automatic connection
 without a Browser button press. Neither fixture proves access to Instagram accounts.
+Final live inspection after the rebuild returned `app_frame_authority_stale` in
+the isolated Browser document, so acceptance on the mounted installation remains
+unconfirmed. The earlier human Chrome connection later became offline. The official
+`core.recovery.restart_backend` attempt reported `restarted: false` because this
+host has no systemd init; it reported backend health as true. No alternate process
+restart was performed. Recovery of the live frame authority and a fresh 0.5.3
+human connection remain necessary for final installed-flow verification.
 
 ## Ownership, transport and queues
 

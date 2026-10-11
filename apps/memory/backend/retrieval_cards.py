@@ -45,12 +45,18 @@ def node_cards(db: sqlite3.Connection, node_ids: list[str]) -> list[dict]:
         FROM claims cl LEFT JOIN citations ct ON ct.claim_id=cl.id AND EXISTS
         (SELECT 1 FROM sources s WHERE s.id=ct.source_id AND s.status='active' AND s.current_version_id=ct.source_version_id)
         WHERE cl.node_id IN ({marks}) AND cl.status='active' GROUP BY cl.node_id""", node_ids)}
-    source_states = {row['node_id']: dict(row) for row in db.execute(f"""SELECT nl.node_id,
-        count(*) AS source_count, max(s.updated_at) AS updated_at,
-        max(COALESCE(json_extract(s.metadata_json,'$.stale'),0)
-          OR COALESCE(json_extract(s.metadata_json,'$.source_stale'),0)) AS stale_source
-        FROM node_source_links nl JOIN sources s ON s.id=nl.source_id AND s.status='active'
-        WHERE nl.node_id IN ({marks}) GROUP BY nl.node_id""", node_ids)}
+    source_states = {row['node_id']: dict(row) for row in db.execute(f"""SELECT node_id,
+        sum(is_source) AS source_count, max(CASE WHEN is_source THEN updated_at END) AS updated_at,
+        sum(NOT is_source) AS reference_count,
+        max(CASE WHEN NOT is_source THEN updated_at END) AS references_updated_at,
+        max(stale) AS stale_source FROM (
+          SELECT nl.node_id,s.updated_at,1 AS is_source,
+            COALESCE(json_extract(s.metadata_json,'$.stale'),0)
+              OR COALESCE(json_extract(s.metadata_json,'$.source_stale'),0) AS stale
+          FROM node_source_links nl JOIN sources s ON s.id=nl.source_id AND s.status='active'
+          WHERE nl.node_id IN ({marks})
+          UNION ALL SELECT node_id,updated_at,0,0 FROM external_refs WHERE node_id IN ({marks})
+        ) GROUP BY node_id""", (*node_ids, *node_ids))}
     cards = []
     for node_id in node_ids:
         if node_id not in nodes:
@@ -70,7 +76,7 @@ def node_cards(db: sqlite3.Connection, node_ids: list[str]) -> list[dict]:
         node.update(node_id=node_id, revision=node['updated_at'],
                     state_revision=fingerprint([node['updated_at'],page,job,indicators,sources]), freshness=fresh,
                     verification=verification, compilation_state=compilation or fresh,
-                    source_state='stale' if sources.get('stale_source') else 'current' if sources else 'unknown',
+                    source_state='stale' if sources.get('stale_source') else 'current' if sources.get('source_count') else 'unknown',
                     evidence={key: indicators.get(key, 0) for key in ('claim_count','support_count','contradiction_count')},
                     details_available=['content','evidence','sources','history'],
                     state_observation='indexed',

@@ -16,7 +16,7 @@ def fingerprint(value: object) -> str:
 def retrieval_revision(db: sqlite3.Connection) -> str:
     # Include queue/evidence changes as well as graph edits. No read writes state.
     return fingerprint([tuple(db.execute(f"SELECT count(*), max(updated_at) FROM {table}").fetchone())
-                        for table in ("nodes", "edges", "wiki_pages", "sources", "ingest_jobs")])
+                        for table in ("nodes", "edges", "wiki_pages", "sources", "ingest_jobs", "external_refs")])
 
 
 def page_offset(cursor: object, binding: str) -> int:

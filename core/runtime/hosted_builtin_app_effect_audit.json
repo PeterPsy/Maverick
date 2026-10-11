@@ -143,11 +143,11 @@
     "memory": {
       "cli": {
         "descriptor_sha256": "e0439617c110752e44fb5f000cfc253df3f7f514c67e132b02b00578b24bc9bc",
-        "execution_sha256": "d22edd9c7183ae60050a0e76857eb5cb9c2879445386796b8baefa1683779c97"
+        "execution_sha256": "86ecfd9182a9c698752afb30b65a5b119e226fb85dd0bbf83034d399623ac4ed"
       },
       "mcp": {
         "descriptor_sha256": "990e5a468b49d08f9aa39501b1b6b1de910c802ac578135f44da35c5a8009e96",
-        "execution_sha256": "de52418d06ffc3a5d3c1099be4566c0cce3a5363801925868a40f5402fac3495"
+        "execution_sha256": "61aa5203470dff8612b6facd21786b9dd559c31e2b1fc1142fbdba8676467fcb"
       }
     },
     "platform-connectors": {

@@ -18,6 +18,7 @@ function Inspector({ node }: { node: NodeDetails }) {
   const { details } = useNodeSections(node, "sources");
   return <div>{details.verification} / {details.source_state}
     {(details.claims || []).flatMap((claim) => [...(claim.citations || []), ...(claim.contradictions || [])]).map((cite) => <p key={cite.id}>{cite.quote}</p>)}
+    {(details.sources || []).map((source) => <p key={source.id}>{source.title}</p>)}
   </div>;
 }
 
@@ -68,6 +69,24 @@ describe("selective inspector lifecycle", () => {
     await render(card);
     expect(call.mock.calls.map(([request]) => request.detail)).toEqual(["evidence", "sources"]);
     expect(container.textContent).toContain("unverified / stale");
+  });
+
+  it("reloads newly attached app references while keeping the fact revision and stale state", async () => {
+    let current = { ...card, freshness: "stale", state_revision: "references-1" };
+    let sources = [{ id: "ref-1", source_kind: "app_entity", status: "reference", title: "Primary profile" }];
+    call.mockImplementation(async (request) => ({ node: {
+      ...current,
+      ...(request.detail === "evidence" ? { state_observation: "live", claims: [] } : { sources }),
+    }, has_more: false, next_cursor: null }));
+    await render(current);
+    expect(container.textContent).toContain("Primary profile");
+    expect(container.textContent).not.toContain("New profile");
+    sources = [...sources, { id: "ref-2", source_kind: "app_entity", status: "reference", title: "New profile" }];
+    current = { ...current, state_revision: "references-2" };
+    await render(current);
+    expect(container.textContent).toContain("Primary profile");
+    expect(container.textContent).toContain("New profile");
+    expect(call.mock.calls.filter(([request]) => request.detail === "sources")).toHaveLength(2);
   });
 
   it("ignores an older in-flight evidence response after the observed state changes", async () => {

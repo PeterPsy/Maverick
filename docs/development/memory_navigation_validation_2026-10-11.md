@@ -55,6 +55,54 @@ cases. Follow-up verification passed:
   changes; a fresh hosted browser session was not part of this follow-up. DOM
   lifecycle tests exercise actual React effects, request cancellation and merges.
 
+## Independent review fixes after `5e3aa1de`
+
+The independent review reproduced two remaining defects on isolated data:
+
+- Two valid source-only facts became one exhausted result when a long source
+  occupied the global passage sample. Verification now reads ranked pages per
+  node in one batched query, advances undecided nodes past damaged prefixes, and
+  retains at most three verified passages from each sample. Finding one valid
+  sample stops further scanning for that node. Indexed continuation and response
+  byte limits remain separate and unchanged.
+- Attaching app references changed the Sources section while leaving the fact
+  revision and `state_revision` unchanged, both before compilation and with a
+  wiki already stale. The existing batched source-state projection now includes
+  reference count/latest update, and read revisions include `external_refs` so
+  earlier detail cursors are explicitly rejected after attachment. References
+  without ingested content retain `source_state=unknown`.
+
+Four backend regressions cover the long/short source pair, a nine-passage damaged
+prefix followed by valid evidence, bounded reads when a valid sample precedes a
+damaged remainder, and reference attachment before compilation/while stale with
+cursor rejection. Long/short-source, damaged-prefix and reference-state cases
+failed before the fix. A fourth real React hook test verifies the refreshed
+Sources section when only the reference state changes. Original passage SHA
+validation is preserved. No
+production frontend code, assets or dependencies changed; no browser/layout
+session or new frontend build was needed for this backend and test-only fix.
+
+Final verification passed:
+
+- Memory: 153 tests run, two expected skips (151 passing), including the nine
+  review regressions and the existing paging, integrity and graph query checks.
+- Frontend: 19 Vitest tests and TypeScript checking passed.
+- Chat: 15 tests across the learning regressions and real Memory save/evidence
+  suites passed.
+- Mounted Core CLI/MCP Memory integration and the focused Core Memory effect/
+  execution-authority test passed. Only Memory's execution hashes were refreshed.
+- SDK validation used the explicit built-in source root and returned `valid=true`.
+  Scoped unused-import checks and source diff checks passed.
+
+The synthetic fixture was repeated. Cards have the same 976 bytes and five-card
+batch has the same 5,503 bytes as the preceding review. Map query counts remain
+10 (unsearched) / 13 (searched), with the same 112,919-byte payload for 100 nodes.
+Including reference changes in cursor binding adds one SELECT per paged retrieval:
+context is 29 SELECT/WITH statements, one card and five cards are both 14, history
+headers 15, exploration 16, and explicit full inspection 26. The per-card reference
+state adds no SQL statement to the shared card projection and no response field.
+These are temporary-data measurements, not production latency claims.
+
 ## Synthetic retrieval measurements
 
 Reproduce with `python3 apps/memory/tests/retrieval_benchmark.py`. The script creates

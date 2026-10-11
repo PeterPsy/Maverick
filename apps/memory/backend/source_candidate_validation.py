@@ -1,11 +1,11 @@
 """Validate source search channels before using them in agent evidence."""
 
-from retrieval import source_chunk_matches_by_node
+from source_matches import source_chunk_matches_by_node
 
 
-def validated_source_candidates(db, data_root, query, candidates, *, limit):
+def validated_source_candidates(db, data_root, query, candidates):
     matches = source_chunk_matches_by_node(db, data_root, query,
-                                          node_ids=[item['id'] for item in candidates], limit=limit)
+                                          node_ids=[item['id'] for item in candidates])
     validated = []
     for candidate in candidates:
         channels = [channel for channel in candidate['match_sources']

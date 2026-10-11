@@ -1,6 +1,8 @@
 """Review cases for critical continuation, source integrity and inspector state."""
 
+import importlib
 import json
+from unittest.mock import patch
 
 from memory_test_fixture import MemoryTestCase
 
@@ -20,6 +22,13 @@ class NavigationReviewRegressions(MemoryTestCase):
                 JOIN sources s ON s.current_version_id=sc.source_version_id
                 JOIN node_source_links nl ON nl.source_id=s.id WHERE nl.node_id=?''', (node_id,)).fetchone()
         return self.root / row['body_path']
+
+    def matching_chunk_paths(self, query):
+        with self.database.connect(self.root) as db:
+            return [row['body_path'] for row in db.execute('''SELECT sc.body_path,
+                bm25(source_chunk_fts) AS rank FROM source_chunk_fts
+                JOIN source_chunks sc ON sc.id=source_chunk_fts.chunk_id
+                WHERE source_chunk_fts MATCH ? ORDER BY rank,sc.chunk_index,sc.id''', (query,))]
 
     def test_critical_continuation_detects_more_edges_of_a_single_kind(self):
         for kind in ('contradicts', 'supersedes'):
@@ -69,6 +78,85 @@ class NavigationReviewRegressions(MemoryTestCase):
             self.assertNotIn('source_chunk', item['match_sources'])
             self.assertEqual(item['source_chunk_matches'], [])
             self.assertNotIn('source passage', item['reason'])
+
+    def test_source_validation_keeps_sparse_hits_beside_a_long_source(self):
+        dense = self.remember('Unrelated dense document', 'Prefer short replies.')['id']
+        sparse = self.remember('Unrelated sparse document', 'Prefer short replies.')['id']
+        self.attach(sparse, 'sparse', 'Other information ' * 80 + ' Quasarword appears once.', compile_now=False)
+        self.attach(dense, 'dense', '\n\n'.join(f'Block {i}. ' + 'Quasarword ' * 170 for i in range(32)), compile_now=False)
+        expected = {dense, sparse}
+        self.assertEqual({item['id'] for item in self.call('search', query='Quasarword', limit=2)['results']}, expected)
+        for action, detail in (('context', {}), ('search', {'detail': 'evidence'})):
+            source_matches = importlib.import_module('source_matches')
+            with patch.object(source_matches, 'read_body', wraps=source_matches.read_body) as reader:
+                result = self.call(action, query='Quasarword', limit=2, max_bytes=64000, **detail)
+            self.assertLessEqual(reader.call_count, 6)
+            items = result['items' if action == 'context' else 'results']
+            self.assertEqual({item['node_id'] for item in items}, expected)
+            self.assertTrue(all(item['source_chunk_matches'] for item in items))
+            self.assertFalse(result['has_more'])
+            first = self.call(action, query='Quasarword', limit=1, max_bytes=64000, **detail)
+            cursor = first['search_next_cursor'] if action == 'context' else first['next_cursor']
+            second = self.call(action, query='Quasarword', limit=1, max_bytes=64000, cursor=cursor, **detail)
+            key = 'items' if action == 'context' else 'results'
+            self.assertTrue(first['has_more'])
+            self.assertFalse(second['has_more'])
+            self.assertEqual({item['node_id'] for item in first[key] + second[key]}, expected)
+
+    def test_source_validation_reaches_valid_passages_after_a_damaged_prefix(self):
+        node = self.remember('Unrelated long document', 'Prefer short replies.')['id']
+        self.attach(node, 'damaged-prefix', '\n\n'.join(f'Block {i}. ' + 'Latequartz ' * 170 for i in range(24)), compile_now=False)
+        paths = self.matching_chunk_paths('Latequartz')
+        self.assertGreater(len(paths), 9)
+        for path in paths[:9]:
+            (self.root / path).write_text('Corrupted contents.', encoding='utf-8')
+        for action, detail in (('context', {}), ('search', {'detail': 'evidence'})):
+            result = self.call(action, query='Latequartz', limit=1, max_bytes=64000, **detail)
+            items = result['items' if action == 'context' else 'results']
+            self.assertEqual([item['node_id'] for item in items], [node])
+            self.assertTrue(items[0]['source_chunk_matches'])
+            self.assertFalse(result['has_more'])
+
+    def test_verified_sample_does_not_scan_a_long_damaged_remainder(self):
+        node = self.remember('Unrelated sparse proof', 'Prefer short replies.')['id']
+        self.attach(node, 'one-valid', '\n\n'.join(f'Block {i}. ' + 'Onevalidquartz ' * 80 for i in range(24)), compile_now=False)
+        paths = self.matching_chunk_paths('Onevalidquartz')
+        self.assertGreater(len(paths), 8)
+        self.assertNotIn(paths[0], paths[1:])
+        for path in paths[1:]:
+            (self.root / path).write_text('Corrupted contents.', encoding='utf-8')
+        source_matches = importlib.import_module('source_matches')
+        for action, detail in (('context', {}), ('search', {'detail': 'evidence'})):
+            with patch.object(source_matches, 'read_body', wraps=source_matches.read_body) as reader:
+                result = self.call(action, query='Onevalidquartz', limit=1, max_bytes=64000, **detail)
+            items = result['items' if action == 'context' else 'results']
+            self.assertEqual([item['node_id'] for item in items], [node])
+            self.assertLessEqual(reader.call_count, 8)
+
+    def test_attached_references_invalidate_uncompiled_and_stale_inspectors(self):
+        for compiled in (False, True):
+            with self.subTest(compiled=compiled):
+                node = self.remember(f'Profile references {compiled}')['id']
+                if compiled:
+                    self.call('compile', node_id=node)
+                def attach(index):
+                    return self.call('attach_entity', node_id=node, owning_app_id='crm',
+                                     entity_type='contact', entity_id=f'contact_{index}', title=f'Profile {index}')['external_ref']['id']
+                initial = self.call('inspect', node_id=node, detail='sources')['node']
+                first = attach(1)
+                before = self.call('inspect', node_id=node, detail='sources', limit=1)
+                self.assertNotEqual(initial['state_revision'], before['node']['state_revision'])
+                second = attach(2)
+                paged = self.call('inspect', node_id=node, detail='sources', limit=1)
+                third = attach(3)
+                after = self.call('inspect', node_id=node, detail='sources')['node']
+                self.assertEqual(before['node']['updated_at'], after['updated_at'])
+                self.assertNotEqual(before['node']['state_revision'], after['state_revision'])
+                self.assertEqual({item['id'] for item in after['sources']}, {first, second, third})
+                repeated = self.call('inspect', node_id=node, detail='card')['node']
+                self.assertEqual(after['state_revision'], repeated['state_revision'])
+                with self.assertRaisesRegex(ValueError, 'stale cursor'):
+                    self.call('inspect', node_id=node, detail='sources', limit=1, cursor=paged['next_cursor'])
 
     def test_evidence_budget_continuation_accounts_for_rejected_positions(self):
         for index in range(8):

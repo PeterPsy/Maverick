@@ -24,7 +24,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
         offset = page_offset(cursor,binding)
         candidates = search_candidates_page(db,query,limit=limit,scope=scope,offset=offset)
         indexed_direct = candidates[:limit]
-        direct, matches = validated_source_candidates(db,data_root,query,indexed_direct,limit=limit)
+        direct, matches = validated_source_candidates(db,data_root,query,indexed_direct)
         direct_ids = [candidate['id'] for candidate in direct]
         critical_groups = [traversal_edges(db,direct_ids,direction='both',kinds=[kind],depth=1,scope=scope,limit=3)
                            for kind in ('contradicts','supersedes')] if direct_ids else []

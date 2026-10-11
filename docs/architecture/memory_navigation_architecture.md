@@ -59,6 +59,17 @@ remain available. Continuation advances over the original indexed positions even
 when an entire page is rejected, and byte limits include the resulting cursor.
 Card search remains an inexpensive indexed discovery surface.
 
+`source_matches.py` reads eight ranked passage candidates per selected node in
+each batched query, retaining at most three integrity/query-checked matches per
+node. A long source cannot consume another node's verification sample. Streams
+with no valid passages continue past damaged or missing candidates until a
+verified sample or exhaustion; absence in one sample is never treated as invalid
+evidence. A sample containing any valid passage stops further scanning for that
+node even if the sample contains fewer than three passages. Body reads are cached
+across shared chunks within the request. Response size is bounded; verification
+has no fixed time limit. A source without intact matches can require scanning its
+remaining indexed passages before rejection is justified.
+
 `exploration.py` follows incoming/outgoing/both edges, optional kinds and scope,
 from one to five seeds. Default depth is one, explicit maximum two. Recursive
 visitation deduplicates `(node, hop)`, derives shortest node distances, and pages
@@ -87,7 +98,10 @@ verification and inferred relationships remain different fields. Reading a card
 does not assert that its original document has just been re-read.
 
 Cards include `state_revision`, a bounded indexed-state fingerprint covering the
-fact, compiled page, queue indicators, evidence counts and active source updates.
+fact, compiled page, queue indicators, evidence counts, active source updates and
+attached external references, including references not yet compiled into sources.
+Reference count/latest update are batched in the existing source-state query;
+adding a reference also invalidates retrieval cursors through the read revision.
 It can change without editing the fact's `updated_at`/`revision`. The inspector
 invalidates cached sections and pending reads on this state change while keeping
 the selected tab. Within one state revision, live verification/source/freshness

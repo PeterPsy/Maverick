@@ -49,7 +49,7 @@ def search_page(data_root: Path, body: dict, *, scope: dict | None = None) -> di
             from source_candidate_validation import validated_source_candidates
             indexed_page = candidates[:limit]
             positions = {candidate['id']:index for index,candidate in enumerate(indexed_page)}
-            validated, matches = validated_source_candidates(db,data_root,query,indexed_page,limit=limit)
+            validated, matches = validated_source_candidates(db,data_root,query,indexed_page)
             items = [{**cards[candidate['id']], 'match_sources':candidate['match_sources'],
                       'reason':selection_reason(candidate,scope)} for candidate in validated]
             projections = compact_projections(db,[item['id'] for item in items],data_root=data_root)

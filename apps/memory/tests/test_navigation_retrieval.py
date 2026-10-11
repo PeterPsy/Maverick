@@ -122,7 +122,7 @@ class NavigationRetrievalTests(MemoryTestCase):
 
     def test_graph_search_and_batch_cards_never_hydrate_bodies_or_history(self):
         ids = [self.node(f'Map fact {index}',body='Map evidence '+('detail '*2000))['id'] for index in range(100)]
-        with self.traced() as trace, patch('retrieval.read_body',side_effect=AssertionError('unexpected body read')):
+        with self.traced() as trace, patch('source_matches.read_body',side_effect=AssertionError('unexpected body read')):
             graph = self.call('graph',query='Map',limit=100)
         selects = [sql for sql in trace if sql.lstrip().upper().startswith(('SELECT','WITH'))]
         self.assertLessEqual(len(selects),15)

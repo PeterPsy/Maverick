@@ -254,6 +254,28 @@ improvement. This Calculator session used AX-backed `ps1_` observations, so it
 does not directly exercise the new `px1_` fallback; that path retains the signed
 physical-host acceptance recorded above.
 
+The matched physical Calculator benchmark later on 2026-10-11 used an identical
+two-calculation task (`17 × 23`, then `27 × 14`) for each UI configuration. The
+main chat remained Sol; UI execution alternated Luna `low` and Sol `medium`.
+With the goal-level request, Luna completed zero of three tasks: failures ended
+after 16.638, 161.351 and 34.261 seconds. Sol completed all three in 79.626,
+75.038 and 76.411 seconds (median 76.411). A matched guided task specifying all
+buttons and intermediate values completed with Sol in 83.598 seconds; Luna
+stopped after 23.547 seconds despite observing the expected first digit.
+Earlier successful single-calculation smoke tasks are separate observations.
+
+Timings come from Core Device Use audit start/completion timestamps for each
+`computer_interact` call. Settings changes, parent task preparation, inter-trial
+gaps and report creation are excluded. Both configurations retain delegation;
+this is not a single-agent Sol baseline without that boundary. The sample does
+not establish a general speedup, cost saving or pure model-processing time.
+Luna's failure durations cannot be compared as successful completion times.
+Setup encountered popup/receipt failures; fresh state checks established the
+selected configuration before resuming, without replaying an uncertain save.
+The original Luna `low` selection was restored and its persistence verified.
+The Storage-owned report and raw audit/task data are under
+`storage/generated/pc-use-benchmark/2026-10-11-calculator-sol-luna.{md,json}`.
+
 Authenticated Codex evaluations used a synthetic native callback with a rendered
 calculator, newly numbered element IDs for every observation and delayed input
 effects. The fixture has no physical Mac connection. Results were:

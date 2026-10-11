@@ -70,6 +70,14 @@ persistence and live transport. Chat applies the same filter to historical
 remain free of account telemetry. Unknown notifications about provider work still
 use the generic runtime event fallback.
 
+The web-only Research profile intentionally skips host skill discovery. Its
+private runtime home and thread start/resume configuration set
+`suppress_unstable_features_warning = true` for this reviewed feature. Provider
+`warning` notifications remain diagnostic `runtime.warning` events rather than
+assistant output. Transcript readers and Chat omit warning-tagged historical
+output from conversation messages and activity labels without changing the
+stored events or filtering assistant text that discusses warnings.
+
 ## Antigravity
 
 Antigravity is a `native_agent` using its installed structured CLI, an isolated

@@ -1,5 +1,5 @@
 import type { RuntimeEvent, RuntimeTurn } from "../api/client";
-import { isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
+import { isNonChatFacingProviderEvent, isProviderWarningEvent, runtimeStepLabel } from "./runtimeStepLabels";
 import { toolActivityLabel } from "./toolPresentation";
 
 export type RuntimeActivityLabelOptions = {
@@ -60,6 +60,7 @@ function activeTurnActivityLabel(events: RuntimeEvent[], turnId?: string | null)
 }
 
 function eventActivityLabel(event: RuntimeEvent): string | null {
+  if (isProviderWarningEvent(event.payload.provider_event_type)) return null;
   if (event.event_type === "runtime.output.delta") {
     return "Writing";
   }

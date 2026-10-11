@@ -228,6 +228,24 @@ class RuntimeTranscriptTest(unittest.TestCase):
         )
         self.assertEqual(sum(message.content.count("Second.") for message in projection.messages), 1)
 
+    def test_projection_omits_persisted_provider_warnings_and_preserves_assistant_text(self) -> None:
+        text = "Under-development features enabled: skip_host_skill_discovery."
+        events = [
+            self.event("queued", "runtime.turn.queued", {"input_text": "research"}),
+            self.event("warning", "runtime.output.delta", {"provider_event_type": "warning", "text": text}, seconds=1),
+            self.event("diagnostic", "runtime.warning", {"message": text}, seconds=2),
+            self.event("answer", "runtime.output.delta", {"text": text, "message_id": "answer"}, seconds=3),
+            self.event("final", "runtime.output.final", {"text": text, "complete_text": text}, seconds=4),
+        ]
+
+        projection = project_runtime_transcript(events, [self.turn("turn-1", input_text="research")])
+
+        self.assertEqual(
+            [(message.role, message.content) for message in projection.messages],
+            [("human", "research"), ("agent", text)],
+        )
+        self.assertNotIn("warning", projection.messages[-1].source_event_ids)
+
     def test_shared_frontend_projection_fixture_matches_python_projection(self) -> None:
         fixture_path = Path(__file__).resolve().parents[2] / "fixtures" / "runtime_transcript_projection.json"
         fixture = json.loads(fixture_path.read_text(encoding="utf-8"))

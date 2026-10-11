@@ -7,6 +7,21 @@ from core.runtime.execution_events import parse_provider_json_event
 
 
 class RuntimeExecutionEventsTestCase(unittest.TestCase):
+    def test_provider_warning_is_diagnostic_instead_of_assistant_output(self) -> None:
+        message = "Under-development features enabled: skip_host_skill_discovery."
+        for payload in (
+            {"type": "warning", "message": message},
+            {"type": "warning", "item": {"message": message}},
+        ):
+            with self.subTest(payload=payload):
+                event = parse_provider_json_event(json.dumps(payload))
+                self.assertEqual(event.event_type, "runtime.warning")
+                self.assertEqual(event.payload, {"message": message, "provider_event_type": "warning"})
+
+        event = parse_provider_json_event(message)
+        self.assertEqual(event.event_type, "runtime.output.delta")
+        self.assertEqual(event.payload["text"], message)
+
     def test_account_updates_are_filtered_before_runtime_event_emission(self) -> None:
         for event_type in ("account.updated", "account/updated", "account_updated", "account updated"):
             with self.subTest(event_type=event_type):

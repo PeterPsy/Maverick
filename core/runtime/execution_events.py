@@ -74,6 +74,11 @@ def parse_provider_json_event(raw_line: str) -> RuntimeExecutionEvent | None:
     item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
     if is_non_chat_facing_provider_event(event_type):
         return None
+    if is_provider_warning_event(event_type):
+        return RuntimeExecutionEvent(
+            event_type="runtime.warning",
+            payload={"message": _text_from_payload(payload, item), "provider_event_type": event_type},
+        )
     tool_payload = _tool_payload(event_type=event_type, payload=payload, item=item)
     if tool_payload is not None:
         return tool_payload
@@ -88,6 +93,11 @@ def parse_provider_json_event(raw_line: str) -> RuntimeExecutionEvent | None:
     if is_internal_provider_noise(label) or is_internal_provider_noise(event_type):
         return None
     return RuntimeExecutionEvent(event_type="runtime.step.updated", payload={"label": label, "provider_event_type": event_type, "raw": _compact_raw(payload)})
+
+
+def is_provider_warning_event(event_type: str) -> bool:
+    """Identify provider diagnostics that must not become assistant output."""
+    return _normalize_provider_event_type(event_type) == "warning"
 
 
 def is_non_chat_facing_provider_event(event_type: str) -> bool:

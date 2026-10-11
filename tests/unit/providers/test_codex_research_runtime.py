@@ -90,6 +90,7 @@ class CodexResearchRuntimeTest(unittest.TestCase):
         self.assertEqual(params["developerInstructions"], "")
         self.assertEqual(params["personality"], "none")
         self.assertEqual(params["config"]["web_search"], "live")
+        self.assertTrue(params["config"]["suppress_unstable_features_warning"])
         self.assertEqual(params["config"]["mcp_servers"], {})
         self.assertTrue(
             all(
@@ -186,6 +187,7 @@ class CodexResearchRuntimeTest(unittest.TestCase):
             self.assertNotIn("operator bias", config_text)
             self.assertNotIn("workspace bias", config_text)
             self.assertEqual(config["web_search"], "live")
+            self.assertTrue(config["suppress_unstable_features_warning"])
             self.assertEqual(config["project_doc_max_bytes"], 0)
             self.assertFalse(config["include_environment_context"])
             self.assertTrue(

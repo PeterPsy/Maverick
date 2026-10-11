@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Iterable
 
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.execution_events import is_provider_warning_event
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.transcript_models import RuntimeTranscriptMessage, RuntimeTranscriptProjection
 from core.runtime.transcript_safety import (
@@ -96,6 +97,8 @@ def project_runtime_transcript(
     for event in ordered_events:
         turn_id = event.turn_id or event.event_id
         payload = event.payload if isinstance(event.payload, dict) else {}
+        if is_provider_warning_event(str(payload.get("provider_event_type") or "")):
+            continue
         if event.event_type in {"runtime.turn.queued", "runtime.message.steered"}:
             if event.event_type == "runtime.message.steered":
                 flush_output(turn_id, complete=True)

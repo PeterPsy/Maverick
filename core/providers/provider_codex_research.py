@@ -167,6 +167,7 @@ def prepare_codex_research_runtime_home(
         f'model = "{selected_model}"',
         f'model_reasoning_effort = "{selected_reasoning}"',
         'web_search = "live"',
+        "suppress_unstable_features_warning = true",
         "project_doc_max_bytes = 0",
         "include_permissions_instructions = false",
         "include_apps_instructions = false",

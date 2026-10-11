@@ -64,6 +64,10 @@ export function isNonChatFacingProviderEvent(value: unknown): boolean {
   );
 }
 
+export function isProviderWarningEvent(value: unknown): boolean {
+  return typeof value === "string" && normalizeLabel(value) === "warning";
+}
+
 export function runtimeStepLabel(event: RuntimeEvent): string | null {
   if (event.event_type !== "runtime.step.updated") {
     return null;
@@ -73,6 +77,7 @@ export function runtimeStepLabel(event: RuntimeEvent): string | null {
     !label ||
     providerJsonLabelType(label) ||
     isNoisyRuntimeLabel(label) ||
+    isProviderWarningEvent(event.payload.provider_event_type) ||
     isNonChatFacingProviderEvent(event.payload.provider_event_type)
   ) {
     return null;

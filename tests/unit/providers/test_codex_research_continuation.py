@@ -74,6 +74,9 @@ class CodexResearchContinuationTest(unittest.TestCase):
         self.assertEqual(resumed, thread_id)
         self.assertEqual(send_request.call_args.args[1], "thread/resume")
         self.assertFalse(send_request.call_args.args[2]["ephemeral"])
+        self.assertTrue(
+            send_request.call_args.args[2]["config"]["suppress_unstable_features_warning"]
+        )
 
 
 if __name__ == "__main__":

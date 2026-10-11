@@ -13,6 +13,19 @@ from core.providers.codex_app_server_runtime_notifications import _handle_generi
 
 
 class CodexAppServerRuntimeNotificationTestCase(unittest.TestCase):
+    def test_provider_warning_does_not_emit_assistant_output(self) -> None:
+        emitted = []
+        runtime = SimpleNamespace(event_lock=Lock(), current_event_sink=emitted.append)
+
+        _handle_notification(
+            runtime,
+            {"method": "warning", "params": {"message": "Under-development features enabled."}},
+        )
+
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0].event_type, "runtime.warning")
+        self.assertEqual(emitted[0].payload["message"], "Under-development features enabled.")
+
     def test_account_updates_do_not_emit_chat_runtime_steps(self) -> None:
         emitted = []
         runtime = SimpleNamespace(event_lock=Lock(), current_event_sink=emitted.append)

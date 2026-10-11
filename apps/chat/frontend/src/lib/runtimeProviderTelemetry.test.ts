@@ -20,8 +20,33 @@ function event(overrides: Partial<RuntimeEvent>): RuntimeEvent {
   };
 }
 
-describe("provider account telemetry", () => {
+describe("provider diagnostics and account telemetry", () => {
   beforeEach(clearTranscriptProjectionCache);
+
+  it("omits the persisted Research warning without hiding assistant explanations or splitting web searches", () => {
+    const text = "Under-development features enabled: skip_host_skill_discovery.";
+    const warning = event({ event_id: "warning", event_type: "runtime.output.delta", payload: { text, provider_event_type: "warning" } });
+    const webSearch = event({ event_id: "web-1", event_type: "runtime.tool_call.started", payload: { name: "web_search", tool_kind: "web_search" } });
+    const messages = eventsToMessages([
+      webSearch,
+      warning,
+      event({ event_id: "web-2", event_type: "runtime.tool_call.completed", payload: { name: "web_search", tool_kind: "web_search" } }),
+      event({ event_id: "diagnostic", event_type: "runtime.warning", payload: { message: text } }),
+      event({ event_id: "answer", event_type: "runtime.output.delta", payload: { text } }),
+    ]);
+
+    expect(messages).toMatchObject([
+      { role: "tool", toolCalls: [{ id: "web-1" }, { id: "web-2" }] },
+      { role: "agent", content: text },
+    ]);
+    expect(messages).toHaveLength(2);
+    expect(eventsToMessages([warning])).toEqual([]);
+    expect(runtimeActivityLabel({
+      activeTurn: { turn_id: "turn-1", status: "active" } as RuntimeTurn,
+      events: [webSearch, warning], isRuntimeBusy: true,
+    })).toBe("Searching the web");
+    expect(runtimeStepLabel(event({ payload: { label: text, provider_event_type: "warning" } }))).toBeNull();
+  });
 
   it.each(["account.updated", "account/updated", "account_updated", "account updated"])(
     "omits persisted %s updates from transcript cards and activity labels",

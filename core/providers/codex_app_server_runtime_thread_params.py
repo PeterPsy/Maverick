@@ -56,6 +56,7 @@ def codex_research_config() -> dict[str, Any]:
     """Return the native Codex web-only configuration with no local context."""
     return {
         "web_search": "live",
+        "suppress_unstable_features_warning": True,
         "project_doc_max_bytes": 0,
         "include_permissions_instructions": False,
         "include_apps_instructions": False,

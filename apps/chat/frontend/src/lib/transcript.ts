@@ -7,7 +7,7 @@ import {
   mergeGoalTranscriptSteps,
 } from "./goalTranscript";
 import { structuredContentFromAgentLinks } from "./linkPreviews";
-import { isNoisyRuntimeLabel, isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
+import { isNoisyRuntimeLabel, isNonChatFacingProviderEvent, isProviderWarningEvent, runtimeStepLabel } from "./runtimeStepLabels";
 
 import { TranscriptProjection, type OrderedMessage } from './transcriptProjection';
 import { isSyntheticRuntimeEvent } from './runtimeEvents';
@@ -421,6 +421,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
   }
 
   for (const [eventIndex, event] of events.entries()) {
+    if (isProviderWarningEvent(event.payload.provider_event_type)) continue;
     const turnId = messageTurnId(event);
     const sourceFields = sourceFieldsForEvent(event);
     const persistedTerminalFailureCode = persistedTerminalProviderFailureCode(event);

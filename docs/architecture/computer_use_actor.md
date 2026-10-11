@@ -247,8 +247,15 @@ Physical Mac and desktop/mobile Settings acceptance were deferred by the user
 until PC use is reactivated. No native binary/protocol change is required.
 The official backend restart was attempted after tests but returned
 `authentication_required`: this runtime CLI credential expired at 09:16:18 UTC.
-Restart/health and saved-setting verification remain pending a fresh authenticated
-runtime; no state-mutating app flow was bypassed.
+A subsequent authenticated official restart attempt reached the backend but
+could not connect to the host systemd bus from the migrated root. After
+verifying the exact service cgroup, process identity/ownership and
+`Restart=always` configuration, the authorized restart sent SIGTERM to the
+existing main process. The host respawned it: PID 1798170 changed to 1970477,
+`/health` returned HTTP 200 with `status=ok` and `service=maverick-core`, and
+the authenticated official CLI resumed successfully. Backend restart/health
+verification is complete; saved-setting and native UI acceptance remain
+pending PC use reactivation.
 
 Raw temporary measurement SHA-256: `cb5f9f8fd7b25431d1ea1734e49a899109371a5d74fed217e6f83dc3308ec52f`.
 

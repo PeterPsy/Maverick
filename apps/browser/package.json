@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test broker/*.test.mjs companion/*.test.mjs tests/connector.test.mjs",
+    "test": "node --test broker/*.test.mjs companion/*.test.mjs tests/*.test.mjs",
     "prebroker": "node ../../scripts/check-node-runtime.mjs",
     "broker": "node broker/playwright-broker.mjs",
     "prebroker:docker": "node ../../scripts/check-node-runtime.mjs",
@@ -13,7 +13,8 @@
     "prebroker:local": "node ../../scripts/check-node-runtime.mjs",
     "broker:local": "node broker/playwright-server-local.mjs",
     "build": "node companion/build.mjs && vite build",
-    "test:companion": "node tests/companion.e2e.mjs"
+    "test:companion": "node tests/companion.e2e.mjs",
+    "test:ui": "node tests/ui.e2e.mjs"
   },
   "dependencies": {
     "playwright": "1.60.0"

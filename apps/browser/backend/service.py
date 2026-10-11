@@ -175,6 +175,7 @@ def handle_action(
                 effective_mode=effective_mode,
                 platform_role=platform_role,
                 workspace_role=workspace_role,
+                user_id=user_id,
             )
             audit_browser_action(
                 data_root,
@@ -274,6 +275,7 @@ def research_web_result(
     effective_mode: str | None,
     platform_role: str | None,
     workspace_role: str | None,
+    user_id: str | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """Read one public URL in an ephemeral, non-interactive browser session."""
     target_url, query = research_target(action, body)
@@ -287,6 +289,7 @@ def research_web_result(
             effective_mode=effective_mode,
             platform_role=platform_role,
             workspace_role=workspace_role,
+            user_id=user_id,
         )
 
     create_status, create_result = invoke(
@@ -1217,6 +1220,9 @@ def state_updates_for_action(
 ) -> dict[str, Any]:
     timestamp = datetime.now(tz=UTC).isoformat()
     updates: dict[str, Any] = {"mode": mode, "updated_at": timestamp}
+    for field in ("last_activity_at", "idle_expires_at", "hard_expires_at"):
+        if isinstance(payload.get(field), str):
+            updates[field] = payload[field]
     if workspace_id:
         updates["workspace_id"] = workspace_id
     if action == "session.create":

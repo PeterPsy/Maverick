@@ -150,13 +150,3 @@ def cancel(data_root: Path, workspace_id: str, user_id: str, operation_id: str) 
             )
         updated = db.execute("SELECT * FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
         return public_operation(updated, include_result=False)
-
-
-def recent(data_root: Path, workspace_id: str, user_id: str) -> list[dict]:
-    with database(data_root) as db:
-        sweep(db, time.time())
-        rows = db.execute(
-            "SELECT o.* FROM operations o JOIN connections c ON o.session_id=c.session_id "
-            "WHERE c.workspace_id=? AND c.user_id=? ORDER BY o.created_at DESC LIMIT 30", (workspace_id, user_id),
-        ).fetchall()
-        return [public_operation(row, include_result=False) for row in rows]

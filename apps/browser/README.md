@@ -22,6 +22,33 @@ Closing either tab, leaving approved platform routes, or revoking sharing stops
 capture. Reloading the connector requires a fresh user-owned connection.
 Frame captures may bring the shared platform window to the foreground.
 
+## Workspace management
+
+Browser's main frontend contains Shared tabs, Activity and Browser Lab. The
+Chrome setup guide opens automatically when no tab is connected and stays
+collapsible. Activity supports search, status filters, cancellation and readable
+results with copyable observed text, source links and saved evidence paths;
+technical JSON is rendered only on request. Browser Lab provides public-page
+reading with automatic temporary-session cleanup, health and individual session
+closure. Research sessions and their audit entries retain the invoking user.
+
+The self-contained frontend disables the Maverick sidebar through
+`presentation.sidebar_enabled: false`. Rail and App Store use their existing
+native `language` globe, with the same theme, sizing and padding as other apps;
+Browser does not override the shell icon with a separate raster tile.
+
+Overview reads share one database transaction and fetch only operation metadata,
+never stored media/input blobs. Pending counts include work beyond the recent
+30-operation window, and active connections precede stopped ones. The frontend
+preserves row/button identity and coalesces simultaneous refreshes.
+Visible views poll every 3 seconds with pending
+work, 10 seconds with connected tabs and 30 seconds when idle (Lab also uses 30
+seconds). Hidden documents pause overview polling, and failures back off to 60
+seconds. Chrome transport keeps its separate heartbeat so active observations
+continue when the management view is hidden. Its app-frame renewal is limited to
+once per minute. Connection starts are deduplicated; stopping during setup revokes
+any late lease instead of resurrecting sharing.
+
 ## Agent operations
 
 Discover current tools through the official surfaces:
@@ -151,6 +178,7 @@ built-in source.
 maverick app browser frontend build --json
 python3 -m unittest discover -s apps/browser/tests -p 'test_browser*.py'
 npm --prefix apps/browser test
+npm --prefix apps/browser run test:ui
 python3 -m unittest discover -s apps/speech/tests -p 'test_local_transcription.py'
 python3 -m unittest tests.unit.runtime_tools.test_browser_execution_closure
 ```

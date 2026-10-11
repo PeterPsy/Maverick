@@ -47,6 +47,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(parsed.contract.distribution.mode, "sealed")
         self.assertEqual(parsed.contract.distribution.source_access, "none")
         self.assertEqual(parsed.contract.presentation.frontend_role, "workspace")
+        self.assertFalse(parsed.contract.presentation.sidebar_enabled)
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertTrue(app_frontend_is_launchable(parsed.contract))
         self.assertEqual(parsed.contract.compatibility.supported_workspace_modes, ["sandbox"])
@@ -74,7 +75,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertIn("sessionLifecycle.touch(session);", broker_text)
         self.assertIn('reducedMotion: "reduce"', broker_text)
         self.assertIn("build", package["scripts"])
-        self.assertEqual(package["scripts"]["test"], "node --test broker/*.test.mjs companion/*.test.mjs tests/connector.test.mjs")
+        self.assertEqual(package["scripts"]["test"], "node --test broker/*.test.mjs companion/*.test.mjs tests/*.test.mjs")
         self.assertEqual(package["scripts"]["broker"], "node broker/playwright-broker.mjs")
         self.assertEqual(package["scripts"]["broker:docker"], "node broker/playwright-server-docker.mjs")
         self.assertEqual(package["scripts"]["broker:local"], "node broker/playwright-server-local.mjs")
@@ -187,6 +188,7 @@ class BrowserAppTests(unittest.TestCase):
                         "web_open",
                         {"url": "https://example.com/article"},
                         effective_mode="full-access",
+                        user_id="reader",
                     )
                     state = load_state(temp_dir)
 
@@ -199,6 +201,21 @@ class BrowserAppTests(unittest.TestCase):
         )
         self.assertEqual(state["sessions"], {})
         self.assertEqual(state["audit"][-1]["action"], "research.open")
+        self.assertTrue(all(item["payload"]["caller_context"]["user_id"] == "reader" for item in broker.actions))
+        self.assertTrue(all(record["user_id"] == "reader" for record in state["audit"]))
+
+    def test_session_deadlines_are_kept_for_management_views(self) -> None:
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            deadlines = {"last_activity_at": "2026-10-11T10:00:00Z", "idle_expires_at": "2026-10-11T10:15:00Z", "hard_expires_at": "2026-10-11T14:00:00Z"}
+            sync_state_after_broker_action(root, "session.create", {}, {"session_id": "lab-one", **deadlines},
+                                          status_code=201, workspace_id="default", mode="read_only")
+            session = load_state(folder)["sessions"]["lab-one"]
+            for field, value in deadlines.items():
+                self.assertEqual(session[field], value)
+            sync_state_after_broker_action(root, "navigate", {"session_id": "lab-one"}, {"idle_expires_at": "2026-10-11T10:20:00Z"},
+                                          status_code=200, workspace_id="default", mode="read_only")
+            self.assertEqual(load_state(folder)["sessions"]["lab-one"]["idle_expires_at"], "2026-10-11T10:20:00Z")
 
     def test_research_tools_reject_extra_or_oversized_input(self) -> None:
         with TemporaryDirectory() as temp_dir:

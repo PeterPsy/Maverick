@@ -52,11 +52,7 @@ def handle(
                 raise BrowserValidationError("display_name must have 1–100 characters.", field="display_name")
             return 201, connections.connect(data_root, workspace_id, user_id, name)
         if action == "companion.overview":
-            return 200, {
-                **connections.overview(data_root, workspace_id, user_id),
-                "operations": operations.recent(data_root, workspace_id, user_id),
-                "workspace_id": workspace_id,
-            }
+            return 200, connections.overview(data_root, workspace_id, user_id)
         if action == "companion.poll":
             return 200, operations.poll(data_root, workspace_id, user_id, body)
         if action == "companion.progress":

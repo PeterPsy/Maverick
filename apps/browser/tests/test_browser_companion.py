@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import base64
+from contextlib import contextmanager
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 import time
 import unittest
+from unittest.mock import patch
+from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from companion_store import database
@@ -96,6 +99,49 @@ class BrowserCompanionTests(unittest.TestCase):
             self.assertEqual(len(row["secret_hash"]), 64)
             self.assertNotEqual(row["secret_hash"], credentials["connector_secret"])
         self.assertEqual((self.root / "companion.sqlite3").stat().st_mode & 0o777, 0o600)
+
+    def test_overview_reads_metadata_in_one_transaction_without_media_payloads(self):
+        credentials = self.sharing()
+        _, queued = self.call("content.read", session_id=credentials["session_id"])
+        media = json.dumps({"text": "x" * 1024 * 1024})
+        with database(self.root) as db:
+            db.execute("UPDATE operations SET status='completed',result_json=? WHERE operation_id=?", (media, queued["operation_id"]))
+        statements = []
+
+        @contextmanager
+        def traced_database(root):
+            with database(root) as db:
+                db.set_trace_callback(statements.append)
+                yield db
+
+        with patch("companion_connections.database", side_effect=traced_database) as opened:
+            status, result = self.call("companion.overview")
+        self.assertEqual(status, 200)
+        self.assertEqual(opened.call_count, 1)
+        self.assertEqual(result["operations"][0]["status"], "completed")
+        self.assertNotIn("result", result["operations"][0])
+        self.assertLess(len(json.dumps(result)), 2000)
+        reads = [sql for sql in statements if sql.startswith("SELECT o.")]
+        self.assertEqual(len(reads), 1)
+        self.assertNotIn("*", reads[0])
+        self.assertNotIn("result_json", reads[0])
+        self.assertNotIn("input_json", reads[0])
+        _, detail = self.call("operation.get", operation_id=queued["operation_id"])
+        self.assertEqual(len(detail["result"]["text"]), 1024 * 1024)
+
+    def test_overview_pending_count_includes_work_beyond_recent_activity(self):
+        for _ in range(3):
+            credentials = self.sharing()
+            with database(self.root) as db:
+                now = time.time()
+                for _ in range(16):
+                    db.execute("INSERT INTO operations(operation_id,session_id,action,input_json,status,created_at,expires_at) VALUES(?,?,'content.read','{}','queued',?,?)",
+                               (str(uuid4()), credentials["session_id"], now, now + 600))
+        _, result = self.call("companion.overview")
+        self.assertEqual(len(result["operations"]), 30)
+        self.assertEqual(result["pending_count"], 48)
+        _, other = handle_action(self.root, {"action": "companion.overview"}, workspace_id="default", user_id="bob")
+        self.assertEqual(other["pending_count"], 0)
 
     def test_read_is_queued_and_only_claimed_connector_can_complete(self):
         credentials = self.sharing()

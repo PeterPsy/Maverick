@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "15e818ceda529b217e8f7fdf6364eed3407a2d1252c990506f8531b4b88e51e8",
+  "build_id": "5ab3e0be697a6672166dcfe46e52efab44480c83df1d97bd3311f68357afe7ef",
   "entrypoints": [
     "companion/offscreen.html",
     "companion/popup.html",
@@ -8,14 +8,14 @@
   ],
   "immutable": [
     {
-      "path": "assets/index-Ba_YAaHm.css",
-      "sha256": "ea97bc5098d77a268d120e839d7f2146e795267f7f8df2628b754ec5285e152d",
-      "size_bytes": 2533
+      "path": "assets/index-CbnQi4cp.css",
+      "sha256": "02f24d180a7db951ca68af4f8bda3873d1b5de89945b4480e8d0be83806a88bb",
+      "size_bytes": 7789
     },
     {
-      "path": "assets/index-gimgFLhU.js",
-      "sha256": "d142a886fd149e8249ee0f1f2e78b67d08368e1c86b22fcc66282f0d3e79b786",
-      "size_bytes": 8638
+      "path": "assets/index-bvXCjSRl.js",
+      "sha256": "08a95eb575cbae05316276cf3eb8e029b568f2580afd1bde3965246acc979aaf",
+      "size_bytes": 21608
     }
   ],
   "revalidated": [
@@ -91,23 +91,18 @@
     },
     {
       "path": "icon.svg",
-      "sha256": "5894cb460514ed5c6eb12b8e717faf7f495d40aa9a8201a6f9749a21517e21b6",
-      "size_bytes": 307
+      "sha256": "01d0ca6aa8f7ba8b775db6f46b23fdcd214d44dc66db59e7c7fcfe33371343ed",
+      "size_bytes": 270
     },
     {
       "path": "index.html",
-      "sha256": "0b191499ea38b154aa9fe838c09b6e7ec036118376baf6c082a03133c6e29057",
+      "sha256": "f8684e25635f96a6a928d50461d224e9d174487defe724b8c14bd7a04a0dcb85",
       "size_bytes": 429
     },
     {
       "path": "maverick-browser-companion.zip",
       "sha256": "de2116958c9632db671c94712737d908505b82caf8c5ebb24e9bf946e1a6999e",
       "size_bytes": 19167
-    },
-    {
-      "path": "maverick-icon-compact.png",
-      "sha256": "85d979955765b9d82fffb40eca6e90cafdf9fa7300622086e0f13eb05c85ec29",
-      "size_bytes": 7863
     }
   ]
 }

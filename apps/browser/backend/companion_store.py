@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS operations (
  result_json TEXT, progress_json TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS operation_session_status ON operations(session_id, status, created_at);
+CREATE INDEX IF NOT EXISTS connection_owner_created ON connections(workspace_id, user_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS media_requests (
  request_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, item_key TEXT NOT NULL,
  dependency_alias TEXT NOT NULL, expected_path TEXT, status TEXT NOT NULL

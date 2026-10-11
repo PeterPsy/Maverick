@@ -1,6 +1,6 @@
 # Browser Reading and Shared Platform Transport
 
-Date: 2026-10-10
+Date: 2026-10-11
 
 ## Implemented architecture
 
@@ -23,6 +23,42 @@ poller when possible; alarms do not wake a sleeping computer and cannot guarante
 uninterrupted execution. Reloading requires fresh user setup. Closing either tab,
 revoking sharing or leaving approved platform routes stops capture. Late connector
 submissions cannot renew expired connections or complete expired operations.
+
+## Management frontend
+
+The self-contained workspace frontend disables the shell sidebar through its
+presentation contract. It exposes Shared tabs with collapsible Companion setup,
+Activity with search/status filters, cancellation and readable results, and
+Browser Lab with public-page reading, health and individual session closure.
+The existing shell/App Store `language` glyph owns Browser's native icon
+presentation; no Browser-specific platform rendering branch or raster override
+is added. The app header uses an inline vector and the favicon an app-owned SVG.
+
+Overview polling opens one SQLite transaction, sweeps leases once and selects
+operation metadata without media/input payloads. Pending counts cover all the
+actor's work beyond the recent 30-operation window and active connections precede
+stopped ones. Rows and action buttons retain DOM identity across heartbeats.
+Reads are serialized, concurrent invalidations
+coalesce into one trailing read, hidden documents pause and failures back off.
+Visible views refresh at 3 seconds for pending operations, 10 seconds for active
+Chrome connections and 30 seconds when idle; Lab uses 30 seconds. Chrome transport
+continues its independent heartbeat while management is hidden, renewing its
+app-frame authentication at most once per minute. Setup is single-flight and
+stopping it fences and revokes a late lease. Automatic revocation reports the
+stopped state to the UI so reconnect controls become available again.
+
+Public research carries the human actor through session creation, observations,
+cleanup and audit. Session state retains broker activity and expiry timestamps
+so management can omit expired sessions. Result text is escaped, source links
+accept only HTTP(S), and raw JSON is rendered lazily with base64 media omitted.
+
+Management verification includes 73 Python tests, 39 Node tests, an offline
+Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
+public-page form, 320/390px layout and light theme), and the real Chromium/MV3
+Companion fixture with Connectors and scope revocation. Authenticated Maverick
+inspection verified desktop/mobile hosting, a public-page read with automatic
+cleanup, sidebar suppression and the native globe in the rail and App Store.
+The Companion fixture does not establish access to a real authenticated profile.
 
 ## Ownership, transport and queues
 

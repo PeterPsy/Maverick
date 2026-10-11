@@ -9,7 +9,7 @@ import sqlite3
 import time
 from uuid import uuid4
 
-from companion_store import database, encoded, public_connection, sweep
+from companion_store import database, encoded, public_connection, public_operation, sweep
 from platform_scope import platform_url, platform_for_url
 
 
@@ -63,10 +63,28 @@ def overview(data_root: Path, workspace_id: str, user_id: str) -> dict:
     with database(data_root) as db:
         sweep(db, time.time())
         rows = db.execute(
-            "SELECT * FROM connections WHERE workspace_id=? AND user_id=? ORDER BY created_at DESC LIMIT 20",
+            "SELECT * FROM connections WHERE workspace_id=? AND user_id=? "
+            "ORDER BY CASE WHEN status IN ('connecting','connected') THEN 0 WHEN status='offline' THEN 1 ELSE 2 END,created_at DESC LIMIT 20",
             (workspace_id, user_id),
         ).fetchall()
-        return {"connections": [public_connection(row) for row in rows]}
+        # Polling needs only metadata. Never fetch multi-megabyte media results here.
+        operations = db.execute(
+            "SELECT o.operation_id,o.session_id,o.action,o.status,o.created_at,o.expires_at,o.progress_json "
+            "FROM operations o JOIN connections c ON o.session_id=c.session_id "
+            "WHERE c.workspace_id=? AND c.user_id=? ORDER BY o.created_at DESC LIMIT 30",
+            (workspace_id, user_id),
+        ).fetchall()
+        pending_count = db.execute(
+            "SELECT count(*) FROM operations o JOIN connections c ON o.session_id=c.session_id "
+            "WHERE c.workspace_id=? AND c.user_id=? AND o.status IN ('queued','running','processing_media')",
+            (workspace_id, user_id),
+        ).fetchone()[0]
+        return {
+            "connections": [public_connection(row) for row in rows],
+            "operations": [public_operation(row, include_result=False) for row in operations],
+            "workspace_id": workspace_id,
+            "pending_count": pending_count,
+        }
 
 
 def heartbeat(db: sqlite3.Connection, row: sqlite3.Row, *, url: object, title: object) -> None:

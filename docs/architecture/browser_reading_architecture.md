@@ -100,6 +100,11 @@ cleanup, sidebar suppression and the native globe in the rail and App Store.
 Review corrections were additionally checked on the mounted app: the isolated
 connector document returned 200, initial light parameters applied, and switching
 to Settings stopped Browser requests for an observed interval over 40 seconds.
+After the fresh-profile correction and backend restart, an anonymous download
+on `maverick.loopino.ai` returned 200 with ZIP MIME type and immutable cache
+headers; its bytes matched the generated package. Authenticated inspection of
+`/app/browser?connector=1` verified the stable copied address, setup instructions
+and visible Connect controls in the mounted isolated Browser frame.
 The Companion fixture does not establish access to a real authenticated profile.
 
 ## Ownership, transport and queues

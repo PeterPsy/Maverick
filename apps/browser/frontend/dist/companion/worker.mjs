@@ -1,7 +1,8 @@
-import {boundedCommand,connectorUrl,platformUrl,platformForUrl,sharedTabUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
+import {boundedCommand,connectorUrl,connectorOrigins,platformUrl,platformForUrl,sharedTabUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
 import {platforms} from "./platforms.mjs";
 import {attachConnectorFrame} from "./connector-frame.mjs";
 import {openConnectorWindow} from "./connector-window.mjs";
+import {createShareSetup} from "./share-setup.mjs";
 import {observe} from "./dom-actions.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
 
@@ -122,9 +123,10 @@ async function share(message) {
   const url=connectorUrl(message.url);const tab=await chrome.tabs.get(message.tabId);
   const agentTab=message.agentTab === true && tab.url === chrome.runtime.getURL("agent-tab.html");
   if (message.agentTab && !agentTab) throw new Error("active_tab_unavailable");
-  if (!agentTab) platformUrl(tab.url);
+  if (!agentTab) platformUrl(tab.url,message.platform);
   const approved=agentTab ? Object.keys(platforms) : [platformForUrl(tab.url)];
-  if (!await chrome.permissions.contains({origins:approved.flatMap(key=>platforms[key].hosts.map(host=>`https://${host}/*`))})) throw new Error("permission_denied");
+  if (!await chrome.permissions.contains({origins:[...connectorOrigins(url),...approved.flatMap(key=>platforms[key].hosts.map(host=>`https://${host}/*`))]})) throw new Error("permission_denied");
+  await chrome.storage.local.set({connectorUrl:url.href});
   await stop();
   try {
     await chrome.offscreen.createDocument({url:"offscreen.html",reasons:["USER_MEDIA"],justification:"Read-only capture of the single platform tab explicitly shared by the user."});
@@ -132,7 +134,7 @@ async function share(message) {
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     await capture("start",{streamId});
     const connector=await openConnectorWindow(url,{sourceTabId:tab.id,reuse:message.reuseConnector !== false});
-    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:agentTab ? null : platformForUrl(tab.url),allowedPlatforms:agentTab ? approved : []}});
+    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:agentTab ? null : platformForUrl(tab.url),allowedPlatforms:agentTab ? approved : []}});
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
     await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#5665df"});
     // A tab may finish loading before onUpdated observes the stored binding.
@@ -141,12 +143,13 @@ async function share(message) {
     return {status:"shared"};
   } catch(error) {await stop();throw error;}
 }
+const beginShare=createShareSetup(share);
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(sender.id !== chrome.runtime.id || message.target !== "worker")return;
   (async()=>{
     if(message.action === "share") {
       if(sender.url !== chrome.runtime.getURL("popup.html"))throw new Error("popup_gesture_required");
-      return share(message);
+      return beginShare(message);
     }
     if(message.action === "agent.open" && sender.url === chrome.runtime.getURL("popup.html")) {
       const tab=await chrome.tabs.create({url:chrome.runtime.getURL("agent-tab.html")});
@@ -166,7 +169,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return {cancelled:true};
     }
     if(message.action === "status") {
-      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
+      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
     }
     if(message.action === "execute")return execute(b,message.command);
     throw new Error("bridge_action_unavailable");

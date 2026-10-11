@@ -1,11 +1,15 @@
-import {connectorUrl, connectorOrigins, platformUrl, platformForUrl} from "./scope.mjs";
-import {platforms} from "./platforms.mjs";
-import {shareableTab, setupError} from "./setup.mjs";
+import {connectorUrl, platformForUrl} from "./scope.mjs";
+import {shareableTab, setupError, defaultConnectorUrl} from "./setup.mjs";
 const status = document.querySelector("#status");
 const input = document.querySelector("#connector");
 const share = document.querySelector("#share");
 let selected;
-input.value = (await chrome.storage.local.get("connectorUrl")).connectorUrl || "";
+input.value = (await chrome.storage.local.get("connectorUrl")).connectorUrl || defaultConnectorUrl;
+const showDestination = () => {
+  try {document.querySelector("#destination").textContent = `Connects to ${connectorUrl(input.value).host}`;}
+  catch {document.querySelector("#destination").textContent = "Check Connection settings below";}
+};
+showDestination(); input.oninput = showDestination;
 try {
   const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
   document.querySelector("#tab-title").textContent = tab?.title || "Selected Chrome tab";
@@ -21,20 +25,11 @@ share.onclick = async () => {
   share.disabled = true;
   try {
     const url = connectorUrl(input.value);
-    // Request permissions before any await so Chrome retains the button's user gesture.
-    const approved = selected.allowed_platforms || [platformForUrl(selected.url)];
-    const granted = await chrome.permissions.request({origins: [...connectorOrigins(url), ...approved.flatMap(key=>platforms[key].hosts.map(host=>`https://${host}/*`))]});
-    if (!granted) throw new Error("permission_denied");
-    // Keep the tab chosen when the popup opened, even if another window gains focus.
-    const tab = await chrome.tabs.get(selected.id);
-    if (selected.allowed_platforms) {
-      if (tab?.url !== chrome.runtime.getURL("agent-tab.html")) throw new Error("active_tab_unavailable");
-    } else platformUrl(tab?.url, platformForUrl(selected.url));
-    status.textContent = "Opening your Browser connection…";
-    await chrome.storage.local.set({connectorUrl: url.href});
-    const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: tab.id, url: url.href, agentTab: Boolean(selected.allowed_platforms), reuseConnector: document.querySelector("#reuse").checked});
+    status.textContent = "Allow Chrome access if asked. Connecting to Maverick…";
+    // Send before any await. The worker retains the transaction if this popup closes.
+    const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: selected.id, url: url.href, agentTab: Boolean(selected.allowed_platforms), platform: platformForUrl(selected.url), reuseConnector: document.querySelector("#reuse").checked});
     if (result?.error) throw new Error(result.detail || result.error);
-    status.textContent = "Tab selected. In the Browser tab that opened or was reused, press Connect selected tab. Keep it and the shared tab open.";
+    status.textContent = "Connecting in Maverick. Sign in there if asked; the shared tab connects automatically. Keep both tabs open.";
   } catch (error) { status.textContent = setupError(error); }
   finally { share.disabled = false; }
 };

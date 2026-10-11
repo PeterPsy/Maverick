@@ -19,6 +19,7 @@ const temporary=mkdtempSync(path.join(tmpdir(),"browser-companion-e2e-"));
 const server=spawn("python3",[path.join(root,"tests/companion_fixture_server.py")],{stdio:["ignore","pipe","pipe"]});
 let context;
 const connectorsOnly=process.argv.includes('--connectors-only');
+const realConsent=process.argv.includes('--permissions');
 let mediaSummary={};
 const wait=async(predicate,timeout=45000)=>{const end=Date.now()+timeout;while(Date.now()<end){const result=await predicate();if(result)return result;await new Promise(r=>setTimeout(r,150));}throw new Error("fixture_wait_timeout");};
 try {
@@ -43,17 +44,17 @@ try {
   });
   const api=async body=>{const response=await fixtureFetch(`${origin}/api/apps/browser/backend`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const result=await response.json();assert(response.ok,JSON.stringify(result));return result;};
   const extension=path.join(temporary,"extension");cpSync(path.join(root,"frontend/public/companion"),extension,{recursive:true});
-  // Only the fixture manifest pre-grants hosts, avoiding the permission dialog.
-  // The production package still has no permanent host permissions.
+  // The fast fixture pre-grants hosts. --permissions exercises the native dialog
+  // with the unmodified production manifest on an isolated Xvfb display.
   const manifest=JSON.parse(readFileSync(path.join(extension,"manifest.json")));
-  manifest.host_permissions=[...Object.values(platforms).flatMap(spec=>spec.hosts.map(host=>`https://${host}/*`)),"http://*.localhost/*","http://localhost/*","http://127.0.0.1/*"];
+  if(!realConsent)manifest.host_permissions=[...Object.values(platforms).flatMap(spec=>spec.hosts.map(host=>`https://${host}/*`)),"http://*.localhost/*","http://localhost/*","http://127.0.0.1/*"];
   writeFileSync(path.join(extension,"manifest.json"),JSON.stringify(manifest));
   execFileSync("espeak-ng",["-w",path.join(temporary,"voice.wav"),"Maverick browser reads video and records audio locally."]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc=size=320x180:rate=12","-i",path.join(temporary,"voice.wav"),"-t","5","-vf","format=yuv420p","-af","apad","-c:v","libx264","-threads","1","-c:a","aac","-movflags","+faststart",path.join(temporary,"video.mp4")]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc2=size=320x180:rate=12","-t","3","-c:v","libx264","-threads","1","-movflags","+faststart",path.join(temporary,"ended.mp4")]);
   const media=readFileSync(path.join(temporary,"video.mp4"));
   const endedMedia=readFileSync(path.join(temporary,"ended.mp4"));
-  context=await chromium.launchPersistentContext(path.join(temporary,"profile"),{headless:true,channel:"chromium",ignoreDefaultArgs:["--mute-audio"],viewport:{width:1000,height:800},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,"--enable-unsafe-extension-debugging","--autoplay-policy=no-user-gesture-required"]});
+  context=await chromium.launchPersistentContext(path.join(temporary,"profile"),{headless:!realConsent,channel:"chromium",ignoreDefaultArgs:["--mute-audio"],viewport:{width:1000,height:800},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,"--enable-unsafe-extension-debugging","--autoplay-policy=no-user-gesture-required","--window-size=1100,740","--window-position=0,0"]});
   assert.equal((await fixtureFetch(`${origin}/apps/browser/?connector=1`)).status,403);
   assert.equal((await fixtureFetch(`${frameOrigin}/apps/browser/?connector=1`)).status,401);
   assert.equal((await context.cookies()).length,0,"Chrome starts without any Maverick or iframe session");
@@ -71,14 +72,25 @@ try {
   const instagram=await context.newPage();await instagram.goto("https://www.instagram.com/fixture_user/");await instagram.bringToFront();
   const worker=context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
   const extensionId=worker.url().split("/")[2];
+  if(realConsent)await instagram.goto(`chrome-extension://${extensionId}/agent-tab.html`);
   const browser=await context.browser().newBrowserCDPSession();
   const popup=await openActionPopup(browser,extensionId,instagram.url());
   const popupEvaluate=popup.evaluate;
   await popupEvaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
+  if(realConsent) {
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    execFileSync('python3',[path.join(root,'tests/consent-dialog.py'),'Maverick agent tab']);
+    await new Promise(resolve=>setTimeout(resolve,300));
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','x11grab','-video_size','1366x768','-i',process.env.DISPLAY,'-frames:v','1','-y',path.join(tmpdir(),'maverick-consent.png')]);
+    await popup.close();
+    execFileSync('python3',[path.join(root,'tests/consent-dialog.py'),'Maverick agent tab','allow']);
+    await wait(()=>worker.evaluate(()=>chrome.permissions.contains({origins:['https://www.instagram.com/*','https://www.youtube.com/*']})));
+    console.log(JSON.stringify({phase:'native-consent',popup_closed_before_approval:true,first_click_continued:true}));
+  }
   await wait(async()=>{
     const page=context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));if(page)return page;
     const status=await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"");
-    if(status && !["Tab selected", "Opening your Browser"].some(prefix=>status.startsWith(prefix)))throw new Error(`share_failed: ${status}`);
+    if(status && !["Connecting in Maverick", "Allow Chrome access"].some(prefix=>status.startsWith(prefix)))throw new Error(`share_failed: ${status}`);
     return context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));
   }).catch(async error=>{
     console.error(JSON.stringify({phase:"sharing",popup_status:await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"closed"),worker_state:await worker.evaluate(async()=>({contexts:await chrome.runtime.getContexts({}),binding:await chrome.storage.session.get("binding")}))}));
@@ -88,14 +100,13 @@ try {
   await connectorWindow.getByRole("button",{name:"Sign in as fixture user"}).click();
   await wait(()=>connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
   const connector=connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`));
-  await connector.waitForSelector("#connect:visible");
+  await connector.waitForSelector("#stop:visible");
   await wait(async()=> (await worker.evaluate(()=>chrome.storage.session.get("binding"))).binding?.connectorDocumentId);
   assert.equal(await connector.locator("#url").inputValue(),connectorAddress);
   assert.equal(await connector.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),"light");
   const consoleErrors=[];connectorWindow.on("pageerror",e=>consoleErrors.push(e.message));
-  await popup.detach();
+  if(!realConsent)await popup.detach();
   await connectorWindow.bringToFront();
-  await connector.locator("#connect").click();
   const connection=await wait(async()=> (await api({action:"companion.overview"})).connections.find(c=>c.status === "connected"));
   console.log(JSON.stringify({phase:"chrome-connected"}));
   const run=async(action,parameters={},shared=connection)=>{
@@ -103,6 +114,7 @@ try {
     const result=await wait(async()=>{const result=await api({action:"operation.get",operation_id:queued.operation_id});return ["completed","failed","cancelled","expired"].includes(result.status) ? result : null;},60000);
     assert.equal(result.status,"completed",JSON.stringify(result));return {...result.result,operation_id:queued.operation_id};
   };
+  if(realConsent)await run('navigate',{url:'https://www.instagram.com/fixture_user/'});
   if(!connectorsOnly) {
   const content=await run("content.read");assert(content.text.includes("Bio visibile"));assert(!content.text.includes("must-not-be-read"));assert(!content.text.includes("hidden-secret"));assert.equal(content.videos[0].duration_seconds,5);
   const scrolling=await run("scroll",{pixels:600});assert.equal(scrolling.target,"rendered_container");assert(scrolling.moved);
@@ -205,14 +217,17 @@ try {
   const agentPopup=await openActionPopup(browser,extensionId,agent.url());
   assert.equal(await agentPopup.evaluate("document.querySelector('#share').textContent"),"Connect agent tab");
   assert.equal(await agentPopup.evaluate("document.querySelector('#reuse').checked"),true);
+  // The existing Maverick instance can be on another native app when reconnecting.
+  await connectorWindow.evaluate(()=>history.replaceState({},"","/app/chat"));
   const reused=connectorWindow.waitForEvent('framenavigated',{predicate:frame=>frame === connectorWindow.mainFrame()});
   await agentPopup.evaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
+  // Native-consent mode already granted all six hosts on the initial agent tab;
+  // the next explicit share must reuse those permissions without another prompt.
   await reused;
   const agentWindow=connectorWindow;
   assert.equal(context.pages().filter(page=>page.url().startsWith(`${origin}/app/browser`)).length,1,'Sharing a new agent tab must reuse the existing Browser bridge.');
   const agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
-  await agentFrame.waitForFunction(()=>document.querySelector('#connect') && !document.querySelector('#connect').disabled);
-  await agentFrame.locator('#connect').click();
+  await agentFrame.waitForSelector('#stop:visible');
   const agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.sharing_mode === 'agent_tab'));
   assert.equal(agentConnection.url,"");assert.deepEqual(agentConnection.allowed_platforms,Object.keys(platforms));
   // Native rail navigation can remove connector=1 and hide the retained Browser

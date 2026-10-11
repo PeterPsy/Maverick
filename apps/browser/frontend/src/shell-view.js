@@ -25,12 +25,12 @@ export function mountShell(connectorMode) {
         <div class="setup-body">
           <p>A dedicated agent tab can navigate between Instagram, X, Reddit, Facebook, LinkedIn and YouTube. An existing shared tab can navigate throughout its selected platform. Sign in to the platforms in your usual Chrome profile.</p>
           <ol class="setup-steps">
-            <li><strong>Install Companion 0.5.2</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. After an update, replace the extracted files and reload the extension.</p></li>
-            <li><strong>Choose an agent tab or an existing page</strong><p>In Companion, choose Open agent tab. On that new tab, click Companion again, paste this connector address and choose Connect agent tab. To share an existing platform page instead, open Companion on it and choose Share this tab. You do not need to select a profile first.</p></li>
-            <li><strong>Connect in the Browser bridge</strong><p>Companion reuses an open Browser tab in the same Chrome profile, or opens a connection window. Desktop apps and other browser profiles need that separate bridge. Sign in there if asked, then press Connect selected tab. Keep the bridge and the shared tab open; the agent navigates the shared tab.</p></li>
+            <li><strong>Install Companion 0.5.3</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. After an update, replace the extracted files and reload the extension.</p></li>
+            <li><strong>Connect once from Companion</strong><p>Choose Open agent tab, then open Companion on that new tab and choose Connect agent tab. To share a platform page instead, open Companion on it and choose Share this tab. The Maverick address is already configured; allow Chrome access when asked.</p></li>
+            <li><strong>Keep both tabs open</strong><p>Companion reuses an existing Maverick tab in the same Chrome profile and connects automatically after sign-in. The agent navigates the shared tab. Desktop apps and other browser profiles need a separate Chrome bridge window.</p></li>
           </ol>
-          <label for="url">Connector address</label>
-          <div class="copy"><input id="url" readonly spellcheck="false"><button id="copy" class="secondary">Copy address</button></div>
+          <details class="connection-settings"><summary>Using another Maverick installation?</summary><p>Set this address in Companion's Connection settings.</p><label for="url">Connector address</label>
+          <div class="copy"><input id="url" readonly spellcheck="false"><button id="copy" class="secondary">Copy address</button></div></details>
           <div id="connector-actions" class="actions" ${connectorMode ? "" : "hidden"}><button id="connect" disabled>Connect selected tab</button><button id="stop" class="secondary" hidden>Stop sharing</button></div>
           <p id="status" class="status" role="status">${connectorMode ? "Checking for the tab shared with this window…" : "Installing Companion is the first step. Choose Open agent tab in Companion, or share an existing platform tab."}</p>
         </div>

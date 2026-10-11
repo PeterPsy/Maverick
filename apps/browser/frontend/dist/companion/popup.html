@@ -1,9 +1,10 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Browser Companion</title><link rel="stylesheet" href="popup.css"></head>
 <body><h1>Maverick Browser</h1><p>Share a platform tab, or open a dedicated tab and let the agent choose where to go.</p>
 <section class="selected" aria-label="Selected tab"><strong id="tab-title">Checking the selected tab…</strong><p id="tab-url"></p></section>
-<label for="connector">Connector address copied from Browser</label><input id="connector" type="url" placeholder="https://…/app/browser?connector=1">
-<label class="reuse"><input id="reuse" type="checkbox" checked>Reuse an open Browser tab in this Chrome profile</label>
+<p id="destination" class="note"></p>
+<details><summary>Connection settings</summary><label for="connector">Maverick address</label><input id="connector" type="url" placeholder="https://…/app/browser?connector=1">
+<label class="reuse"><input id="reuse" type="checkbox" checked>Reuse an open Maverick tab in this Chrome profile</label></details>
 <button id="share" disabled>Share this tab</button><button id="stop" class="secondary">Stop sharing</button><p id="status" role="status"></p>
 <button id="open-agent" class="secondary">Open agent tab</button>
 <p class="note">Agent tab supports Instagram, X, Reddit, Facebook, LinkedIn and YouTube. It can navigate, read and analyze content. Posting, messaging and form entry are not available.</p>
-<p class="note">The Browser connection tab is the bridge; the selected platform or agent tab is the page the agent uses. A new bridge window opens if Browser is not already open here. Desktop apps and other browser profiles cannot be reused. Keep both tabs open. Captures may bring the shared tab to the foreground. Cookies and passwords are not sent to Maverick.</p><script type="module" src="popup.mjs"></script></body></html>
+<p class="note">Connect once and allow access if Chrome asks. Maverick opens in an existing tab in this profile and connects automatically after sign-in. The agent uses the shared tab; keep it and Maverick open. A separate window is needed for desktop apps and other browser profiles. Cookies and passwords are not sent to Maverick.</p><script type="module" src="popup.mjs"></script></body></html>

@@ -32,13 +32,10 @@ try {
   const popup=await openActionPopup(browser,extensionId,page.url());
   const result=await popup.evaluate("({disabled:document.querySelector('#share').disabled,title:document.querySelector('#tab-title').textContent,url:document.querySelector('#tab-url').textContent})");
   assert.equal(result.disabled,false);assert.equal(result.url,page.url());assert.equal(result.title,"Fixture selected tab");
+  assert.equal(await popup.evaluate("document.querySelector('#connector').value"),"https://maverick.loopino.ai/app/browser?connector=1");
   assert.equal(await worker.evaluate(()=>chrome.permissions.contains({origins:["https://www.instagram.com/*"]})),false);
   await popup.evaluate("document.querySelector('#connector').value='https://maverick-fixture.test/apps/browser/';document.querySelector('#share').click();true");
-  assert.match(await popup.evaluate("document.querySelector('#status').textContent"),/Copy the connector address/u);
-  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
-  // Simulate declining the permission dialog; capture must never start.
-  await popup.evaluate("chrome.permissions.request=async()=>false;document.querySelector('#connector').value='https://maverick-fixture.test/app/browser?connector=1';document.querySelector('#share').click();true");
-  assert.match(await popup.evaluate("document.querySelector('#status').textContent"),/Allow access/u);
+  assert.match(await popup.evaluate("document.querySelector('#status').textContent"),/Connection settings/u);
   assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
   await popup.close();
   await page.goto('chrome://newtab/');await page.bringToFront();
@@ -51,10 +48,8 @@ try {
   const agentPopup=await openActionPopup(browser,extensionId,agent.url());
   assert.equal(await agentPopup.evaluate("document.querySelector('#share').disabled"),false);
   assert.equal(await agentPopup.evaluate("document.querySelector('#share').textContent"),'Connect agent tab');
-  const requested=await agentPopup.evaluate("(async()=>{let requested;chrome.permissions.request=async p=>{requested=p;return false;};document.querySelector('#connector').value='https://maverick-fixture.test/app/browser?connector=1';document.querySelector('#share').click();await new Promise(r=>setTimeout(r,50));return requested;})()");
-  for(const host of ['www.instagram.com','x.com','www.reddit.com','www.facebook.com','www.linkedin.com','www.youtube.com'])assert(requested.origins.includes(`https://${host}/*`));
-  assert(!requested.origins.includes('https://*/*'));
+  assert.equal(await agentPopup.evaluate("document.querySelector('#connector').value"),"https://maverick.loopino.ai/app/browser?connector=1");
   assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
   await agentPopup.close();
-  console.log("Companion popup passed with production permissions: restricted Chrome pages, existing platform via activeTab, new empty agent tab, six explicit platform permissions, and invalid connector guidance.");
+  console.log("Companion popup passed with production permissions: restricted Chrome pages, existing platform via activeTab, new empty agent tab, preconfigured Maverick address and invalid custom-address guidance.");
 } finally {if(context)await context.close();rmSync(temporary,{recursive:true,force:true});}

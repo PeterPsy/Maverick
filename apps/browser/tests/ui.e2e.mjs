@@ -118,7 +118,8 @@ try {
   denyDisconnect = false; await page.locator("#connections button").click();
   await page.waitForFunction(() => document.querySelector("#tab-count")?.textContent === "0");
   assert.equal(await page.locator("#connections button").isVisible(), false);
-  await page.locator("#setup summary").click();
+  await page.locator("#setup > summary").click();
+  await page.locator(".connection-settings > summary").click();
   for (const width of [390, 320]) {
     await page.setViewportSize({width, height: 844});
     const mark = await page.locator(".app-mark").boundingBox(), title = await page.locator("h1").boundingBox();

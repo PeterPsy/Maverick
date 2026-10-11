@@ -8,6 +8,7 @@ import {showResult} from "./result-view.js";
 import {createLab} from "./lab.js";
 import {createPlatformState} from "./platform-state.js";
 import {connectionDetail} from "./sharing-state.js";
+import {createAutoConnect} from "./auto-connect.js";
 import companionArchiveUrl from "../package/maverick-browser-companion.zip?url";
 
 const launchParams = new URLSearchParams(location.search);
@@ -112,10 +113,11 @@ function checkSelectedTab(retry = false) {
   if (["connecting", "connected"].includes(connectionState)) return;
   if (checking) { checkAgain ||= retry; return checking; }
   $("#connect").disabled = true;
-  checking = bridge("status", undefined, 2500).then(shared => {
+  checking = bridge("status", undefined, 2500).then(async shared => {
     $("#connect").disabled = false;
     $("#error").hidden = true;
     $("#status").textContent = `Selected tab: ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}. Ready to connect.`;
+    await autoConnect(shared);
   }).catch(error => { $("#status").textContent = error.message; })
     .finally(() => { checking = null; if (checkAgain) { checkAgain = false; void checkSelectedTab(); } });
   return checking;
@@ -130,9 +132,11 @@ const connector = createConnector((text, state) => {
   }
   if (state === "stopped") void loop.refresh();
 });
-$("#connect").onclick = () => run($("#connect"), {run: async () => {
+async function connectSelectedTab() {
   await connector.start(); $("#connect").hidden = true; $("#stop").hidden = false; await loop.refresh();
-}});
+}
+const autoConnect = createAutoConnect(connectSelectedTab);
+$("#connect").onclick = () => run($("#connect"), {run: connectSelectedTab});
 $("#stop").onclick = () => run($("#stop"), {run: async () => { await connector.stop(); await loop.refresh(); }});
 function openConnectorSetup(retry = false) {
   connectorMode = true; $("#setup").open = true; $("#connector-actions").hidden = false;

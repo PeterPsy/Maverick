@@ -8,26 +8,33 @@ proxy, hosted-browser or remote transcription service is used.
 
 ## Connect a platform tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.5.2,
-then load its folder with Chrome's “Load unpacked” developer-mode action. Copy
-the connector address displayed by Browser. Use Chrome 120 or later. Open a
-supported platform page in Chrome, log in directly if needed, and share it from
-Companion. The agent can navigate throughout that platform; sharing a profile
+Open Browser in the workspace shell. Download and extract Browser Companion 0.5.3,
+then load its folder with Chrome's “Load unpacked” developer-mode action.
+Use Chrome 120 or later. The official `https://maverick.loopino.ai` address is
+preconfigured; other installations can change Connection settings in Companion.
+Open a supported platform page in Chrome, log in directly if needed, and choose
+**Share this tab** once. Allow Chrome access when asked. The service worker owns
+the permission request and the remaining setup, so closing the popup during the
+native dialog cannot discard the connection. The agent can navigate throughout
+that platform; sharing a profile
 does not restrict navigation to that profile. Platform home pages are supported.
 
 To start empty, choose **Open agent tab** in Companion, even from Chrome's New
-Tab page. On the new dedicated tab, click Companion in Chrome's toolbar again,
-paste the connector address and choose **Connect agent tab**. This explicit
+Tab page. On the new dedicated tab, click Companion in Chrome's toolbar again and
+choose **Connect agent tab** once. This explicit
 invocation grants Chrome's tab-capture permission for that tab. The popup asks
 for the six supported platform hosts plus Maverick, not every website. By default
-it reuses the most recently used Browser tab at the chosen Maverick origin in the
-same Chrome profile. Other apps and the source tab are never redirected. Uncheck
+it reuses the most recently used Maverick shell tab at the chosen origin in the
+same Chrome profile, including Chat or other apps, and opens Browser there.
+Private/API routes, other origins and the source tab are excluded. Uncheck
 the reuse option to open a separate bridge window. A new window is also necessary
-when no matching Browser tab exists, including Maverick in another profile,
-browser or desktop application. Connect in the reused or new Browser bridge and
-keep both tabs open. The agent navigates the dedicated source tab, not the bridge.
-It can then
-navigate across Instagram, X, Reddit, Facebook, LinkedIn and YouTube, using your
+when no matching Maverick tab exists, including Maverick in another profile,
+browser or desktop application. Sign in if asked; the exact selected Browser
+document connects automatically using the extension's explicit sharing generation.
+There is no second Connect button to press. Automatic setup is attempted once
+per generation; a failed attempt retains the manual retry control. Keep both tabs
+open. The agent navigates the dedicated source tab, not the bridge.
+It can navigate across Instagram, X, Reddit, Facebook, LinkedIn and YouTube, using your
 usual Chrome platform sessions. It can read, scroll, collect content and analyze
 images/video/audio; clicks, form entry, posting and messages have no command.
 Sign in to platforms directly in Chrome. Other tabs are not shared.
@@ -44,8 +51,9 @@ The hashed Companion ZIP is a public, immutable build asset under
 `/apps/browser/assets/` and requires no Maverick cookie. Private iframe URLs
 are never copied as connector addresses.
 Installing the extension or opening the connector address manually does not
-share a tab. Connect is enabled only after this exact window receives the
-selected platform tab from Companion. If setup fails, the status explains how
+share a tab. Only an exact extension-bound document with explicit automatic-setup
+status can start the lease; launch parameters and ready messages cannot authorize it.
+If setup fails, the status explains how
 to retry instead of remaining on “Connecting…”. After an extension update,
 replace the extracted files and reload it in `chrome://extensions`.
 
@@ -240,6 +248,7 @@ maverick app browser frontend build --json
 python3 -m unittest discover -s apps/browser/tests -p 'test_browser*.py'
 npm --prefix apps/browser test
 npm --prefix apps/browser run test:ui
+npm --prefix apps/browser run test:consent  # Linux: Xvfb, libX11/libXtst and ffmpeg
 python3 -m unittest discover -s apps/speech/tests -p 'test_local_transcription.py'
 python3 -m unittest tests.unit.runtime_tools.test_browser_execution_closure
 ```

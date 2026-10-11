@@ -1,21 +1,21 @@
-// Reuse only Browser in the chosen Chrome profile and Maverick origin.
+// The user's Connect action may bring any existing Maverick shell to Browser.
+const isShell = (value, origin) => {
+  try {
+    const url = new URL(value);
+    return url.origin === origin && !url.username && !url.password
+      && (url.pathname === "/" || /^\/app(?:\/|$)/u.test(url.pathname));
+  } catch {return false;}
+};
 export async function openConnectorWindow(url, {sourceTabId, reuse = true} = {}) {
   if (reuse) {
-    const tabs = await chrome.tabs.query({url: `${url.origin}/app/browser*`});
-    const candidates = tabs.filter(tab => {
-      try {
-        const current = new URL(tab.url);
-        return tab.id !== sourceTabId && current.origin === url.origin && current.pathname === "/app/browser";
-      } catch { return false; }
-    }).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+    const tabs = await chrome.tabs.query({url: `${url.origin}/*`});
+    const candidates = tabs.filter(tab => tab.id !== sourceTabId && isShell(tab.url, url.origin))
+      .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
     for (const tab of candidates) {
       // A tab can close between discovery and selection. Recheck before navigating.
       let current;
       try { current = await chrome.tabs.get(tab.id); } catch { continue; }
-      try {
-        const address = new URL(current.url);
-        if (address.origin !== url.origin || address.pathname !== "/app/browser") continue;
-      } catch { continue; }
+      if (!isShell(current.url, url.origin)) continue;
       const connector = await chrome.tabs.update(tab.id, {url: url.href, active: true});
       await chrome.windows.update(connector.windowId, {focused: true});
       return connector;

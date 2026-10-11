@@ -45,7 +45,7 @@ try {
   assert.equal(await frame.locator("#url").count(), 0, "The app bundle has not executed yet");
   assert.equal(reads, 0);
   releaseBundle();
-  await frame.waitForSelector("#url");
+  await frame.waitForSelector("#url", {state:"attached"});
   await frame.waitForFunction(() => document.querySelector("#tab-count").textContent === "0");
   assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
   assert.equal(await frame.locator("#url").inputValue(), `${platform}/app/browser?connector=1`);

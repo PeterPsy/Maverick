@@ -24,14 +24,20 @@ An empty public URL is accepted only for a dedicated agent connection. Read/medi
 operations require navigation first; tabs and navigation/collection work while empty.
 Platform home pages are approved content routes. Sharing a profile never binds
 navigation to that profile.
-The popup requests optional permissions for the selected platform or dedicated
-tab’s approved platforms, chosen Maverick origin and its isolated app-frame namespace, then opens the stable
-`/app/browser?connector=1` shell route. Companion 0.5.2 defaults to reusing the most
-recent Browser tab at the exact chosen Maverick origin in the same Chrome profile,
+The official Maverick address is preconfigured in Companion; other installations
+can change Connection settings. The popup sends the selected tab and destination
+to the worker within its button gesture. The worker synchronously requests optional
+permissions for the selected platform or dedicated tab's approved platforms,
+Maverick origin and isolated app-frame namespace, then completes setup even if
+Chrome closes the popup during the native consent dialog. Concurrent requests are
+deduplicated; denial never starts sharing. It then opens the stable
+`/app/browser?connector=1` shell route. Companion 0.5.3 defaults to reusing the most
+recent Maverick shell tab at the exact chosen origin in the same Chrome profile,
 with a fresh document for the new binding. It rechecks the candidate before
-navigation, excludes the source tab and never redirects another app. The popup
+navigation, excludes the source tab, private/API routes and other origins. The
+user's Connect action can move an existing Chat or other app tab to Browser. The popup
 can disable reuse. A dedicated connector window remains the fallback when no
-matching Browser tab exists; desktop applications and other browser profiles
+matching Maverick tab exists; desktop applications and other browser profiles
 cannot be selected through Chrome's tabs API. The shared agent/platform tab is
 the navigation target; Browser is the authenticated bridge. Chrome 120
 or later is required. The connector uses ordinary Core-hosted backend calls and a
@@ -53,7 +59,7 @@ Browser Lab with public-page reading, health and individual session closure.
 The existing shell/App Store `language` glyph owns Browser's native icon
 presentation; no Browser-specific platform rendering branch or raster override
 is added. The app header uses an inline vector and the favicon an app-owned SVG.
-Companion 0.5.2 packages its reproducible ZIP as a Vite-imported, hashed public
+Companion 0.5.3 packages its reproducible ZIP as a Vite-imported, hashed public
 asset under `/apps/browser/assets/`, with immutable manifest/cache metadata.
 Download uses the platform origin and requires no login or app-frame cookie.
 The copied connector address uses the stable platform shell route, never an
@@ -81,7 +87,11 @@ permissions produce setup instructions rather than raw error codes. Share is
 disabled on unsupported pages and during setup. Installing Companion alone or
 opening `/app/browser?connector=1` manually does not select a platform tab.
 The selected Browser document announces bridge readiness; the frontend probes
-its worker status and enables Connect only after that response. Late attachment
+its worker status and enables Connect only after that response. A new user-selected
+sharing generation requesting automatic setup starts the authenticated lease once,
+after any human sign-in, without another Connect press. Launch URLs and ready
+messages alone cannot start it. Automatic failure retains manual retry; repeated
+ready/wake events do not create a retry loop. Late attachment
 retries an in-flight or timed-out probe. Start failures leave “Connecting…” and
 permit retry, without creating a backend lease for an unattached window.
 
@@ -129,7 +139,7 @@ it does not request another app's protected media routes. Collections expose
 items, per-page progress, stop reasons and coverage independently of raw JSON.
 
 Management verification includes 81 Python tests (including the built document
-and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 48 Node
+and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 52 Node
 tests, an offline Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
 public-page form, 320/390px layout, image/video/collection rendering and blob
 cleanup), a cross-origin shell fixture with platform-served bundles, a protected
@@ -182,6 +192,15 @@ observed an extension-unavailable stop and a later 0.5.1 heartbeat lapse; the ta
 probe stayed queued and was cancelled without revoking the human's connection.
 Those failed live probes are not successful page observations. The final release
 still needs a fresh human connection before live platform access can be confirmed.
+The 0.5.3 setup removes copy/paste on the official installation, owns consent in
+the service worker and reuses Maverick even when another app is visible. A real
+human-owned 0.5.2 connection completed a tabs probe on its empty agent tab, confirming
+live transport; no real authenticated platform content was requested. The separate
+Xvfb Chromium `--permissions` fixture uses the unmodified production manifest,
+closes the action popup before granting Chrome's native permission dialog and
+requires sharing and authenticated auto-connect to continue after that one click.
+The normal fixture separately verifies reuse from Chat and automatic connection
+without a Browser button press. Neither fixture proves access to Instagram accounts.
 
 ## Ownership, transport and queues
 

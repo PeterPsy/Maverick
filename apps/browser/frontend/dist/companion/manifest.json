@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Maverick Browser Companion",
   "description": "Share a platform tab or a dedicated agent tab for navigation, reading and media analysis with Maverick.",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "minimum_chrome_version": "120",
   "permissions": ["activeTab", "scripting", "storage", "tabCapture", "offscreen", "alarms"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://*.localhost/*"],

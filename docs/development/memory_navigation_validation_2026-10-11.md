@@ -19,6 +19,42 @@
 
 Architecture: [Memory retrieval and navigation](../architecture/memory_navigation_architecture.md).
 
+## Follow-up review of `abfda5bf`
+
+The review reproduced four defects on temporary data and DOM fixtures:
+
+1. Three critical edges of one kind returned two edges with
+   `critical_has_more=false`. An additional edge per kind now detects overflow;
+   the existing two-edge reservation and kind priority are preserved.
+2. A source-only hit survived a missing/corrupted stored passage, returning an
+   unrelated fact with reason `Matches a current source passage`. Context and
+   evidence search now remove failed source match channels, retaining valid other
+   channels. Rejected indexed positions still advance cursors; tests cover empty
+   continuing pages and byte-budget truncation without duplicate/lost valid IDs.
+3. Replacing evidence changed `verified` to `conflict` without changing the fact's
+   timestamp, so the open inspector kept old quotes and verification. Compact
+   `state_revision` fingerprints now invalidate sections, requests and previews
+   when compilation/evidence/source/queue state changes; the current tab is kept.
+4. Loading the source list after live evidence could overwrite `unverified/stale`
+   with indexed `verified/current`. Section merging preserves live observations
+   within the same state revision and discards cached sections across revisions.
+
+Five backend regressions and three real React hook lifecycle regressions were
+added. The DOM-only dependency is development-only; no production visualization
+dependency or graph engine was added. The pre-fix tests failed on the reproduced
+cases. Follow-up verification passed:
+
+- Memory: 149 tests run, two expected skips (147 passing), including all five
+  added backend regressions and the existing numeric/provenance safeguards.
+- Frontend: 18 Vitest tests passing, including three hook lifecycle regressions;
+  TypeScript and official hosted frontend rebuild passed.
+- Chat: 15 learning-review tests and the real Memory save/evidence test passed.
+- SDK source validation passed; Memory's audited CLI/MCP execution hashes and
+  the focused Core navigation/effect admission test were refreshed and passed.
+- Unused imports and scoped diff checks passed. The fixes add no visual/layout
+  changes; a fresh hosted browser session was not part of this follow-up. DOM
+  lifecycle tests exercise actual React effects, request cancellation and merges.
+
 ## Synthetic retrieval measurements
 
 Reproduce with `python3 apps/memory/tests/retrieval_benchmark.py`. The script creates
@@ -28,18 +64,18 @@ parallel related edge and contradiction for exploration. It never opens workspac
 Memory data. JSON bytes use Python's UTF-8 `ensure_ascii=False` serialization;
 SELECT counts include read revision/state projection queries and recursive WITH.
 
-Observed final run:
+Observed follow-up review run (elapsed time varies with host load):
 
 | Operation | SELECT/WITH statements | JSON bytes | Local elapsed |
 | --- | ---: | ---: | ---: |
-| Map, 100 nodes | 10 | 108,319 | 14.92 ms |
-| Searched map, same 100 nodes | 13 | 108,319 | 46.64 ms |
-| Context, textual limit 8 | 28 | 8,840 | 50.39 ms |
-| One card | 13 | 930 | 5.93 ms |
-| Explicit full inspection | 25 | 450,261 | 15.14 ms |
-| Ten history headers | 14 | 2,526 | 8.26 ms |
-| Five cards, one call | 13 | 5,273 | 5.43 ms |
-| Three graph edges / three cards | 15 | 3,382 | 7.50 ms |
+| Map, 100 nodes | 10 | 112,919 | 7.68 ms |
+| Searched map, same 100 nodes | 13 | 112,919 | 23.69 ms |
+| Context, textual limit 8 | 28 | 8,840 | 24.03 ms |
+| One card | 13 | 976 | 3.77 ms |
+| Explicit full inspection | 25 | 450,261 | 8.52 ms |
+| Ten history headers | 14 | 2,572 | 3.39 ms |
+| Five cards, one call | 13 | 5,503 | 3.56 ms |
+| Three graph edges / three cards | 15 | 3,520 | 4.58 ms |
 
 The map avoids detailed hydration: searched and unsearched projections have the
 same payload and query counts stay bounded as node count grows. The supplied
@@ -47,6 +83,8 @@ report's 516-SELECT searched-map result is a useful prior observation, not a
 controlled before/after latency experiment with this fixture. State-rich cards
 are larger than the former bare map summary; the UI defaults to thirty cards and
 caps its visible subgraph at forty.
+The review's state fingerprint adds 46 serialized bytes per card and no SQL
+statements in this fixture. The compact context's byte size remains unchanged.
 
 The context returns seven items within its byte budget and correctly reports
 `retrieval_has_more=true`, a search cursor and a non-exact/null total. Tests also

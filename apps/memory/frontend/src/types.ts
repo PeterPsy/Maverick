@@ -23,6 +23,9 @@ export type GraphNode = {
   metadata?: Record<string, unknown>;
   status?: string;
   revision?: string;
+  state_revision?: string;
+  state_observation?: string;
+  freshness?: string;
   reason?: string;
   verification?: string;
   compilation_state?: string;

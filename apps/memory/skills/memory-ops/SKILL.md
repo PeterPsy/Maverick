@@ -32,6 +32,10 @@ explicit; they are not proof. Follow `search_next_cursor` while
 `budget_omitted_node_ids` describe already retrieved items omitted by bytes:
 batch their cards separately. `total_candidate_count` is null unless the first
 page exhausts the candidates; do not infer an exact total from a limited page.
+When `critical_has_more` is true, explore the selected nodes with
+`kinds=["contradicts","supersedes"]` and follow the exploration cursor.
+An empty evidence page can still have search continuation after invalid source
+matches were rejected; follow its cursor rather than treating it as exhaustion.
 
 Explore one to five known nodes without loading bodies or revisions:
 
@@ -66,6 +70,10 @@ explicit unbudgeted audit read, so avoid it during ordinary reasoning.
 budget or choose a card. Search defaults to cards; `detail=evidence` adds compact
 proof and source matches. Queued compilation does not block existing source
 access: evidence includes `available_source_chunks` to fetch immediately.
+Use a card's `state_revision` to invalidate cached evidence, sources and compiled
+state. The fact's `updated_at`/`revision` alone does not change for every evidence
+update. Indexed card indicators do not supersede a live observation from evidence
+inspection of the same state revision.
 
 For source-level evidence, use Memory source primitives instead of reading `data/memory/` files:
 

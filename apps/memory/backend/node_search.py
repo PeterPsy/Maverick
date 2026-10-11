@@ -41,12 +41,18 @@ def search_page(data_root: Path, body: dict, *, scope: dict | None = None) -> di
             card = cards[candidate['id']]
             card.update(relevance=candidate['relevance'],match_sources=candidate['match_sources'],reason=selection_reason(candidate,scope))
             items.append(card)
+        page_options = {}
         if detail == 'evidence':
             from context_payloads import agent_compact_memory_item, MEMORY_CONTEXT_COMPACTION_LEVELS
             from retrieval_projections import compact_projections
-            from retrieval import memory_node_result, source_chunk_matches_by_node
+            from retrieval import memory_node_result
+            from source_candidate_validation import validated_source_candidates
+            indexed_page = candidates[:limit]
+            positions = {candidate['id']:index for index,candidate in enumerate(indexed_page)}
+            validated, matches = validated_source_candidates(db,data_root,query,indexed_page,limit=limit)
+            items = [{**cards[candidate['id']], 'match_sources':candidate['match_sources'],
+                      'reason':selection_reason(candidate,scope)} for candidate in validated]
             projections = compact_projections(db,[item['id'] for item in items],data_root=data_root)
-            matches = source_chunk_matches_by_node(db,data_root,query,node_ids=[item['id'] for item in items],limit=limit+1)
             evidence_items = []
             for item in items:
                 evidence = memory_node_result(db,data_root,{**item,'source_chunk_matches':matches.get(item['id'],[])},
@@ -57,8 +63,12 @@ def search_page(data_root: Path, body: dict, *, scope: dict | None = None) -> di
                         break
                 evidence_items.append(compact)
             items = evidence_items
+            # A rejected indexed hit still consumes its original position. Keep
+            # search continuation separate from any byte-budget truncation.
+            page_options = {'item_offsets':[offset+positions[item['id']]+1 for item in items],
+                            'continuation_offset':offset+len(indexed_page) if len(candidates)>limit else None}
         return bounded_page(items,key='results',base={'query':query[:420],'snapshot_id':binding,'detail':detail},
-                            limit=limit,offset=offset,binding=binding,max_bytes=budget)
+                            limit=limit,offset=offset,binding=binding,max_bytes=budget,**page_options)
 
 
 def selection_reason(candidate: dict, scope: dict | None) -> str:

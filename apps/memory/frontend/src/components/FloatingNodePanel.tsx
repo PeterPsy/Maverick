@@ -19,7 +19,7 @@ type FloatingNodePanelProps = {
 
 export function FloatingNodePanel(props: FloatingNodePanelProps) {
   if (!props.node) return null;
-  return <NodePanel key={`${props.node.id}:${props.node.updated_at}`} {...props} node={props.node as NodeDetails} />;
+  return <NodePanel key={props.node.id} {...props} node={props.node as NodeDetails} />;
 }
 
 function NodePanel({ node, relationships, connectionsMore, connectionsLoading, onMoreConnections, onClose, onSelect, onBack }: FloatingNodePanelProps & { node: NodeDetails }) {
@@ -66,7 +66,7 @@ function NodePanel({ node, relationships, connectionsMore, connectionsLoading, o
       {connectionsMore && <button type="button" disabled={connectionsLoading} onClick={onMoreConnections}>{connectionsLoading ? "Loading…" : "More connections"}</button>}
     </section>}
     {section === "sources" && <>
-      <MemoryEvidence node={details} />
+      <MemoryEvidence key={details.state_revision || details.updated_at} node={details} />
       {cursors.evidence && <button type="button" disabled={busy} onClick={() => void load("evidence", true)}>More evidence</button>}
       {cursors.sources && <button type="button" disabled={busy} onClick={() => void load("sources", true)}>More sources</button>}
       <div className="reference-list">{(details.external_refs || details.sources?.flatMap((source) => source.external_ref ? [source.external_ref] : []) || []).map((ref) => <div className="reference-card" key={ref.id}>

@@ -3,6 +3,7 @@
 import sqlite3
 
 from database import row_payload
+from retrieval_pages import fingerprint
 
 CARD_FIELDS = """n.id, n.type, substr(n.title,1,240) AS title,
     substr(CASE WHEN n.summary != '' THEN n.summary ELSE n.body_text END,1,360) AS summary,
@@ -45,7 +46,8 @@ def node_cards(db: sqlite3.Connection, node_ids: list[str]) -> list[dict]:
         (SELECT 1 FROM sources s WHERE s.id=ct.source_id AND s.status='active' AND s.current_version_id=ct.source_version_id)
         WHERE cl.node_id IN ({marks}) AND cl.status='active' GROUP BY cl.node_id""", node_ids)}
     source_states = {row['node_id']: dict(row) for row in db.execute(f"""SELECT nl.node_id,
-        count(*) AS source_count, max(COALESCE(json_extract(s.metadata_json,'$.stale'),0)
+        count(*) AS source_count, max(s.updated_at) AS updated_at,
+        max(COALESCE(json_extract(s.metadata_json,'$.stale'),0)
           OR COALESCE(json_extract(s.metadata_json,'$.source_stale'),0)) AS stale_source
         FROM node_source_links nl JOIN sources s ON s.id=nl.source_id AND s.status='active'
         WHERE nl.node_id IN ({marks}) GROUP BY nl.node_id""", node_ids)}
@@ -65,7 +67,8 @@ def node_cards(db: sqlite3.Connection, node_ids: list[str]) -> list[dict]:
             verification = 'conflict' if indicators.get('contradiction_count') else 'verified' if indicators.get('claim_count') and indicators['claim_count'] == indicators['supported_claim_count'] else 'unverified'
         job = jobs.get(node_id, {})
         compilation = job.get('status') if job.get('status') in ('pending','running') or job.get('updated_at','')>page.get('compiled_at','') else fresh
-        node.update(node_id=node_id, revision=node['updated_at'], freshness=fresh,
+        node.update(node_id=node_id, revision=node['updated_at'],
+                    state_revision=fingerprint([node['updated_at'],page,job,indicators,sources]), freshness=fresh,
                     verification=verification, compilation_state=compilation or fresh,
                     source_state='stale' if sources.get('stale_source') else 'current' if sources else 'unknown',
                     evidence={key: indicators.get(key, 0) for key in ('claim_count','support_count','contradiction_count')},

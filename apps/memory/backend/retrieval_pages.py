@@ -47,12 +47,16 @@ def byte_count(value: object) -> int:
 
 
 def bounded_page(items: list[dict], *, key: str, base: dict, limit: int, offset: int,
-                 binding: str, max_bytes: int) -> dict:
+                 binding: str, max_bytes: int, item_offsets: list[int] | None = None,
+                 continuation_offset: int | None = None) -> dict:
     selected = items[:limit]
     while True:
-        has_more = len(items) > len(selected)
+        remaining = len(items) > len(selected)
+        has_more = remaining or continuation_offset is not None
+        selected_offset = item_offsets[len(selected)-1] if item_offsets and selected else offset+len(selected)
+        next_offset = selected_offset if remaining else continuation_offset
         payload = {**base, key: selected, "has_more": has_more,
-                   "next_cursor": page_cursor(offset + len(selected), binding) if has_more else None,
+                   "next_cursor": page_cursor(next_offset, binding) if has_more else None,
                    "omitted_for_budget": min(limit, len(items)) - len(selected),
                    "stop_reason": "budget" if len(selected) < min(limit, len(items)) else "limit" if has_more else "end"}
         if byte_count(payload) <= max_bytes:

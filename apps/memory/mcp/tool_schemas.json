@@ -118,6 +118,7 @@
                 "title": {"type": "string"},
                 "status": {"type": "string"},
                 "revision": {"type": "string"},
+                "state_revision": {"type": "string", "description": "Indexed fact/evidence/source/compilation state; may change without editing the fact revision."},
                 "verification": {"enum": ["unverified", "verified", "conflict"]},
                 "compilation_state": {"type": "string"},
                 "details_available": {"type": "array", "items": {"type": "string"}}
@@ -533,6 +534,7 @@
             "type": "object",
             "required": ["id", "title"],
             "properties": {
+              "state_revision": {"type": "string", "description": "Invalidate cached sections when this indexed state changes, even if updated_at is unchanged."},
               "claims": {"type": "array", "items": {"type": "object"}},
               "citations": {"type": "array", "items": {"type": "object"}},
               "sources": {"type": "array", "items": {"type": "object"}},
@@ -946,6 +948,7 @@
                 "title": {"type": "string"},
                 "status": {"type": "string"},
                 "revision": {"type": "string"},
+                "state_revision": {"type": "string", "description": "Indexed fact/evidence/source/compilation state; may change without editing the fact revision."},
                 "verification": {"enum": ["unverified", "verified", "conflict"]},
                 "compilation_state": {"type": "string"},
                 "details_available": {"type": "array", "items": {"type": "string"}}
@@ -1032,6 +1035,7 @@
                 "title": {"type": "string"},
                 "status": {"type": "string"},
                 "revision": {"type": "string"},
+                "state_revision": {"type": "string", "description": "Indexed fact/evidence/source/compilation state; may change without editing the fact revision."},
                 "verification": {"enum": ["unverified", "verified", "conflict"]},
                 "compilation_state": {"type": "string"},
                 "details_available": {"type": "array", "items": {"type": "string"}}

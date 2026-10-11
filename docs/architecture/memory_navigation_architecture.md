@@ -49,7 +49,15 @@ exhausted first page; otherwise the total is null. Up to two critical edges and
 their outside neighbors are considered even when text hits fill `limit`. One
 contradiction and one supersession receive priority when both exist. These
 neighbors precede text results during byte compaction. `critical_has_more` directs
-the caller to explore remaining critical relationships.
+the caller to explore remaining critical relationships, including when all of
+them have the same kind. Each kind reads an additional edge to detect overflow.
+
+Context and `search` with `detail=evidence` validate source-channel matches against
+integrity-checked stored passages. A failed or missing passage removes that match
+channel; a source-only candidate is omitted. Valid node/identity/wiki/claim matches
+remain available. Continuation advances over the original indexed positions even
+when an entire page is rejected, and byte limits include the resulting cursor.
+Card search remains an inexpensive indexed discovery surface.
 
 `exploration.py` follows incoming/outgoing/both edges, optional kinds and scope,
 from one to five seeds. Default depth is one, explicit maximum two. Recursive
@@ -77,6 +85,15 @@ Card state is explicitly an **indexed observation**. Selective evidence and full
 inspection observe live source currency. Confidence, user confirmation, supporting
 verification and inferred relationships remain different fields. Reading a card
 does not assert that its original document has just been re-read.
+
+Cards include `state_revision`, a bounded indexed-state fingerprint covering the
+fact, compiled page, queue indicators, evidence counts and active source updates.
+It can change without editing the fact's `updated_at`/`revision`. The inspector
+invalidates cached sections and pending reads on this state change while keeping
+the selected tab. Within one state revision, live verification/source/freshness
+observations survive later content/source/history reads that supply indexed cards.
+Evidence previews are reset with the state revision too. The fingerprint does not
+claim to observe external files that have changed outside Memory's index.
 
 ## Deferred compilation
 

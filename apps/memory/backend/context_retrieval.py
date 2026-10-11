@@ -6,10 +6,11 @@ from context_payloads import agent_compact_context_payload
 from database import connect, ensure_schema, normalize_limit, record_event
 from exploration import traversal_edges
 from node_search import search_candidates_page, selection_reason
-from retrieval import memory_node_result, source_chunk_matches_by_node
+from retrieval import memory_node_result
 from retrieval_cards import node_cards
 from retrieval_pages import fingerprint, page_cursor, page_offset, response_budget, retrieval_revision
 from retrieval_projections import compact_projections
+from source_candidate_validation import validated_source_candidates
 
 
 def context_payload(data_root: Path, query: str, *, limit: int = 8, record_access_event: bool = False,
@@ -22,12 +23,13 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
         binding = fingerprint([query,scope,retrieval_revision(db),'context'])
         offset = page_offset(cursor,binding)
         candidates = search_candidates_page(db,query,limit=limit,scope=scope,offset=offset)
-        direct = candidates[:limit]
+        indexed_direct = candidates[:limit]
+        direct, matches = validated_source_candidates(db,data_root,query,indexed_direct,limit=limit)
         direct_ids = [candidate['id'] for candidate in direct]
-        critical_groups = [traversal_edges(db,direct_ids,direction='both',kinds=[kind],depth=1,scope=scope,limit=2)
+        critical_groups = [traversal_edges(db,direct_ids,direction='both',kinds=[kind],depth=1,scope=scope,limit=3)
                            for kind in ('contradicts','supersedes')] if direct_ids else []
         # Reserve one of each kind before taking a second of either kind.
-        critical_candidates = [group[index] for index in range(2) for group in critical_groups if len(group)>index]
+        critical_candidates = [group[index] for index in range(3) for group in critical_groups if len(group)>index]
         critical = critical_candidates[:2]
         reserved_ids = list(dict.fromkeys(value for edge in critical for value in (edge['source'],edge['target']) if value not in direct_ids))[:2]
         related = []
@@ -40,7 +42,6 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
         ids = reserved_ids+direct_ids+related_ids
         cards = node_cards(db,ids)
         projections = compact_projections(db,ids,data_root=data_root)
-        matches = source_chunk_matches_by_node(db,data_root,query,node_ids=direct_ids,limit=limit)
         by_id = {candidate['id']:candidate for candidate in direct}
         marks = ','.join('?' for _ in ids)
         bodies = {row['id']:row['body'] for row in db.execute(f'SELECT id,substr(body_text,1,520) AS body FROM nodes WHERE id IN ({marks})',ids)} if ids else {}
@@ -59,7 +60,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
             items.append(item)
         search_more = len(candidates)>limit
         payload = agent_compact_context_payload(query,items,requested_limit=limit,max_bytes=budget,
-            retrieval_metadata={'retrieval_has_more':search_more,'search_next_cursor':page_cursor(offset+len(direct),binding) if search_more else None,
+            retrieval_metadata={'retrieval_has_more':search_more,'search_next_cursor':page_cursor(offset+len(indexed_direct),binding) if search_more else None,
                                 'total_candidate_count':len(direct) if not search_more and offset == 0 else None,
                                 'candidate_count_is_exact':not search_more and offset == 0,'snapshot_id':binding,
                                 'critical_edges':critical,'critical_has_more':len(critical_candidates)>2,

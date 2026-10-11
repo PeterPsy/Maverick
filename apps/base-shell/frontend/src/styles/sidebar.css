@@ -1,5 +1,6 @@
 .bs-sidebar {
   --bs-sidebar-glass-radius: 34px;
+  --bs-sidebar-rail-radius: 18px;
   --bs-sidebar-control-radius: 18px;
   --bs-sidebar-cell-radius: 22px;
   --bs-sidebar-soft-surface-hover: var(--maverick-surface-hover);
@@ -12,9 +13,7 @@
   --bs-sidebar-composer-shadow:
     var(--bs-sidebar-glass-edge),
     0 24px 80px var(--maverick-shadow-panel);
-  --bs-sidebar-rail-shadow:
-    inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.032),
-    0 24px 80px var(--maverick-shadow-panel);
+  --bs-sidebar-rail-shadow: var(--bs-sidebar-composer-shadow);
   --bs-sidebar-rail-padding-block: 0.34rem;
   --bs-sidebar-rail-padding-inline: 0.42rem;
   position: fixed;
@@ -104,7 +103,7 @@
   z-index: 4;
   overflow: visible;
   box-shadow: var(--bs-sidebar-rail-shadow);
-  border-radius: var(--bs-sidebar-glass-radius);
+  border-radius: var(--bs-sidebar-rail-radius);
   transition:
     border-radius 220ms ease,
     opacity 160ms ease,

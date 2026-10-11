@@ -70,11 +70,13 @@ def agent_compact_context_payload(
     items: list[dict[str, Any]],
     *,
     requested_limit: int,
+    max_bytes: int = MEMORY_CONTEXT_TARGET_BYTES,
+    retrieval_metadata: dict | None = None,
 ) -> dict[str, Any]:
     """Return a bounded Memory context payload suitable for agent provider context."""
     for options in MEMORY_CONTEXT_COMPACTION_LEVELS:
-        payload = build_agent_context_payload(query, items, requested_limit=requested_limit, options=options)
-        if json_byte_len(payload) <= MEMORY_CONTEXT_TARGET_BYTES:
+        payload = build_agent_context_payload(query, items, requested_limit=requested_limit, options=options, retrieval_metadata=retrieval_metadata)
+        if json_byte_len(payload) <= max_bytes:
             return payload
 
     tight_options = MEMORY_CONTEXT_COMPACTION_LEVELS[-1]
@@ -86,17 +88,23 @@ def agent_compact_context_payload(
             requested_limit=requested_limit,
             options=tight_options,
             omitted_item_count=len(items) - len(included),
+            retrieval_metadata=retrieval_metadata,
         )
-        if json_byte_len(payload) <= MEMORY_CONTEXT_TARGET_BYTES:
+        if json_byte_len(payload) <= max_bytes:
             return payload
         included.pop()
-    return build_agent_context_payload(
+    payload = build_agent_context_payload(
         query,
         [],
         requested_limit=requested_limit,
         options=tight_options,
         omitted_item_count=len(items),
+        retrieval_metadata=retrieval_metadata,
     )
+    if json_byte_len(payload) > max_bytes:
+        from errors import MemoryValidationError
+        raise MemoryValidationError('max_bytes is too small for the context continuation; increase the budget or lower the limit.')
+    return payload
 
 
 def build_agent_context_payload(
@@ -106,11 +114,14 @@ def build_agent_context_payload(
     requested_limit: int,
     options: dict[str, int],
     omitted_item_count: int = 0,
+    retrieval_metadata: dict | None = None,
 ) -> dict[str, Any]:
     compact_items = [agent_compact_memory_item(item, options=options) for item in items]
     query_text = normalize_spaces(query)
     query_snippet = bounded_text(query_text, MEMORY_CONTEXT_QUERY_SNIPPET_CHARS)
+    metadata = retrieval_metadata or {}
     return {
+        **metadata,
         "query": query_snippet,
         "query_snippet": query_snippet,
         "query_char_count": len(query_text),
@@ -118,18 +129,24 @@ def build_agent_context_payload(
         "profile": MEMORY_CONTEXT_PROFILE,
         "requested_limit": requested_limit,
         "item_count": len(compact_items),
-        "total_candidate_count": len(items) + omitted_item_count,
-        "has_more": omitted_item_count > 0,
+        "total_candidate_count": metadata.get('total_candidate_count', metadata.get('retrieved_candidate_count', len(items) + omitted_item_count)) if metadata.get('candidate_count_is_exact', True) else None,
+        "has_more": bool(metadata.get('retrieval_has_more')) or omitted_item_count > 0,
+        "omitted_for_budget": omitted_item_count,
+        "budget_omitted_node_ids": metadata.get('view', {}).get('node_ids', [])[len(items):] if omitted_item_count else [],
         "omitted_item_count": omitted_item_count,
         "items": compact_items,
         "expand": {
             "node_tool": "memory_inspect_node",
-            "node_arguments": {"node_id": "<items[].node_id>"},
+            "node_arguments": {"node_id": "<items[].node_id>", "detail": "evidence"},
+            "neighbors_tool": "memory_explore",
+            "neighbors_arguments": {"node_ids": ["<items[].node_id>"], "depth": 1},
+            "cards_tool": "memory_get_nodes",
             "source_chunks_tool": "memory_fetch_chunks",
             "source_chunks_arguments": {"chunk_ids": "<items[].source_chunk_matches[].chunk_id>"},
             "note": (
-                "Use memory_inspect_node for full node body, compiled wiki body, claims, citations, "
-                "sources, and lint findings; use memory_fetch_chunks for source chunk body text."
+                "Explore connections with memory_explore; batch cards with memory_get_nodes. "
+                "Select evidence, content, sources or history on memory_inspect_node; "
+                "use memory_fetch_chunks for integrity-checked original passages."
             ),
         },
     }
@@ -156,6 +173,10 @@ def agent_compact_memory_item(item: dict[str, Any], *, options: dict[str, int]) 
         "status": item.get("status") or node.get("status") or "active",
         "importance": item.get("importance") if item.get("importance") is not None else node.get("importance"),
         "confidence": item.get("confidence") if item.get("confidence") is not None else node.get("confidence"),
+        "revision": item.get("revision") or item.get("updated_at"),
+        "compilation_state": item.get("compilation_state", "unknown"),
+        "verification": item.get("verification", "unverified"),
+        "details_available": item.get("details_available", []),
         "body_text_char_count": item.get("body_text_char_count", len(body_text)),
         "body_text_truncated": bool(body_text and (body_snippet != normalize_spaces(body_text) or item.get("body_text_char_count", len(body_text)) > len(body_text))),
         "match_sources": string_list(item.get("match_sources")),

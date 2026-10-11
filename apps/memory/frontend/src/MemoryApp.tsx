@@ -3,10 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateNodeModal } from "./components/CreateNodeModal";
 import { GraphCanvas } from "./components/GraphCanvas";
 import { PreviewContextModal, type PreviewContextItem } from "./components/PreviewContextModal";
-import { notifyActiveMemorySelection } from "./lib/activeMemorySelection";
+import { useMemoryExploration } from "./hooks/useMemoryExploration";
 import { nodeIdFromParams, scalarString, shouldOpenCreateNode, shouldOpenPreviewContext } from "./lib/memoryNavigationParams";
 import { callMemory, currentMemoryAppId, MemoryApiError, normalizeViewFilter } from "./memoryApi";
-import type { GraphEdge, GraphNode, NodeDetails, NodeDraft, ViewFilter } from "./types";
+import { contextIdsFromParams, mergeSubgraph, type Subgraph } from "./lib/graphSubgraph";
+import type { GraphEdge, GraphNode, NodeDraft, ViewFilter } from "./types";
 
 const defaultDraft = { title: "", body: "", type: "note" };
 
@@ -20,15 +21,12 @@ export function MemoryApp() {
   const graphAbortRef = useRef<AbortController | null>(null);
   const graphRequestSeqRef = useRef(0);
   const nodesRef = useRef<GraphNode[]>([]);
+  const edgesRef = useRef<GraphEdge[]>([]);
   const previewAbortRef = useRef<AbortController | null>(null);
   const previewRequestSeqRef = useRef(0);
-  const selectAbortRef = useRef<AbortController | null>(null);
-  const selectRequestSeqRef = useRef(0);
   const viewFilterRequestSeqRef = useRef(0);
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedDetails, setSelectedDetails] = useState<NodeDetails | null>(null);
   const [query, setQuery] = useState("");
   const [viewFilter, setViewFilter] = useState<ViewFilter>(() => normalizeViewFilter());
   const [draft, setDraft] = useState<NodeDraft>(defaultDraft);
@@ -39,49 +37,42 @@ export function MemoryApp() {
   const [previewContextLoading, setPreviewContextLoading] = useState(false);
   const [previewContextItems, setPreviewContextItems] = useState<PreviewContextItem[]>([]);
   const [previewContextQuery, setPreviewContextQuery] = useState("");
+  const [previewContextSnapshot, setPreviewContextSnapshot] = useState("");
   const [previewContextError, setPreviewContextError] = useState("");
   const [error, setError] = useState("");
   const consumedCreateRequests = useRef<Set<string>>(new Set());
   const consumedPreviewRequests = useRef<Set<string>>(new Set());
   const consumedLegacyCreateRequest = useRef(false);
   const consumedLegacyPreviewRequest = useRef(false);
-  const selectedIdRef = useRef<string | null>(null);
+  const focusedGraphRef = useRef<Subgraph | null>(null);
+  const localContextRef = useRef<string[] | null>(null);
+  const [contextSnapshot, setContextSnapshot] = useState("");
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const selectedNode = selectedId ? nodeById.get(selectedId) || selectedDetails || null : null;
-
-  useEffect(() => {
-    nodesRef.current = nodes;
-  }, [nodes]);
 
   const hydrateGraph = useCallback((payload: { nodes?: GraphNode[]; edges?: GraphEdge[] }) => {
-    const center = { x: 450, y: 310 };
-    setNodes((current) => {
-      const existing = new Map(current.map((node) => [node.id, node]));
-      const incoming = payload.nodes || [];
-      return incoming.map((node, index) => {
-        const previous = existing.get(node.id);
-        const angle = (index / Math.max(1, incoming.length)) * Math.PI * 2;
-        const radius = 110 + Math.min(280, incoming.length * 10);
-        return {
-          ...node,
-          x: previous?.x ?? center.x + Math.cos(angle) * radius,
-          y: previous?.y ?? center.y + Math.sin(angle) * radius,
-          vx: previous?.vx ?? 0,
-          vy: previous?.vy ?? 0,
-          radius: 13 + Math.min(13, Number(node.importance ?? 0.5) * 15),
-        };
-      });
-    });
-    setEdges(payload.edges || []);
+    const graph = mergeSubgraph({ nodes: payload.nodes || [], edges: payload.edges || [] }, focusedGraphRef.current);
+    // Navigation can continue before React commits the graph render.
+    nodesRef.current = graph.nodes;
+    edgesRef.current = graph.edges;
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
   }, []);
+
+  const { selectedId, selectedDetails, selectedIdRef, selectNode, moreConnections, goBack, canGoBack, relationships, connectionCursor, connectionLoading } =
+    useMemoryExploration({ appId, focusedGraphRef, nodesRef, edgesRef, hydrateGraph, setError });
+  const selectedNode = selectedId ? nodeById.get(selectedId) || selectedDetails || null : null;
 
   const refreshGraph = useCallback(async (override: { query: string; viewFilter: ViewFilter }) => {
     setGraphLoading(true);
     const effectiveQuery = override.query;
     const effectiveViewFilter = override.viewFilter;
-    const body: Record<string, unknown> = { action: "graph", query: effectiveQuery, limit: 220 };
-    if (effectiveViewFilter.mode === "custom") {
+    const body: Record<string, unknown> = { action: "graph", query: effectiveQuery, limit: 30 };
+    if (localContextRef.current) {
+      body.node_ids = localContextRef.current;
+      body.query = "";
+      body.limit = Math.max(1, Math.min(40, localContextRef.current.length));
+    } else if (effectiveViewFilter.mode === "custom") {
       body.node_ids = effectiveViewFilter.refs.map((ref) => ref.entity_id).filter(Boolean);
     }
     graphAbortRef.current?.abort();
@@ -129,36 +120,6 @@ export function MemoryApp() {
     return next;
   }, [readViewFilter]);
 
-  const selectNode = useCallback(async (id: string | null) => {
-    selectAbortRef.current?.abort();
-    setSelectedId(id);
-    selectedIdRef.current = id;
-    if (!id) {
-      setSelectedDetails(null);
-      return;
-    }
-    notifyActiveMemorySelection(id, { ownerAppId: appId });
-    const controller = new AbortController();
-    selectAbortRef.current = controller;
-    const requestId = selectRequestSeqRef.current + 1;
-    selectRequestSeqRef.current = requestId;
-    try {
-      const payload = await callMemory<{ node: NodeDetails }>({ action: "inspect", node_id: id }, { signal: controller.signal });
-      if (controller.signal.aborted || requestId !== selectRequestSeqRef.current || selectedIdRef.current !== id) {
-        return;
-      }
-      setSelectedDetails(payload.node);
-      setError("");
-    } catch (inspectError) {
-      if (isCancelledRequest(inspectError)) {
-        return;
-      }
-      if (requestId === selectRequestSeqRef.current) {
-        setSelectedDetails(null);
-        setError(inspectError instanceof Error ? inspectError.message : "Unable to inspect node.");
-      }
-    }
-  }, [appId]);
 
   const refreshMemory = useCallback(() => {
     setGraphLoading(true);
@@ -176,21 +137,6 @@ export function MemoryApp() {
     refreshMemory();
   }, [refreshMemory]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let running = false;
-    const tick = async () => {
-      if (document.visibilityState !== "visible" || running) return;
-      running = true;
-      try { await callMemory({ action: "maintenance" }, { signal: controller.signal }); }
-      catch (problem) { if (!isCancelledRequest(problem)) setError(problem instanceof Error ? problem.message : "Unable to maintain memory."); }
-      finally { running = false; }
-    };
-    void tick();
-    const timer = window.setInterval(() => void tick(), 30_000);
-    return () => { controller.abort(); window.clearInterval(timer); };
-  }, []);
-
   const scheduleEventRefresh = useCallback(() => {
     if (eventRefreshTimerRef.current !== null) window.clearTimeout(eventRefreshTimerRef.current);
     eventRefreshTimerRef.current = window.setTimeout(() => {
@@ -205,7 +151,6 @@ export function MemoryApp() {
       if (eventRefreshTimerRef.current !== null) window.clearTimeout(eventRefreshTimerRef.current);
       graphAbortRef.current?.abort();
       previewAbortRef.current?.abort();
-      selectAbortRef.current?.abort();
     };
   }, []);
 
@@ -236,16 +181,7 @@ export function MemoryApp() {
     if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === appId) scheduleEventRefresh();
   }, scheduleEventRefresh), [appId, scheduleEventRefresh]);
 
-  const relationships = useMemo(() => {
-    if (!selectedId) return [];
-    const direct = selectedDetails ? [...(selectedDetails.outgoing_edges || []), ...(selectedDetails.incoming_edges || [])].map((edge) => ({
-      id: edge.id, source: edge.source_node_id, target: edge.target_node_id, kind: edge.kind, weight: edge.weight, confidence: edge.confidence, reason: edge.reason, other_title: edge.other_title, other_type: edge.other_type,
-    })) : edges.filter((edge) => edge.source === selectedId || edge.target === selectedId);
-    return direct.map((edge) => {
-      const otherId = edge.source === selectedId ? edge.target : edge.source;
-      return { ...edge, otherId, other: nodeById.get(otherId) || ("other_title" in edge ? { id: otherId, title: String(edge.other_title || otherId), type: String(edge.other_type || "note") } : undefined), direction: edge.source === selectedId ? "Outgoing" : "Incoming" };
-    });
-  }, [edges, nodeById, selectedId, selectedDetails]);
+
 
   async function remember() {
     setCreatingNode(true);
@@ -288,7 +224,7 @@ export function MemoryApp() {
       }
       const contextQuery = next.query || "";
       setPreviewContextQuery(contextQuery);
-      const payload = await callMemory<{ items?: PreviewContextItem[] }>({
+      const payload = await callMemory<{ items?: PreviewContextItem[]; snapshot_id?: string }>({
         action: "context",
         query: contextQuery,
         limit: 5,
@@ -297,6 +233,7 @@ export function MemoryApp() {
         return;
       }
       setPreviewContextItems(payload.items || []);
+      setPreviewContextSnapshot(payload.snapshot_id || "");
     } catch (contextError) {
       if (isCancelledRequest(contextError)) {
         return;
@@ -316,6 +253,13 @@ export function MemoryApp() {
   }
 
   async function handleNavigationParams(params: Record<string, string | boolean | null>) {
+    const contextIds = contextIdsFromParams(params);
+    if (contextIds.length) {
+      localContextRef.current = contextIds;
+      focusedGraphRef.current = null;
+      setContextSnapshot(scalarString(params.context_snapshot_id) || "Referenced context");
+      await refreshGraph({ query: "", viewFilter });
+    }
     const requestedNodeId = nodeIdFromParams(params);
     if (requestedNodeId) {
       if (nodesRef.current.some((node) => node.id === requestedNodeId) || selectedIdRef.current !== requestedNodeId) {
@@ -356,7 +300,10 @@ export function MemoryApp() {
 
   return (
     <main className="memory-shell">
-      {error ? <div className="memory-error">{error}</div> : null}
+      {error ? <div className="memory-error" role="alert">{error}</div> : null}
+      {contextSnapshot && <div className="memory-context-banner">Referenced context · {contextSnapshot.slice(0, 12)}
+        <button type="button" onClick={() => { localContextRef.current = null; focusedGraphRef.current = null; setContextSnapshot(""); refreshMemory(); }}>Workspace view</button>
+      </div>}
       <GraphCanvas
         nodes={nodes}
         edges={edges}
@@ -365,7 +312,11 @@ export function MemoryApp() {
         selectedDetails={selectedDetails}
         loading={graphLoading}
         relationships={relationships}
-        onSelectNode={selectNode}
+        connectionsMore={!!connectionCursor}
+        connectionsLoading={connectionLoading}
+        onMoreConnections={() => void moreConnections()}
+        onBack={canGoBack ? goBack : undefined}
+        onSelectNode={(id) => void selectNode(id)}
       />
       <CreateNodeModal
         draft={draft}
@@ -384,6 +335,12 @@ export function MemoryApp() {
         open={previewContextOpen}
         query={previewContextQuery}
         onClose={closePreviewContext}
+        onSelect={(id) => { closePreviewContext(); void selectNode(id); }}
+        onShowGraph={() => {
+          localContextRef.current = previewContextItems.map((item) => item.node_id || "").filter(Boolean);
+          focusedGraphRef.current = null; setContextSnapshot(previewContextSnapshot || "Preview context"); closePreviewContext();
+          void refreshGraph({ query: "", viewFilter });
+        }}
       />
     </main>
   );

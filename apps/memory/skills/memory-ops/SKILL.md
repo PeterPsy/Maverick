@@ -21,11 +21,51 @@ Use returned provenance to mention files or app entities only when they are rele
 
 When a result includes `storage_references`, use those Storage references for preview, export, or reference resolution. Memory stores knowledge and citations; Storage remains the file gateway.
 
+Use a short retrieval path: small context, graph exploration only when needed,
+then the evidence necessary for the answer. The common target is one to three
+calls; original passages or audit reconstruction can require more.
+
+`context` reserves up to two critical graph neighbors (`contradicts`,
+`supersedes`) beyond the textual limit. Low-confidence connections remain
+explicit; they are not proof. Follow `search_next_cursor` while
+`retrieval_has_more` is true. `omitted_for_budget` and
+`budget_omitted_node_ids` describe already retrieved items omitted by bytes:
+batch their cards separately. `total_candidate_count` is null unless the first
+page exhausts the candidates; do not infer an exact total from a limited page.
+
+Explore one to five known nodes without loading bodies or revisions:
+
+```bash
+maverick app memory mcp call memory_explore --node-ids '["node_..."]' --direction both --depth 1 --limit 10 --json
+maverick app memory mcp call memory_explore --node-ids '["node_..."]' --kinds '["contradicts","depends_on","supersedes"]' --depth 2 --json
+maverick app memory mcp call memory_get_nodes --node-ids '["node_a","node_b"]' --json
+```
+
+Keep the same seeds, direction, kinds, depth and scope when following
+`next_cursor`. `stop_reason` distinguishes `limit`, `budget`, and `end`.
+Cursors reject changed data instead of silently skipping results; restart the
+page when stale. Parallel relationships have different `edge.id` values:
+deduplicate by id, never by endpoint pair. Cards report indexed evidence state;
+read the evidence section to observe source currency before relying on proof.
+Track visited node IDs across follow-up explorations so cycles do not cause
+repeated calls. Each page's `visited_node_ids` is its endpoint set.
+
 For direct node lookup, inspection, or verification, use the Memory CLI instead of reading app data files:
 
 ```bash
-maverick app memory cli run memory --action inspect --node-id <node_id>
+maverick app memory cli run memory --action inspect --node-id <node_id> --detail evidence
 ```
+
+`inspect` defaults to a card. Select `detail=evidence`, `content`, `sources`,
+or `history` and follow the section's `next_cursor`. Batch reads are cards only.
+`content=node|wiki` pages text; `detail=history` pages revision headers, and
+`detail=content` with `revision_id` reads one historical body progressively.
+`detail=evidence` with `claim_id` pages a claim's citations. `full` is an
+explicit unbudgeted audit read, so avoid it during ordinary reasoning.
+`max_bytes` bounds paged reads; if even one result cannot fit, increase the
+budget or choose a card. Search defaults to cards; `detail=evidence` adds compact
+proof and source matches. Queued compilation does not block existing source
+access: evidence includes `available_source_chunks` to fetch immediately.
 
 For source-level evidence, use Memory source primitives instead of reading `data/memory/` files:
 
@@ -47,7 +87,15 @@ Check `compilation_state`, `source_state` and `verification` separately. A fresh
 compilation does not establish that a fact is verified. Supporting citations and
 contradictions are separate; relevant sources and uncertain paraphrases must not
 be described as confirming proof. Search relevance is a ranking score. Use
-`project_id` or `person_id` when knowledge must be restricted to that scope.
+stable `project_id` or `person_id` when knowledge must be restricted to that
+scope; node metadata may also carry `aliases` and stable app references. The
+same scope filters apply to context, search, wiki, sources and exploration.
+`as_of=YYYY-MM-DD` selects validity at a date; default is today.
+`include_expired=true` explicitly includes past/future validity intervals, and
+`include_unscoped=true` includes general preferences beside scoped knowledge.
+An as-of filter does not reconstruct overwritten facts: read revision/source
+history for that. User confirmation (`confidence_basis`, `confirmation`),
+source verification and agent-inferred relationships are independent.
 
 When Memory returns queued ingest or compile work, inspect the app-owned job queue through Memory rather than editing SQLite:
 
@@ -57,7 +105,7 @@ maverick app memory mcp call memory_jobs --json --operation claim --job-types '[
 maverick app memory mcp call memory_jobs --json --operation run_until_idle --max-jobs 50
 ```
 
-If an ingest, staleness, or compile request enqueues work and the current answer depends on it, drain a bounded batch with `run_until_idle` before answering. Do not assume a background worker has already processed queued Memory jobs.
+If an ingest, staleness, or compile request enqueues work and the current answer depends on it, drain a bounded batch with `run_until_idle` before answering. The platform tick progresses compile/lint work even with Memory closed; inspect `compilation_state` instead of assuming it has already completed. Other ingest and Storage reindex operations remain explicit.
 
 Storage staleness can enqueue `requires_storage_reindex` jobs. Treat those jobs as action-required markers: run Storage `drive_index`, pass the returned Memory source to `memory_ingest_source` with `adapter_id=remote_storage_file`, and then acknowledge Storage indexing after Memory succeeds.
 
@@ -76,6 +124,14 @@ maverick app memory cli run memory --action set_custom_view --title "Acme contex
 ```
 
 Use `clear_custom_view` to return the app to normal graph search mode.
+
+Read operations never change that workspace view. A context response includes
+`view.node_ids` and `view.snapshot_id` for a conversation-local reference view.
+When opening Memory through shell navigation, send `context_node_ids` as the
+JSON-encoded id array and `context_snapshot_id` as the retrieval id. Reopening
+loads current cards, not a stored historical snapshot. Use revisions from the
+original context to check changes. UI preview can show its referenced context
+without writing shared view state; “Workspace view” returns to the shared view.
 
 ## Saving Memory
 
@@ -191,8 +247,9 @@ suggestions and revisions before merging; use source and target revision guards.
 The node inspector exposes these management actions, evidence passages, source
 history and complete active relationships.
 
-The visible UI performs bounded compile/lint maintenance; closed/hidden Memory
-does not have a background worker. Full index integrity checking is an explicit
+The platform background/recovery hooks perform bounded compile/lint maintenance
+with a workspace-local process lock, job leases, deduplication and retries. The
+UI does not drive queue progress. Full index integrity checking is an explicit
 `memory_maintenance` request with `verify_index=true`, never a per-search scan.
 
 If multiple plausible nodes match, ask the user to choose before deleting. If the user asks to delete the original linked source as well, switch to the owning app's official surface, such as Storage for files, and confirm destructive external deletion when needed.
@@ -215,7 +272,7 @@ maverick app memory cli run memory --action attach_app_entity --node-id <node_id
 
 ## Relationship Discipline
 
-Create inferred relationships only with a reason and confidence:
+Create inferred relationships only with a reason, confidence and `metadata.confidence_basis=agent_inferred`:
 
 ```bash
 maverick app memory cli run memory --action link --source-node-id <node_id> --target-node-id <node_id> --kind supports --weight 0.8 --confidence 0.7 --reason "<why these are connected>"

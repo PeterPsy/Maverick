@@ -71,10 +71,10 @@ class MemoryReviewRegressions(MemoryTestCase):
         restored = self.remote(compile_after_ingest=False)
         self.assertEqual(restored['sources'][0]['id'], source_id)
         self.assertTrue(self.call('source_query', query='contratto')['results'])
-        self.assertEqual(self.call('inspect', node_id=node_id)['node']['compiled_page']['freshness'], 'stale')
+        self.assertEqual(self.call('inspect', detail='full', node_id=node_id)['node']['compiled_page']['freshness'], 'stale')
         self.assertEqual(len(self.call('jobs_list', status='ready')['jobs']), 1)
         self.call('maintenance')
-        self.assertEqual(self.call('inspect', node_id=node_id)['node']['compiled_page']['freshness'], 'fresh')
+        self.assertEqual(self.call('inspect', detail='full', node_id=node_id)['node']['compiled_page']['freshness'], 'fresh')
 
     def test_v4_supports_are_unverified_until_checked_by_new_semantics(self):
         node = self.call('remember', title='Balance', body='Il saldo è 100 euro.')['node']
@@ -86,7 +86,7 @@ class MemoryReviewRegressions(MemoryTestCase):
         with self.database.transaction(self.root) as db:
             db.execute("UPDATE schema_metadata SET value='4' WHERE key='schema_version'")
         self.database.ensure_schema(self.root)
-        inspected = self.call('inspect', node_id=node['id'])['node']
+        inspected = self.call('inspect', detail='full', node_id=node['id'])['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'stale')
         self.assertEqual(inspected['compiled_page']['verification'], 'unverified')
         self.assertEqual(inspected['citations'], [])
@@ -94,7 +94,7 @@ class MemoryReviewRegressions(MemoryTestCase):
         self.database.ensure_schema(self.root)
         self.assertEqual(len(self.call('jobs_list', status='ready')['jobs']), 1)
         self.call('maintenance')
-        checked = self.call('inspect', node_id=node['id'])['node']
+        checked = self.call('inspect', detail='full', node_id=node['id'])['node']
         self.assertEqual(checked['compiled_page']['verification'], 'conflict')
         self.assertEqual(checked['citations'], [])
 
@@ -143,9 +143,9 @@ class MemoryReviewRegressions(MemoryTestCase):
         errors = importlib.import_module('errors')
         with self.assertRaisesRegex(errors.MemoryValidationError, 'changed since'):
             self.call('delete_node', node_id=node['id'], expected_updated_at=node['updated_at'])
-        self.assertEqual(self.call('inspect', node_id=node['id'])['node']['status'], 'excluded')
+        self.assertEqual(self.call('inspect', detail='full', node_id=node['id'])['node']['status'], 'excluded')
         self.assertTrue(self.call('delete_node', node_id=node['id'], expected_updated_at=excluded['updated_at'], reason='user_removed')['deleted'])
-        self.assertEqual(self.call('inspect', node_id=node['id'])['node']['status'], 'deleted')
+        self.assertEqual(self.call('inspect', detail='full', node_id=node['id'])['node']['status'], 'deleted')
 
     def test_remote_reference_change_enqueues_without_changing_curated_fact(self):
         node = self.call('remember', title='Decision', body='Keep the current decision.')['node']
@@ -157,7 +157,7 @@ class MemoryReviewRegressions(MemoryTestCase):
         self.assertEqual(changed['node']['compiled_page']['freshness'], 'stale')
         self.assertEqual(len(self.call('jobs_list', status='ready')['jobs']), 1)
         self.call('maintenance')
-        self.assertEqual(self.call('inspect', node_id=node['id'])['node']['compiled_page']['freshness'], 'fresh')
+        self.assertEqual(self.call('inspect', detail='full', node_id=node['id'])['node']['compiled_page']['freshness'], 'fresh')
 
 
 if __name__ == '__main__':

@@ -118,7 +118,9 @@
       "memory_merge_nodes",
       "memory_exclude_node",
       "memory_remove_source",
-      "memory_maintenance"
+      "memory_maintenance",
+      "memory_explore",
+      "memory_get_nodes"
     ],
     "cli_commands": [
       "memory"
@@ -232,7 +234,9 @@
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
-      "health_check": "hooks/health_check.py"
+      "health_check": "hooks/health_check.py",
+      "background_tick": "hooks/background_tick.py",
+      "backend_recovery": "hooks/background_tick.py"
     }
   },
   "storage": {

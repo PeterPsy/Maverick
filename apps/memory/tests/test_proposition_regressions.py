@@ -25,7 +25,7 @@ class PropositionRegressions(MemoryTestCase):
                     f'Il budget annuale del progetto è {right} euro.', f'arithmetic-{index}')
                 self.assertEqual(result['compiled']['citations'], [])
                 self.assertEqual(result['compiled']['compiled_page']['verification'], 'unverified')
-                self.assertEqual(self.call('inspect', node_id=result['node']['id'])['node']['citations'], [])
+                self.assertEqual(self.call('inspect', detail='full', node_id=result['node']['id'])['node']['citations'], [])
 
     def test_identifiers_and_locators_do_not_poison_neighboring_evidence(self):
         fact = 'Marco vive a Milano da dieci anni.'
@@ -144,7 +144,7 @@ class PropositionRegressions(MemoryTestCase):
         self.database.ensure_schema(self.root)
         self.assertEqual(len(self.call('jobs_list', status='ready')['jobs']), 1)
         self.call('maintenance')
-        inspected = self.call('inspect', node_id=node_id)['node']
+        inspected = self.call('inspect', detail='full', node_id=node_id)['node']
         self.assertEqual(inspected['compiled_page']['verification'], 'verified')
         self.assertEqual([citation['quote'] for citation in inspected['citations']], [fact])
         self.assertNotEqual(self.call('compile', node_id=node_id)['compile_run']['id'], old_run)
@@ -160,13 +160,13 @@ class PropositionRegressions(MemoryTestCase):
             db.execute("UPDATE schema_metadata SET value='6' WHERE key='schema_version'")
         self.database.ensure_schema(self.root)
         self.database.ensure_schema(self.root)
-        inspected = self.call('inspect', node_id=node_id)['node']
+        inspected = self.call('inspect', detail='full', node_id=node_id)['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'stale')
         self.assertEqual(inspected['compiled_page']['verification'], 'unverified')
         self.assertEqual(inspected['citations'], [])
         self.assertEqual(len(self.call('jobs_list', status='ready')['jobs']), 1)
         self.call('maintenance')
-        inspected = self.call('inspect', node_id=node_id)['node']
+        inspected = self.call('inspect', detail='full', node_id=node_id)['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'fresh')
         self.assertEqual(inspected['compiled_page']['verification'], 'unverified')
         self.assertEqual(inspected['citations'], [])
@@ -186,13 +186,13 @@ class PropositionRegressions(MemoryTestCase):
             db.execute("UPDATE schema_metadata SET value='7' WHERE key='schema_version'")
         self.database.ensure_schema(self.root)
         self.database.ensure_schema(self.root)
-        inspected = self.call('inspect', node_id=node_id)['node']
+        inspected = self.call('inspect', detail='full', node_id=node_id)['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'stale')
         self.assertEqual(inspected['compiled_page']['verification'], 'unverified')
         self.assertEqual(inspected['citations'], [])
         self.assertEqual(len(self.call('jobs_list', status='ready')['jobs']), 1)
         self.call('maintenance')
-        inspected = self.call('inspect', node_id=node_id)['node']
+        inspected = self.call('inspect', detail='full', node_id=node_id)['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'fresh')
         self.assertEqual(inspected['compiled_page']['verification'], 'unverified')
         self.assertEqual(inspected['citations'], [])

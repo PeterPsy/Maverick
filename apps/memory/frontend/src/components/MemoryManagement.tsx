@@ -2,7 +2,7 @@ import { useState } from "react";
 import { callMemory } from "../memoryApi";
 import type { NodeDetails } from "../types";
 
-export function MemoryManagement({ node, onSelect, onClose }: { node: NodeDetails; onSelect: (id: string) => void; onClose: () => void }) {
+export function MemoryManagement({ node, onSelect, onClose, contentComplete = true }: { node: NodeDetails; onSelect: (id: string) => void; onClose: () => void; contentComplete?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(node.title);
   const [body, setBody] = useState(node.body_text || node.summary || "");
@@ -42,11 +42,12 @@ export function MemoryManagement({ node, onSelect, onClose }: { node: NodeDetail
     <h3>Manage memory</h3>
     {error && <p role="alert">{error}</p>}
     <div className="memory-actions">
-      <button type="button" disabled={busy || excluded} onClick={() => setEditing(!editing)}>Correct fact</button>
+      <button type="button" disabled={busy || excluded || !contentComplete} onClick={() => setEditing(!editing)}>Correct fact</button>
       <button type="button" disabled={busy || excluded} onClick={() => void perform("compile")}>Verify evidence</button>
       <button type="button" disabled={busy} onClick={() => void perform("exclude_node", { excluded: node.status !== "excluded" })}>{node.status === "excluded" ? "Include in retrieval" : "Exclude from retrieval"}</button>
     </div>
     {excluded && <p className="muted">Include this memory in retrieval to correct, verify or merge it.</p>}
+    {!contentComplete && <p className="muted">Load the complete content before correcting this fact.</p>}
     {editing && !excluded && <form onSubmit={(event) => { event.preventDefault(); void perform("update_node", { title, body, summary: body.slice(0, 320), metadata: { person_id: personId, project_id: projectId, valid_from: validFrom, valid_until: validUntil, confirmation: "user_corrected", confidence_basis: "user_confirmed" } }); }}>
       <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
       <label>Fact<textarea value={body} onChange={(event) => setBody(event.target.value)} required rows={5} /></label>

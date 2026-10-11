@@ -7,6 +7,40 @@
   background: var(--maverick-bg);
 }
 
+.memory-graph-engine { position: absolute; inset: 0; }
+.graph-navigation {
+  position: absolute;
+  top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 1rem);
+  right: 1rem;
+  z-index: 3;
+  display: grid;
+  gap: .5rem;
+  max-width: min(280px, calc(100% - 2rem));
+}
+.graph-navigation details, .graph-edge-panel {
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(12, 12, 14, .88);
+  padding: .7rem;
+  font-size: .78rem;
+}
+.graph-node-list { display: grid; gap: .3rem; max-height: 28dvh; overflow: auto; margin-top: .5rem; }
+.graph-navigation button, .node-panel-tabs button, .node-panel > button, .node-panel section > button, .graph-edge-panel button, .memory-context-banner button {
+  padding: .5rem .7rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-surface);
+  color: var(--maverick-text);
+  font-size: .76rem;
+  overflow-wrap: anywhere;
+}
+.node-panel-tabs { display: flex; gap: .3rem; flex-wrap: wrap; }
+.node-panel-tabs [aria-current], .graph-node-list [aria-current] { background: var(--maverick-accent-soft); border-color: var(--maverick-accent); }
+.graph-navigation :focus-visible, .graph-edge-panel :focus-visible { outline: 2px solid var(--maverick-accent); outline-offset: 2px; }
+.graph-navigation summary { cursor: pointer; }
+.graph-edge-panel { position: absolute; right: 1rem; bottom: 1rem; z-index: 5; display: grid; gap: .5rem; max-width: min(320px, calc(100% - 2rem)); }
+.memory-context-banner { position: absolute; z-index: 6; left: 1rem; top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + .5rem); display: flex; gap: .5rem; align-items: center; font-size: .76rem; max-width: calc(100% - 2rem); }
+
 .graph-stage canvas {
   display: block;
   width: 100%;
@@ -181,10 +215,9 @@
 }
 
 .metrics strong {
-  overflow: hidden;
   font-size: 0.92rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .metrics small,

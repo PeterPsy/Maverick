@@ -120,6 +120,14 @@ export function iconNodeForType(type: string): NodeIconNode {
   return nodeTypeIconNodes[type] || fallbackIcon;
 }
 
+export function iconDataUrlForType(type: string, color: string): string {
+  const escapeAttribute = (value: string | number) => String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const paths = iconNodeForType(type).map(([tag, attributes]) => `<${tag} ${Object.entries(attributes)
+    .filter(([key]) => key !== "key").map(([key, value]) => `${key}="${escapeAttribute(value)}"`).join(" ")} />`).join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" color="${color}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 type NodeTypeIconProps = SVGProps<SVGSVGElement> & {
   size?: number;
   type: string;

@@ -6,9 +6,8 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from context_payloads import agent_compact_context_payload
 from content_store import read_body
-from database import connect, ensure_schema, normalize_limit, record_event, row_payload
+from database import connect, ensure_schema, normalize_limit, row_payload
 from errors import MemoryValidationError
 from source_retrieval import citations_for_chunk, chunk_freshness as source_chunk_freshness, chunk_summary
 from storage_reference_payloads import storage_references_for_node
@@ -18,14 +17,14 @@ from retrieval_projections import compact_projections
 from search_candidates import ranked_candidates, query_expression, query_terms, scope_sql
 
 
-def search_nodes(data_root: Path, query: str, *, limit: int = 10, compact: bool = False, scope: dict | None = None) -> list[dict[str, Any]]:
+def search_nodes(data_root: Path, query: str, *, limit: int = 10, compact: bool = False, scope: dict | None = None, offset: int = 0) -> list[dict[str, Any]]:
     ensure_schema(data_root)
     normalized_limit = normalize_limit(limit, default=10, minimum=1, maximum=500)
     scope_clause, scope_values = scope_sql(scope)
     with connect(data_root) as db:
-        candidates = ranked_candidates(db, query, limit=normalized_limit, scope=scope) if query.strip() else [
+        candidates = ranked_candidates(db, query, limit=normalized_limit, scope=scope, offset=offset) if query.strip() else [
             {**dict(row), "match_sources": ["node"], "relevance": float(row["importance"])}
-            for row in db.execute(f"SELECT id, importance FROM nodes WHERE status = 'active' {scope_clause} ORDER BY importance DESC, updated_at DESC LIMIT ?", (*scope_values, normalized_limit))]
+            for row in db.execute(f"SELECT id, importance FROM nodes WHERE status = 'active' {scope_clause} ORDER BY importance DESC, updated_at DESC, id DESC LIMIT ? OFFSET ?", (*scope_values, normalized_limit, offset))]
         selected_ids = [candidate["id"] for candidate in candidates[:normalized_limit]]
         projections = compact_projections(db, selected_ids, data_root=data_root) if compact else {}
         matches_by_node = source_chunk_matches_by_node(db, data_root, query, node_ids=selected_ids, limit=normalized_limit)
@@ -45,35 +44,6 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10, compact: bool 
             if len(results) >= normalized_limit:
                 break
         return results
-
-
-def context_payload(data_root: Path, query: str, *, limit: int = 8, record_access_event: bool = False, scope: dict | None = None) -> dict[str, Any]:
-    normalized_limit = normalize_limit(limit, default=8, minimum=1, maximum=50)
-    items = search_nodes(data_root, query, limit=normalized_limit, compact=True, scope=scope)
-    seen = {item["id"] for item in items}
-    scope_clause, scope_values = scope_sql(scope, alias="n")
-    with connect(data_root) as db:
-        if len(items) < normalized_limit:
-            for node in list(items):
-                related = db.execute(f"""SELECT n.id, n.type, n.title, n.summary, substr(n.body_text,1,520) AS body_text,
-                    n.status, n.importance, n.confidence, n.updated_at, n.metadata_json,
-                    e.weight AS relation_weight, e.confidence AS relation_confidence, e.kind, e.reason
-                    FROM edges e JOIN nodes n ON n.id = CASE WHEN e.source_node_id = ? THEN e.target_node_id ELSE e.source_node_id END
-                    WHERE (e.source_node_id = ? OR e.target_node_id = ?) AND e.status = 'active' AND n.status = 'active'
-                      AND e.weight >= .5 AND e.confidence >= .5 AND e.kind IN ('supports','about','depends_on','derived_from','related_to')
-                    {scope_clause} ORDER BY e.weight * e.confidence DESC LIMIT 3""", (node["id"], node["id"], node["id"], *scope_values))
-                for row in related:
-                    payload = row_payload(row) or {}
-                    if payload["id"] in seen or len(items) >= normalized_limit:
-                        continue
-                    seen.add(payload["id"])
-                    items.append(memory_node_result(db, data_root, payload, compact=True,
-                        relevance=round(node["relevance"] * payload["relation_weight"] * payload["relation_confidence"] * .5, 3),
-                        match_sources=["related_node"], reason=payload.get("reason") or f"Related through {payload['kind']}"))
-        if record_access_event:
-            record_event(db, event_type="retrieval_context_generated", payload={"query": query, "item_count": len(items)})
-            db.commit()
-    return agent_compact_context_payload(query, items, requested_limit=normalized_limit)
 
 
 def source_chunk_matches_by_node(
@@ -182,7 +152,7 @@ def source_chunk_matches_by_node(
                     "hash_kind": row["hash_kind"] or "",
                     "extraction_status": row["extraction_status"] or "",
                 },
-                "citations": citations_for_chunk(db, str(row["chunk_id"] or "")),
+                "citations": citations_for_chunk(db, str(row["chunk_id"] or ""), limit=4),
             }
         )
     return matches
@@ -261,6 +231,9 @@ def memory_node_result(
         "status": node.get("status") or "active",
         "importance": node.get("importance"),
         "confidence": node.get("confidence"),
+        "revision": node.get("revision") or node.get("updated_at"),
+        "compilation_state": node.get("compilation_state", compiled.get("compilation_state", "unknown")),
+        "details_available": node.get("details_available", ["content","evidence","sources","history"]),
         "verification": compiled.get("verification", "unverified"),
         "relevance": round(relevance, 3),
         "match_sources": sources,
@@ -277,92 +250,32 @@ def memory_node_result(
     return item
 
 
-def graph_payload(data_root: Path, *, query: str = "", node_ids: object = None, limit: int = 200, scope: dict | None = None) -> dict[str, Any]:
+def graph_payload(data_root: Path, *, query: str = "", node_ids: object = None, limit: int = 30, scope: dict | None = None) -> dict[str, Any]:
     ensure_schema(data_root)
-    normalized_limit = normalize_limit(limit, default=200, minimum=1, maximum=500)
-    selected_node_ids = _normalized_node_ids(node_ids, limit=normalized_limit)
-    scope_clause, scope_values = scope_sql(scope)
-    if selected_node_ids:
-        placeholders = ",".join("?" for _item in selected_node_ids)
-        with connect(data_root) as db:
-            rows = [
-                row_payload(row) or {}
-                for row in db.execute(
-                    f"""
-                    SELECT *, 0.0 AS score FROM nodes
-                    WHERE status = 'active' AND id IN ({placeholders}) {scope_clause}
-                    """,
-                    (*selected_node_ids, *scope_values),
-                )
-            ]
-        row_by_id = {row["id"]: row for row in rows}
-        nodes = [row_by_id[node_id] for node_id in selected_node_ids if node_id in row_by_id]
-        if query.strip():
-            matches = {node["id"] for node in search_nodes(data_root, query, limit=500, scope=scope)}
-            nodes = [node for node in nodes if node["id"] in matches]
-        node_ids = {node["id"] for node in nodes}
-    elif query.strip():
-        nodes = search_nodes(data_root, query, limit=normalized_limit, scope=scope)
-        node_ids = {node["id"] for node in nodes}
-    else:
-        with connect(data_root) as db:
-            nodes = [
-                row_payload(row) or {}
-                for row in db.execute(
-                    f"""
-                    SELECT *, 0.0 AS score FROM nodes
-                    WHERE status = 'active' {scope_clause}
-                    ORDER BY importance DESC, updated_at DESC
-                    LIMIT ?
-                    """,
-                    (*scope_values, normalized_limit),
-                )
-            ]
-            node_ids = {node["id"] for node in nodes}
-    if not node_ids:
-        return {"nodes": [], "edges": []}
-    placeholders = ",".join("?" for _item in node_ids)
+    normalized_limit = normalize_limit(limit, default=30, minimum=1, maximum=500)
+    selected = _normalized_node_ids(node_ids, limit=normalized_limit)
+    scope_clause, scope_values = scope_sql(scope, alias="n")
     with connect(data_root) as db:
-        edges = [
-            row_payload(row) or {}
-            for row in db.execute(
-                f"""
-                SELECT * FROM edges
-                WHERE status = 'active'
-                  AND source_node_id IN ({placeholders})
-                  AND target_node_id IN ({placeholders})
-                ORDER BY weight DESC, confidence DESC
-                LIMIT 1000
-                """,
-                tuple(node_ids) + tuple(node_ids),
-            )
-        ]
-    graph_nodes = []
-    for node in nodes:
-        graph_nodes.append(
-            {
-                "id": node["id"],
-                "type": node["type"],
-                "title": node["title"],
-                "summary": node["summary"] or node["body_text"][:240],
-                "importance": node["importance"],
-                "confidence": node["confidence"],
-                "updated_at": node["updated_at"],
-            }
-        )
-    graph_edges = [
-        {
-            "id": edge["id"],
-            "source": edge["source_node_id"],
-            "target": edge["target_node_id"],
-            "kind": edge["kind"],
-            "weight": edge["weight"],
-            "confidence": edge["confidence"],
-            "reason": edge["reason"],
-        }
-        for edge in edges
-    ]
-    return {"nodes": graph_nodes, "edges": graph_edges}
+        db.execute("BEGIN")
+        if query.strip():
+            from node_search import search_candidates_page
+            candidates = search_candidates_page(db, query, limit=normalized_limit, scope=scope, node_ids=selected or None)
+            ids = [item["id"] for item in candidates[:normalized_limit]]
+            has_more = len(candidates)>normalized_limit
+        elif selected:
+            marks = ",".join("?" for _ in selected)
+            eligible = {row["id"] for row in db.execute(f"SELECT n.id FROM nodes n WHERE n.id IN ({marks}) AND n.status='active' {scope_clause}", (*selected,*scope_values))}
+            ids, has_more = [value for value in selected if value in eligible], False
+        else:
+            ids = [row["id"] for row in db.execute(f"SELECT n.id FROM nodes n WHERE n.status='active' {scope_clause} ORDER BY importance DESC,updated_at DESC,id DESC LIMIT ?", (*scope_values,normalized_limit+1))]
+            has_more, ids = len(ids)>normalized_limit, ids[:normalized_limit]
+        from retrieval_cards import node_cards
+        nodes = node_cards(db, ids)
+        marks = ",".join("?" for _ in ids)
+        edges = [dict(row) for row in db.execute(f"""SELECT id,source_node_id AS source,target_node_id AS target,
+            kind,weight,confidence,substr(reason,1,220) AS reason FROM edges WHERE status='active'
+            AND source_node_id IN ({marks}) AND target_node_id IN ({marks}) ORDER BY weight DESC,confidence DESC,id LIMIT 1001""", (*ids,*ids))] if ids else []
+        return {"nodes": nodes,"edges": edges[:1000],"has_more": has_more,"edges_has_more": len(edges)>1000}
 
 
 def _normalized_node_ids(raw_node_ids: object, *, limit: int) -> list[str]:

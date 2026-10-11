@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import date
 import sqlite3
 from typing import Any
 
@@ -43,6 +44,9 @@ from store import (
 )
 from knowledge_management import merge_nodes, remove_source, set_retrieval_exclusion
 from maintenance import maintain_memory
+from exploration import explore
+from node_reads import read_nodes
+from node_search import search_page
 from storage_ingestion import ingest_storage_source
 from storage_staleness import apply_storage_staleness
 
@@ -101,6 +105,8 @@ WIKI_ACTIONS = {"compile", "lint"}
 GRAPH_AND_WIKI_ACTIONS = {"ingest_source", "ingest_storage_source", "jobs_run", "jobs_run_loop", "maintenance", "merge_nodes", "remove_source"}
 MCP_TOOL_ACTIONS = {
     "memory_context": "context",
+    "memory_explore": "explore",
+    "memory_get_nodes": "get_nodes",
     "memory_merge_nodes": "merge_nodes",
     "memory_exclude_node": "exclude_node",
     "memory_remove_source": "remove_source",
@@ -188,10 +194,20 @@ def sqlite_integrity_detail(error: sqlite3.IntegrityError) -> str:
     return "database constraint failed."
 
 
-def retrieval_scope(body: dict[str, Any]) -> dict[str, str]:
+def retrieval_scope(body: dict[str, Any]) -> dict:
+    if body.get('scope') is not None and not isinstance(body['scope'],dict):
+        raise MemoryValidationError('scope must be an object.')
     nested = body.get("scope") if isinstance(body.get("scope"), dict) else {}
-    return {key: str(value) for key in ("project_id", "person_id")
-            if (value := nested.get(key, body.get(key)))}
+    scope = {key: value for key in ("project_id", "person_id", "as_of", "include_expired", "include_unscoped")
+             if (value := nested.get(key, body.get(key))) is not None}
+    for key,value in scope.items():
+        if key in ('include_expired','include_unscoped'):
+            if not isinstance(value,bool):
+                raise MemoryValidationError(f'{key} must be a boolean.')
+        elif not isinstance(value,str) or len(value)>256:
+            raise MemoryValidationError(f'{key} must be a string of at most 256 characters.')
+    scope.setdefault('as_of',date.today().isoformat())
+    return scope
 
 
 def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memory") -> tuple[int, dict[str, Any]]:
@@ -230,12 +246,16 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
     if action in {"attach_entity", "attach_app_entity"}:
         return 200, {"external_ref": add_external_ref(data_root, body, ref_kind="app_entity")}
     if action == "inspect":
-        node_id = str(body.get("node_id") or body.get("entity_id") or body.get("id") or "").strip()
-        return 200, {"node": inspect_node(data_root, node_id)}
+        result = read_nodes(data_root, body)
+        if 'nodes' in result:
+            result['node'] = result.pop('nodes')[0]
+        return 200, result
+    if action == "get_nodes":
+        return 200, read_nodes(data_root, body)
+    if action == "explore":
+        return 200, explore(data_root, body, scope=retrieval_scope(body))
     if action == "search":
-        query = str(body.get("query") or "").strip()
-        limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
-        return 200, {"results": search_nodes(data_root, query, limit=limit, scope=retrieval_scope(body))}
+        return 200, search_page(data_root, body, scope=retrieval_scope(body))
     if action == "compile":
         return 200, compile_node(data_root, body)
     if action == "lint":
@@ -243,11 +263,12 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
     if action == "wiki_query":
         query = str(body.get("query") or "").strip()
         limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
-        return 200, wiki_query(data_root, query, limit=limit)
+        return 200, wiki_query(data_root, query, limit=limit, scope=retrieval_scope(body), cursor=body.get('cursor'), max_bytes=body.get('max_bytes'))
     if action == "source_query":
         query = str(body.get("query") or "").strip()
         limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
-        return 200, source_query(data_root, query, limit=limit, include_history=bool(body.get("include_history")), include_excluded=bool(body.get("include_excluded")))
+        return 200, source_query(data_root, query, limit=limit, include_history=bool(body.get("include_history")), include_excluded=bool(body.get("include_excluded")),
+                                 scope=retrieval_scope(body), cursor=body.get('cursor'), max_bytes=body.get('max_bytes'))
     if action == "fetch_chunks":
         return 200, fetch_chunks(
             data_root,
@@ -309,6 +330,8 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
             limit=normalize_limit(body.get("limit"), default=8, minimum=1, maximum=50),
             record_access_event=bool(body.get("record_access_event")),
             scope=retrieval_scope(body),
+            cursor=body.get('cursor'),
+            max_bytes=body.get('max_bytes'),
         )
     if action == "graph":
         return 200, graph_payload(
@@ -316,7 +339,7 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
             query=str(body.get("query") or "").strip(),
             node_ids=body.get("node_ids"),
             scope=retrieval_scope(body),
-            limit=normalize_limit(body.get("limit"), default=200, minimum=1, maximum=500),
+            limit=normalize_limit(body.get("limit"), default=30, minimum=1, maximum=500),
         )
     if action == "audit":
         limit = normalize_limit(body.get("limit"), default=50, minimum=1, maximum=200)

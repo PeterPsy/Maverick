@@ -2,36 +2,135 @@
   "tools": {
     "memory_context": {
       "effect_class": "read",
-      "description": "Return bounded agent-compact Memory context for an agent query, including bounded query snippet/count metadata, node ids, summaries, bounded body snippets, body length counts, compact provenance, compiled wiki summaries/citations, reusable Storage references, and expansion hints.",
+      "description": "Start with compact context (9500 byte default budget). Returns separate search continuation, byte omissions, reasons, scope/validity, verification and compilation state. Reserves critical contradictions/supersessions even at a full textual limit. Explore when needed, then inspect selective evidence or fetch original chunks.",
       "input_schema": {
         "type": "object",
         "properties": {
           "query": {"type": "string"},
           "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 8},
           "record_access_event": {"type": "boolean", "default": false},
-          "scope": {"type": "object", "properties": {"project_id": {"type": "string"}, "person_id": {"type": "string"}}, "additionalProperties": false},
+          "scope": {
+            "type": "object",
+            "properties": {
+              "project_id": {"type": "string", "maxLength": 256},
+              "person_id": {"type": "string", "maxLength": 256},
+              "as_of": {"type": "string", "format": "date"},
+              "include_expired": {"type": "boolean", "default": false},
+              "include_unscoped": {"type": "boolean", "default": false}
+            },
+            "additionalProperties": false
+          },
           "project_id": {"type": "string"},
-          "person_id": {"type": "string"}
+          "person_id": {"type": "string"},
+          "cursor": {"type": "string", "maxLength": 1024},
+          "max_bytes": {"type": "integer", "minimum": 2000, "maximum": 64000, "default": 9500},
+          "as_of": {"type": "string", "format": "date"},
+          "include_expired": {"type": "boolean"},
+          "include_unscoped": {"type": "boolean"}
         },
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"}
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "items",
+          "retrieval_has_more",
+          "search_next_cursor",
+          "omitted_for_budget",
+          "budget_omitted_node_ids",
+          "candidate_count_is_exact",
+          "snapshot_id",
+          "critical_edges",
+          "view"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {"type": "object", "required": ["node_id", "title", "reason", "revision", "verification", "compilation_state"]}
+          },
+          "retrieval_has_more": {"type": "boolean"},
+          "search_next_cursor": {"type": ["string", "null"]},
+          "total_candidate_count": {"type": ["integer", "null"]},
+          "omitted_for_budget": {"type": "integer"},
+          "budget_omitted_node_ids": {"type": "array", "items": {"type": "string"}},
+          "candidate_count_is_exact": {"type": "boolean"},
+          "snapshot_id": {"type": "string"},
+          "critical_edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "source", "target", "kind", "hop", "reason", "revision", "confidence_basis"],
+              "properties": {
+                "id": {"type": "string"},
+                "source": {"type": "string"},
+                "target": {"type": "string"},
+                "kind": {"type": "string"},
+                "hop": {"type": "integer"}
+              }
+            }
+          },
+          "view": {"type": "object", "required": ["node_ids", "snapshot_id"]}
+        }
+      }
     },
     "memory_search": {
       "effect_class": "read",
-      "description": "Search Memory nodes and compiled wiki text, returning reusable Storage references for matched nodes when available.",
+      "description": "Search node, wiki, claim and current-source FTS with shared project/person/validity filters and stable ID/alias matching. Compact cards by default; detail=evidence is explicit. Follow next_cursor; use context for answer-ready evidence and explore for connections.",
       "input_schema": {
         "type": "object",
         "properties": {
           "query": {"type": "string"},
           "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
-          "scope": {"type": "object", "properties": {"project_id": {"type": "string"}, "person_id": {"type": "string"}}, "additionalProperties": false},
+          "scope": {
+            "type": "object",
+            "properties": {
+              "project_id": {"type": "string", "maxLength": 256},
+              "person_id": {"type": "string", "maxLength": 256},
+              "as_of": {"type": "string", "format": "date"},
+              "include_expired": {"type": "boolean", "default": false},
+              "include_unscoped": {"type": "boolean", "default": false}
+            },
+            "additionalProperties": false
+          },
           "project_id": {"type": "string"},
-          "person_id": {"type": "string"}
+          "person_id": {"type": "string"},
+          "cursor": {"type": "string", "maxLength": 1024},
+          "max_bytes": {"type": "integer", "minimum": 2000, "maximum": 64000, "default": 9500},
+          "as_of": {"type": "string", "format": "date"},
+          "include_expired": {"type": "boolean"},
+          "include_unscoped": {"type": "boolean"},
+          "detail": {"enum": ["card", "evidence"], "default": "card"}
         },
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"}
+      "output_schema": {
+        "type": "object",
+        "required": ["results", "has_more", "next_cursor", "omitted_for_budget", "stop_reason", "snapshot_id"],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "node_id", "title", "status", "revision", "verification", "compilation_state", "details_available"],
+              "properties": {
+                "id": {"type": "string"},
+                "node_id": {"type": "string"},
+                "title": {"type": "string"},
+                "status": {"type": "string"},
+                "revision": {"type": "string"},
+                "verification": {"enum": ["unverified", "verified", "conflict"]},
+                "compilation_state": {"type": "string"},
+                "details_available": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          },
+          "has_more": {"type": "boolean"},
+          "next_cursor": {"type": ["string", "null"]},
+          "omitted_for_budget": {"type": "integer", "minimum": 0},
+          "stop_reason": {"enum": ["budget", "limit", "end"]},
+          "snapshot_id": {"type": "string"}
+        }
+      }
     },
     "memory_remember": {
       "effect_class": "mutating",
@@ -112,10 +211,7 @@
           "reason": {"type": "string"},
           "metadata": {"type": "object"}
         },
-        "anyOf": [
-          {"required": ["source_node_id", "target_node_id"]},
-          {"required": ["source", "target"]}
-        ],
+        "anyOf": [{"required": ["source_node_id", "target_node_id"]}, {"required": ["source", "target"]}],
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}
@@ -125,10 +221,7 @@
       "description": "Soft-delete one Memory edge.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "edge_id": {"type": "string"},
-          "id": {"type": "string"}
-        },
+        "properties": {"edge_id": {"type": "string"}, "id": {"type": "string"}},
         "anyOf": [{"required": ["edge_id"]}, {"required": ["id"]}],
         "additionalProperties": false
       },
@@ -157,7 +250,10 @@
               "provider": {"type": "string"},
               "connection_id": {"type": "string"},
               "drive_file_id": {"type": "string"},
-	          "source_version": {"type": "string", "description": "Required Storage source version from drive_index; may also be present in memory_source.metadata.source_version."},
+              "source_version": {
+                "type": "string",
+                "description": "Required Storage source version from drive_index; may also be present in memory_source.metadata.source_version."
+              },
               "display_path": {"type": "string"},
               "staleness": {"type": ["object", "string"]},
               "sync_state": {"type": "object"}
@@ -238,7 +334,11 @@
             },
             "additionalProperties": false
           },
-          "operation": {"type": "string", "enum": ["attach_evidence", "update_fact", "replace_fact"], "description": "Default: refresh generated document facts; attach evidence to curated notes. replace_fact saves the previous fact revision."},
+          "operation": {
+            "type": "string",
+            "enum": ["attach_evidence", "update_fact", "replace_fact"],
+            "description": "Default: refresh generated document facts; attach evidence to curated notes. replace_fact saves the previous fact revision."
+          },
           "fact_body": {"type": "string", "description": "Fact content distinct from the evidence body."},
           "fact_summary": {"type": "string"},
           "fact_metadata": {"type": "object"},
@@ -255,14 +355,8 @@
             "required": ["adapter_id"],
             "anyOf": [{"required": ["workspace_relative_path"]}, {"required": ["file_id"]}, {"required": ["entity_id"]}]
           },
-          {
-            "properties": {"adapter_id": {"const": "remote_storage_file"}},
-            "required": ["adapter_id", "memory_source"]
-          },
-          {
-            "properties": {"adapter_id": {"const": "app_entity"}},
-            "required": ["adapter_id", "owning_app_id", "entity_type", "entity_id"]
-          },
+          {"properties": {"adapter_id": {"const": "remote_storage_file"}}, "required": ["adapter_id", "memory_source"]},
+          {"properties": {"adapter_id": {"const": "app_entity"}}, "required": ["adapter_id", "owning_app_id", "entity_type", "entity_id"]},
           {
             "required": ["source"],
             "not": {"required": ["adapter_id"]},
@@ -278,14 +372,8 @@
                     "properties": {"adapter_id": {"const": "storage_file"}},
                     "anyOf": [{"required": ["workspace_relative_path"]}, {"required": ["file_id"]}, {"required": ["entity_id"]}]
                   },
-                  {
-                    "properties": {"adapter_id": {"const": "remote_storage_file"}},
-                    "required": ["adapter_id"]
-                  },
-                  {
-                    "properties": {"adapter_id": {"const": "app_entity"}},
-                    "required": ["owning_app_id", "entity_type", "entity_id"]
-                  }
+                  {"properties": {"adapter_id": {"const": "remote_storage_file"}}, "required": ["adapter_id"]},
+                  {"properties": {"adapter_id": {"const": "app_entity"}}, "required": ["owning_app_id", "entity_type", "entity_id"]}
                 ]
               }
             }
@@ -352,17 +440,7 @@
         "required": ["memory_source"],
         "anyOf": [
           {"required": ["source_version"]},
-          {
-            "properties": {
-              "memory_source": {
-                "properties": {
-                  "metadata": {
-                    "required": ["source_version"]
-                  }
-                }
-              }
-            }
-          }
+          {"properties": {"memory_source": {"properties": {"metadata": {"required": ["source_version"]}}}}}
         ],
         "additionalProperties": false
       },
@@ -399,10 +477,7 @@
             "additionalProperties": true
           }
         },
-        "oneOf": [
-          {"required": ["owning_app_id", "entity_type", "entity_id"]},
-          {"required": ["memory_staleness"]}
-        ],
+        "oneOf": [{"required": ["owning_app_id", "entity_type", "entity_id"]}, {"required": ["memory_staleness"]}],
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}
@@ -431,28 +506,56 @@
     },
     "memory_inspect_node": {
       "effect_class": "read",
-      "description": "Inspect one Memory node with relationships, external references, compiled wiki, claims, citations, source links, and lint findings.",
+      "description": "Read one node card by default. Select evidence, content, sources or history explicitly; follow next_cursor for that section. full is an explicit unbudgeted audit inspection. Use memory_explore for connections and memory_get_nodes for batch cards.",
       "input_schema": {
         "type": "object",
         "properties": {
           "node_id": {"type": "string"},
           "entity_id": {"type": "string"},
-          "id": {"type": "string"}
+          "id": {"type": "string"},
+          "detail": {"enum": ["card", "content", "evidence", "sources", "history", "full"], "default": "card"},
+          "content": {"enum": ["node", "wiki"], "default": "node"},
+          "content_chars": {"type": "integer", "minimum": 1, "maximum": 10000, "default": 3000},
+          "revision_id": {"type": "string"},
+          "claim_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+          "cursor": {"type": "string", "maxLength": 1024},
+          "max_bytes": {"type": "integer", "minimum": 2000, "maximum": 64000, "default": 9500}
         },
         "anyOf": [{"required": ["node_id"]}, {"required": ["entity_id"]}, {"required": ["id"]}],
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"}
+      "output_schema": {
+        "type": "object",
+        "required": ["node", "detail", "has_more", "next_cursor"],
+        "properties": {
+          "node": {
+            "type": "object",
+            "required": ["id", "title"],
+            "properties": {
+              "claims": {"type": "array", "items": {"type": "object"}},
+              "citations": {"type": "array", "items": {"type": "object"}},
+              "sources": {"type": "array", "items": {"type": "object"}},
+              "revisions": {"type": "array", "items": {"type": "object"}}
+            }
+          },
+          "detail": {"enum": ["card", "content", "evidence", "sources", "history", "full"], "default": "card"},
+          "has_more": {"type": "boolean"},
+          "next_cursor": {"type": ["string", "null"]},
+          "omitted_for_budget": {"type": "integer", "minimum": 0},
+          "stop_reason": {"enum": ["budget", "limit", "end"]},
+          "snapshot_id": {"type": "string"},
+          "text": {"type": "string"},
+          "content_char_count": {"type": "integer", "minimum": 0}
+        }
+      }
     },
     "memory_compile": {
       "effect_class": "mutating",
       "description": "Compile one Memory node into deterministic internal wiki content with sources, source versions, claims, citations, and lint findings.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "node_id": {"type": "string"},
-          "id": {"type": "string"}
-        },
+        "properties": {"node_id": {"type": "string"}, "id": {"type": "string"}},
         "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
         "additionalProperties": false
       },
@@ -463,10 +566,7 @@
       "description": "Refresh Memory lint findings for nodes, compiled wiki pages, and Storage-backed source freshness.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "node_id": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 500}
-        },
+        "properties": {"node_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}},
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}
@@ -478,11 +578,56 @@
         "type": "object",
         "properties": {
           "query": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+          "cursor": {"type": "string", "maxLength": 1024},
+          "max_bytes": {"type": "integer", "minimum": 2000, "maximum": 64000, "default": 9500},
+          "scope": {
+            "type": "object",
+            "properties": {
+              "project_id": {"type": "string", "maxLength": 256},
+              "person_id": {"type": "string", "maxLength": 256},
+              "as_of": {"type": "string", "format": "date"},
+              "include_expired": {"type": "boolean", "default": false},
+              "include_unscoped": {"type": "boolean", "default": false}
+            },
+            "additionalProperties": false
+          },
+          "as_of": {"type": "string", "format": "date"},
+          "include_expired": {"type": "boolean"},
+          "include_unscoped": {"type": "boolean"},
+          "project_id": {"type": "string"},
+          "person_id": {"type": "string"}
         },
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"}
+      "output_schema": {
+        "type": "object",
+        "required": ["has_more", "next_cursor", "omitted_for_budget", "stop_reason", "snapshot_id", "results"],
+        "properties": {
+          "has_more": {"type": "boolean"},
+          "next_cursor": {"type": ["string", "null"]},
+          "omitted_for_budget": {"type": "integer", "minimum": 0},
+          "stop_reason": {"enum": ["budget", "limit", "end"]},
+          "snapshot_id": {"type": "string"},
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "node_id", "wiki_page_id", "title", "reason", "freshness", "relevance", "compiled"],
+              "properties": {
+                "kind": {"const": "wiki_page"},
+                "node_id": {"type": "string"},
+                "wiki_page_id": {"type": "string"},
+                "title": {"type": "string"},
+                "reason": {"type": "string"},
+                "freshness": {"type": "string"},
+                "relevance": {"type": "number"},
+                "compiled": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
     },
     "memory_source_query": {
       "effect_class": "read",
@@ -493,11 +638,58 @@
           "query": {"type": "string"},
           "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
           "include_history": {"type": "boolean", "default": false},
-          "include_excluded": {"type": "boolean", "default": false}
+          "include_excluded": {"type": "boolean", "default": false},
+          "cursor": {"type": "string", "maxLength": 1024},
+          "max_bytes": {"type": "integer", "minimum": 2000, "maximum": 64000, "default": 9500},
+          "scope": {
+            "type": "object",
+            "properties": {
+              "project_id": {"type": "string", "maxLength": 256},
+              "person_id": {"type": "string", "maxLength": 256},
+              "as_of": {"type": "string", "format": "date"},
+              "include_expired": {"type": "boolean", "default": false},
+              "include_unscoped": {"type": "boolean", "default": false}
+            },
+            "additionalProperties": false
+          },
+          "as_of": {"type": "string", "format": "date"},
+          "include_expired": {"type": "boolean"},
+          "include_unscoped": {"type": "boolean"},
+          "project_id": {"type": "string"},
+          "person_id": {"type": "string"}
         },
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"}
+      "output_schema": {
+        "type": "object",
+        "required": ["has_more", "next_cursor", "omitted_for_budget", "stop_reason", "snapshot_id", "results"],
+        "properties": {
+          "has_more": {"type": "boolean"},
+          "next_cursor": {"type": ["string", "null"]},
+          "omitted_for_budget": {"type": "integer", "minimum": 0},
+          "stop_reason": {"enum": ["budget", "limit", "end"]},
+          "snapshot_id": {"type": "string"},
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "source_id", "source_version_id", "chunk_id", "summary", "freshness", "reason", "citations", "locator", "hash"],
+              "properties": {
+                "kind": {"const": "source_chunk"},
+                "source_id": {"type": "string"},
+                "source_version_id": {"type": "string"},
+                "chunk_id": {"type": "string"},
+                "summary": {"type": "string"},
+                "freshness": {"type": "string"},
+                "reason": {"type": "string"},
+                "citations": {"type": "array", "items": {"type": "object"}},
+                "locator": {"type": "object"},
+                "hash": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
     },
     "memory_fetch_chunks": {
       "effect_class": "read",
@@ -505,12 +697,7 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "chunk_ids": {
-            "type": "array",
-            "items": {"type": "string"},
-            "minItems": 1,
-            "maxItems": 20
-          },
+          "chunk_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 20},
           "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 20}
         },
         "required": ["chunk_ids"],
@@ -574,10 +761,7 @@
           },
           "job_id": {"type": "string"},
           "id": {"type": "string"},
-          "job_type": {
-            "type": "string",
-            "enum": ["ingest_source", "compile_node", "lint_node", "mark_stale", "requires_storage_reindex"]
-          },
+          "job_type": {"type": "string", "enum": ["ingest_source", "compile_node", "lint_node", "mark_stale", "requires_storage_reindex"]},
           "job_types": {
             "type": "array",
             "items": {"type": "string", "enum": ["ingest_source", "compile_node", "lint_node", "mark_stale", "requires_storage_reindex"]},
@@ -604,9 +788,7 @@
       "description": "Return recent Memory audit events.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}
-        },
+        "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}
@@ -622,10 +804,7 @@
       "description": "Set the Memory graph keyword filter.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "query": {"type": "string"},
-          "preserve_custom": {"type": "boolean", "default": false}
-        },
+        "properties": {"query": {"type": "string"}, "preserve_custom": {"type": "boolean", "default": false}},
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}
@@ -662,10 +841,7 @@
       "description": "Search Memory node references for mention pickers and agents.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "query": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
-        },
+        "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}},
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}
@@ -675,10 +851,7 @@
       "description": "Resolve one Memory node reference by entity id.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "entity_id": {"type": "string"},
-          "node_id": {"type": "string"}
-        },
+        "properties": {"entity_id": {"type": "string"}, "node_id": {"type": "string"}},
         "anyOf": [{"required": ["entity_id"]}, {"required": ["node_id"]}],
         "additionalProperties": false
       },
@@ -689,10 +862,7 @@
       "description": "Return a token-efficient Memory node summary for an agent or mention preview.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "entity_id": {"type": "string"},
-          "node_id": {"type": "string"}
-        },
+        "properties": {"entity_id": {"type": "string"}, "node_id": {"type": "string"}},
         "anyOf": [{"required": ["entity_id"]}, {"required": ["node_id"]}],
         "additionalProperties": false
       },
@@ -704,92 +874,192 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "node_id": {
-            "type": "string"
-          },
-          "target_node_id": {
-            "type": "string"
-          },
-          "expected_updated_at": {
-            "type": "string"
-          },
-          "target_updated_at": {
-            "type": "string"
-          }
+          "node_id": {"type": "string"},
+          "target_node_id": {"type": "string"},
+          "expected_updated_at": {"type": "string"},
+          "target_updated_at": {"type": "string"}
         },
-        "required": [
-          "node_id",
-          "target_node_id"
-        ],
+        "required": ["node_id", "target_node_id"],
         "additionalProperties": false
       },
-      "output_schema": {
-        "type": "object"
-      }
+      "output_schema": {"type": "object"}
     },
     "memory_exclude_node": {
       "effect_class": "mutating",
       "description": "Reversibly exclude or include a node in ordinary retrieval.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "node_id": {
-            "type": "string"
-          },
-          "excluded": {
-            "type": "boolean",
-            "default": true
-          },
-          "expected_updated_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "node_id"
-        ],
+        "properties": {"node_id": {"type": "string"}, "excluded": {"type": "boolean", "default": true}, "expected_updated_at": {"type": "string"}},
+        "required": ["node_id"],
         "additionalProperties": false
       },
-      "output_schema": {
-        "type": "object"
-      }
+      "output_schema": {"type": "object"}
     },
     "memory_remove_source": {
       "effect_class": "destructive",
       "description": "Soft-remove a source from ordinary retrieval, retaining immutable content for explicit audit.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "source_id": {
-            "type": "string"
-          },
-          "node_id": {"type": "string"},
-          "expected_updated_at": {"type": "string"}
-        },
-        "required": [
-          "source_id"
-        ],
+        "properties": {"source_id": {"type": "string"}, "node_id": {"type": "string"}, "expected_updated_at": {"type": "string"}},
+        "required": ["source_id"],
         "additionalProperties": false
       },
-      "output_schema": {
-        "type": "object"
-      }
+      "output_schema": {"type": "object"}
     },
     "memory_maintenance": {
       "effect_class": "mutating",
-      "description": "Run up to three compile/lint jobs within a foreground tick; optionally verify and repair the full source index.",
+      "description": "Explicitly run the same bounded compile/lint tick as the platform background/recovery hooks; optionally verify and repair the source index. Queue progress does not require an open UI.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "verify_index": {
-            "type": "boolean",
-            "default": false
-          }
-        },
+        "properties": {"verify_index": {"type": "boolean", "default": false}},
         "required": [],
         "additionalProperties": false
       },
+      "output_schema": {"type": "object"}
+    },
+    "memory_get_nodes": {
+      "effect_class": "read",
+      "description": "Retrieve up to twenty compact node cards in one read-only call. No bodies, revisions or source passages. Follow next_cursor if byte or result limits omit cards.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 20},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+          "cursor": {"type": "string", "maxLength": 1024},
+          "max_bytes": {"type": "integer", "minimum": 2000, "maximum": 64000, "default": 9500}
+        },
+        "required": ["node_ids"],
+        "additionalProperties": false
+      },
       "output_schema": {
-        "type": "object"
+        "type": "object",
+        "required": ["nodes", "has_more", "next_cursor", "omitted_for_budget", "stop_reason", "snapshot_id"],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "node_id", "title", "status", "revision", "verification", "compilation_state", "details_available"],
+              "properties": {
+                "id": {"type": "string"},
+                "node_id": {"type": "string"},
+                "title": {"type": "string"},
+                "status": {"type": "string"},
+                "revision": {"type": "string"},
+                "verification": {"enum": ["unverified", "verified", "conflict"]},
+                "compilation_state": {"type": "string"},
+                "details_available": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          },
+          "has_more": {"type": "boolean"},
+          "next_cursor": {"type": ["string", "null"]},
+          "omitted_for_budget": {"type": "integer", "minimum": 0},
+          "stop_reason": {"enum": ["budget", "limit", "end"]},
+          "snapshot_id": {"type": "string"}
+        }
+      }
+    },
+    "memory_explore": {
+      "effect_class": "read",
+      "description": "Explore directed graph connections from one to five known nodes. One hop by default; depth=2 is explicit. Preserves parallel edge ids and handles cycles. Returns compact endpoint cards, reasons, evidence/compilation states, a snapshot id and request-bound next_cursor. Read-only; never changes the shared UI view.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 5},
+          "direction": {"enum": ["incoming", "outgoing", "both"], "default": "both"},
+          "kinds": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "related_to",
+                "supports",
+                "contradicts",
+                "mentions",
+                "derived_from",
+                "about",
+                "owned_by",
+                "requested_by",
+                "depends_on",
+                "same_as",
+                "supersedes"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "depth": {"type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+          "scope": {
+            "type": "object",
+            "properties": {
+              "project_id": {"type": "string", "maxLength": 256},
+              "person_id": {"type": "string", "maxLength": 256},
+              "as_of": {"type": "string", "format": "date"},
+              "include_expired": {"type": "boolean", "default": false},
+              "include_unscoped": {"type": "boolean", "default": false}
+            },
+            "additionalProperties": false
+          },
+          "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+          "cursor": {"type": "string", "maxLength": 1024},
+          "max_bytes": {"type": "integer", "minimum": 2000, "maximum": 64000, "default": 9500}
+        },
+        "required": ["node_ids"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "nodes",
+          "has_more",
+          "next_cursor",
+          "omitted_for_budget",
+          "stop_reason",
+          "snapshot_id",
+          "edges",
+          "visited_node_ids",
+          "unavailable_node_ids"
+        ],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "node_id", "title", "status", "revision", "verification", "compilation_state", "details_available"],
+              "properties": {
+                "id": {"type": "string"},
+                "node_id": {"type": "string"},
+                "title": {"type": "string"},
+                "status": {"type": "string"},
+                "revision": {"type": "string"},
+                "verification": {"enum": ["unverified", "verified", "conflict"]},
+                "compilation_state": {"type": "string"},
+                "details_available": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          },
+          "has_more": {"type": "boolean"},
+          "next_cursor": {"type": ["string", "null"]},
+          "omitted_for_budget": {"type": "integer", "minimum": 0},
+          "stop_reason": {"enum": ["budget", "limit", "end"]},
+          "snapshot_id": {"type": "string"},
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "source", "target", "kind", "hop", "reason", "revision", "confidence_basis"],
+              "properties": {
+                "id": {"type": "string"},
+                "source": {"type": "string"},
+                "target": {"type": "string"},
+                "kind": {"type": "string"},
+                "hop": {"type": "integer"}
+              }
+            }
+          },
+          "visited_node_ids": {"type": "array", "items": {"type": "string"}},
+          "unavailable_node_ids": {"type": "array", "items": {"type": "string"}}
+        }
       }
     }
   }

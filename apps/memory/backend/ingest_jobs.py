@@ -351,10 +351,14 @@ def next_ready_job(db: sqlite3.Connection, *, job_types: list[str], timestamp: s
             OR (status = 'running' AND locked_until IS NOT NULL AND locked_until <= ?)
           )
           {type_clause}
+          AND NOT EXISTS (SELECT 1 FROM ingest_jobs peer WHERE peer.status='running'
+            AND peer.locked_until > ? AND peer.id != ingest_jobs.id
+            AND peer.node_id != '' AND peer.node_id=ingest_jobs.node_id
+            AND peer.job_type IN ('compile_node','lint_node') AND ingest_jobs.job_type IN ('compile_node','lint_node'))
         ORDER BY available_at, created_at
         LIMIT 1
         """,
-        tuple(values),
+        (*values, timestamp),
     ).fetchone()
 
 

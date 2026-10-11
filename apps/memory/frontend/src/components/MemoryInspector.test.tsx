@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FloatingNodePanel } from "./FloatingNodePanel";
 import { MemoryManagement } from "./MemoryManagement";
+import { MemoryEvidence } from "./MemoryEvidence";
 import type { NodeDetails } from "../types";
 
 describe("Memory inspector", () => {
@@ -20,6 +21,7 @@ describe("Memory inspector", () => {
   it("separates source currency, compilation and contradictory evidence with correction actions", () => {
     const node: NodeDetails = {
       id: "node-1", title: "Renewal", type: "fact", updated_at: "2026-10-11", confidence: 0,
+      source_state: "current", verification: "conflict", compilation_state: "fresh",
       compiled_page: { id: "page-1", node_id: "node-1", title: "Renewal", freshness: "fresh", compilation_state: "fresh", source_state: "current", verification: "conflict" },
       claims: [{ id: "claim-1", wiki_page_id: "page-1", node_id: "node-1", claim_text: "The renewal costs 1200 euro.", verification: "conflict",
         contradictions: [{ id: "cite-1", claim_id: "claim-1", quote: "The renewal costs 9000 euro.", source_chunk_id: "chunk-1" }],
@@ -27,10 +29,14 @@ describe("Memory inspector", () => {
     };
     const markup = renderToStaticMarkup(<FloatingNodePanel node={node} relationships={[]} onClose={() => {}} onSelect={() => {}} />);
     expect(markup).toContain("Source: current");
-    expect(markup).toContain("Evidence: conflict");
-    expect(markup).toContain("Contradicting passage");
-    expect(markup).toContain("Relevant passage · needs review");
-    expect(markup).toContain("9000 euro");
+    expect(markup).toContain("conflict");
+    expect(markup).not.toContain("9000 euro");
+    expect(markup).toContain("Connections");
+    expect(markup).toContain("History");
+    const evidence = renderToStaticMarkup(<MemoryEvidence node={node} />);
+    expect(evidence).toContain("Contradicting passage");
+    expect(evidence).toContain("Relevant passage · needs review");
+    expect(evidence).toContain("9000 euro");
     expect(markup).toContain("Correct fact");
     expect(markup).toContain("Exclude from retrieval");
     expect(markup).toContain("Merge into another memory");

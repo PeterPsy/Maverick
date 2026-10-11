@@ -142,12 +142,12 @@
     },
     "memory": {
       "cli": {
-        "descriptor_sha256": "182de47b20da7ebd6ee620fed51fe8cc6a53e4192e61a352e3e2032a04720442",
-        "execution_sha256": "25c9c0e814c52b3f14e9577b2b66e21493d5b433322f3dc5684469b34d440dc5"
+        "descriptor_sha256": "e0439617c110752e44fb5f000cfc253df3f7f514c67e132b02b00578b24bc9bc",
+        "execution_sha256": "45538b87174a5fadcbfe6a4220b3b046aa88fca92c2a9d84f7d15d25e7dd3e63"
       },
       "mcp": {
-        "descriptor_sha256": "26062e6969d91cece27a0d8d1444b6d369fd7822bba395d4f50e27abfefa2a99",
-        "execution_sha256": "4dfff87dcd6ae9c8ee0599132df9ae2d4dc33e2187fd28f39e1f5c72e0883c04"
+        "descriptor_sha256": "2f350644041c58b0bbf7e555327260e6f9f6c405617239082c1a2190872cb78a",
+        "execution_sha256": "95cccba1b9b48b444c9701e324e2c800d9514c036436dce8bccee77f9aadf9ab"
       }
     },
     "platform-connectors": {

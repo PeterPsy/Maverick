@@ -6,7 +6,7 @@ from ingest_jobs import cancel_job, claim_job, complete_job, enqueue_job, fail_j
 from job_runner import run_jobs_until_idle, run_next_job
 from nodes import create_node, inspect_node, update_node, soft_delete_node
 from references import add_external_ref
-from retrieval import audit_events, context_payload, graph_payload, search_nodes
+from retrieval import audit_events, graph_payload, search_nodes
 from source_ingestion import ingest_source
 from source_retrieval import fetch_chunks, source_query
 from source_inspection import inspect_source
@@ -49,3 +49,5 @@ __all__ = [
     "update_node",
     "wiki_query",
 ]
+
+from context_retrieval import context_payload

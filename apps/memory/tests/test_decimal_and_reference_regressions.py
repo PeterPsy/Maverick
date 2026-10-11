@@ -26,7 +26,7 @@ class DecimalAndReferenceRegressions(MemoryTestCase):
                 result = self.attach_rate(rate, source_rate, f'rate-{index}')
                 self.assertEqual(result['compiled']['citations'], [])
                 self.assertNotEqual(result['compiled']['compiled_page']['verification'], 'verified')
-                self.assertNotEqual(self.call('inspect', node_id=result['node']['id'])['node']['compiled_page']['verification'], 'verified')
+                self.assertNotEqual(self.call('inspect', detail='full', node_id=result['node']['id'])['node']['compiled_page']['verification'], 'verified')
         for index, rate in enumerate(['.5', '+.5', '-.5', '−.5', ',5']):
             with self.subTest(supported=rate):
                 result = self.attach_rate(rate, rate, f'equal-{index}')
@@ -53,14 +53,14 @@ class DecimalAndReferenceRegressions(MemoryTestCase):
             db.execute("UPDATE schema_metadata SET value='5' WHERE key='schema_version'")
         self.database.ensure_schema(self.root)
         self.database.ensure_schema(self.root)
-        inspected = self.call('inspect', node_id=node_id)['node']
+        inspected = self.call('inspect', detail='full', node_id=node_id)['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'stale')
         self.assertEqual(inspected['compiled_page']['verification'], 'unverified')
         self.assertEqual(inspected['citations'], [])
         self.assertEqual(self.call('context', query='contratto', limit=1)['items'][0]['compiled']['verification'], 'unverified')
         self.assertEqual(len(self.call('jobs_list', status='ready')['jobs']), 1)
         self.call('maintenance')
-        inspected = self.call('inspect', node_id=node_id)['node']
+        inspected = self.call('inspect', detail='full', node_id=node_id)['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'fresh')
         self.assertNotEqual(inspected['compiled_page']['verification'], 'verified')
         self.assertEqual(inspected['citations'], [])
@@ -80,7 +80,7 @@ class DecimalAndReferenceRegressions(MemoryTestCase):
             with self.subTest(maintained=maintained):
                 if maintained:
                     self.call('maintenance')
-                full = self.call('search', query='Beta', limit=1)['results'][0]
+                full = self.call('search', detail='evidence', query='Beta', limit=1)['results'][0]
                 items = self.call('context', query='Anchorterm', limit=2)['items']
                 related = next(item for item in items if item['id'] == b['id'])
                 self.assertEqual(related['match_sources'], ['related_node'])
@@ -101,7 +101,7 @@ class DecimalAndReferenceRegressions(MemoryTestCase):
                     removed = self.database.row_payload(db.execute('SELECT * FROM sources WHERE id=?', (source_id,)).fetchone())
                     self.assertIsNone(refs.storage_reference_payload(removed))
                     self.assertEqual(refs.storage_reference_payload(removed, include_removed=True)['entity_id'], 'file_drive_contract')
-                audited = self.call('inspect', node_id=b['id'])['node']
+                audited = self.call('inspect', detail='full', node_id=b['id'])['node']
                 self.assertEqual(audited['external_refs'][0]['metadata']['ingest_preview_text'], preview)
                 self.assertEqual(audited['storage_references'][0]['entity_id'], 'file_drive_contract')
                 self.assertTrue(self.call('inspect_source', source_id=source_id)['versions'])

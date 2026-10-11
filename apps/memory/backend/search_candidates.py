@@ -1,6 +1,10 @@
 """Rank all direct retrieval channels before applying the result limit."""
 
+import json
 import re
+from datetime import date
+
+from errors import MemoryValidationError
 import sqlite3
 
 TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
@@ -16,70 +20,90 @@ def query_expression(query: str, *, complete: bool = True) -> str:
     return (" AND " if complete else " OR ").join('"' + term + '"' for term in query_terms(query))
 
 
-def scope_sql(scope: dict | None, *, alias: str = "nodes") -> tuple[str, list[str]]:
+def scope_sql(scope: dict | None, *, alias: str = "nodes") -> tuple[str, list]:
+    scope = scope or {}
     clauses, values = [], []
+    if scope.get('_node_ids'):
+        ids = scope['_node_ids']
+        clauses.append(f"AND {alias}.id IN ({','.join('?' for _ in ids)})")
+        values.extend(ids)
     for key in ("project_id", "person_id"):
-        if scope and scope.get(key):
-            clauses.append(f"AND COALESCE(json_extract({alias}.metadata_json, '$.{key}'), '') = ?")
+        if scope.get(key):
+            field = f"COALESCE(json_extract({alias}.metadata_json, '$.{key}'), '')"
+            clauses.append(f"AND ({field} = ?" + (f" OR {field} = ''" if scope.get("include_unscoped") else "") + ")")
             values.append(str(scope[key]))
+    as_of = str(scope.get("as_of") or date.today().isoformat())
+    try:
+        date.fromisoformat(as_of)
+    except ValueError:
+        raise MemoryValidationError("as_of must be an ISO date (YYYY-MM-DD).") from None
+    if not scope.get("include_expired"):
+        for key, operator in (("valid_from", "<="), ("valid_until", ">=")):
+            field = f"COALESCE(json_extract({alias}.metadata_json, '$.{key}'), '')"
+            clauses.append(f"AND ({field} = '' OR substr({field},1,10) {operator} ?)")
+            values.append(as_of)
     return " ".join(clauses), values
 
 
-def ranked_candidates(db: sqlite3.Connection, query: str, *, limit: int, scope: dict | None = None) -> list[dict]:
+def candidate_node_scope(scope: dict | None, node_ids: list[str]) -> dict:
+    return {**(scope or {}), '_node_ids': node_ids}
+
+
+def ranked_candidates(db: sqlite3.Connection, query: str, *, limit: int, scope: dict | None = None,
+                      offset: int = 0, channels: list[str] | None = None) -> list[dict]:
     terms = query_terms(query)
     if not terms:
         return []
-    candidate_limit = max(100, min(500, limit * 10))
     scope_clause, scope_values = scope_sql(scope, alias="n")
-    candidates: dict[str, dict] = {}
+    unions, values = [], []
+    selected_channels = channels or ["node", "wiki_page", "claim", "source_chunk", "identity"]
+    def coverage(title, summary, excerpt):
+        tokens = set(TOKEN_PATTERN.findall(' '.join((title or '',summary or '',excerpt or '')).casefold()))
+        return sum(term in tokens for term in terms)/len(terms)
+    db.create_function('memory_coverage',3,coverage,deterministic=True)
     for complete in (True, False):
         expression = query_expression(query, complete=complete)
-        rows = list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
-            n.metadata_json, bm25(memory_fts, 0, 5, 3, 1, 0.5) AS rank,
-            snippet(memory_fts, 3, '', '', '…', 64) AS excerpt, 'node' AS channel
-            FROM memory_fts JOIN nodes n ON n.id = memory_fts.node_id
-            WHERE memory_fts MATCH ? AND n.status = 'active' {scope_clause}
-            ORDER BY rank LIMIT ?""", (expression, *scope_values, candidate_limit)))
-        rows += list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
-            n.metadata_json, bm25(compiled_fts, 0, 5, 3, 1, 2) AS rank,
-            snippet(compiled_fts, 3, '', '', '…', 64) AS excerpt, 'wiki_page' AS channel
-            FROM compiled_fts JOIN nodes n ON n.id = compiled_fts.node_id
-            JOIN wiki_pages wp ON wp.node_id = n.id
-            WHERE compiled_fts MATCH ? AND n.status = 'active' AND wp.status = 'active' AND wp.freshness = 'fresh'
-            {scope_clause} ORDER BY rank LIMIT ?""", (expression, *scope_values, candidate_limit)))
-        rows += list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
-            n.metadata_json, bm25(compiled_fts, 0, 5, 3, 1, 2) AS rank,
-            snippet(compiled_fts, 4, '', '', '…', 64) AS excerpt, 'claim' AS channel
-            FROM compiled_fts JOIN nodes n ON n.id = compiled_fts.node_id JOIN wiki_pages wp ON wp.node_id = n.id
-            WHERE compiled_fts MATCH ? AND n.status = 'active' AND wp.status = 'active' AND wp.freshness = 'fresh'
-            {scope_clause} ORDER BY rank LIMIT ?""", ("claim_text : (" + expression + ")", *scope_values, candidate_limit)))
-        rows += list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
-            n.metadata_json, bm25(source_chunk_fts, 0, 0, 0, 0, 4, 1, 0.5, 0.5, 0.5) AS rank,
-            snippet(source_chunk_fts, 5, '', '', '…', 64) AS excerpt, 'source_chunk' AS channel,
-            sc.id AS chunk_id, s.id AS source_id, sv.id AS source_version_id
-            FROM source_chunk_fts JOIN source_chunks sc ON sc.id = source_chunk_fts.chunk_id
-            JOIN source_versions sv ON sv.id = sc.source_version_id
-            JOIN sources s ON s.id = sv.source_id AND s.current_version_id = sv.id
-            JOIN node_source_links nl ON nl.source_id = s.id JOIN nodes n ON n.id = nl.node_id
-            WHERE source_chunk_fts MATCH ? AND s.status = 'active' AND n.status = 'active'
-            {scope_clause} ORDER BY rank LIMIT ?""", (expression, *scope_values, candidate_limit)))
-        for row in rows:
-            item = dict(row)
-            text = " ".join((item["title"], item["summary"], item["excerpt"])).casefold()
-            coverage = 1.0 if complete else sum(term in TOKEN_PATTERN.findall(text) for term in terms) / len(terms)
-            # Relevance is a ranking score, explicitly not a probability.
-            score = .75 * coverage + .1 * min(1, abs(item["rank"]) * 100) + .05 * item["importance"]
-            if item["channel"] == "source_chunk":
-                score += .1
-            item.update(relevance=round(min(1., score), 3), match_sources=[item["channel"]])
-            old = candidates.get(item["id"])
-            if old:
-                channels = list(dict.fromkeys(old["match_sources"] + item["match_sources"]))
-                if old["relevance"] >= item["relevance"]:
-                    old["match_sources"] = channels
-                    continue
-                item["match_sources"] = channels
-            candidates[item["id"]] = item
-        if len(candidates) >= limit:
-            break
-    return sorted(candidates.values(), key=lambda item: (item["relevance"], item["importance"], item["updated_at"], item["id"]), reverse=True)
+        for channel in selected_channels:
+            if channel == "identity":
+                continue
+            table = "memory_fts" if channel == "node" else "source_chunk_fts" if channel == "source_chunk" else "compiled_fts"
+            if channel == "source_chunk":
+                joins = """JOIN source_chunks sc ON sc.id=source_chunk_fts.chunk_id
+                    JOIN source_versions sv ON sv.id=sc.source_version_id
+                    JOIN sources s ON s.id=sv.source_id AND s.current_version_id=sv.id
+                    JOIN node_source_links nl ON nl.source_id=s.id JOIN nodes n ON n.id=nl.node_id"""
+                filters = "AND s.status='active' AND sc.body_path != ''"
+            else:
+                joins = f"JOIN nodes n ON n.id={table}.node_id"
+                filters = ""
+                if channel != "node":
+                    joins += " JOIN wiki_pages wp ON wp.node_id=n.id"
+                    filters = "AND wp.status='active' AND wp.freshness='fresh'"
+            search = "claim_text : (" + expression + ")" if channel == "claim" else expression
+            # Complete matches precede partial matches; the SQL score is a rank,
+            # never a probability. Aggregate all channels before paging.
+            excerpt_column = 5 if channel == 'source_chunk' else 4 if channel == 'claim' else 3
+            base = '0.75' if complete else f"0.75*memory_coverage(n.title,n.summary,snippet({table},{excerpt_column},'','','…',64))"
+            bonus = 0.1 if channel == "source_chunk" else 0
+            weights = ',0,5,3,1,0.5' if channel == 'node' else ',0,5,3,1,2' if channel != 'source_chunk' else ',0,0,0,0,4,1,0.5,0.5,0.5'
+            unions.append(f"""SELECT n.id, '{channel}' AS channel,
+                min(1.0,{base}+{bonus}+0.1*min(1,abs(bm25({table}{weights}))*100)+0.05*n.importance) AS score FROM {table} {joins}
+                WHERE {table} MATCH ? AND n.status='active' {filters} {scope_clause}""")
+            values.extend([search, *scope_values])
+    if "identity" in selected_channels:
+        unions.append(f"""SELECT n.id, 'identity' AS channel, 1.0 AS score FROM nodes n
+            WHERE n.status='active' {scope_clause} AND (
+              lower(n.id)=lower(?) OR lower(COALESCE(json_extract(n.metadata_json,'$.person_id'),''))=lower(?)
+              OR lower(COALESCE(json_extract(n.metadata_json,'$.project_id'),''))=lower(?)
+              OR EXISTS(SELECT 1 FROM json_each(CASE WHEN json_type(n.metadata_json,'$.aliases')='array'
+                THEN json_extract(n.metadata_json,'$.aliases') ELSE '[]' END) WHERE lower(value)=lower(?))
+              OR EXISTS(SELECT 1 FROM external_refs er WHERE er.node_id=n.id AND lower(er.entity_id)=lower(?)
+                AND NOT EXISTS(SELECT 1 FROM sources s WHERE s.external_ref_id=er.id AND s.status!='active')))""")
+        values.extend([*scope_values, *([query.strip()] * 5)])
+    sql = " UNION ALL ".join(unions)
+    rows = db.execute(f"""WITH matches AS MATERIALIZED ({sql}), ranked AS (
+        SELECT id,max(score) AS relevance,json_group_array(DISTINCT channel) AS channels FROM matches GROUP BY id)
+        SELECT ranked.*,n.importance,n.updated_at FROM ranked JOIN nodes n ON n.id=ranked.id
+        ORDER BY relevance DESC,n.importance DESC,n.updated_at DESC,n.id DESC LIMIT ? OFFSET ?""", (*values, limit, offset))
+    return [{"id": row["id"], "relevance": round(row["relevance"],3), "importance": row["importance"],
+             "updated_at": row["updated_at"], "match_sources": json.loads(row["channels"])} for row in rows]

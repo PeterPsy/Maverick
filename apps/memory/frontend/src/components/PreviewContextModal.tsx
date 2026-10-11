@@ -18,9 +18,11 @@ type PreviewContextModalProps = {
   open: boolean;
   query: string;
   onClose: () => void;
+  onSelect: (id: string) => void;
+  onShowGraph: () => void;
 };
 
-export function PreviewContextModal({ error, items, loading, open, query, onClose }: PreviewContextModalProps) {
+export function PreviewContextModal({ error, items, loading, open, query, onClose, onSelect, onShowGraph }: PreviewContextModalProps) {
   if (!open) return null;
 
   return (
@@ -57,6 +59,7 @@ export function PreviewContextModal({ error, items, loading, open, query, onClos
                   <strong>{item.title}</strong>
                   <p>{truncate(item.summary || item.body_text, 220)}</p>
                   {item.reason ? <small>{item.reason}</small> : null}
+                  {item.node_id && <button type="button" onClick={() => onSelect(item.node_id!)}>Open memory</button>}
                 </article>
               ))}
             </div>
@@ -64,6 +67,7 @@ export function PreviewContextModal({ error, items, loading, open, query, onClos
         </div>
 
         <footer className="modal-actions">
+          <button className="secondary-action" disabled={loading || !items.length} onClick={onShowGraph} type="button">Show context in graph</button>
           <button className="secondary-action" onClick={onClose} type="button">Close</button>
         </footer>
       </section>

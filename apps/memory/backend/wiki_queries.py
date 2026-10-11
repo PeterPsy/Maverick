@@ -11,86 +11,34 @@ from lint import computed_page_freshness, lint_findings_for_node, source_state_f
 from storage_reference_payloads import storage_reference_for_citation, storage_references_for_node
 
 
-def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any]:
+def wiki_query(data_root: Path, query: str, *, limit: int = 10, scope: dict | None = None,
+               cursor: object = None, max_bytes: object = None) -> dict[str, Any]:
+    from retrieval_pages import bounded_page, fingerprint, page_offset, response_budget, retrieval_revision
+    from search_candidates import ranked_candidates
+    from retrieval_projections import compact_projections
     ensure_schema(data_root)
-    normalized_limit = normalize_limit(limit, default=10, minimum=1, maximum=50)
-    needle = f"%{query.strip()}%"
-    if not query.strip():
-        return {"query": query, "results": []}
+    limit = normalize_limit(limit,default=10,minimum=1,maximum=50)
     with connect(data_root) as db:
-        page_rows = list(
-            db.execute(
-                """
-                SELECT wp.*, n.type AS node_type
-                FROM wiki_pages wp
-                JOIN nodes n ON n.id = wp.node_id
-                WHERE wp.status = 'active'
-                  AND n.status = 'active'
-                  AND (wp.title LIKE ? OR wp.summary LIKE ? OR wp.body_markdown LIKE ?)
-                ORDER BY wp.updated_at DESC
-                LIMIT ?
-                """,
-                (needle, needle, needle, normalized_limit),
-            )
-        )
-        results = [
-            {
-                "kind": "wiki_page",
-                "node_id": row["node_id"],
-                "wiki_page_id": row["id"],
-                "title": row["title"],
-                "summary": row["summary"],
-                "node_type": row["node_type"],
-                "freshness": computed_page_freshness(db, row, data_root=data_root),
-                "compiled_at": row["compiled_at"],
-                "storage_references": storage_references_for_node(db, row["node_id"]),
-            }
-            for row in page_rows
-        ]
-        if len(results) < normalized_limit:
-            claim_rows = list(
-                db.execute(
-                    """
-                    SELECT c.*, wp.title, wp.freshness, wp.compiled_at
-                    FROM claims c
-                    JOIN wiki_pages wp ON wp.id = c.wiki_page_id
-                    JOIN nodes n ON n.id = c.node_id
-                    WHERE c.status = 'active'
-                      AND wp.status = 'active'
-                      AND n.status = 'active'
-                      AND c.claim_text LIKE ?
-                    ORDER BY c.updated_at DESC
-                    LIMIT ?
-                    """,
-                    (needle, normalized_limit - len(results)),
-                )
-            )
-            for row in claim_rows:
-                citations = _citations_for_claim(db, row["id"])
-                results.append(
-                    {
-                        "kind": "claim",
-                        "node_id": row["node_id"],
-                        "wiki_page_id": row["wiki_page_id"],
-                        "claim_id": row["id"],
-                        "title": row["title"],
-                        "summary": row["claim_text"],
-                        "freshness": _page_freshness(db, row["wiki_page_id"]) or row["freshness"],
-                        "compiled_at": row["compiled_at"],
-                        "citations": citations,
-                        "storage_references": [
-                            citation["storage_reference"]
-                            for citation in citations
-                            if isinstance(citation.get("storage_reference"), dict)
-                        ],
-                    }
-                )
-    return {"query": query, "results": results}
-
-
-def _page_freshness(db: sqlite3.Connection, wiki_page_id: str) -> str:
-    row = db.execute("SELECT freshness FROM wiki_pages WHERE id = ?", (wiki_page_id,)).fetchone()
-    return str(row["freshness"] or "") if row is not None else ""
+        db.execute('BEGIN')
+        binding = fingerprint([query,scope,retrieval_revision(db),'wiki'])
+        offset = page_offset(cursor,binding)
+        candidates = ranked_candidates(db,query,limit=limit+1,scope=scope,offset=offset,channels=['wiki_page','claim'])
+        ids = [candidate['id'] for candidate in candidates]
+        projections = compact_projections(db,ids,data_root=data_root)
+        marks = ','.join('?' for _ in ids)
+        pages = {row['node_id']:dict(row) for row in db.execute(f"""SELECT wp.id,wp.node_id,substr(wp.title,1,240) AS title,
+            substr(wp.summary,1,360) AS summary,wp.compiled_at,n.type AS node_type
+            FROM wiki_pages wp JOIN nodes n ON n.id=wp.node_id WHERE wp.node_id IN ({marks}) AND wp.status='active'""",ids)} if ids else {}
+        results = []
+        for candidate in candidates:
+            page = pages[candidate['id']]
+            projection = projections[page['node_id']]
+            results.append({**page,'kind':'wiki_page','wiki_page_id':page['id'],
+                'freshness':projection['compiled'].get('freshness','unknown'),'compiled':projection['compiled'],
+                'storage_references':projection['storage_references'],'match_sources':candidate['match_sources'],
+                'relevance':candidate['relevance'],'reason':'Matches compiled wiki or claims'})
+        return bounded_page(results,key='results',base={'query':query[:420],'snapshot_id':binding},
+            limit=limit,offset=offset,binding=binding,max_bytes=response_budget(max_bytes))
 
 
 def compiled_payload_for_node(

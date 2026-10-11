@@ -21,11 +21,12 @@ export type GraphNode = {
   created_at?: string;
   updated_at?: string;
   metadata?: Record<string, unknown>;
-  x?: number;
-  y?: number;
-  vx?: number;
-  vy?: number;
-  radius?: number;
+  status?: string;
+  revision?: string;
+  reason?: string;
+  verification?: string;
+  compilation_state?: string;
+  source_state?: string;
 };
 
 export type GraphEdge = {
@@ -89,6 +90,7 @@ export type MemoryClaim = {
   contradictions?: MemoryCitation[];
   related_evidence?: MemoryCitation[];
   verification?: string;
+  citations_has_more?: boolean;
 };
 
 export type CompiledPage = {
@@ -115,6 +117,9 @@ export type MemorySource = {
   workspace_relative_path?: string;
   uri?: string;
   title?: string;
+  status?: string;
+  external_ref?: ExternalRef;
+  storage_reference?: { deep_link?: string };
 };
 
 export type LintFinding = {
@@ -136,8 +141,17 @@ export type NodeDetails = GraphNode & {
   citations?: MemoryCitation[];
   sources?: MemorySource[];
   lint_findings?: LintFinding[];
-  revisions?: Array<{ id: string; revision: string; reason: string; snapshot: { title?: string; body_text?: string } }>;
+  revisions?: Array<{ id: string; revision: string; reason: string; snapshot?: { title?: string; body_text?: string } }>;
   duplicate_candidates?: Array<{ id: string; title: string; updated_at?: string }>;
+  available_source_chunks?: Array<{ chunk_id: string; source_id: string; source_version_id: string; title: string }>;
+};
+
+export type ExploreResult = {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  snapshot_id: string;
+  has_more: boolean;
+  next_cursor: string | null;
 };
 
 export type NodeDraft = {

@@ -8,28 +8,33 @@ import sqlite3
 from typing import Any
 
 from content_store import read_body
+from context_payloads import compact_citations
 from database import connect, ensure_schema, normalize_limit, row_payload
 from errors import MemoryValidationError
-from source_chunk_index import source_chunk_fts_query
 from source_current import current_version_id
-from search_candidates import query_terms
+from search_candidates import query_expression, query_terms, scope_sql
+from retrieval_pages import bounded_page, fingerprint, page_offset, response_budget, retrieval_revision
 from storage_reference_payloads import storage_reference_for_citation
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
 
-def source_query(data_root: Path, query: str, *, limit: int = 10, include_history: bool = False, include_excluded: bool = False) -> dict[str, Any]:
+def source_query(data_root: Path, query: str, *, limit: int = 10, include_history: bool = False, include_excluded: bool = False,
+                 scope: dict | None = None, cursor: object = None, max_bytes: object = None) -> dict[str, Any]:
     ensure_schema(data_root)
     normalized_limit = normalize_limit(limit, default=10, minimum=1, maximum=50)
-    search = source_chunk_fts_query(query)
-    if not query.strip():
-        return {"query": query, "results": []}
-    if not search:
-        return {"query": query, "results": []}
+    search = query_expression(query, complete=False)
     with connect(data_root) as db:
+        db.execute('BEGIN')
+        binding = fingerprint([query,scope,include_history,include_excluded,retrieval_revision(db),'source'])
+        offset = page_offset(cursor,binding)
+        scope_clause, scope_values = scope_sql(scope,alias='n')
+        base = {'query':query[:420],'snapshot_id':binding}
+        if not search:
+            return bounded_page([],key='results',base=base,limit=normalized_limit,offset=offset,binding=binding,max_bytes=response_budget(max_bytes))
         chunk_rows = list(
             db.execute(
-                """
+                f"""
                 SELECT
                   sc.*,
                   sv.id AS source_version_id,
@@ -54,20 +59,20 @@ def source_query(data_root: Path, query: str, *, limit: int = 10, include_histor
                 LEFT JOIN source_documents sd ON sd.id = sv.source_document_id
                 WHERE sc.body_path != '' AND (? OR s.status = 'active')
                   AND (? OR s.current_version_id = sv.id)
-                  AND (? OR EXISTS (SELECT 1 FROM node_source_links nl JOIN nodes n ON n.id = nl.node_id WHERE nl.source_id = s.id AND n.status = 'active'))
+                  AND EXISTS (SELECT 1 FROM node_source_links nl JOIN nodes n ON n.id = nl.node_id
+                    WHERE nl.source_id = s.id AND (? OR n.status = 'active') {scope_clause})
                   AND source_chunk_fts MATCH ?
                 ORDER BY rank, sv.observed_at DESC, sc.chunk_index
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (include_excluded, include_history, include_excluded, search, normalized_limit * 8),
+                (include_excluded, include_history, include_excluded, *scope_values, search, normalized_limit+1, offset),
             )
         )
         results = []
         for row in chunk_rows:
             payload = row_payload(row) or {}
             chunk_body = _read_chunk_body(data_root, payload)
-            if not chunk_matches_query(payload, chunk_body, query):
-                continue
+            citations = citations_for_chunk(db, payload['id'], limit=4)
             results.append(
                 {
                     "kind": "source_chunk",
@@ -78,8 +83,11 @@ def source_query(data_root: Path, query: str, *, limit: int = 10, include_histor
                     "chunk_id": payload["id"],
                     "title": payload.get("source_title") or payload.get("source_key") or payload["source_id"],
                     "summary": chunk_summary(chunk_body, query),
+                    "reason": "Matches a historical source passage" if include_history else "Matches a current source passage",
+                    "match_sources": ["source_chunk"],
                     "freshness": chunk_freshness(db, payload),
-                    "citations": citations_for_chunk(db, payload["id"]),
+                    "citations": compact_citations(citations,limit=3,quote_chars=300),
+                    "citations_has_more": len(citations)>3,
                     "locator": {
                         "kind": payload.get("locator_kind") or "",
                         "value": payload.get("locator") or "",
@@ -90,9 +98,8 @@ def source_query(data_root: Path, query: str, *, limit: int = 10, include_histor
                     "source": _source_payload(payload),
                 }
             )
-            if len(results) >= normalized_limit:
-                break
-        return {"query": query, "results": results}
+        return bounded_page(results,key='results',base=base,limit=normalized_limit,offset=offset,
+                            binding=binding,max_bytes=response_budget(max_bytes))
 
 
 def fetch_chunks(data_root: Path, chunk_ids: object, *, limit: int = 20) -> dict[str, Any]:
@@ -167,9 +174,10 @@ def _read_chunk_body(data_root: Path, chunk: dict[str, Any]) -> str:
     )
 
 
-def citations_for_chunk(db: sqlite3.Connection, chunk_id: str) -> list[dict[str, Any]]:
+def citations_for_chunk(db: sqlite3.Connection, chunk_id: str, *, limit: int | None = None) -> list[dict[str, Any]]:
     citations = []
-    for row in db.execute("SELECT ct.* FROM citations ct JOIN claims cl ON cl.id = ct.claim_id JOIN nodes n ON n.id = cl.node_id WHERE source_chunk_id = ? AND ct.evidence_relation = 'supports' AND n.status = 'active' AND cl.stale = 0 ORDER BY ct.created_at", (chunk_id,)):
+    query = "SELECT ct.* FROM citations ct JOIN claims cl ON cl.id = ct.claim_id JOIN nodes n ON n.id = cl.node_id WHERE source_chunk_id = ? AND ct.evidence_relation = 'supports' AND n.status = 'active' AND cl.stale = 0 ORDER BY ct.created_at,ct.id"
+    for row in db.execute(query+(' LIMIT ?' if limit else ''), (chunk_id,limit) if limit else (chunk_id,)):
         citation = row_payload(row) or {}
         metadata = citation.get("metadata") if isinstance(citation.get("metadata"), dict) else {}
         citation["source_version"] = str(metadata.get("source_version") or "")

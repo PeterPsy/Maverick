@@ -810,7 +810,7 @@ class MemoryAppTestCase(unittest.TestCase):
             )
 
             run_status, run = service.handle_action(data_root, {"action": "jobs_list", "operation": "run_next", "job_types": ["compile_node"]})
-            _inspect_status, inspected = service.handle_action(data_root, {"action": "inspect", "node_id": node["id"]})
+            _inspect_status, inspected = service.handle_action(data_root, {"action": "inspect", "detail": "full", "node_id": node["id"]})
 
             self.assertEqual(run_status, 200)
             self.assertTrue(run["ran"])
@@ -852,8 +852,8 @@ class MemoryAppTestCase(unittest.TestCase):
                 },
             )
             done_jobs = service.handle_action(data_root, {"action": "jobs_list", "status": "done"})[1]["jobs"]
-            first_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": first["id"]})[1]
-            second_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": second["id"]})[1]
+            first_inspect = service.handle_action(data_root, {"action": "inspect", "detail": "full", "node_id": first["id"]})[1]
+            second_inspect = service.handle_action(data_root, {"action": "inspect", "detail": "full", "node_id": second["id"]})[1]
 
             self.assertEqual(run_status, 200)
             self.assertTrue(run["ran"])
@@ -974,7 +974,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(len(graph["edges"]), 1)
             self.assertEqual(graph["edges"][0]["kind"], "mentions")
 
-    def test_search_returns_full_envelope_and_context_returns_agent_compact_payload(self) -> None:
+    def test_search_evidence_and_context_return_bounded_projections(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
             node = self.run_backend(
@@ -987,15 +987,14 @@ class MemoryAppTestCase(unittest.TestCase):
                 },
             )["json"]["node"]
 
-            search = self.run_backend(data_root, {"action": "search", "query": "renewal owner"})["json"]
+            search = self.run_backend(data_root, {"action": "search", "detail": "evidence", "query": "renewal owner"})["json"]
             context = self.run_backend(data_root, {"action": "context", "query": "renewal owner"})["json"]
 
             search_item = search["results"][0]
             self.assertEqual(search_item["kind"], "memory_node")
             self.assertEqual(search_item["id"], node["id"])
             self.assertEqual(search_item["node_id"], node["id"])
-            self.assertEqual(search_item["node"]["id"], node["id"])
-            self.assertEqual(search_item["node"]["node_id"], node["id"])
+            self.assertNotIn("node", search_item)
             self.assertEqual(search_item["title"], "Acme renewal owner")
             self.assertEqual(search_item["type"], "fact")
             self.assertIn("compiled", search_item)
@@ -1117,7 +1116,7 @@ class MemoryAppTestCase(unittest.TestCase):
             )["json"]
             citation = ingested["compiled"]["citations"][0]
 
-            search = self.run_backend(data_root, {"action": "search", "query": "Atlas onboarding owner"})["json"]
+            search = self.run_backend(data_root, {"action": "search", "detail": "evidence", "query": "Atlas onboarding owner"})["json"]
             context = self.run_backend(data_root, {"action": "context", "query": "Atlas onboarding owner"})["json"]
 
             for item in (search["results"][0], context["items"][0]):
@@ -1150,9 +1149,9 @@ class MemoryAppTestCase(unittest.TestCase):
             )["json"]["external_ref"]
 
             compiled = self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})
-            inspect = self.run_backend(data_root, {"action": "inspect", "node_id": node["id"]})
+            inspect = self.run_backend(data_root, {"action": "inspect", "detail": "full", "node_id": node["id"]})
             context = self.run_backend(data_root, {"action": "context", "query": "renewal owner"})
-            search = self.run_backend(data_root, {"action": "search", "query": "renewal owner"})
+            search = self.run_backend(data_root, {"action": "search", "detail": "evidence", "query": "renewal owner"})
             wiki_query = self.run_backend(data_root, {"action": "wiki_query", "query": "support agreement"})
 
             self.assertEqual(compiled["status_code"], 200)
@@ -1198,7 +1197,7 @@ class MemoryAppTestCase(unittest.TestCase):
             compiled = self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})["json"]
             source_path.write_text("Changed support source.", encoding="utf-8")
             lint_after_source_change = self.run_backend(data_root, {"action": "lint", "node_id": node["id"]})["json"]
-            changed_source_inspect = self.run_backend(data_root, {"action": "inspect", "node_id": node["id"]})["json"]["node"]
+            changed_source_inspect = self.run_backend(data_root, {"action": "inspect", "detail": "full", "node_id": node["id"]})["json"]["node"]
             self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})
             updated = self.run_backend(
                 data_root,
@@ -1454,7 +1453,7 @@ class MemoryAppTestCase(unittest.TestCase):
             citation = ingested["compiled"]["citations"][0]
             cited_chunk = next(chunk for chunk in chunks if chunk["id"] == citation["source_chunk_id"])
             source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Priya owner"})
-            search_status, search = service.handle_action(data_root, {"action": "search", "query": "Priya owner"})
+            search_status, search = service.handle_action(data_root, {"action": "search", "detail": "evidence", "query": "Priya owner"})
             context_status, context = service.handle_action(data_root, {"action": "context", "query": "Priya owner"})
             self.assertEqual(status, 200)
             self.assertGreater(len(chunks), 1)
@@ -2453,7 +2452,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     },
                 )
                 context_status, context = service.handle_action(data_root, {"action": "context", "query": "renewal owner"})
-                search_status, search = service.handle_action(data_root, {"action": "search", "query": "Dana"})
+                search_status, search = service.handle_action(data_root, {"action": "search", "detail": "evidence", "query": "Dana"})
                 wiki_status, wiki_result = service.handle_action(data_root, {"action": "wiki_query", "query": "Dana"})
                 source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana owner"})
             finally:
@@ -3278,8 +3277,8 @@ class MemoryAppTestCase(unittest.TestCase):
                     },
                 },
             )
-            first_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": first["node"]["id"]})[1]
-            second_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": second_node["id"]})[1]
+            first_inspect = service.handle_action(data_root, {"action": "inspect", "detail": "full", "node_id": first["node"]["id"]})[1]
+            second_inspect = service.handle_action(data_root, {"action": "inspect", "detail": "full", "node_id": second_node["id"]})[1]
             source_query = service.handle_action(data_root, {"action": "source_query", "query": "changed file"})[1]
             ready_jobs = service.handle_action(
                 data_root,
@@ -3457,7 +3456,7 @@ class MemoryAppTestCase(unittest.TestCase):
             missing_delete = self.run_backend(data_root, {"action": "delete_node", "node_id": "node_missing"})
             missing_unlink = self.run_backend(data_root, {"action": "unlink", "edge_id": "edge_missing"})
             graph = self.run_backend(data_root, {"action": "graph"})
-            inspect = self.run_backend(data_root, {"action": "inspect", "node_id": node["id"]})
+            inspect = self.run_backend(data_root, {"action": "inspect", "detail": "full", "node_id": node["id"]})
 
             self.assertEqual(invalid_limit["status_code"], 400)
             self.assertEqual(invalid_limit["json"]["error"], "validation_error")
@@ -3634,7 +3633,7 @@ class MemoryAppTestCase(unittest.TestCase):
             )
             inspect = run_json_entrypoint(
                 MEMORY_ROOT / "backend" / "app_backend.py",
-                payload={"data_root": str(data_root), "body": {"action": "inspect", "node_id": node["id"]}},
+                payload={"data_root": str(data_root), "body": {"action": "inspect", "detail": "full", "node_id": node["id"]}},
                 cwd=MEMORY_ROOT,
             )
 
@@ -3682,6 +3681,13 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertEqual(remembered["node"]["title"], "Bando X")
         self.assertEqual(context_payload["status_code"], 200)
         self.assertTrue(context_payload["items"])
+        node_id = remembered['node']['id']
+        for tool, arguments in [('memory_explore', {'node_ids':[node_id]}), ('memory_get_nodes', {'node_ids':[node_id]})]:
+            result = call_mcp_tool(tool_name='app.memory.'+tool, context=mcp_context,
+                app_store=state.app_store, workspace_id='default', start_path=repo_root, arguments=arguments)
+            self.assertEqual(result['status_code'],200)
+            self.assertEqual(result['nodes'][0]['id'],node_id)
+            self.assertNotIn('body_text',result['nodes'][0])
 
     @full_test("full memory wrapper suite; run with scripts/test_suite.py --level full")
     def test_maverick_wrapper_invokes_workspace_app_cli_and_mcp_without_app_paths(self) -> None:

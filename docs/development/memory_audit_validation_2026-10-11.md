@@ -87,10 +87,12 @@ unverified. It is not a general entailment model. Semantic retrieval and selecti
 model verification remain optional future additions requiring evaluation against
 real queries; this change introduces neither embeddings nor inference costs.
 
-Foreground maintenance runs while Memory is visible, at most three compile/lint
-jobs, stopping between jobs after two seconds. One job can exceed that soft
-budget. Immediate agent workflows still explicitly drain bounded ready work.
-External Storage reindexing remains a governed Storage operation.
+The subsequent [navigation improvement](memory_navigation_validation_2026-10-11.md)
+moved queue progress to platform background/recovery hooks, independent of the
+visible UI. Each tick runs at most three compile/lint jobs, stopping between jobs
+after two seconds; one job can exceed that soft budget. Immediate agent workflows
+can still explicitly drain bounded ready work. External Storage reindexing remains
+a governed Storage operation.
 
 Merge preserves the chosen target fact instead of inventing a combined assertion.
 Node/source removal retains audit content; original documents remain owned by

@@ -293,8 +293,9 @@ class LearningRegressionTests(LearningTestCase):
         self.assertEqual(current["status"], "saved")
         self.assertTrue(current["details"]["saved_fact_verified"])
         self.assertEqual(current["details"]["node_updated_at"], revision)
-        persisted = memory({"action": "inspect", "node_id": previous["id"]})["json"]["node"]
-        self.assertEqual(persisted["body_text"], item["body"])
+        inspected = memory({"action": "inspect", "node_id": previous["id"], "detail": "content"})["json"]
+        persisted = inspected["node"]
+        self.assertEqual(inspected["text"], item["body"])
         self.assertNotEqual(persisted["updated_at"], previous["updated_at"])
         self.assertEqual(persisted["metadata"]["knowledge_type"], "person")
         context = memory({"action": "context", "query": "Milano"})["json"]["items"][0]

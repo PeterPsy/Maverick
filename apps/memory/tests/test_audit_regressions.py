@@ -80,7 +80,7 @@ class MemoryAuditRegressions(unittest.TestCase):
         updated = self.ingest('Il contratto annuale costa 9000 euro.', node_id=target['id'], operation='replace_fact',
             fact_body='Approve the revised quote.', expected_updated_at=target['updated_at'])
         self.assertEqual(updated['node']['body_text'], 'Approve the revised quote.')
-        refreshed = self.call('inspect', node_id=generated['node']['id'])['node']
+        refreshed = self.call('inspect', detail='full', node_id=generated['node']['id'])['node']
         self.assertEqual(refreshed['body_text'], 'Il contratto annuale costa 9000 euro.')
         self.assertNotIn('Approve', refreshed['body_text'])
 
@@ -128,7 +128,7 @@ class MemoryAuditRegressions(unittest.TestCase):
         self.note(title='Rinnovo', body='Unrelated note.', importance=1)
         best = self.note(title='Evidence', body='Source reference.', importance=0)
         self.ingest('Aurora rinnovo approvato.', node_id=best['id'])
-        result = self.call('search', query='Aurora rinnovo', limit=2)
+        result = self.call('search', detail='evidence', query='Aurora rinnovo', limit=2)
         self.assertEqual(result['results'][0]['id'], best['id'])
         self.assertIn('approvato', result['results'][0]['source_chunk_matches'][0]['summary'])
 
@@ -178,7 +178,7 @@ class MemoryAuditRegressions(unittest.TestCase):
     def test_exclusion_is_reversible_and_source_removal_is_separate(self):
         a = self.ingest()
         self.call('exclude_node', node_id=a['node']['id'])
-        self.assertEqual(self.call('search', query='1200')['results'], [])
+        self.assertEqual(self.call('search', detail='evidence', query='1200')['results'], [])
         self.assertEqual(self.call('source_query', query='1200')['results'], [])
         self.call('exclude_node', node_id=a['node']['id'], excluded=False)
         self.assertTrue(self.call('source_query', query='1200')['results'])
@@ -190,10 +190,10 @@ class MemoryAuditRegressions(unittest.TestCase):
         a = self.ingest()
         target = self.note(title='Curated contract', body='Keep this fact.')
         self.call('merge_nodes', node_id=a['node']['id'], target_node_id=target['id'], expected_updated_at=a['node']['updated_at'], target_updated_at=target['updated_at'])
-        result = self.call('inspect', node_id=target['id'])['node']
+        result = self.call('inspect', detail='full', node_id=target['id'])['node']
         self.assertEqual(result['body_text'], 'Keep this fact.')
-        self.assertEqual(self.call('inspect', node_id=a['node']['id'])['node']['status'], 'deleted')
-        self.assertEqual(self.call('search', query='1200')['results'][0]['id'], target['id'])
+        self.assertEqual(self.call('inspect', detail='full', node_id=a['node']['id'])['node']['status'], 'deleted')
+        self.assertEqual(self.call('search', detail='evidence', query='1200')['results'][0]['id'], target['id'])
 
     def test_exclusion_can_be_reversed_after_identical_note_is_recreated(self):
         original = self.note()
@@ -233,7 +233,7 @@ class MemoryAuditRegressions(unittest.TestCase):
             self.assertEqual(self.call('context', query='absentunique')['items'], [])
         with self.database.connect(self.root) as db:
             before = db.execute('SELECT count(*) FROM events').fetchone()[0]
-        self.call('search', query='scalability')
+        self.call('search', detail='evidence', query='scalability')
         self.call('inspect_source', source_key='inline_markdown:contract')
         with self.database.connect(self.root) as db:
             self.assertEqual(before, db.execute('SELECT count(*) FROM events').fetchone()[0])
@@ -299,7 +299,7 @@ class MemoryAuditRegressions(unittest.TestCase):
             self.assertEqual(db.execute('SELECT freshness FROM wiki_pages WHERE node_id=?', (a['node']['id'],)).fetchone()[0], 'stale')
             self.assertEqual(db.execute("SELECT count(*) FROM ingest_jobs WHERE dedupe_key=?", ('compile_node:migration:8:' + a['node']['id'],)).fetchone()[0], 1)
         self.call('maintenance')
-        self.assertEqual(self.call('inspect', node_id=a['node']['id'])['node']['compiled_page']['verification'], 'verified')
+        self.assertEqual(self.call('inspect', detail='full', node_id=a['node']['id'])['node']['compiled_page']['verification'], 'verified')
 
     def test_foreground_maintenance_drains_at_most_three_compiles(self):
         for index in range(5):
@@ -312,7 +312,7 @@ class MemoryAuditRegressions(unittest.TestCase):
     def test_node_edit_does_not_report_the_source_outdated(self):
         result = self.ingest()
         self.call('update_node', node_id=result['node']['id'], body='The user added a note.')
-        inspected = self.call('inspect', node_id=result['node']['id'])['node']
+        inspected = self.call('inspect', detail='full', node_id=result['node']['id'])['node']
         self.assertEqual(inspected['compiled_page']['compilation_state'], 'stale')
         self.assertEqual(inspected['compiled_page']['source_state'], 'current')
 
@@ -338,7 +338,7 @@ class MemoryAuditRegressions(unittest.TestCase):
         with patch.object(snapshots, 'source_snapshot', side_effect=snapshot), patch.object(lint, 'source_snapshot', side_effect=snapshot), patch('wiki_content.source_snapshot', side_effect=snapshot):
             self.call('compile', node_id=node['id'])
         with patch.object(lint, 'source_snapshot', return_value={'hash': 'changed'}):
-            inspected = self.call('inspect', node_id=node['id'])['node']
+            inspected = self.call('inspect', detail='full', node_id=node['id'])['node']
         self.assertEqual(inspected['compiled_page']['freshness'], 'stale')
         with self.database.connect(self.root) as db:
             self.assertEqual(db.execute('SELECT freshness FROM wiki_pages WHERE node_id=?', (node['id'],)).fetchone()[0], 'fresh')

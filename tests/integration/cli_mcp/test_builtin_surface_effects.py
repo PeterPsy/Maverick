@@ -41,6 +41,21 @@ EFFECT_CLASSES = {"read", "mutating", "destructive"}
 
 
 class BuiltinSurfaceEffectsTest(SurfaceTestBase):
+    def test_memory_navigation_surfaces_match_their_audited_execution(self) -> None:
+        app_root = REPOSITORY_ROOT / 'apps' / 'memory'
+        contract = parse_app_contract_file(app_root).contract
+        self.assertTrue({'memory_explore', 'memory_get_nodes'}.issubset(contract.capabilities.mcp_tools))
+        for surface, relative in [('cli', 'cli/command_schemas.json'), ('mcp', 'mcp/tool_schemas.json')]:
+            self.assertEqual(audited_builtin_app_effect_descriptor_digests()['memory'][surface],
+                             hashlib.sha256((app_root / relative).read_bytes()).hexdigest())
+            self.assertEqual(audited_builtin_app_execution_digests()['memory'][surface],
+                             hosted_builtin_app_execution_digest('memory',surface=surface,apps_root=REPOSITORY_ROOT / 'apps'))
+        for tool in contract.capabilities.mcp_tools:
+            metadata = app_mcp_tool_execution_metadata(app_root, tool)
+            self.assertIn(metadata.effect_class, EFFECT_CLASSES)
+        for tool in ('memory_explore', 'memory_get_nodes', 'memory_context', 'memory_inspect_node'):
+            self.assertEqual(app_mcp_tool_execution_metadata(app_root, tool).effect_class, 'read')
+
     def test_builtin_effect_descriptors_match_core_audit_inventory(self) -> None:
         observed: dict[str, dict[str, str]] = {}
         for app_root in sorted((REPOSITORY_ROOT / "apps").iterdir()):
@@ -114,7 +129,7 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                     metadata,
                 )
 
-        self.assertEqual(counts, {"cli": 28, "mcp": 385})
+        self.assertEqual(counts, {"cli": 28, "mcp": 387})
         self.assertEqual(argument_sensitive, 33)
 
     def test_real_storage_cli_and_mcp_catalog_execute_after_preflight(self) -> None:

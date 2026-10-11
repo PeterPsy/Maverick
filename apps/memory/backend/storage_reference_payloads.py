@@ -13,6 +13,24 @@ from source_references import external_ref_by_id, external_refs_for_nodes
 STORAGE_REF_KINDS = {"workspace_file", "local_storage_file", "remote_storage_file"}
 
 
+def attach_storage_references(db: sqlite3.Connection, citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach navigable references with two shared projections per page."""
+    source_ids = list({item.get('source_id') for item in citations if item.get('source_id')})
+    ref_ids = list({item.get('external_ref_id') for item in citations if item.get('external_ref_id')})
+    def rows(table: str, ids: list) -> dict:
+        marks = ','.join('?' for _ in ids)
+        return {row['id']: row_payload(row) for row in db.execute(f'SELECT * FROM {table} WHERE id IN ({marks})', ids)} if ids else {}
+    sources, refs = rows('sources', source_ids), rows('external_refs', ref_ids)
+    for item in citations:
+        source = sources.get(item.get('source_id')) or {}
+        if source.get('status') != 'active':
+            continue
+        reference = storage_reference_payload(refs.get(item.get('external_ref_id')) or {}) or storage_reference_payload(source)
+        if reference:
+            item['storage_reference'] = reference
+    return citations
+
+
 def storage_references_for_node(db: sqlite3.Connection, node_id: str, *, include_removed: bool = False) -> list[dict[str, Any]]:
     references = []
     for row in external_refs_for_nodes(db, [node_id], include_removed=include_removed):

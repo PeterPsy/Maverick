@@ -33,6 +33,8 @@ def emit_usage():
 def next_call():
     global step
     actions = ["observe_app", "click", "observe_app"]
+    if mode == 'root-delegation-failure':
+        actions = ['observe_app', 'delegate', 'observe_app']
     if mode == 'semantic-before-observation':
         actions.insert(0, 'ui_action')
     elif mode == 'semantic-rejection-limit':
@@ -70,6 +72,9 @@ def next_call():
     if mode == "uncertain-other-engine" and step == 2:
         tool, action = "mac_computer", "observe"
     arguments = {"action": action, "bundle_id": bundle, "snapshot": "snapshot-" + str(step)}
+    if action == 'delegate':
+        tool = 'computer_interact'
+        arguments = {'objective': 'select', 'completion_criterion': 'selected'}
     if action == 'ui_action':
         tool = 'ui_action'
         arguments = {'tool': 'mac_peekaboo', 'target': bundle, 'action': 'click',

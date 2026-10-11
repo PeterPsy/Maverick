@@ -63,6 +63,26 @@ class ComputerTaskProgressTests(unittest.TestCase):
         self.assertFalse(self.progress.observation.verifies({'role': 'statictext', 'value': '7'}))
         self.assertTrue(self.progress.observation.verifies({'identifier': 'Seven'}))
 
+    def test_visible_text_matches_exact_labels_and_values_not_substrings(self):
+        observed = native_observation(observation(value='17'), 'mac_peekaboo', {})
+        self.assertTrue(observed.verifies({'text': '17'}))
+        self.assertFalse(observed.verifies({'text': '1'}))
+
+    def test_menu_item_appearance_can_verify_an_open_menu(self):
+        from tests.support.ui_benchmark_fixture import BUNDLE as fixture_bundle, UIBenchmarkFixture
+        fixture = UIBenchmarkFixture('menu', '', render=False)
+        self.addCleanup(fixture.close)
+        plan = {'steps': [{'tool': 'mac_peekaboo', 'target': fixture_bundle, 'action': 'click',
+                          'control': {'label': 'Theme'}, 'expect': {'text': 'Dark'}}]}
+        progress = ComputerTaskProgress(plan)
+        read = {'action': 'observe_app', 'bundle_id': fixture_bundle}
+        progress.record('mac_peekaboo', read, fixture.invoke('mac_peekaboo', read, 'read'))
+        tool, args = progress.prepare({'step_index': 0})
+        progress.record(tool, args, fixture.invoke(tool, args, 'input'))
+        self.assertIsNotNone(progress.pending)
+        progress.record('mac_peekaboo', read, fixture.invoke('mac_peekaboo', read, 'settle'))
+        self.assertEqual(progress.index, 1)
+
     def test_duplicates_and_missing_images_fail_before_dispatch(self):
         self.read(observation(duplicate=True))
         with self.assertRaisesRegex(DeviceUseUnavailableError, 'target_ambiguous'):

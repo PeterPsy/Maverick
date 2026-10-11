@@ -9,7 +9,8 @@ SELECTOR_SCHEMA = {
     'properties': {key: {'type': 'string', 'minLength': 1, 'maxLength': 200}
                    for key in ('label', 'identifier', 'role', 'value')},
 }
-EXPECTATION_SCHEMA = {**SELECTOR_SCHEMA, 'properties': {
+EXPECTATION_SCHEMA = {**SELECTOR_SCHEMA,
+    'description': 'Expected visible effect. Prefer exact label/identifier/role/value selectors. text matches an exact visible control label, value, label: value, or standalone line, never a substring.', 'properties': {
     **SELECTOR_SCHEMA['properties'], 'text': {'type': 'string', 'minLength': 1, 'maxLength': 500}}}
 STEP_SCHEMA = {
     'type': 'object', 'additionalProperties': False,

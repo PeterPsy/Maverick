@@ -149,8 +149,10 @@ and observable expected effect. Text must match `prepared_text`. Runtime-owned
 it never guesses coordinates or reuses old element ids. Planned tasks cannot
 bypass it with raw native input. Pending effects admit only same-target reads;
 three unverified reads return a concrete failure without replaying input.
-An already-visible predicate requires a later read, rather than treating dispatch
-as proof. Native recovery and original parent authority remain enforced.
+Expected text must equal a visible control label, value, `label: value`, or
+standalone receipt line; substring matches do not verify an effect. An already-visible
+predicate requires a later read, rather than treating dispatch as proof. Native
+recovery and original parent authority remain enforced.
 
 Rejected semantic validation has not sent input: the model gets up to three
 actionable corrections to acquire its own observation. Planned tasks renew the
@@ -173,8 +175,10 @@ initial state and 180-second budgets on rendered Calculator, form, menu and
 asynchronous-save fixtures. Element ids change on each observation and effects
 settle on later reads. An independent state validator requires both Calculator
 results, exact form fields, a closed menu, and a persisted title after close/reopen.
-Model completion claims alone do not pass. This is an authenticated model/transport
-benchmark, not a physical Mac bridge benchmark.
+Model completion claims alone do not pass. The harness forwards a nested delegation
+failure to its root planner as an ordinary tool result, matching the production
+parent; a failure may be followed by read-only state verification, without replay.
+This is an authenticated model/transport benchmark, not a physical Mac bridge benchmark.
 
 Elapsed time includes planner/operator startup, verification and cleanup. Provider
 usage counts every fresh stream once, separates cached/uncached input and reasoning,

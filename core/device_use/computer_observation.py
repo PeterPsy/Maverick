@@ -49,7 +49,13 @@ class NativeObservation:
 
     def verifies(self, expectation):
         if set(expectation) == {'text'}:
-            return normalized(expectation['text']) in {normalized(line) for line in self.text.splitlines()}
+            visible = {normalized(line) for line in self.text.splitlines()}
+            for control in self.controls:
+                visible.add(normalized(control.label))
+                if control.value is not None:
+                    visible.add(normalized(control.value))
+                    visible.add(normalized(control.label) + ': ' + normalized(control.value))
+            return normalized(expectation['text']) in visible
         return any(control.matches(expectation) for control in self.controls)
 
 

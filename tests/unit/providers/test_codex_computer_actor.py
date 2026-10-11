@@ -146,6 +146,19 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertEqual(output['summary'], 'computer_actor_criterion_not_met')
         self.assertEqual([call[1]['action'] for call in self.calls], ['observe_app', 'observe_app'])
 
+    def test_root_can_read_after_a_delegation_failure_without_replaying_input(self):
+        from core.device_use.computer_actor_contract import planner_device_use_tools
+        native = self.invoke
+        def invoke(tool, args, call_id):
+            if tool == 'computer_interact':
+                return DeviceUseResult('delegate', call_id, {'success': False, 'contentItems': [
+                    {'type': 'inputText', 'text': 'Operator could not verify the effect; inspect before continuing.'}]}, None, None, 1)
+            return native(tool, args, call_id)
+        self.invoke = invoke
+        result, _ = self.run_actor('root-delegation-failure', tools=planner_device_use_tools())
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual([call[1]['action'] for call in self.calls], ['observe_app', 'observe_app'])
+
     def test_interrupted_task_does_not_leak_queued_events_into_the_next_task(self):
         first, _ = self.run_actor(max_steps=1)
         self.assertEqual(first["status"], "needs_decision")

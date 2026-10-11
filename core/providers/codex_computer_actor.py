@@ -203,7 +203,12 @@ class CodexComputerActor:
                 validation_failures = 0
                 steps += 1
                 last_image = result.image_jpeg
-                if not recovery.record(tool, arguments, result):
+                if tool == 'computer_interact':
+                    # The benchmark's root planner receives delegation failures
+                    # as ordinary tool replies, like the production parent. It
+                    # can inspect evidence and read the state before deciding.
+                    recovery.completion_verified = last_image is not None
+                elif not recovery.record(tool, arguments, result):
                     return self._result("blocked", "computer_actor_native_failure", steps,
                                         json.dumps(result.result, ensure_ascii=False)[:3000]), last_image
                 progress.record(tool, arguments, result)

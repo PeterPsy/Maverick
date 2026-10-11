@@ -85,6 +85,8 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
+        if self.headers.get("Host", "").startswith("localhost:") and "fixture_frame=authorized" not in self.headers.get("Cookie", ""):
+            self.send_error(401); return
         if self.path == "/.well-known/maverick-app-frame-session":
             self.send_response(204); self.end_headers(); return
         length = int(self.headers.get("Content-Length", "0"))
@@ -104,6 +106,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlsplit(self.path)
+        isolated = self.headers.get("Host", "").startswith("localhost:")
+        if parsed.path == "/__test/authorize" and isolated:
+            self.send_response(303)
+            self.send_header("Set-Cookie", "fixture_frame=authorized; Path=/; HttpOnly; SameSite=Strict")
+            self.send_header("Location", "/apps/browser/?maverick_theme=light")
+            self.end_headers(); return
+        if parsed.path.startswith("/apps/browser/") and not parsed.path.startswith("/apps/browser/assets/"):
+            if not isolated:
+                self.send_error(403, "app_frame_isolation_required"); return
+            if "fixture_frame=authorized" not in self.headers.get("Cookie", ""):
+                self.send_error(401); return
         if parsed.path == "/__test/media":
             operation_id = parse_qs(parsed.query).get("operation_id", [""])[0]
             status, operation = handle_action(WORKSPACE / "data/browser", {"action": "operation.get", "operation_id": operation_id}, workspace_id="fixture", user_id="fixture-user", surface="backend")
@@ -125,7 +138,12 @@ class Handler(BaseHTTPRequestHandler):
         path = (root / relative).resolve()
         if root not in path.parents or not path.is_file():
             self.send_error(404); return
-        content = path.read_bytes(); self.send_response(200)
+        content = path.read_bytes()
+        if path.suffix == ".html":
+            origin = f"http://127.0.0.1:{self.server.server_port}"
+            content = content.decode().replace('<head>', f'<head><script>window.__MAVERICK_PLATFORM_ORIGIN__={json.dumps(origin)}</script>').replace('"/apps/browser/assets/', f'"{origin}/apps/browser/assets/').encode()
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", f"http://localhost:{self.server.server_port}")
         self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "application/octet-stream")
         self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
 

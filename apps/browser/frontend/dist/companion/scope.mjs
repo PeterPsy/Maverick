@@ -32,7 +32,10 @@ export function connectorUrl(value) {
   const url = new URL(value);
   if (url.username || url.password || !(url.protocol === "https:" || url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) throw new Error("secure_connector_url_required");
   if (url.pathname !== "/apps/browser/" && url.pathname !== "/apps/browser/index.html") throw new Error("browser_connector_url_required");
+  const theme = url.searchParams.get("maverick_theme"), scheme = url.searchParams.get("maverick_color_scheme");
   url.search = "?connector=1";
+  if (["light", "dark"].includes(theme)) url.searchParams.set("maverick_theme", theme);
+  if (["light", "dark"].includes(scheme)) url.searchParams.set("maverick_color_scheme", scheme);
   url.hash = "";
   return url;
 }

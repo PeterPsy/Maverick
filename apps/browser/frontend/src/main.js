@@ -6,8 +6,10 @@ import {mountShell} from "./shell-view.js";
 import {createRecords, label, timestamp} from "./records.js";
 import {showResult} from "./result-view.js";
 import {createLab} from "./lab.js";
+import {createPlatformState} from "./platform-state.js";
 
-const connectorMode = new URLSearchParams(location.search).get("connector") === "1";
+const launchParams = new URLSearchParams(location.search);
+const connectorMode = launchParams.get("connector") === "1";
 mountShell(connectorMode);
 const $ = selector => document.querySelector(selector);
 let platformOrigin = location.origin;
@@ -16,10 +18,17 @@ try {
   if (["http:", "https:"].includes(origin.protocol) && origin.origin === supplied) platformOrigin = origin.origin;
 } catch { /* Standalone connector window. */ }
 $("#connectors-link").href = new URL("/app/platform-connectors", platformOrigin).href;
-const connectorUrl = new URL("/apps/browser/?connector=1", platformOrigin);
+// Both routes require the authenticated app-frame cookie, not the platform host.
+const connectorUrl = new URL("/apps/browser/?connector=1", location.origin);
+for (const name of ["maverick_theme", "maverick_color_scheme", "maverick_theme_mode"]) {
+  const value = launchParams.get(name);
+  if (value) connectorUrl.searchParams.set(name, value);
+}
 $("#url").value = connectorUrl.href;
-// Built assets are served by the platform, including from isolated app frames.
-$("#download").href = new URL(/* @vite-ignore */ "../maverick-browser-companion.zip", import.meta.url).href;
+$("#download").href = new URL("/apps/browser/maverick-browser-companion.zip", location.origin).href;
+const platform = createPlatformState(platformOrigin, () => {
+  if (platform.visible()) void loop.refresh(); else loop.pause();
+});
 
 let overview = {connections: [], operations: []}, view = "tabs", initialized = false;
 function reportError(error) { $("#error").textContent = error.message; $("#error").hidden = false; }
@@ -69,8 +78,10 @@ function render() {
 
 const lab = createLab(run);
 const loop = createRefreshLoop({
+  visible: platform.visible,
   async read(signal) {
     const result = await request({action: "companion.overview"}, {signal});
+    if (!platform.visible()) return;
     overview = result; render();
     $("#error").hidden = true;
     $("#updated").textContent = `Updated ${new Date().toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit"})} · Auto refresh on`;
@@ -108,9 +119,6 @@ $("#connect").onclick = () => run($("#connect"), {run: async () => {
   await connector.start(); $("#connect").hidden = true; $("#stop").hidden = false; await loop.refresh();
 }});
 $("#stop").onclick = () => run($("#stop"), {run: async () => { await connector.stop(); await loop.refresh(); }});
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") loop.pause(); else void loop.refresh();
-});
 window.addEventListener("message", event => {
   if (event.source !== window.parent || event.origin !== platformOrigin) return;
   const message = event.data;

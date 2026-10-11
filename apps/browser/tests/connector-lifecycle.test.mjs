@@ -2,16 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {setImmediate as nextTurn} from "node:timers/promises";
 
-test("connector starts once, throttles auth renewal and revokes a late connection after stop", async t => {
+test("connector starts once, throttles renewal, fences stop and preserves sharing across cancellation races", async t => {
   const origin = "https://browser-fixture.test", listeners = [], calls = [], states = [];
-  let delayed = false, release, serial = 0, connector;
+  let delayed = false, release, serial = 0, connector, nextCommand, executing, cancelled = false;
   const previous = {window: globalThis.window, location: globalThis.location};
   globalThis.location = {origin};
   const dispatch = data => listeners.forEach(listener => listener({source: window, origin, data}));
   globalThis.window = {
     addEventListener(_type, listener) { listeners.push(listener); },
-    postMessage(message) { queueMicrotask(() => dispatch({type: "maverick.browser.response", id: message.id,
-      result: message.action === "status" ? {url: "https://www.instagram.com/fixture/"} : {}})); },
+    postMessage(message) {
+      if (message.action === "execute") {executing = message; return;}
+      if (message.action === "cancel") cancelled = true;
+      queueMicrotask(() => dispatch({type: "maverick.browser.response", id: message.id,
+        result: message.action === "status" ? {url: "https://www.instagram.com/fixture/", active_operation: executing?.command.operation_id} : {}}));
+    },
   };
   t.mock.method(globalThis, "fetch", async (url, options) => {
     const body = options.body ? JSON.parse(options.body) : {};
@@ -21,6 +25,11 @@ test("connector starts once, throttles auth renewal and revokes a late connectio
       result = {connection: {session_id: `session-${++serial}`}, connector_secret: "fixture"};
       if (delayed) await new Promise(resolve => { release = resolve; });
     }
+    if (body.action === "companion.poll" && nextCommand) { result = {command: nextCommand}; nextCommand = null; }
+    if (body.action === "operation.get") result = {status: "running"};
+    if (body.action === "companion.progress" || body.action === "companion.complete") return {
+      ok: false, status: 409, async json() {return {error: "operation_not_running", detail: "The operation was cancelled."};},
+    };
     return {ok: true, status: 200, async json() { return result; }};
   });
   t.after(async () => {
@@ -47,4 +56,17 @@ test("connector starts once, throttles auth renewal and revokes a late connectio
   await until(() => Boolean(release)); await connector.stop(); release(); await rejection;
   assert.ok(calls.some(call => call.action === "companion.disconnect" && call.session_id === "session-2"));
   assert.equal(calls.filter(call => call.action === "companion.poll").length, 2);
+  delayed = false;
+  nextCommand = {operation_id: "cancel-race", lease_id: "fixture-lease", action: "video.analyze", expires_at: Date.now() / 1000 + 60};
+  await connector.start(); await until(() => Boolean(executing)); await nextTurn();
+  const disconnects = calls.filter(call => call.action === "companion.disconnect").length;
+  dispatch({type: "maverick.browser.wake"}); await until(() => cancelled);
+  await until(() => calls.some(call => call.action === "companion.poll" && call.active_operation_id === "cancel-race"));
+  assert.equal(calls.filter(call => call.action === "companion.disconnect").length, disconnects, "An operation cancellation race must not revoke sharing");
+  const pendingExecution = executing; executing = null;
+  dispatch({type: "maverick.browser.response", id: pendingExecution.id, result: {error: "operation_cancelled"}});
+  await nextTurn(); await nextTurn();
+  dispatch({type: "maverick.browser.wake"});
+  await until(() => calls.filter(call => call.action === "companion.poll").length >= 5);
+  assert.equal(calls.filter(call => call.action === "companion.disconnect").length, disconnects);
 });

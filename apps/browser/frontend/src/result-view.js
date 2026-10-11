@@ -1,12 +1,10 @@
 import {label, node} from "./records.js";
-
-function publicUrl(value) {
-  try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) ? url.href : null; }
-  catch { return null; }
-}
+import {appendMedia} from "./result-media.js";
+import {appendCollection, appendCoverage, publicUrl} from "./result-collection.js";
 
 export function showResult(operation) {
-  document.querySelector("dialog")?.remove();
+  const previous = document.querySelector("dialog");
+  if (previous) previous.close();
   const result = operation.result || operation;
   const dialog = node("dialog", "result-dialog");
   dialog.setAttribute("aria-labelledby", "result-title");
@@ -21,6 +19,9 @@ export function showResult(operation) {
     dialog.append(link);
   }
   if (result.error) dialog.append(node("p", "error", result.detail || label(result.error)));
+  const release = appendMedia(dialog, result, window.__MAVERICK_PLATFORM_ORIGIN__ || location.origin);
+  appendCollection(dialog, result);
+  appendCoverage(dialog, result.coverage);
   const text = result.text || result.content || result.transcription?.text;
   if (typeof text === "string" && text) {
     const copy = node("button", "secondary result-copy", "Copy text");
@@ -41,19 +42,15 @@ export function showResult(operation) {
     }
     details.append(list); dialog.append(details);
   }
-  const evidence = [...(Array.isArray(result.frames) ? result.frames : []), result.audio].filter(item => item?.storage?.workspace_relative_path);
-  if (evidence.length) {
-    const details = node("details", "result-details"); details.append(node("summary", "", `${evidence.length} saved evidence files`));
-    for (const item of evidence) details.append(node("p", "source-link", item.storage.workspace_relative_path));
-    dialog.append(details);
-  }
   const details = node("details", "result-details");
   details.append(node("summary", "", "Technical details"));
   // Serialize lazily; captured media never becomes a second large DOM payload.
   details.addEventListener("toggle", () => {
-    if (details.open && details.children.length === 1) details.append(node("pre", "", JSON.stringify(operation, (key, value) => key === "base64" ? "[captured media]" : value, 2)));
+    if (details.open && details.children.length === 1) details.append(node("pre", "", JSON.stringify(operation, function(key, value) {
+      return key === "base64" || key === "data" && this.encoding === "base64" ? "[captured media shown above]" : value;
+    }, 2)));
   });
   dialog.append(details);
-  dialog.addEventListener("close", () => dialog.remove(), {once: true});
+  dialog.addEventListener("close", () => { release(); dialog.remove(); }, {once: true});
   document.body.append(dialog); dialog.showModal(); close.focus();
 }

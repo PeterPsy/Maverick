@@ -27,12 +27,13 @@ try {
   const lines=createInterface({input:server.stdout});
   const info=await Promise.race([new Promise(resolve=>lines.once("line",line=>resolve(JSON.parse(line)))),new Promise((_,reject)=>setTimeout(()=>reject(new Error("fixture_server_timeout")),10000))]);
   const origin=`http://127.0.0.1:${info.port}`;
+  const frameOrigin=`http://localhost:${info.port}`;
   const api=async body=>{const response=await fetch(`${origin}/api/apps/browser/backend`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const result=await response.json();assert(response.ok,JSON.stringify(result));return result;};
   const extension=path.join(temporary,"extension");cpSync(path.join(root,"frontend/public/companion"),extension,{recursive:true});
   // Only the fixture manifest pre-grants hosts, avoiding the permission dialog.
   // The production package still has no permanent host permissions.
   const manifest=JSON.parse(readFileSync(path.join(extension,"manifest.json")));
-  manifest.host_permissions=["https://www.instagram.com/*","http://127.0.0.1/*"];
+  manifest.host_permissions=["https://www.instagram.com/*","http://localhost/*"];
   writeFileSync(path.join(extension,"manifest.json"),JSON.stringify(manifest));
   execFileSync("espeak-ng",["-w",path.join(temporary,"voice.wav"),"Maverick browser reads video and records audio locally."]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc=size=320x180:rate=12","-i",path.join(temporary,"voice.wav"),"-t","5","-vf","format=yuv420p","-af","apad","-c:v","libx264","-threads","1","-c:a","aac","-movflags","+faststart",path.join(temporary,"video.mp4")]);
@@ -40,6 +41,19 @@ try {
   const media=readFileSync(path.join(temporary,"video.mp4"));
   const endedMedia=readFileSync(path.join(temporary,"ended.mp4"));
   context=await chromium.launchPersistentContext(path.join(temporary,"profile"),{headless:true,channel:"chromium",ignoreDefaultArgs:["--mute-audio"],viewport:{width:1000,height:800},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,"--enable-unsafe-extension-debugging","--autoplay-policy=no-user-gesture-required"]});
+  assert.equal((await fetch(`${origin}/apps/browser/?connector=1`)).status,403);
+  assert.equal((await fetch(`${origin}/apps/browser/maverick-browser-companion.zip`)).status,403);
+  assert.equal((await fetch(`${frameOrigin}/apps/browser/?connector=1`)).status,401);
+  const setup=await context.newPage(); await setup.goto(`${frameOrigin}/__test/authorize`);
+  await setup.waitForSelector("#url");
+  const connectorAddress=await setup.locator("#url").inputValue();
+  assert.equal(new URL(connectorAddress).origin,frameOrigin);
+  assert.equal(await setup.locator("#download").getAttribute("href"),`${frameOrigin}/apps/browser/maverick-browser-companion.zip`);
+  const downloadPromise=setup.waitForEvent("download");
+  await setup.locator("#download").click();
+  const download=await downloadPromise;assert.equal(await download.failure(),null);
+  assert(readFileSync(await download.path()).equals(readFileSync(path.join(root,"frontend/public/maverick-browser-companion.zip"))));
+  await setup.close();
   await context.route("https://www.instagram.com/**",route=>{
     if(route.request().url().includes("fixture-media.mp4"))return route.fulfill({contentType:"video/mp4",body:media});
     return route.fulfill({contentType:"text/html",body:`<!doctype html><html lang="it"><head><title>Fixture Instagram</title></head><body><h1>Profilo fixture</h1><p>Bio visibile</p><input type="password" value="must-not-be-read"><p hidden>hidden-secret</p><video controls muted src="/fixture-media.mp4" width="640" height="360"></video><main style="height:200px;overflow:auto"><div style="height:1400px"><a href="/p/one/">Post uno</a><a href="/reel/two/">Reel due</a><div style="margin-top:1100px"><a href="/p/three/">Post tre</a></div></div></main></body></html>`});
@@ -69,17 +83,18 @@ try {
     });
   };
   await wait(()=>popupEvaluate("typeof document.querySelector('#share')?.onclick === 'function'"));
-  await popupEvaluate(`document.querySelector('#connector').value=${JSON.stringify(`${origin}/apps/browser/?connector=1`)};document.querySelector('#share').click();true`);
+  await popupEvaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
   await wait(async()=>{
-    const page=context.pages().find(page=>page.url().startsWith(`${origin}/apps/browser/`));if(page)return page;
+    const page=context.pages().find(page=>page.url().startsWith(`${frameOrigin}/apps/browser/`));if(page)return page;
     const status=await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"");
     if(status && !status.startsWith("Tab shared"))throw new Error(`share_failed: ${status}`);
-    return context.pages().find(page=>page.url().startsWith(`${origin}/apps/browser/`));
+    return context.pages().find(page=>page.url().startsWith(`${frameOrigin}/apps/browser/`));
   }).catch(async error=>{
     console.error(JSON.stringify({phase:"sharing",popup_status:await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"closed"),worker_state:await worker.evaluate(async()=>({contexts:await chrome.runtime.getContexts({}),binding:await chrome.storage.session.get("binding")}))}));
     throw error;
   });
-  const connector=context.pages().find(page=>page.url().startsWith(`${origin}/apps/browser/`));
+  const connector=context.pages().find(page=>page.url().startsWith(`${frameOrigin}/apps/browser/`));
+  assert.equal(await connector.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),"light");
   const consoleErrors=[];connector.on("pageerror",e=>consoleErrors.push(e.message));
   await browser.send("Target.detachFromTarget",{sessionId});
   await connector.bringToFront();
@@ -183,7 +198,7 @@ try {
   assert.equal(consoleErrors.length,0,consoleErrors.join('\n'));
   await instagram.goto("https://www.instagram.com/accounts/login/");
   await wait(async()=>{const overview=await api({action:"companion.overview"});return overview.connections.find(c=>c.session_id === connection.session_id)?.status === "revoked";});
-  console.log(JSON.stringify({status:"passed",real_chromium:true,...mediaSummary,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,connectors_mcp_workflow:true,connectors_frontend_absent:true,scope_revocation:true,browser_desktop_mobile_layout:true,instagram_access_verified:false}));
+  console.log(JSON.stringify({status:"passed",real_chromium:true,isolated_connector_cookie:true,isolated_download_verified:true,...mediaSummary,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,connectors_mcp_workflow:true,connectors_frontend_absent:true,scope_revocation:true,browser_desktop_mobile_layout:true,instagram_access_verified:false}));
 }finally {
   if(context)await context.close();
   if(server.exitCode === null && server.signalCode === null){const exited=new Promise(resolve=>server.once("exit",resolve));server.kill("SIGTERM");await exited;}

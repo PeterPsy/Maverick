@@ -13,6 +13,11 @@ then load its folder with Chrome's “Load unpacked” developer-mode action. Co
 the connector address displayed by Browser. Use Chrome 120 or later. Open a supported platform page in Chrome, log in directly if needed, and use the extension popup to share
 that tab. Paste the connector address there. In the dedicated Browser window
 opened by the extension, press “Connect” and keep the window open during work.
+Download and connector links use Browser's isolated origin, whose HttpOnly
+app-frame cookie authenticates the dedicated window in the same Chrome profile.
+The platform's `/apps/browser/` document and ZIP routes require isolation and
+must not be used as setup links. Copy a fresh address from the mounted app after
+signing in again or changing workspace. Theme parameters follow the connector.
 
 Sharing is explicit and limited to one tab. Passwords, cookies, browser history,
 forms, social writes and caller JavaScript are outside the tool surface. The
@@ -27,7 +32,9 @@ Frame captures may bring the shared platform window to the foreground.
 Browser's main frontend contains Shared tabs, Activity and Browser Lab. The
 Chrome setup guide opens automatically when no tab is connected and stays
 collapsible. Activity supports search, status filters, cancellation and readable
-results with copyable observed text, source links and saved evidence paths;
+results with copyable observed text, source links, captured images, video sample
+times, audio playback and links to saved evidence in Storage. Collections show
+items, scrolling budgets, per-page stop reasons and coverage;
 technical JSON is rendered only on request. Browser Lab provides public-page
 reading with automatic temporary-session cleanup, health and individual session
 closure. Research sessions and their audit entries retain the invoking user.
@@ -43,11 +50,19 @@ never stored media/input blobs. Pending counts include work beyond the recent
 preserves row/button identity and coalesces simultaneous refreshes.
 Visible views poll every 3 seconds with pending
 work, 10 seconds with connected tabs and 30 seconds when idle (Lab also uses 30
-seconds). Hidden documents pause overview polling, and failures back off to 60
+seconds). Hidden documents and frames hidden by the shell's
+`maverick.app.visibility-changed` event pause overview polling, including data
+invalidations; returning refreshes immediately. Failures back off to 60
 seconds. Chrome transport keeps its separate heartbeat so active observations
 continue when the management view is hidden. Its app-frame renewal is limited to
 once per minute. Connection starts are deduplicated; stopping during setup revokes
 any late lease instead of resurrecting sharing.
+An operation becoming terminal between its status read and progress update
+cancels/drains that worker task without revoking sharing or queued observations.
+The initial `maverick_theme`/`maverick_color_scheme` parameters and authenticated
+parent `maverick.shell.theme-changed` messages apply the platform's effective
+theme. Media object URLs are released when a result closes; technical JSON
+omits the encoded bytes already displayed by the image/audio view.
 
 ## Agent operations
 

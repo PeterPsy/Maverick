@@ -33,31 +33,58 @@ Browser Lab with public-page reading, health and individual session closure.
 The existing shell/App Store `language` glyph owns Browser's native icon
 presentation; no Browser-specific platform rendering branch or raster override
 is added. The app header uses an inline vector and the favicon an app-owned SVG.
+Companion download and connector addresses are resolved against the current
+isolated app origin, not the platform origin serving immutable JS bundles.
+The dedicated connector window reuses the HttpOnly, SameSite=Strict app-frame
+cookie in the same Chrome profile and remains bound to its exact tab/origin/path
+by Companion. Sign-in/workspace changes require copying a current address.
 
 Overview polling opens one SQLite transaction, sweeps leases once and selects
 operation metadata without media/input payloads. Pending counts cover all the
 actor's work beyond the recent 30-operation window and active connections precede
 stopped ones. Rows and action buttons retain DOM identity across heartbeats.
 Reads are serialized, concurrent invalidations
-coalesce into one trailing read, hidden documents pause and failures back off.
+coalesce into one trailing read, hidden documents and shell-hidden frames pause
+and failures back off. The frontend consumes authenticated parent
+`maverick.app.visibility-changed` events and refreshes immediately on return;
+data invalidations cannot restart reads while hidden. Initial shell theme
+parameters and `maverick.shell.theme-changed` events apply the effective theme.
 Visible views refresh at 3 seconds for pending operations, 10 seconds for active
 Chrome connections and 30 seconds when idle; Lab uses 30 seconds. Chrome transport
 continues its independent heartbeat while management is hidden, renewing its
 app-frame authentication at most once per minute. Setup is single-flight and
 stopping it fences and revokes a late lease. Automatic revocation reports the
 stopped state to the UI so reconnect controls become available again.
+The progress heartbeat captures the active command before awaiting its status.
+An `operation_not_running` race cancels/drains that task without revoking the
+connection or cancelling unrelated queued work.
 
 Public research carries the human actor through session creation, observations,
 cleanup and audit. Session state retains broker activity and expiry timestamps
 so management can omit expired sessions. Result text is escaped, source links
 accept only HTTP(S), and raw JSON is rendered lazily with base64 media omitted.
+Screenshot/video-frame views decode Companion `base64` and Lab `encoding:base64`
+`data` as bounded raster blobs, released when the dialog closes. Video analysis
+shows sample times, captured duration/audio and Storage links for saved frames;
+it does not request another app's protected media routes. Collections expose
+items, per-page progress, stop reasons and coverage independently of raw JSON.
 
-Management verification includes 73 Python tests, 39 Node tests, an offline
+Management verification includes 74 Python tests (including the built document
+and ZIP through Core's real ASGI app-frame bootstrap/authorization), 39 Node
+tests, an offline
 Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
-public-page form, 320/390px layout and light theme), and the real Chromium/MV3
-Companion fixture with Connectors and scope revocation. Authenticated Maverick
+public-page form, 320/390px layout, image/video/collection rendering and blob
+cleanup), a cross-origin shell fixture with platform-served bundles, protected
+document/ZIP routes, initial/live themes and hidden-frame polling, and the real
+Chromium/MV3 Companion fixture with Connectors and scope revocation. The latter
+requires an isolated-origin Strict cookie, rejects platform document/download
+links and compares the downloaded archive with the built package before testing
+the extension's exact-window connection. Authenticated Maverick
 inspection verified desktop/mobile hosting, a public-page read with automatic
 cleanup, sidebar suppression and the native globe in the rail and App Store.
+Review corrections were additionally checked on the mounted app: the isolated
+connector document returned 200, initial light parameters applied, and switching
+to Settings stopped Browser requests for an observed interval over 40 seconds.
 The Companion fixture does not establish access to a real authenticated profile.
 
 ## Ownership, transport and queues

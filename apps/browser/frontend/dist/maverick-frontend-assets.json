@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "5ab3e0be697a6672166dcfe46e52efab44480c83df1d97bd3311f68357afe7ef",
+  "build_id": "bf3a25c6aabc6eb4fc714d96b4b15fd52ca6cb96c0f170c3b7df742daaec8c17",
   "entrypoints": [
     "companion/offscreen.html",
     "companion/popup.html",
@@ -8,14 +8,14 @@
   ],
   "immutable": [
     {
-      "path": "assets/index-CbnQi4cp.css",
-      "sha256": "02f24d180a7db951ca68af4f8bda3873d1b5de89945b4480e8d0be83806a88bb",
-      "size_bytes": 7789
+      "path": "assets/index-B979AdFI.css",
+      "sha256": "c82d62b6531ab0cced40808862eb15b22a737520599b232ec8c23127e511226a",
+      "size_bytes": 8614
     },
     {
-      "path": "assets/index-bvXCjSRl.js",
-      "sha256": "08a95eb575cbae05316276cf3eb8e029b568f2580afd1bde3965246acc979aaf",
-      "size_bytes": 21608
+      "path": "assets/index-BC_0s-Ar.js",
+      "sha256": "3bb81be8d5af5e520c87089202c26b9e659a7e044a82a6e7816649ca63290bdf",
+      "size_bytes": 26810
     }
   ],
   "revalidated": [
@@ -76,8 +76,8 @@
     },
     {
       "path": "companion/scope.mjs",
-      "sha256": "05d1bf822330d147677d1823635d18e6fab80745b1bb9ca7b93e34cf6fa55f39",
-      "size_bytes": 5651
+      "sha256": "2b4b9231dcb7c0aeeac856c5f5c49b0cf89b11b16df654a8032c9d72e8a7ec57",
+      "size_bytes": 5948
     },
     {
       "path": "companion/worker.mjs",
@@ -96,13 +96,13 @@
     },
     {
       "path": "index.html",
-      "sha256": "f8684e25635f96a6a928d50461d224e9d174487defe724b8c14bd7a04a0dcb85",
+      "sha256": "97c911a20630e24ca25fb6b38ee692aa1f7957299b6e83a44b7c2439096eba60",
       "size_bytes": 429
     },
     {
       "path": "maverick-browser-companion.zip",
-      "sha256": "de2116958c9632db671c94712737d908505b82caf8c5ebb24e9bf946e1a6999e",
-      "size_bytes": 19167
+      "sha256": "a9ef39343a6f540c22d009963ab774dd90d81fb3d27f33630dea4032601af4b5",
+      "size_bytes": 19240
     }
   ]
 }

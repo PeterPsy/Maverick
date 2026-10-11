@@ -9,6 +9,7 @@ test("Instagram scope excludes credentials, login, redirects and URL normalizati
 });
 test("Connector is restricted to the selected secure Browser window",()=>{
   const url=connectorUrl("https://frame.maverick.test/apps/browser/?connector=1");
+  assert.equal(connectorUrl("https://frame.maverick.test/apps/browser/?maverick_theme=light&secret=discard").search,"?connector=1&maverick_theme=light");
   const b={connectorTabId:10,origin:url.origin,path:url.pathname};
   assert(sameConnector({id:10,url:url.href},b));assert(!sameConnector({id:11,url:url.href},b));assert(!sameConnector({id:10,url:"https://evil.test/apps/browser/?connector=1"},b));
   for(const url of ["https://maverick.test/apps/chat/","http://maverick.test/apps/browser/","https://user:pass@maverick.test/apps/browser/"])assert.throws(()=>connectorUrl(url));

@@ -12,6 +12,7 @@ const overview = {workspace_id: "fixture", connections: [{session_id: "chrome-fi
   display_name: "Chrome", status: "connected", platform: "instagram", url: "https://www.instagram.com/fixture/", last_seen: now}],
   operations: [{operation_id: "op-fixture", session_id: "chrome-fixture", action: "content.read", status: "running", created_at: now}]};
 let denyDisconnect = true;
+let operationResult;
 const browser = await chromium.launch({headless: true});
 try {
   const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
@@ -24,6 +25,7 @@ try {
       if (body.action === "operation.get" || body.action === "research.open") result = {status: "completed", title: "Fixture result",
         text: "Observed <script>untrusted()</script> text", url: "https://example.com/",
         links: [{url: "javascript:alert(1)", text: "Unsafe link"}, {url: "https://example.com/source", text: "Observed source"}], base64: "fixture-media"};
+      if (body.action === "operation.get" && operationResult) result = operationResult;
       if (body.action === "status") result = {broker: {status: "ready"}, sessions: []};
       if (body.action === "companion.disconnect") {
         if (denyDisconnect) {status = 403; result = {error: "fixture_denial", detail: "Sharing could not be stopped."};}
@@ -64,6 +66,41 @@ try {
   await page.waitForFunction(() => document.querySelector("dialog .result-details:last-child pre"));
   assert.ok(!(await page.locator("dialog .result-details:last-child pre").textContent()).includes("fixture-media"));
   await page.getByRole("button", {name: "Close", exact: true}).click();
+  const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
+  for (const action of ["screenshot", "video.frame"]) {
+    for (const payload of [{base64: image}, {encoding: "base64", data: image}]) {
+      operationResult = {action, status: "completed", result: {mime_type: "image/png", ...payload, width: 1, height: 1, time_seconds: 2.5}};
+      await page.locator("#operations button").click();
+      await page.waitForFunction(() => document.querySelector("dialog img")?.naturalWidth === 1);
+      const url = await page.locator("dialog img").getAttribute("src"); assert(url.startsWith("blob:"));
+      assert((await page.locator("dialog figcaption").textContent()).includes("2.5s"));
+      await page.getByText("Technical details", {exact: true}).click();
+      await page.waitForSelector("dialog .result-details pre");
+      assert(!(await page.locator("dialog .result-details pre").textContent()).includes(image));
+      await page.getByRole("button", {name: "Close", exact: true}).click();
+      await page.waitForSelector("dialog", {state: "detached"});
+      assert.equal(await page.evaluate(url => fetch(url).then(() => true, () => false), url), false, "Closing a result releases the media object URL");
+    }
+  }
+  operationResult = {action: "video.analyze", status: "completed", result: {duration_seconds: 20, covered_seconds: 10, truncated: true,
+    frames: [{mime_type: "image/png", base64: image, time_seconds: 0}, {time_seconds: 9.95, storage: {file_id: "saved-frame"}}],
+    audio: {duration_seconds: 10, storage: {file_id: "saved-audio"}}, transcription: {status: "unavailable"}, coverage: "Sampled frames and captured audio."}};
+  await page.locator("#operations button").click(); await page.waitForSelector("dialog[open]");
+  assert.equal(await page.locator(".result-frame").count(), 2);
+  assert.equal(await page.getByRole("link", {name: "Open saved frame in Storage"}).getAttribute("href"), `${origin}/app/storage?file_id=saved-frame`);
+  assert.equal(await page.getByRole("link", {name: "Open saved audio in Storage"}).count(), 1);
+  assert((await page.locator(".result-media").textContent()).includes("10s observed · 20s duration"));
+  await page.getByRole("button", {name: "Close", exact: true}).click();
+  operationResult = {action: "content.collect", status: "completed", result: {items: [{url: "https://example.com/post", text: "Observed <script>post</script>", kind: "video", content_observed: false}],
+    batches: 3, stop_reason: "item_limit", sections: [{source_url: "https://example.com/", status: "observed", batches: 3, stop_reason: "section_item_limit"}],
+    coverage: "Links found during bounded scrolling; feed coverage is partial."}};
+  await page.locator("#operations button").click(); await page.waitForSelector("dialog[open]");
+  assert((await page.locator(".result-collection").textContent()).includes("1 collected items"));
+  assert((await page.locator(".result-collection").textContent()).includes("Stopped: item limit"));
+  assert((await page.locator(".result-items").textContent()).includes("item content has not been read"));
+  assert.equal(await page.locator(".result-coverage").textContent(), operationResult.result.coverage);
+  assert.equal(await page.locator("dialog script").count(), 0);
+  await page.getByRole("button", {name: "Close", exact: true}).click(); operationResult = null;
   await page.locator("#filter").selectOption("active");
   assert.equal(await page.locator("#operations .row").count(), 0);
   await page.locator("#filter").selectOption("all");
@@ -92,9 +129,10 @@ try {
       assert.ok(box.x >= 0 && box.x + box.width <= width, `${selector} clipped at ${width}px`);
     }
   }
-  await page.evaluate(() => {document.documentElement.dataset.maverickTheme = "light";});
+  await page.evaluate(() => window.postMessage({type: "maverick.shell.theme-changed", theme: {effective: "light", mode: "light", color_scheme: "light"}}, location.origin));
+  await page.waitForFunction(() => document.documentElement.dataset.maverickTheme === "light");
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
   assert.deepEqual(errors, []);
   await context.close();
-  process.stdout.write("Browser UI fixtures passed: focus, actions, filters, results, research, 320/390px layout and light theme.\n");
+  process.stdout.write("Browser UI fixtures passed: focus, actions, filters, text/images/video/collections, media cleanup, research, 320/390px layout and theme messages.\n");
 } finally { await browser.close(); }

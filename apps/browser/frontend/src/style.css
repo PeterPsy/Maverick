@@ -148,4 +148,16 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-heig
   .row button { white-space: normal; max-width: 95px; padding: 8px 12px; }
   dialog { padding: 18px; }
 }
+.result-media, .result-collection { margin-top: 20px; }
+.result-media h3, .result-collection h3 { font-size: 14px; margin: 16px 0 10px; }
+.result-frames { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px; }
+.result-frame { margin: 0; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 14px; }
+.result-frame img { display: block; width: 100%; max-height: 55vh; object-fit: contain; border-radius: 8px; }
+.result-frame figcaption { font-size: 12px; margin: 10px 0; color: var(--muted); }
+.result-media audio { width: 100%; }
+.result-coverage { font-size: 12px; line-height: 1.6; color: var(--muted); }
+.result-items { padding-left: 22px; }
+.result-items li, .result-page { margin: 12px 0; overflow-wrap: anywhere; }
+.result-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 12px; }
+.result-facts dd { margin: 0; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

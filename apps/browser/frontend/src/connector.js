@@ -38,11 +38,21 @@ export function createConnector(report) {
     try {
       const shared=await bridge("status");
       if(attempt!==generation || stopped || !lease)return;
-      if(command) {
-        const operation=await request({action:"operation.get",operation_id:command.operation_id});
+      const active=command;
+      if(active) {
+        const operation=await request({action:"operation.get",operation_id:active.operation_id});
         if(attempt!==generation || stopped || !lease)return;
-        if(operation.status !== "running")await bridge("cancel",{operation_id:command.operation_id}).catch(()=>{});
-        else await request({action:"companion.progress",...fields(),operation_id:command.operation_id,lease_id:command.lease_id,phase:command.action});
+        if(operation.status !== "running")await bridge("cancel",{operation_id:active.operation_id}).catch(()=>{});
+        else {
+          try {
+            await request({action:"companion.progress",...fields(),operation_id:active.operation_id,lease_id:active.lease_id,phase:active.action});
+          } catch(error) {
+            // Cancellation/completion can win between the status read and progress.
+            // Drain the worker without revoking the unrelated connection/queued work.
+            if(error.code !== "operation_not_running")throw error;
+            await bridge("cancel",{operation_id:active.operation_id}).catch(()=>{});
+          }
+        }
       }
       if(attempt!==generation || stopped || !lease)return;
       // Cancellation only sets a flag; the worker remains busy while restoring media.

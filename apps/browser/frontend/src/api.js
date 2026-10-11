@@ -13,7 +13,7 @@ export async function request(body, {signal, timeoutMs = 30000} = {}) {
     try { result = await response.json(); }
     catch { throw Object.assign(new Error("Browser returned an unreadable response. Please retry."), {status: response.status}); }
     if (!response.ok || result.error) {
-      throw Object.assign(new Error(result.detail || result.error || `HTTP ${response.status}`), {status: response.status});
+      throw Object.assign(new Error(result.detail || result.error || `HTTP ${response.status}`), {status: response.status, code: result.error});
     }
     return result;
   } catch (error) {

@@ -524,3 +524,29 @@ and foreground observations reported the executor unavailable. Post-install
 clicks, off-desktop input, multiple windows and matched model comparisons remain
 pending reconnection. Storage preserves the report and measured audit snapshots
 under `storage/generated/pc-use-benchmark/2026-10-11-pixel-plan-{notes.md,audit.json}`.
+
+## Reconnected physical planned-task evaluation (2026-10-11)
+
+Fresh observations and the running app's Info.plist confirmed MaverickMac
+0.3.4 (65). Luna low completed the actual Calculator window 46765's
+`19×37 = 703` in 25.691 seconds, then three identical structured tasks containing
+`17×23 = 391` and `27×14 = 378` in 57.979, 53.408 and 44.774 seconds
+(median 53.408). All 49 clicks across these four tasks were verified by runtime
+progress and corroborated by native call counts. The pair tasks each used three
+context segments and resumed verified progress at the checkpoints. Measured
+native work for the pairs was 6.455, 6.125 and 5.565 seconds. The difference from
+task elapsed time is not pure model-processing time.
+
+Setup failures remain separate from the three successful pair trials. An invalid
+combined `text`/`role` expectation was rejected before input. An AX plan then met
+a pixel-only observation, while the following pixel plan met AX: both stopped
+without clicking. Current plans do not declare alternatives across these
+representations. Settings reached Platform settings, but its large detailed
+receipt omitted later control sections, so no model selection was saved and no
+matched post-fix Sol trial ran. The saved Luna low selection remained visible.
+The final Calculator inventory still placed the window on the active desktop;
+off-desktop input, multiple Calculator windows and a direct single-model baseline
+remain unverified. These planned-task successes do not establish general
+reliability, comparative speed or per-trial cost. The verified Storage report and
+bounded audit/usage data are under
+`storage/generated/pc-use-benchmark/2026-10-11-reconnect-evaluation.{md,json}`.

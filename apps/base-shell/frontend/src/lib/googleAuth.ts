@@ -25,6 +25,22 @@ function pause(signal?: AbortSignal): Promise<void> {
 
 export async function runGoogleFlow(mode: "login" | "connect", services: GoogleService[], post: Post,
   signal?: AbortSignal): Promise<"redirecting" | "completed"> {
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  signal?.addEventListener("abort", cancel, { once: true });
+  window.addEventListener("maverick.server-will-change", cancel);
+  window.addEventListener("pagehide", cancel);
+  if (signal?.aborted) cancel();
+  try { return await runScopedGoogleFlow(mode, services, post, controller.signal); }
+  finally {
+    signal?.removeEventListener("abort", cancel);
+    window.removeEventListener("maverick.server-will-change", cancel);
+    window.removeEventListener("pagehide", cancel);
+  }
+}
+
+async function runScopedGoogleFlow(mode: "login" | "connect", services: GoogleService[], post: Post,
+  signal: AbortSignal): Promise<"redirecting" | "completed"> {
   const handlers = (window as unknown as { webkit?: { messageHandlers?: {
     maverickExternalURL?: NativeOpener; sensesHost?: unknown; maverickDeviceUse?: unknown;
   } } }).webkit?.messageHandlers;

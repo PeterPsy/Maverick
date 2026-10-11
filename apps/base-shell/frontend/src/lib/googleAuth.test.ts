@@ -20,8 +20,8 @@ describe("Google browser transport", () => {
     await vi.advanceTimersByTimeAsync(1200);
     expect(await result).toBe("completed");
     expect(postMessage).toHaveBeenCalledExactlyOnceWith({ url: browserUrl });
-    expect(post).toHaveBeenNthCalledWith(1, "/api/auth/google/start", { mode: "connect", services: ["gmail", "calendar"], transport: "system-browser" }, undefined);
-    expect(post).toHaveBeenNthCalledWith(2, "/api/auth/google/result", { flow_id: flowId }, undefined);
+    expect(post).toHaveBeenNthCalledWith(1, "/api/auth/google/start", { mode: "connect", services: ["gmail", "calendar"], transport: "system-browser" }, expect.any(AbortSignal));
+    expect(post).toHaveBeenNthCalledWith(2, "/api/auth/google/result", { flow_id: flowId }, expect.any(AbortSignal));
   });
 
   it("waits through pending consent and a temporary loss of connectivity", async () => {
@@ -46,6 +46,17 @@ describe("Google browser transport", () => {
     const rejected = expect(result).rejects.toMatchObject({ name: "AbortError" });
     await vi.advanceTimersByTimeAsync(1); controller.abort(); await rejected;
     expect(post).toHaveBeenLastCalledWith("/api/auth/google/cancel", { flow_id: flowId });
+  });
+
+  it("cancels pending consent before a native server transition", async () => {
+    const result = runGoogleFlow("connect", [], post);
+    const rejected = expect(result).rejects.toMatchObject({ name: "AbortError" });
+    await vi.advanceTimersByTimeAsync(1);
+    window.dispatchEvent(new Event("maverick.server-will-change"));
+    await rejected;
+    expect(post).toHaveBeenLastCalledWith("/api/auth/google/cancel", { flow_id: flowId });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(post.mock.calls.some(([path]) => path.endsWith("/result"))).toBe(false);
   });
 
   it("refuses a launch on another origin before calling the native bridge", async () => {

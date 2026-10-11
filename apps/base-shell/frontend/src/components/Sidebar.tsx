@@ -323,7 +323,7 @@ export function Sidebar({
       {!isMobileLayout ? (
         <div className="bs-sidebar__rail" aria-label="Applications">
           {!sidebarEnabled ? <SidebarRailMenu icon="workspaces" label="Controlli workspace" placement="top">
-            <SidebarHeader activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} isLoading={isLoading}
+            <SidebarHeader user={user} activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} isLoading={isLoading}
               notifications={notifications}
               isWorkspacesLoading={isWorkspacesLoading} onOpenAppSettings={onOpenAppSettings}
               onWorkspaceChange={onWorkspaceChange} workspaces={workspaces} />
@@ -349,7 +349,7 @@ export function Sidebar({
 
       {!sidebarEnabled && isMobileLayout ? <SidebarRailMenu icon="workspaces" label="Controlli workspace" placement="mobile"
         open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-        <SidebarHeader activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} isLoading={isLoading}
+        <SidebarHeader user={user} activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} isLoading={isLoading}
           isWorkspacesLoading={isWorkspacesLoading} onOpenAppSettings={onOpenAppSettings}
           onWorkspaceChange={onWorkspaceChange} workspaces={workspaces} />
         <SidebarShellControls mode={mode} onModeChange={onModeChange} onThemeModeChange={onThemeModeChange}
@@ -358,6 +358,7 @@ export function Sidebar({
       <div className="bs-sidebar__details" aria-hidden={!isDetailLayerOpen}>
         <div className="bs-sidebar__top-overlay">
           {sidebarEnabled ? <SidebarHeader
+            user={user}
             activeApp={activeApp}
             activeWorkspaceId={activeWorkspaceId}
             isLoading={isLoading}

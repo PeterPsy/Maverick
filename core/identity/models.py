@@ -25,6 +25,7 @@ class UserRecord:
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    avatar_url: str | None = None
 
 
 @dataclass(frozen=True)

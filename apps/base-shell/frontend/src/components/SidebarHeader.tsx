@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import type { AppRegistryItem, WorkspaceItem } from "../api";
+import type { AppRegistryItem, WorkspaceItem, SessionUser } from "../api";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { UserAvatar } from "./UserAvatar";
 
-export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorkspacesLoading, onOpenAppSettings, onWorkspaceChange, workspaces, notifications }: {
+export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorkspacesLoading, onOpenAppSettings, onWorkspaceChange, workspaces, notifications, user }: {
   activeApp: AppRegistryItem | null;
   activeWorkspaceId: string;
   isLoading: boolean;
@@ -13,6 +14,7 @@ export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorks
   onWorkspaceChange: (workspaceId: string) => Promise<void> | void;
   workspaces: WorkspaceItem[];
   notifications?: ReactNode;
+  user?: SessionUser | null;
 }) {
   const settingsLabel = activeApp ? `Impostazioni di ${activeApp.name}` : "Impostazioni app";
   return (
@@ -26,9 +28,9 @@ export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorks
         disabled={!activeApp || isLoading} onClick={onOpenAppSettings} type="button">
         <span aria-hidden="true" className="material-symbols-rounded">settings</span>
       </button>
-      <button className="bs-sidebar__app-settings" aria-label="Connected accounts" title="Connected accounts" type="button"
+      <button className="bs-sidebar__app-settings" aria-label="Account and servers" title="Account and servers" type="button"
         onClick={() => window.dispatchEvent(new Event("maverick.connected-accounts.open"))}>
-        <span aria-hidden="true" className="material-symbols-rounded">account_circle</span>
+        <UserAvatar user={user} />
       </button>
       {notifications}
     </div>

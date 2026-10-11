@@ -101,6 +101,7 @@ def public_user_payload(user: UserRecord) -> dict[str, object]:
         "username": user.username,
         "email": user.email,
         "display_name": user.display_name,
+        "avatar_url": user.avatar_url,
         "account_type": user.account_type,
         "platform_role": user.platform_role,
     }

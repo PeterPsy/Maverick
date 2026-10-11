@@ -95,10 +95,10 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])("keeps connected accounts only in the sidebar header (mobile: %s)", async (isMobileLayout) => {
+  it.each([false, true])("keeps account and server management only in the sidebar header (mobile: %s)", async (isMobileLayout) => {
     await renderSidebar({ isMobileLayout });
 
-    const accounts = container.querySelectorAll<HTMLButtonElement>('button[aria-label="Connected accounts"]');
+    const accounts = container.querySelectorAll<HTMLButtonElement>('button[aria-label="Account and servers"]');
     expect(accounts).toHaveLength(1);
     expect(accounts[0].closest(".bs-sidebar__header")).not.toBeNull();
     expect(accounts[0].closest(".bs-sidebar__rail")).toBeNull();

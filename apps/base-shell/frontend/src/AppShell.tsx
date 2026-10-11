@@ -62,6 +62,8 @@ import { useDeviceUseBroker } from "./useDeviceUseBroker";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
 import { ConnectedAccountsDialog } from "./components/ConnectedAccountsDialog";
+import { ServerProfilesLauncher } from "./components/ServerProfilesPanel";
+import { clearNativeServerSession } from "./lib/serverProfiles";
 import { MobileShellHeader } from "./components/MobileShellHeader";
 import { MobilePinnedAppsPanel } from "./components/MobilePinnedAppsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -95,6 +97,7 @@ export function AppShell() {
   const [settings, setSettings] = useState<ProviderSetupSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
   const [accountsScope, setAccountsScope] = useState<string | null>(null);
+  const accountPanelOpenRef = useRef(false);
   const [accountRevision, setAccountRevision] = useState(0);
   const [accountCallbackError, setAccountCallbackError] = useState<string | null>(null);
   const [appSettingsScope, setAppSettingsScope] = useState<{ appId: string; sessionGeneration: string } | null>(null);
@@ -153,6 +156,7 @@ export function AppShell() {
     ? JSON.stringify([authenticatedSession.user.user_id, authenticatedSession.workspace_id, authenticatedSession.session_generation])
     : null;
   const authenticatedFrameWorkspaceId = authenticatedSession?.workspace_id ?? null;
+  accountPanelOpenRef.current = Boolean(accountsScope && accountsScope === authenticatedFrameScopeIdentity);
   const frameScope = useMemo<MaverickFrameScope | null>(() => (
     authenticatedFrameScopeIdentity && authenticatedFrameWorkspaceId
       ? Object.freeze({
@@ -285,6 +289,7 @@ export function AppShell() {
   }
 
   function closeSidebar() {
+    if (accountPanelOpenRef.current) return;
     if (isSidebarPinned) {
       clearSidebarClosing();
       setIsSidebarOpen(true);
@@ -867,6 +872,7 @@ export function AppShell() {
       logoutError = error;
     } finally {
       await shellCacheLifecycle.endSession().catch(() => undefined);
+      await clearNativeServerSession().catch(() => undefined);
       publishAnonymousShellState();
     }
     if (logoutError) {
@@ -952,6 +958,7 @@ export function AppShell() {
   if (isSessionTransitioning || session === null) {
     return (
       <main className="bs-shell">
+        <ServerProfilesLauncher />
         <div className="bs-shell-initial-pending">
           {error ? <div role="alert">
             <p>Connessione a Maverick non disponibile. Riprovo appena torna la connessione.</p>
@@ -1064,8 +1071,20 @@ export function AppShell() {
       />
       {accountsScope === authenticatedFrameScopeIdentity && accountsScope && <ConnectedAccountsDialog
         key={accountsScope} callbackError={accountCallbackError}
-        onClose={() => { setAccountsScope(null); setAccountCallbackError(null); }}
-        onChanged={() => setAccountRevision(revision => revision + 1)} />}
+        user={authenticatedSession.user}
+        workspaceName={workspaces.find(workspace => workspace.workspace_id === activeWorkspaceId)?.name || activeWorkspaceId}
+        onLogout={handleLogout}
+        onOpenSettings={apps.some(app => app.app_id === SETTINGS_APP_ID) ? openSettingsApp : undefined}
+        onClose={() => { accountPanelOpenRef.current = false; setAccountsScope(null); setAccountCallbackError(null); }}
+        onChanged={() => {
+          setAccountRevision(revision => revision + 1);
+          const identity = authenticatedFrameScopeIdentity;
+          void getSession().then(next => {
+            if (next.authenticated && JSON.stringify([next.user.user_id, next.workspace_id, next.session_generation]) === identity) {
+              setSession(previous => previous?.authenticated && previous.session_generation === next.session_generation ? next : previous);
+            }
+          }).catch(() => undefined);
+        }} />}
       {activeApp && appSettingsScope?.appId === activeApp.app_id && appSettingsScope.sessionGeneration === frameScope.sessionGeneration && <AppSettingsDialog
         key={`${frameScope.sessionGeneration}:${activeApp.app_id}`}
         app={activeApp}

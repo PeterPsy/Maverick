@@ -34,6 +34,9 @@ class IdentityStore(Protocol):
     def get_user(self, user_id: str) -> UserRecord:
         ...
 
+    def update_user_avatar(self, user_id: str, avatar_url: str, *, now, only_if_empty: bool = False) -> UserRecord:
+        ...
+
     def get_user_by_username(self, username: str) -> UserRecord:
         ...
 
@@ -100,6 +103,17 @@ class IdentityDocumentStore:
         if document is None:
             raise UserNotFoundError(f"User `{user_id}` was not found.")
         return UserRecord(**document)
+
+    def update_user_avatar(self, user_id: str, avatar_url: str, *, now, only_if_empty: bool = False) -> UserRecord:
+        """Update verified profile imagery without overwriting roles or recreating users."""
+        query = {"user_id": user_id, "is_active": True}
+        if only_if_empty:
+            query["avatar_url"] = None
+        self.collections.users.update_one(
+            query,
+            {"$set": {"avatar_url": avatar_url, "updated_at": now}}, upsert=False,
+        )
+        return self.get_user(user_id)
 
     def get_user_by_username(self, username: str) -> UserRecord:
         document = self.collections.users.find_one({"username": username})

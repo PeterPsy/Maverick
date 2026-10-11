@@ -15,7 +15,7 @@ let data: ConnectedAccountsPayload;
 const changed = vi.fn();
 const flush = () => act(async () => { await Promise.resolve(); });
 const render = async () => {
-  await act(async () => { root.render(<ConnectedAccountsDialog onClose={vi.fn()} onChanged={changed} />); });
+  await act(async () => { root.render(<ConnectedAccountsDialog initialSection="access" onClose={vi.fn()} onChanged={changed} />); });
   await flush();
 };
 const checkbox = (email: string) => host.querySelector<HTMLInputElement>(`input[aria-label="Use ${email} in this workspace"]`)!;

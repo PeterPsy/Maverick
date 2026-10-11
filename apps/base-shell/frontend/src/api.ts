@@ -96,6 +96,7 @@ export type SessionUser = {
   username: string;
   email: string | null;
   display_name: string | null;
+  avatar_url?: string | null;
   account_type: string;
   platform_role: string;
 };

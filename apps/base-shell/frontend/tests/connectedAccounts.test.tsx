@@ -52,7 +52,7 @@ describe("Google login and connected accounts", () => {
   });
 
   it("explains missing consent while allowing independent app access changes", async () => {
-    await act(async () => root.render(<ConnectedAccountsDialog onClose={vi.fn()} onChanged={changed} />));
+    await act(async () => root.render(<ConnectedAccountsDialog initialSection="access" onClose={vi.fn()} onChanged={changed} />));
     expect(container.querySelector("dialog")?.open).toBe(true);
     expect(container.textContent).toContain("Additional consent needed: gmail");
     await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Allow Calendar to use Google"]')!.click());

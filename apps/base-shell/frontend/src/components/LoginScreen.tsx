@@ -3,6 +3,7 @@ import { login, getSession, googleStatus, startGoogle, type GoogleStatus, type G
 import { GoogleMark, GoogleServices, googleCallbackMessage } from "./GoogleServices";
 import { GoogleAuthError } from "../lib/googleAuth";
 import { BrandMark } from "./BrandMark";
+import { ServerProfilesLauncher } from "./ServerProfilesPanel";
 
 type LoginStep = "email" | "password";
 
@@ -100,6 +101,7 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
 
   return (
     <main className="bs-login">
+      <ServerProfilesLauncher beforeSwitch={() => googleController.current?.abort()} />
       <Suspense fallback={<div className="bs-login-paper-bg is-static" aria-hidden="true" />}>
         <LoginPaperBackground />
       </Suspense>

@@ -1,16 +1,43 @@
 .bs-connected-accounts {
-  width: min(38rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem);
+  width: min(60rem, calc(100vw - 2rem)); height: min(44rem, calc(100dvh - 2rem)); max-height: calc(100dvh - 2rem);
   padding: 0; border: 1px solid var(--maverick-border-strong); border-radius: 22px;
   color: var(--maverick-text); background: var(--maverick-dialog-surface); box-shadow: var(--maverick-dialog-shadow);
 }
 .bs-connected-accounts::backdrop { background: var(--maverick-dialog-scrim); }
+.bs-connected-accounts[open] { display: flex; flex-direction: column; }
 .bs-connected-accounts header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem; border-bottom: 1px solid var(--maverick-border); }
 .bs-connected-accounts h2, .bs-connected-accounts h3, .bs-connected-accounts p { margin: 0; }
 .bs-connected-accounts h2 { font-size: 1.35rem; }
 .bs-connected-accounts h2:focus { outline: none; }
 .bs-connected-accounts h3 { font-size: 1rem; margin-bottom: .7rem; }
 .bs-connected-accounts header p, .bs-connected-accounts small { color: var(--maverick-text-muted); font-size: .8rem; }
-.bs-connected-accounts__body { display: grid; gap: 1.25rem; padding: 1.25rem; overflow-y: auto; max-height: calc(100dvh - 9rem); }
+.bs-account-layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); min-height: 0; flex: 1; }
+.bs-connected-accounts__body { display: flex; flex-direction: column; gap: 1.25rem; padding: 1.5rem; overflow-y: auto; min-width: 0; min-height: 0; overscroll-behavior: contain; }
+.bs-account-heading, .bs-account-profile { display: flex; align-items: center; gap: .9rem; min-width: 0; }
+.bs-account-heading > div { min-width: 0; }
+.bs-account-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-user-avatar { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; background: var(--maverick-surface-hover); font-size: .65rem; font-weight: 600; overflow: hidden; color: var(--maverick-text); }
+.bs-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.bs-account-heading .bs-user-avatar { flex-basis: 44px; width: 44px; height: 44px; font-size: 1rem; }
+.bs-account-profile .bs-user-avatar { flex-basis: 64px; width: 64px; height: 64px; font-size: 1.3rem; }
+.bs-account-section { display: flex; flex-direction: column; gap: 1.25rem; }
+.bs-account-section p, .bs-connected-accounts__body > p { line-height: 1.5; font-size: .875rem; }
+.bs-account-nav { display: flex; flex-direction: column; gap: .25rem; border-right: 1px solid var(--maverick-border); padding: .85rem; overflow-y: auto; }
+.bs-connected-accounts .bs-account-nav button { display: flex; align-items: center; gap: .65rem; border: 0; border-radius: 10px; background: transparent; text-align: left; font-size: .825rem; min-height: 42px; padding: .65rem; }
+.bs-connected-accounts .bs-account-nav button[aria-current="page"] { background: var(--maverick-surface-hover); font-weight: 600; }
+.bs-account-nav .material-symbols-rounded { font-size: 19px; }
+.bs-account-nav .bs-account-nav__logout { margin-top: auto; }
+.bs-account-nav__arrow { margin-left: auto; }
+.bs-account-details { display: grid; gap: 0; margin: 0; }
+.bs-account-details > div { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 1rem; padding: .85rem 0; border-bottom: 1px solid var(--maverick-border); font-size: .85rem; }
+.bs-account-details dt, .bs-account-note { color: var(--maverick-text-muted); }
+.bs-account-details dd { margin: 0; overflow-wrap: anywhere; }
+.bs-server-form { display: grid; gap: .8rem; }
+.bs-server-form label { display: grid; gap: .4rem; font-size: .85rem; }
+.bs-server-form input { width: 100%; box-sizing: border-box; border: 1px solid var(--maverick-border); border-radius: 10px; padding: .7rem; background: var(--maverick-surface); color: var(--maverick-text); font: inherit; }
+.bs-server-launcher { position: fixed; z-index: 20; right: max(16px, env(safe-area-inset-right)); top: max(16px, env(safe-area-inset-top)); display: flex; align-items: center; gap: .4rem; padding: .65rem .8rem; border: 1px solid var(--maverick-border); border-radius: 12px; background: var(--maverick-dialog-surface); color: var(--maverick-text); cursor: pointer; }
+.bs-connected-accounts--servers { width: min(40rem, calc(100vw - 2rem)); }
+.bs-connected-accounts--servers .bs-connected-accounts__body { flex: 1; box-sizing: border-box; }
 .bs-connected-accounts__account { padding: 1rem; border: 1px solid var(--maverick-border); border-radius: 18px; display: grid; gap: .8rem; }
 .bs-connected-accounts small { display: block; overflow-wrap: anywhere; margin-top: .25rem; }
 .bs-connected-accounts__actions, .bs-connected-accounts__confirmation { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; font-size: .8rem; }
@@ -40,7 +67,16 @@
 .bs-login__google summary { cursor: pointer; font-size: .85rem; text-align: center; }
 .bs-login__google details[open] summary { margin-bottom: 1rem; }
 .bs-login__google > small { color: var(--maverick-text-muted); text-align: center; }
-@media (max-width: 600px) { .bs-connected-accounts { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); } .bs-connected-accounts__body { padding: 1rem; } }
+@media (max-width: 680px) {
+  .bs-connected-accounts { width: calc(100vw - 1rem); height: calc(100dvh - 1rem); max-height: calc(100dvh - 1rem); border-radius: 18px; }
+  .bs-connected-accounts header { padding: 1rem; }
+  .bs-connected-accounts h2 { font-size: 1.1rem; }
+  .bs-account-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .bs-account-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--maverick-border); overflow-x: auto; padding: .5rem; }
+  .bs-account-nav button { flex-shrink: 0; white-space: nowrap; }
+  .bs-account-nav .bs-account-nav__logout { margin-top: 0; }
+  .bs-connected-accounts__body { padding: 1rem; }
+}
 .bs-google-handoff {
   min-height: 100dvh;
   display: flex;

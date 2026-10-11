@@ -187,3 +187,48 @@ projection rather than requiring an app-owned Vault credential reference. Its
 provider requests still require the matching invocation-scoped Core handle;
 withdrawn account authority remains unavailable, and manual Drive connections
 retain their local credential metadata check.
+
+
+## Account panel and installation profiles
+
+The shell's existing account button stays at the top of the sidebar next to the
+app settings button. It opens Account and servers, a 960px desktop dialog with
+section navigation and an independently scrolling content area. On narrow
+screens the navigation scrolls horizontally and the panel fills the available
+viewport. The panel remembers its last section per signed-in user and origin.
+Keyboard dismissal returns to the launcher; an open panel prevents the hover
+sidebar from closing underneath it.
+
+Profile displays the authenticated Maverick identity, current server and
+workspace. User records have a backward-compatible optional `avatar_url` from a
+verified Google identity; initials remain the fallback. A first connection may
+supply an absent avatar. Connecting a secondary Google service account cannot
+replace it, even with stale request context or concurrent profile writes. A new
+Google login may update the identity photo. Targeted, non-upserting avatar writes
+preserve existing roles and other identity fields. Google photo validation is
+shared with connected-account display metadata.
+
+Connected accounts owns linking, reconnecting and global Google disconnection.
+App access owns the existing workspace account selection, explicit default and
+per-app grants. Settings navigates to the Settings app only when it is available
+in the user's registry. Log out ends the current installation's session and
+clears its shell cache; in native clients it also clears that profile's WebKit
+session and iOS recovery credential. It does not disconnect Google accounts or
+log out other saved native profiles.
+
+Servers is a device-local native registry, separate from server Settings. The
+shared macOS/iOS native bridge accepts requests only from the active profile's
+trusted top-level shell and fences retired WebView generations. The first
+profile retains the old default WebKit store; further profiles get independent
+persistent stores. Changing server checks `/api/session` without sending any
+stored cookie, then retires device commands, cancels pending Google consent and
+recreates native state and the WebView. Failure retains the current server.
+Login/offline selectors are available independently of authentication. Browser
+and PWA use site-local bookmarks and navigate to another installation, whose
+cookies and data remain managed by its origin. Removing a browser bookmark does
+not delete that destination's cookies.
+
+No server cloning, data migration or installation synchronization occurs in this
+flow. Each installation requires its own configured Google callback URI.
+Native implementation and offline entry points are documented in
+`docs/maverick-macos-device-use.md` in the companion repository.

@@ -41,11 +41,13 @@ class UIBenchmarkFixtureTests(unittest.TestCase):
     def test_old_target_and_pending_input_are_rejected_without_replay(self):
         fixture = self.fixture('menu')
         self.read(fixture)
+        self.assertEqual(fixture.trace[-1]['arguments'], {'action': 'observe_app', 'bundle_id': BUNDLE})
         old_element, old_receipt = next(iter(fixture.elements)), fixture.receipt
         self.read(fixture)
         result = fixture.invoke('mac_peekaboo', {'action': 'click', 'bundle_id': BUNDLE,
             'element': old_element, 'snapshot': old_receipt}, 'stale')
         self.assertFalse(result.result['success'])
+        self.assertEqual(fixture.trace[-1]['arguments']['snapshot'], old_receipt)
         self.assertIsNone(fixture.pending)
         self.read(fixture)
         self.input(fixture, 'Theme')

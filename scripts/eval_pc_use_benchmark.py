@@ -42,7 +42,7 @@ input. Ignore unrelated workspace work.'''
 
 def run_trial(variant, scenario, chromium, *, timeout=180, repetition=0):
     fixture = UIBenchmarkFixture(scenario, chromium)
-    samples, delegated_attempts = [], []
+    samples, delegated_attempts, delegated_tasks = [], [], []
     started = time.monotonic()
     final, exception = None, None
     try:
@@ -62,6 +62,7 @@ def run_trial(variant, scenario, chromium, *, timeout=180, repetition=0):
                 nonlocal operator
                 if tool == 'computer_interact':
                     task = validate_actor_task(args)
+                    delegated_tasks.append(task)
                     if operator is None:
                         operator = CodexComputerActor(session, binding, selection=selection)
                     def native(tool, arguments, native_call_id):
@@ -108,6 +109,7 @@ def run_trial(variant, scenario, chromium, *, timeout=180, repetition=0):
         'synthetic_native_seconds': round(fixture.native_ms / 1000, 3),
         'result': final, 'exception': exception, 'verified_state': fixture.state(),
         'usage': benchmark_usage(samples), 'delegated_attempts': delegated_attempts,
+        'delegated_tasks': delegated_tasks,
         'native_calls': len(fixture.trace), 'trace': fixture.trace}
 
 

@@ -135,22 +135,24 @@ class UIBenchmarkFixture:
                 if self.pending['reads'] <= 0:
                     self.apply(self.pending['action'], self.pending['label'], self.pending['text'])
                     self.pending = None
-            self.trace.append({'action': action, 'state': self.state()})
+            self.trace.append({'action': action, 'arguments': dict(arguments), 'state': self.state()})
             return self.result(call_id, started)
         if action == 'list_windows':
+            self.trace.append({'action': action, 'arguments': dict(arguments), 'state': self.state()})
             return self.result(call_id, started)
         if (action not in {'click', 'type', 'replace'} or self.pending
             or arguments.get('snapshot') != self.receipt or arguments.get('element') not in self.elements):
-            self.trace.append({'action': action, 'rejected_before_dispatch': True})
+            self.trace.append({'action': action, 'arguments': dict(arguments), 'rejected_before_dispatch': True})
             return self.result(call_id, started, failure='stale target or pending update')
         item = self.elements[arguments['element']]
         if not item['actionable'] or (action != 'click' and item['role'] != 'textfield'):
+            self.trace.append({'action': action, 'arguments': dict(arguments), 'rejected_before_dispatch': True})
             return self.result(call_id, started, failure='control cannot accept this action')
         self.pending = {'action': action, 'label': item['label'], 'text': arguments.get('text', ''),
                         'reads': 2 if item['label'] == 'Save' else 1}
         if item['label'] == 'Save':
             self.status = 'Saving'
-        self.trace.append({'action': action, 'label': item['label'], 'text': arguments.get('text'), 'state_before': self.state()})
+        self.trace.append({'action': action, 'arguments': dict(arguments), 'label': item['label'], 'text': arguments.get('text'), 'state_before': self.state()})
         return self.result(call_id, started)
 
     def state(self):

@@ -191,6 +191,67 @@ user reports are delivered through Storage. Run explicitly with:
 python3 scripts/eval_pc_use_benchmark.py --repetitions 3 --timeout 180 --output /tmp/pc-use-benchmark.json
 ```
 
+## Matched results on 2026-10-11
+
+Final controlled series: three repetitions of each of four scenarios, 36 trials.
+The measured execution code is preserved in `c5cf0407`; earlier exploratory runs
+are excluded. All figures include the Sol root planner and worker streams,
+failures, context renewal, recovery, verification and process cleanup.
+Success requires both a completed parent response and independently correct UI
+state within the trial budget; correct state alone does not pass a timed-out run.
+
+| Variant | End-to-end success | Seconds per success | Processed tokens per success | Uncached input per success | Cached input per success |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Sol direct | 12/12 | 46.8 | 216,082 | 27,394 | 188,032 |
+| Sol delegated | 10/12 | 98.4 | 211,207 | 49,438 | 160,499 |
+| Luna Low + safe Sol recovery | 12/12 | 58.7 | 210,787 | 48,828 | 160,736 |
+
+Per-scenario cells show successes/runs and seconds per success including failed
+attempts. These are controlled fixture times, not native Mac latency estimates.
+
+| Scenario | Sol direct | Sol delegated | Luna Low + recovery |
+| --- | ---: | ---: | ---: |
+| calculator | 3/3 · 91.9 s | 3/3 · 145.4 s | 3/3 · 111.7 s |
+| form | 3/3 · 30.3 s | 2/3 · 65.5 s | 3/3 · 43.0 s |
+| menu | 3/3 · 25.4 s | 3/3 · 36.8 s | 3/3 · 31.0 s |
+| async-save | 3/3 · 39.7 s | 2/3 · 153.2 s | 3/3 · 49.0 s |
+
+Luna required one Sol recovery on Calculator after a rejected planned-action
+call. It is therefore 12/12 for the corrected configuration, not evidence of
+12/12 autonomous Luna reliability. Context checkpoints are continuations, not
+additional failed trials.
+
+Sol delegated stopped one form before input after two worker observations:
+`ui_action` continued to return `computer_actor_fresh_observation_required`.
+The original trace does not retain its exact plan/read arguments, so it cannot
+establish the source of that mismatch. Subsequent harness runs retain both.
+Its last async-save trial reached the independently correct reopened title and
+Loaded status, but the parent did not complete before the 180-second budget
+(180.464 seconds including cleanup). That run remains an end-to-end failure;
+its time and consumption remain in the per-success totals.
+
+This small sample favors Sol direct for responsiveness. Luna with structured
+steps and safe recovery remains an experimental alternative. Processed-token
+counts are similar across configurations, with more uncached input in delegated
+runs; provider billing/prices and cache treatment would be needed to infer monetary cost. These results do not justify general native reliability
+claims or changing an existing saved workspace selection automatically.
+
+Final regression: 165 Python tests passed, five SQLite usage variants skipped
+because this interpreter is below the verified WAL-safe runtime; 11 Settings
+frontend tests and the official frontend build passed. Six benchmark metrics/
+fixture checks also passed after adding richer diagnostic traces. The repository
+fast suite has failures outside this change in other app, model-fixture and
+repository-policy checks, so the full suite is not reported as green.
+
+Physical Mac and desktop/mobile Settings acceptance were deferred by the user
+until PC use is reactivated. No native binary/protocol change is required.
+The official backend restart was attempted after tests but returned
+`authentication_required`: this runtime CLI credential expired at 09:16:18 UTC.
+Restart/health and saved-setting verification remain pending a fresh authenticated
+runtime; no state-mutating app flow was bypassed.
+
+Raw temporary measurement SHA-256: `cb5f9f8fd7b25431d1ea1734e49a899109371a5d74fed217e6f83dc3308ec52f`.
+
 Implementation verification on 2026-10-08 includes 165 focused passing tests for
 provider routing, private JSON-RPC, native lease/turn authority, steering, MCP,
 reconnection, and usage in both document and SQLite stores. A live authenticated

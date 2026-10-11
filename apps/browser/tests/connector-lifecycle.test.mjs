@@ -73,4 +73,8 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   dispatch({type: "maverick.browser.wake"});
   await until(() => calls.filter(call => call.action === "companion.poll").length >= 5);
   assert.equal(calls.filter(call => call.action === "companion.disconnect").length, disconnects);
+  await nextTurn(); statusFailure = true;
+  dispatch({type: "maverick.browser.wake"});
+  await until(() => calls.filter(call => call.action === "companion.disconnect").length === disconnects + 1);
+  assert.equal(states.at(-1), "stopped", "A scoped bridge failure must revoke on the first response even when its message contains friendly guidance");
 });

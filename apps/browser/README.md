@@ -1,6 +1,6 @@
 # Browser
 
-Browser 0.4 provides read-only platform navigation through a user-shared Chrome
+Browser provides read-only platform navigation through a user-shared Chrome
 session and governed public-web research through an isolated Playwright Lab.
 Platform workflows and saved collections belong to the Connectors app.
 All browser, collection and speech components are open source; no scraping,
@@ -8,19 +8,32 @@ proxy, hosted-browser or remote transcription service is used.
 
 ## Connect a platform tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.4.2,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.5.0,
 then load its folder with Chrome's “Load unpacked” developer-mode action. Copy
 the connector address displayed by Browser. Use Chrome 120 or later. Open a
-supported platform page in Chrome, log in directly if needed, and click the
-extension toolbar icon on that tab. Its popup shows the selected page;
-Chrome internal pages, Maverick and
-unsupported routes cannot be shared. Paste the connector address and choose
-“Share this tab”. In the dedicated Browser window opened by the extension,
-sign in to Maverick if prompted and select the workspace you want to connect.
-When the selected tab appears, press “Connect” and keep that window open during
-work. The stable `/app/browser?connector=1` shell address creates
-a fresh authenticated isolated Browser frame in Chrome; it works even when the
-original Maverick app uses another browser profile or the desktop application.
+supported platform page in Chrome, log in directly if needed, and share it from
+Companion. The agent can navigate throughout that platform; sharing a profile
+does not restrict navigation to that profile. Platform home pages are supported.
+
+To start empty, choose **Open agent tab** in Companion, even from Chrome's New
+Tab page. On the new dedicated tab, click Companion in Chrome's toolbar again,
+paste the connector address and choose **Connect agent tab**. This explicit
+invocation grants Chrome's tab-capture permission for that tab. The popup asks
+for the six supported platform hosts plus Maverick, not every website. Connect
+in the Browser window it opens and keep both tabs open. The agent can then
+navigate across Instagram, X, Reddit, Facebook, LinkedIn and YouTube, using your
+usual Chrome platform sessions. It can read, scroll, collect content and analyze
+images/video/audio; clicks, form entry, posting and messages have no command.
+Sign in to platforms directly in Chrome. Other tabs are not shared.
+
+The dedicated tab starts with an empty public URL. Its immutable approved
+platform list is saved in the user-created connection lease and returned by
+`browser_companion_status`. The backend and extension independently enforce the
+same list and reviewed content routes. Existing platform-tab connections retain
+their single-platform scope. Schema migration preserves existing sharing leases.
+
+The connector shell opens a fresh authenticated isolated Browser frame in Chrome;
+it works even when the original Maverick app uses another browser profile or the desktop application.
 The hashed Companion ZIP is a public, immutable build asset under
 `/apps/browser/assets/` and requires no Maverick cookie. Private iframe URLs
 are never copied as connector addresses.
@@ -33,8 +46,8 @@ replace the extracted files and reload it in `chrome://extensions`.
 Sharing is explicit and limited to one tab. Passwords, cookies, browser history,
 forms, social writes and caller JavaScript are outside the tool surface. The
 extension requests optional access to the selected Maverick origin, its isolated
-frame namespace and the selected platform. It probes only app identity in the
-selected connector window and attaches to one exact Browser frame/document;
+frame namespace and the selected platform, or the six supported platforms for a
+dedicated agent tab. It probes only app identity in the selected connector window and attaches to one exact Browser frame/document;
 other tabs, shell frames and replaced documents cannot execute its fixed commands.
 Closing either tab, leaving approved platform routes, or revoking sharing stops
 capture. Reloading the connector requires a fresh user-owned connection.
@@ -102,8 +115,9 @@ skipped sections, limits, login/challenge indicators and coverage. Connectors op
 collected links separately before marking their content as read.
 
 Supported Chrome scopes are Instagram, X/Twitter, Reddit, Facebook, LinkedIn,
-and YouTube. Each connection
-is bound to its platform. Switching platforms requires explicit sharing again.
+and YouTube. Platform-tab connections retain one platform; dedicated agent-tab
+connections can cross their immutable user-approved platform list.
+Inspect `sharing_mode` and `allowed_platforms` before using the session.
 
 `browser_video_analyze` samples 1–12 frames and optionally plays/records at most
 180 seconds of tab audio. Analysis starts from zero; a default single-frame capture

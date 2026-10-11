@@ -25,15 +25,28 @@ async function capture(action,p) {
   }
   if(!stream?.getTracks().some(t=>t.readyState === "live")) throw new Error("tab_capture_unavailable");
   if(action === "status") return {capturing:true,recording:recorder?.state === "recording"};
-  if(action === "frame") {
-    if(typeof p.image_data_url !== "string" || !p.image_data_url.startsWith("data:image/jpeg;base64,") || p.image_data_url.length>8*1024*1024) throw new Error("invalid_tab_screenshot");
-    const bitmap=await createImageBitmap(await (await fetch(p.image_data_url)).blob());
+  if(["frame","stream.frame"].includes(action)) {
+    let bitmap;
+    if(action === "stream.frame") {
+      // Static tabs need not emit another video callback. Grab the bound track's
+      // current frame instead of waiting for the page to repaint.
+      bitmap=await new ImageCapture(stream.getVideoTracks()[0]).grabFrame();
+    } else {
+      if(typeof p.image_data_url !== "string" || !p.image_data_url.startsWith("data:image/jpeg;base64,") || p.image_data_url.length>8*1024*1024) throw new Error("invalid_tab_screenshot");
+      bitmap=await createImageBitmap(await (await fetch(p.image_data_url)).blob());
+    }
     let rect={x:0,y:0,width:bitmap.width,height:bitmap.height};
     if(p.rect) {
-      const scaleX=bitmap.width/p.viewport.width,scaleY=bitmap.height/p.viewport.height;
+      let scaleX=bitmap.width/p.viewport.width,scaleY=bitmap.height/p.viewport.height,offsetX=0,offsetY=0;
+      if(action === "stream.frame") {
+        // Tab capture can letterbox a viewport inside the track's resolution.
+        scaleX=scaleY=Math.min(scaleX,scaleY);
+        offsetX=(bitmap.width-p.viewport.width*scaleX)/2;
+        offsetY=(bitmap.height-p.viewport.height*scaleY)/2;
+      }
       const r=p.rect;
       if(r.x < -1 || r.y < -1 || r.x+r.width > p.viewport.width+1 || r.y+r.height > p.viewport.height+1 || r.width<2 || r.height<2) throw new Error("video_not_fully_visible");
-      rect={x:Math.max(0,r.x*scaleX),y:Math.max(0,r.y*scaleY),width:r.width*scaleX,height:r.height*scaleY};
+      rect={x:offsetX+Math.max(0,r.x*scaleX),y:offsetY+Math.max(0,r.y*scaleY),width:r.width*scaleX,height:r.height*scaleY};
     }
     const factor=Math.min(1,1280/Math.max(rect.width,rect.height));
     const canvas=document.createElement("canvas");canvas.width=Math.round(rect.width*factor);canvas.height=Math.round(rect.height*factor);

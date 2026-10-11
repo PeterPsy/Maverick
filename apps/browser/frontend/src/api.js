@@ -33,7 +33,7 @@ window.addEventListener("message",event=>{
   const result=event.data.result;
   if(result?.error) {
     const guidance = ["connector_scope_required", "sharing_revoked"].includes(result.error)
-      ? "Open the platform tab in Chrome, click Browser Companion and choose Share this tab. Connect only in the Browser window opened by the extension."
+      ? "Open Browser Companion and choose Open agent tab, or choose Share this tab on a platform page. Connect in the Browser window opened by the extension."
       : result.detail || result.error;
     entry.reject(Object.assign(new Error(guidance),{code:result.error}));
   } else entry.resolve(result);
@@ -44,7 +44,7 @@ export function bridge(action,command,timeout=5000) {
     const timer=setTimeout(()=>{
       pending.delete(id);
       const message=action === "status"
-        ? "No shared tab is attached to this window. Open a platform page in Chrome, click Browser Companion, choose Share this tab, then connect in the window it opens."
+        ? "No shared tab is attached to this window. In Companion, choose Open agent tab and connect it, or choose Share this tab on a platform page. Connect in the window the extension opens."
         : "The Chrome command timed out. Keep the shared tab and its Browser connection window open, then retry.";
       reject(Object.assign(new Error(message),{code:action === "status" ? "companion_unavailable" : "companion_command_timeout"}));
     },timeout);

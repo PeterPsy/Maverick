@@ -6,6 +6,7 @@ export const platforms={
       "www.instagram.com"
     ],
     "paths": [
+      "/",
       "/[A-Za-z0-9._]{1,30}/?",
       "/(p|reel)/[A-Za-z0-9_-]{1,80}/?",
       "/[A-Za-z0-9._]{1,30}/reels/?",
@@ -25,6 +26,7 @@ export const platforms={
       "www.twitter.com"
     ],
     "paths": [
+      "/",
       "/search/?",
       "/home/?",
       "/[A-Za-z0-9_]{1,15}/?",
@@ -66,6 +68,7 @@ export const platforms={
       "www.facebook.com"
     ],
     "paths": [
+      "/",
       "/search/(top|posts|people|groups|pages|videos)/?",
       "/groups/[A-Za-z0-9._-]+(/posts/[0-9]+)?/?",
       "/reel/[0-9]+/?",
@@ -85,6 +88,8 @@ export const platforms={
       "www.linkedin.com"
     ],
     "paths": [
+      "/",
+      "/feed/?",
       "/in/[^/]+/?",
       "/company/[^/]+(/posts)?/?",
       "/posts/[^/]+/?",
@@ -106,6 +111,7 @@ export const platforms={
       "youtu.be"
     ],
     "paths": [
+      "/",
       "/watch/?",
       "/results/?",
       "/shorts/[A-Za-z0-9_-]+/?",

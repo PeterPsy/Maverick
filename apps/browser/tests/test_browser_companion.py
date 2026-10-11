@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import base64
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -35,6 +35,57 @@ class BrowserCompanionTests(unittest.TestCase):
         status, _ = self.call("companion.poll", **credentials, url="https://www.instagram.com/martagiunti/", title="Marta")
         self.assertEqual(status, 200)
         return credentials
+
+    def test_agent_tab_starts_empty_and_navigates_only_user_approved_platforms(self):
+        status, connected = self.call("companion.connect", allowed_platforms=["instagram", "youtube"])
+        self.assertEqual(status, 201)
+        self.assertEqual(connected["connection"]["sharing_mode"], "agent_tab")
+        credentials = {"session_id": connected["connection"]["session_id"], "connector_secret": connected["connector_secret"]}
+        self.assertEqual(self.call("companion.poll", **credentials, url="", title="Agent tab")[0], 200)
+        self.assertEqual(self.call("content.read", session_id=credentials["session_id"])[1]["error"], "agent_tab_empty")
+        self.assertEqual(self.call("navigate", session_id=credentials["session_id"], url="https://www.instagram.com/")[0], 202)
+        self.assertEqual(self.call("companion.poll", **credentials, url="https://www.instagram.com/")[0], 200)
+        self.assertEqual(self.call("navigate", session_id=credentials["session_id"], url="https://www.youtube.com/")[0], 202)
+        self.assertEqual(self.call("companion.poll", **credentials, url="https://www.youtube.com/")[0], 200)
+        for action, body in [("navigate", {"session_id":credentials["session_id"], "url":"https://x.com/home/"}),
+                             ("companion.poll", {**credentials, "url":"https://x.com/home/"}),
+                             ("companion.poll", {**credentials, "url":"chrome://newtab/"}),
+                             ("companion.poll", {**credentials, "url":"https://www.instagram.com/direct/"}),
+                             ("companion.poll", {**credentials, "url":"", "allowed_platforms":["twitter"]})]:
+            self.assertEqual(self.call(action, **body)[0], 400)
+        _, overview = self.call("companion.overview")
+        self.assertEqual(overview["connections"][0]["allowed_platforms"], ["instagram", "youtube"])
+
+    def test_platform_tab_cannot_expand_scope_or_become_an_empty_agent_tab(self):
+        credentials = self.sharing()
+        for url in ["", "https://www.youtube.com/", "https://x.com/home/"]:
+            self.assertEqual(self.call("companion.poll", **credentials, url=url)[0], 400)
+        self.assertEqual(self.call("navigate", session_id=credentials["session_id"], url="https://www.youtube.com/")[0], 400)
+        for value in ["instagram", ["unknown"], ["instagram", "instagram"], [None], [True], {"instagram":True}]:
+            self.assertEqual(self.call("companion.connect", allowed_platforms=value)[0], 400)
+
+    def test_first_navigation_completion_allows_read_before_next_heartbeat(self):
+        _, connected = self.call("companion.connect", allowed_platforms=["instagram", "youtube"])
+        credentials = {"session_id":connected["connection"]["session_id"], "connector_secret":connected["connector_secret"]}
+        self.call("companion.poll", **credentials, url="")
+        _, queued = self.call("navigate", session_id=credentials["session_id"], url="https://www.instagram.com/")
+        _, poll = self.call("companion.poll", **credentials, url="")
+        claim = {**credentials, "operation_id":queued["operation_id"], "lease_id":poll["command"]["lease_id"]}
+        self.assertEqual(self.call("companion.complete", **claim, result={"source_url":"https://www.instagram.com/"})[0], 200)
+        self.assertEqual(self.call("content.read", session_id=credentials["session_id"])[0], 202)
+
+    def test_existing_connection_database_preserves_platform_scope_during_migration(self):
+        import sqlite3
+        from companion_store import SCHEMA
+        old = SCHEMA.replace(",\n allowed_platforms_json TEXT NOT NULL DEFAULT '[]'", "")
+        with closing(sqlite3.connect(self.root / "companion.sqlite3")) as db:
+            db.executescript(old)
+            db.execute("INSERT INTO connections VALUES(?,?,?,?,?,?,?,?,?,?,?)", ("chrome-existing", "default", "alice", "Existing", "hashed", "connected", time.time(), time.time(), time.time()+120, "https://www.instagram.com/", "Instagram"))
+            db.commit()
+        _, overview = self.call("companion.overview")
+        self.assertEqual(overview["connections"][0]["sharing_mode"], "platform")
+        self.assertEqual(overview["connections"][0]["allowed_platforms"], ["instagram"])
+        self.assertEqual(self.call("navigate", session_id="chrome-existing", url="https://www.youtube.com/")[0], 400)
 
     def media_completion(self):
         credentials = self.sharing()

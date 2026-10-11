@@ -4,16 +4,28 @@ Date: 2026-10-11
 
 ## Implemented architecture
 
-Browser 0.4 extends the installation-level `apps/browser` app with an app-owned
+Browser extends the installation-level `apps/browser` app with an app-owned
 Chrome Manifest V3 companion. Its fixed observation adapter reuses Browser's
 rendered DOM reader. Platform workflows belong to `apps/platform-connectors`; Browser owns technical
 transport and fixed observation adapters. Core remains app-agnostic. No commercial scraping, proxy, browser relay or speech service is
 required. Browser's isolated Playwright Lab remains available for public research
 and authorized Maverick development inspection.
 
-The user shares one already authenticated supported platform tab from the extension popup.
-The popup requests optional permissions for the selected platform, chosen Maverick
-origin and its isolated app-frame namespace, then opens the stable
+The user shares a supported platform tab or opens a dedicated agent tab from the
+extension popup. The dedicated tab is an extension-owned empty start page. A
+second explicit toolbar invocation on that tab grants Chrome tab-capture access;
+it can then connect without choosing an initial platform or profile. It asks for
+the six exact supported platform host groups and Maverick, not all-web access.
+The authenticated Browser UI records that approved platform list when creating
+the backend lease. Only user connector actions can set it; subsequent heartbeats
+and queued operations cannot change it. SQLite's versioned schema migration adds
+an empty-list default so existing leases keep their single-platform ownership.
+An empty public URL is accepted only for a dedicated agent connection. Read/media
+operations require navigation first; tabs and navigation/collection work while empty.
+Platform home pages are approved content routes. Sharing a profile never binds
+navigation to that profile.
+The popup requests optional permissions for the selected platform or dedicated
+tab’s approved platforms, chosen Maverick origin and its isolated app-frame namespace, then opens the stable
 `/app/browser?connector=1` shell route in a dedicated connector window. Chrome 120
 or later is required. The connector uses ordinary Core-hosted backend calls and a
 scoped content-script channel. Passwords, cookies, browser history, raw CDP,
@@ -34,7 +46,7 @@ Browser Lab with public-page reading, health and individual session closure.
 The existing shell/App Store `language` glyph owns Browser's native icon
 presentation; no Browser-specific platform rendering branch or raster override
 is added. The app header uses an inline vector and the favicon an app-owned SVG.
-Companion 0.4.2 packages its reproducible ZIP as a Vite-imported, hashed public
+Companion 0.5.0 packages its reproducible ZIP as a Vite-imported, hashed public
 asset under `/apps/browser/assets/`, with immutable manifest/cache metadata.
 Download uses the platform origin and requires no login or app-frame cookie.
 The copied connector address uses the stable platform shell route, never an
@@ -79,7 +91,11 @@ stopping it fences and revokes a late lease. Automatic revocation reports the
 stopped state to the UI so reconnect controls become available again.
 The progress heartbeat captures the active command before awaiting its status.
 An `operation_not_running` race cancels/drains that task without revoking the
-connection or cancelling unrelated queued work.
+connection or cancelling unrelated queued work. Bridge scope failures revoke on
+the first response using their structured error code, independently of friendly
+setup guidance. Successful observations publish their approved source URL in the
+same transaction as completion, so a read immediately after first navigation does
+not see the previous empty-tab heartbeat.
 
 Public research carries the human actor through session creation, observations,
 cleanup and audit. Session state retains broker activity and expiry timestamps
@@ -91,20 +107,20 @@ shows sample times, captured duration/audio and Storage links for saved frames;
 it does not request another app's protected media routes. Collections expose
 items, per-page progress, stop reasons and coverage independently of raw JSON.
 
-Management verification includes 74 Python tests (including the built document
-and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 43 Node
-tests, an offline
-Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
+Management verification includes 79 Python tests (including the built document
+and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 45 Node
+tests, an offline Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
 public-page form, 320/390px layout, image/video/collection rendering and blob
 cleanup), a cross-origin shell fixture with platform-served bundles, a protected
 document and public hashed ZIP, light first paint while the bundle is held pending,
 initial/live themes, unattached-window guidance, late bridge readiness and
 hidden-frame polling. A production-manifest Chrome popup fixture uses only
 `activeTab` to identify the selected platform, with no pre-granted host access,
-and covers Chrome/Maverick page rejection and invalid connector guidance.
+and covers Chrome/Maverick page rejection, an empty agent-tab launch, the six exact
+optional platform host groups and invalid connector guidance.
 The real Chromium/MV3 Companion fixture uses Core's actual immutable identity
-and message relay plus the native iframe sandbox/CSP, with Connectors and scope
-revocation. This fixture
+and message relay plus the native iframe sandbox/CSP, with Connectors, empty-tab
+connection, cross-platform navigation/capture and scope revocation. This fixture
 starts with no Maverick cookies, downloads the archive before login and compares
 it with the built package. The user then signs in through the shell, bootstraps
 an isolated-origin Strict cookie and attaches Companion to the exact Browser
@@ -125,6 +141,13 @@ connector showed the current installation guide, kept Connect disabled and
 explained how to share the platform tab. Its anonymous ZIP returned 200 and
 matched the generated package. The complete fixture passed text/scroll, image,
 video, audio, Storage evidence, cancellation recovery and Connectors workflows.
+Companion 0.5.0 additionally passed an actual action-popup launch from Chrome New
+Tab with production permissions, followed by an empty dedicated-tab connection in
+the full fixture. That connection navigated across X and Instagram, read content,
+captured the static X page, produced distinct sought video frames and recorded
+audio. Leaving approved platforms revoked it. Mounted authenticated inspection
+confirmed the new setup guide and readiness controls; an anonymous download
+returned 200 and matched the generated 0.5.0 archive byte for byte.
 The Companion fixture does not establish access to a real authenticated profile.
 
 ## Ownership, transport and queues
@@ -158,11 +181,13 @@ session, while extension commands only target approved top-level platform routes
 ## Observation and collection contract
 
 The companion admits fixed navigate, snapshot, rendered-content, scroll,
-screenshot, video-frame, tab and wait observations. Navigation is bound to the platform inferred at sharing. Reviewed exact HTTPS
+screenshot, video-frame, tab and wait observations. Existing platform tabs bind
+navigation to the platform inferred at sharing. Dedicated agent tabs permit
+navigation across the user-approved list. Reviewed exact HTTPS
 hosts, routes and retained source query keys live in `companion/platforms.json`,
 with a generated Chrome module and a matching Python validator. Instagram,
-X/Twitter, Reddit, Facebook, LinkedIn, YouTube, Bilibili, XiaoHongShu, Xueqiu,
-Boss Zhipin and Xiaoyuzhou are scoped independently. Login, challenge, messages,
+X/Twitter, Reddit, Facebook, LinkedIn and YouTube are scoped independently. Login,
+challenge, messages,
 settings, credentials and normalization tricks are rejected. Authentication and
 checkpoints remain user actions in Chrome. Likes, follows,
 messages, posting, uploads and form filling have no companion command.
@@ -183,8 +208,14 @@ reach its observed boundary. Connectors constructs the Instagram profile/Reels
 workflow and opens links individually before recording their content as read.
 The former public Instagram collection tool has been removed.
 
-Screenshots use Chrome `captureVisibleTab` with the explicitly shared tab active,
-rate limiting and before/after window/tab activation guards. Video frames require
+Platform-tab screenshots use Chrome `captureVisibleTab` with the explicitly shared tab active,
+rate limiting and before/after window/tab activation guards. Dedicated agent tabs
+use `ImageCapture.grabFrame` on their already bound `tabCapture` video track; this
+continues across platform navigation without requiring all-URL screenshot access
+and handles static pages that emit no new video callback.
+Both paths fence the source document before and after capture. Track letterboxing
+is removed when cropping videos so their aspect ratio and rendered bounds remain
+correct. Video frames require
 the selected video to fit in the viewport; an offscreen document crops the captured
 JPEG to its rendered bounds. Seeking waits for a newly presented decoded frame
 at the requested time, reports the observed media time and restores prior video

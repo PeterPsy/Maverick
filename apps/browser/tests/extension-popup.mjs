@@ -4,9 +4,11 @@ export async function openActionPopup(browser, extensionId, tabUrl) {
     for (let i=0;i<100;i++) { const result=await predicate();if(result)return result;await new Promise(resolve=>setTimeout(resolve,100)); }
     throw new Error("extension_popup_timeout");
   };
-  const targets=(await browser.send("Target.getTargets",{filter:[{type:"tab"},{exclude:true}]})).targetInfos;
-  const tab=targets.find(target=>target.url === tabUrl);
-  if(!tab)throw new Error("extension_action_tab_missing");
+  const canonical=value=>value.replace(/^chrome:\/\/(newtab|new-tab-page)\//u,"chrome://newtab/");
+  const tab=await wait(async()=>{
+    const targets=(await browser.send("Target.getTargets",{filter:[{type:"tab"},{exclude:true}]})).targetInfos;
+    return targets.find(target=>canonical(target.url) === canonical(tabUrl));
+  });
   await browser.send("Extensions.triggerAction",{id:extensionId,targetId:tab.targetId});
   const popup=await wait(async()=> (await browser.send("Target.getTargets",{filter:[{}]})).targetInfos.find(target=>target.type === "page" && target.url.endsWith("/popup.html")));
   const {sessionId}=await browser.send("Target.attachToTarget",{targetId:popup.targetId,flatten:false});

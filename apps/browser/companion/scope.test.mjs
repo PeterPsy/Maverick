@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {platformUrl,connectorUrl,connectorOrigins,connectorFrameUrl,boundedCommand,sameConnector,sameConnectorFrame} from "./scope.mjs";
+import {platformUrl,sharedTabUrl,connectorUrl,connectorOrigins,connectorFrameUrl,boundedCommand,sameConnector,sameConnectorFrame} from "./scope.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
+
+test("a dedicated tab crosses only approved platforms; a platform tab keeps its single-platform scope",()=>{
+  const agent="chrome-extension://fixture/agent-tab.html",b={allowedPlatforms:["instagram","youtube"]};
+  assert.equal(sharedTabUrl(agent,b,agent),"");
+  for(const url of ["https://www.instagram.com/","https://www.youtube.com/"])assert.equal(sharedTabUrl(url,b,agent),url);
+  for(const url of ["https://x.com/home/","https://example.com/","chrome://newtab/","https://www.instagram.com/direct/",agent+"?changed=1"])assert.throws(()=>sharedTabUrl(url,b,agent));
+  assert.throws(()=>sharedTabUrl("https://www.youtube.com/",{platform:"instagram"},agent));
+  assert.throws(()=>sharedTabUrl(agent,{platform:"instagram"},agent));
+});
 
 test("Instagram scope excludes credentials, login, redirects and URL normalization tricks",()=>{
   assert.equal(platformUrl("https://www.instagram.com/martagiunti/?token=s#anchor"),"https://www.instagram.com/martagiunti/");

@@ -50,7 +50,7 @@ function render() {
   connections(overview.connections.map(connection => ({
     id: connection.session_id, title: connection.title || connection.display_name,
     status: connection.status,
-    detail: `${connection.platform || "Chrome"} · ${connection.url || "Waiting for Chrome to share a page"}`,
+    detail: connection.sharing_mode === "agent_tab" ? `Agent tab · ${connection.allowed_platforms.join(", ")} · ${connection.url || "Ready for agent navigation"}` : `${connection.platform || "Chrome"} · ${connection.url || "Waiting for Chrome to share a page"}`,
     action: ["connecting", "connected", "offline"].includes(connection.status) ? {
       label: "Stop sharing", run: async () => {
         await request({action: "companion.disconnect", session_id: connection.session_id});

@@ -12,7 +12,7 @@ from errors import BrowserValidationError
 USER_ACTIONS = frozenset({"companion.connect", "companion.poll", "companion.progress", "companion.complete", "companion.disconnect"})
 COMPANION_ACTIONS = USER_ACTIONS | {"companion.overview", "operation.get", "operation.cancel", "content.collect", "video.analyze", "media.completed"}
 FIELDS = {
-    "companion.connect": {"display_name"},
+    "companion.connect": {"display_name", "allowed_platforms"},
     "companion.overview": set(),
     "companion.disconnect": {"session_id"},
     "companion.poll": {"session_id", "connector_secret", "url", "title", "active_operation_id"},
@@ -50,7 +50,7 @@ def handle(
             name = body.get("display_name", "Chrome")
             if not isinstance(name, str) or not 1 <= len(name) <= 100:
                 raise BrowserValidationError("display_name must have 1–100 characters.", field="display_name")
-            return 201, connections.connect(data_root, workspace_id, user_id, name)
+            return 201, connections.connect(data_root, workspace_id, user_id, name, body.get("allowed_platforms"))
         if action == "companion.overview":
             return 200, connections.overview(data_root, workspace_id, user_id)
         if action == "companion.poll":

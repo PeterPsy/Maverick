@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS connections (
  session_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, user_id TEXT NOT NULL,
  display_name TEXT NOT NULL, secret_hash TEXT NOT NULL, status TEXT NOT NULL,
  created_at REAL NOT NULL, seen_at REAL NOT NULL, expires_at REAL NOT NULL,
- tab_url TEXT NOT NULL DEFAULT '', tab_title TEXT NOT NULL DEFAULT ''
+ tab_url TEXT NOT NULL DEFAULT '', tab_title TEXT NOT NULL DEFAULT '',
+ allowed_platforms_json TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS operations (
  operation_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, action TEXT NOT NULL,
@@ -47,6 +48,11 @@ def database(data_root: Path) -> Iterator[sqlite3.Connection]:
         connection.executescript(SCHEMA)
         connection.execute("PRAGMA busy_timeout=5000")
         connection.execute("BEGIN IMMEDIATE")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 1:
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(connections)")}
+            if "allowed_platforms_json" not in columns:
+                connection.execute("ALTER TABLE connections ADD COLUMN allowed_platforms_json TEXT NOT NULL DEFAULT '[]'")
+            connection.execute("PRAGMA user_version=1")
         yield connection
         connection.commit()
     except BaseException:
@@ -83,11 +89,14 @@ def sweep(connection: sqlite3.Connection, now: float) -> None:
 
 def public_connection(row: sqlite3.Row) -> dict:
     from platform_scope import platform_for_url
+    approved = json.loads(row["allowed_platforms_json"])
     return {
         "session_id": row["session_id"], "provider": "chrome_companion", "status": row["status"],
         "display_name": row["display_name"], "url": row["tab_url"], "title": row["tab_title"],
         "last_seen": row["seen_at"], "expires_at": row["expires_at"], "owned_by": "user",
         "platform": platform_for_url(row["tab_url"]),
+        "sharing_mode": "agent_tab" if approved else "platform",
+        "allowed_platforms": approved or ([platform_for_url(row["tab_url"])] if row["tab_url"] else []),
     }
 
 

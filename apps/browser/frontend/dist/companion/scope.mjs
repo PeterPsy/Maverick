@@ -23,9 +23,19 @@ export function platformUrl(value,expectedPlatform=null) {
   url.pathname=rawPath.endsWith("/") || /\.(?:html|php)$/u.test(parts.at(-1)) ? rawPath : `${rawPath}/`;
   if(platform === "twitter")url.hostname="x.com";
   if(platform === "reddit")url.hostname="www.reddit.com";
-  if(platform === "youtube" && url.hostname === "youtu.be") {url.hostname="www.youtube.com";url.pathname="/watch";for(const key of [...query.keys()])query.delete(key);query.set("v",parts[0]);}
+  if(platform === "youtube" && url.hostname === "youtu.be") {url.hostname="www.youtube.com";url.pathname=parts[0] ? "/watch" : "/";for(const key of [...query.keys()])query.delete(key);if(parts[0])query.set("v",parts[0]);}
   else if(platform === "youtube" && url.pathname === "/watch/") {url.hostname="www.youtube.com";url.pathname="/watch";}
   url.search=query.toString();url.hash="";return url.href;
+}
+
+export function sharedTabUrl(value, binding, agentTabUrl) {
+  if (binding.allowedPlatforms?.length) {
+    if (value === agentTabUrl) return "";
+    const url = platformUrl(value);
+    if (!binding.allowedPlatforms.includes(platformForUrl(url))) throw new Error("shared_platform_scope_required");
+    return url;
+  }
+  return platformUrl(value, binding.platform);
 }
 
 export function connectorUrl(value) {

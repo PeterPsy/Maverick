@@ -1,4 +1,4 @@
-"""Shared-source route policy; a Chrome lease stays on its user-selected platform."""
+"""Reviewed platform content routes; connection ownership defines permitted platforms."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ def platform_url(value: object, *, expected_platform: str | None = None) -> str:
         raise BrowserValidationError("A supported platform HTTPS URL is required.", field="url")
     try:
         parsed = urlsplit(value)
+        parsed = parsed._replace(path=parsed.path or "/")
         valid = parsed.scheme == "https" and parsed.port in (None, 443) and not parsed.username and not parsed.password
     except ValueError:
         valid = False
@@ -52,8 +53,8 @@ def platform_url(value: object, *, expected_platform: str | None = None) -> str:
     if platform == "reddit":
         host = "www.reddit.com"
     if platform == "youtube" and host == "youtu.be":
-        pairs = [("v",parts[0])]
-        host,path = "www.youtube.com","/watch"
+        pairs = [("v",parts[0])] if parts[0] else []
+        host,path = "www.youtube.com","/watch" if parts[0] else "/"
     elif platform == "youtube" and path == "/watch/":
         host,path = "www.youtube.com","/watch"
     return urlunsplit(("https", host, path, urlencode(pairs), ""))

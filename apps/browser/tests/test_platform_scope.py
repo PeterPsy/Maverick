@@ -9,10 +9,18 @@ import unittest
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(APP / 'backend'))
 from errors import BrowserValidationError
-from platform_scope import platform_url
+from platform_scope import PLATFORMS, platform_url
 
 
 class PlatformScopeTests(unittest.TestCase):
+    def test_platform_homepages_do_not_require_a_selected_profile(self):
+        urls = ["https://"+spec["hosts"][0] for spec in PLATFORMS.values()] + ["https://www.linkedin.com/feed/", "https://youtu.be/"]
+        python = [platform_url(url) for url in urls]
+        code = "import {platformUrl} from './companion/scope.mjs';let text='';for await(const c of process.stdin)text+=c;console.log(JSON.stringify(JSON.parse(text).map(u=>platformUrl(u))));"
+        process = subprocess.run(['node','--input-type=module','-e',code],input=json.dumps(urls),text=True,capture_output=True,cwd=APP,timeout=15,check=True)
+        self.assertEqual(python, json.loads(process.stdout))
+        self.assertEqual(python[-1], "https://www.youtube.com/")
+
     def test_platform_routes_aliases_and_queries_match_chrome_policy(self):
         urls = [
             'https://www.instagram.com/name.with.dots/?tracking=1',

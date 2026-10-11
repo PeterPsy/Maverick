@@ -7,10 +7,9 @@ from pathlib import Path
 import time
 from uuid import uuid4
 
-from companion_connections import CompanionError, heartbeat, require_connector, require_owner
+from companion_connections import CompanionError, connection_url, heartbeat, require_connector, require_owner
 from companion_store import database, encoded, public_operation, sweep
 from companion_validation import command_payload
-from platform_scope import platform_for_url, platform_url
 
 
 MAX_RESULT_BYTES = 8 * 1024 * 1024
@@ -27,12 +26,13 @@ def enqueue(data_root: Path, workspace_id: str, user_id: str, body: dict) -> dic
         connection = require_owner(db, session_id, workspace_id, user_id)
         if connection["status"] != "connected" or connection["expires_at"] <= now:
             raise CompanionError("connector_offline", "Keep the Browser connector window open and share a supported platform tab.", 409)
-        source = platform_for_url(connection["tab_url"])
         if action == "navigate":
-            platform_url(parameters["url"], expected_platform=source)
+            connection_url(connection, parameters["url"])
         if action == "content.collect":
             for url in parameters["urls"]:
-                platform_url(url, expected_platform=source)
+                connection_url(connection, url)
+        if not connection["tab_url"] and action not in {"navigate", "content.collect", "tabs"}:
+            raise CompanionError("agent_tab_empty", "Navigate the agent tab to a supported platform before reading or capturing it.", 409)
         pending = db.execute(
             "SELECT count(*) FROM operations WHERE session_id=? AND status IN ('queued','running','processing_media')", (session_id,)
         ).fetchone()[0]
@@ -112,6 +112,13 @@ def complete(data_root: Path, workspace_id: str, user_id: str, body: dict, depen
     status = "failed" if result.get("error") else "completed"
     with database(data_root) as db:
         row = claimed_operation(db, workspace_id, user_id, body)
+        if status == "completed" and result.get("source_url"):
+            connection = require_owner(db, row["session_id"], workspace_id, user_id)
+            observed_url = connection_url(connection, result["source_url"])
+            # Publish the observed page atomically with completion. Otherwise an
+            # immediate read after the first navigation sees the previous blank
+            # heartbeat until the connector's next poll.
+            db.execute("UPDATE connections SET tab_url=? WHERE session_id=?", (observed_url, row["session_id"]))
         from companion_media import prepare
         requests = prepare(db, row, result, dependencies)
         status = "processing_media" if requests else status

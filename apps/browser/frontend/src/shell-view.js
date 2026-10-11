@@ -21,21 +21,21 @@ export function mountShell(connectorMode) {
     <p id="error" class="error" role="alert" hidden></p>
     <section id="tabs-view" aria-label="Shared tabs">
       <details id="setup" class="panel setup" ${connectorMode ? "open" : ""}>
-        <summary><span><strong>${connectorMode ? "Connect your selected tab" : "Connect Chrome"}</strong><small>Share a platform tab with Browser Companion</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+        <summary><span><strong>${connectorMode ? "Connect your selected tab" : "Connect Chrome"}</strong><small>Start an agent tab or share a platform page</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
         <div class="setup-body">
-          <p>Share one tab from Instagram, X, Reddit, Facebook, LinkedIn or YouTube. Use Connectors to research profiles, posts and video.</p>
+          <p>A dedicated agent tab can navigate between Instagram, X, Reddit, Facebook, LinkedIn and YouTube. An existing shared tab can navigate throughout its selected platform. Sign in to the platforms in your usual Chrome profile.</p>
           <ol class="setup-steps">
-            <li><strong>Install Companion 0.4.2</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. After an update, replace the extracted files and reload the extension.</p></li>
-            <li><strong>Share the platform page</strong><p>Open a profile, post or video in Chrome and sign in there. On that same tab, click the Browser Companion toolbar icon, paste this connector address and choose Share this tab. Maverick and Chrome settings cannot be shared.</p></li>
+            <li><strong>Install Companion 0.5.0</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. After an update, replace the extracted files and reload the extension.</p></li>
+            <li><strong>Choose an agent tab or an existing page</strong><p>In Companion, choose Open agent tab. On that new tab, click Companion again, paste this connector address and choose Connect agent tab. To share an existing platform page instead, open Companion on it and choose Share this tab. You do not need to select a profile first.</p></li>
             <li><strong>Use the window it opens</strong><p>Sign in to Maverick there if asked. When your selected tab appears below, press Connect selected tab. Keep that window open; opening this address manually does not share a tab.</p></li>
           </ol>
           <label for="url">Connector address</label>
           <div class="copy"><input id="url" readonly spellcheck="false"><button id="copy" class="secondary">Copy address</button></div>
           <div id="connector-actions" class="actions" ${connectorMode ? "" : "hidden"}><button id="connect" disabled>Connect selected tab</button><button id="stop" class="secondary" hidden>Stop sharing</button></div>
-          <p id="status" class="status" role="status">${connectorMode ? "Checking for the tab shared with this window…" : "Installing Companion is the first step. Share a platform tab from its toolbar icon to connect."}</p>
+          <p id="status" class="status" role="status">${connectorMode ? "Checking for the tab shared with this window…" : "Installing Companion is the first step. Choose Open agent tab in Companion, or share an existing platform tab."}</p>
         </div>
       </details>
-      <section class="panel"><div class="section-title"><div><h2>Shared tabs</h2><p>Manage access to the tabs you have shared.</p></div><span class="badge">Read only</span></div>
+      <section class="panel"><div class="section-title"><div><h2>Shared tabs</h2><p>Delegate a dedicated tab or share an existing platform tab. Navigation, reading and media analysis are available; posting and form entry are not.</p></div><span class="badge">Read only</span></div>
         <div id="connections" class="records" aria-label="Chrome connections"><div class="empty">Loading shared tabs…</div></div>
       </section>
     </section>

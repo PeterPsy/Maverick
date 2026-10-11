@@ -77,7 +77,7 @@ admin context. The default admin dev targets are `hostmachine:8000` and
 `hostmachine:8014`; any other local port must be added as an exact admin dev
 target before use.
 
-## User-shared Instagram
+## User-shared Chrome
 
 Use `browser_companion_status` to find the actor's connected `chrome-` session.
 Sharing, login and revocation are human Browser UI/Chrome actions. Do not create,
@@ -97,8 +97,12 @@ With `save_evidence: true`, verified Storage references replace inline frames.
 Read and view the actual images through Storage/native image inspection before
 claiming visual details. Report missing transcript/capture/evidence explicitly.
 
-Chrome navigation stays within the platform bound at sharing and its approved
-content routes. There are no
+Inspect `sharing_mode` and `allowed_platforms` in the connection before navigation.
+A `platform` tab stays on its initially shared platform, including other profiles,
+home pages, searches and content routes. An `agent_tab` starts empty and can navigate
+between the platforms explicitly approved by the user. Navigate or collect before
+reading an empty agent tab; an empty URL represents the Companion start page.
+Never expand the allowed list. Login remains a human Chrome action. There are no
 external clicks/forms, caller selectors, arbitrary scripts, history reads or cookie
 exports. Social read-only mode permits local scroll/seek/playback for observation.
 Do not close or revoke the user's shared Chrome session during agent cleanup;

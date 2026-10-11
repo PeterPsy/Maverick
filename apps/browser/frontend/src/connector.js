@@ -71,7 +71,7 @@ export function createConnector(report) {
     } catch(error) {
       if(attempt!==generation || stopped)return;
       report(error.message);failures++;
-      if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|sharing_revoked|platform_route_unavailable|extension_unavailable)/u.test(error.message) || failures>=10)await revoke();
+      if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|sharing_revoked|platform_route_unavailable|extension_unavailable)/u.test(error.code || error.message) || failures>=10)await revoke();
     }
     finally {ticking=false;if(!stopped)timer=setTimeout(tick,3000);}
   };
@@ -87,7 +87,7 @@ export function createConnector(report) {
       starting=(async()=>{
         const shared=await bridge("status");
         if(attempt!==generation)throw new Error("Sharing was stopped. Connect again to retry.");
-        const result=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Shared Chrome tab"});
+        const result=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Shared Chrome tab",allowed_platforms:shared.allowed_platforms || []});
         if(attempt!==generation) {
           await request({action:"companion.disconnect",session_id:result.connection.session_id});
           throw new Error("Sharing was stopped. Connect again to retry.");

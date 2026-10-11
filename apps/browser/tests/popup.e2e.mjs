@@ -41,5 +41,20 @@ try {
   assert.match(await popup.evaluate("document.querySelector('#status').textContent"),/Allow access/u);
   assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
   await popup.close();
-  console.log("Companion popup passed with production permissions: restricted Chrome pages, Maverick rejection, selected platform via activeTab, and invalid connector guidance.");
+  await page.goto('chrome://newtab/');await page.bringToFront();
+  const launcher=await openActionPopup(browser,extensionId,page.url());
+  assert.equal(await launcher.evaluate("document.querySelector('#open-agent').disabled"),false);
+  const agentOpened=context.waitForEvent('page');
+  await launcher.evaluate("document.querySelector('#open-agent').click();true");
+  const agent=await agentOpened;await agent.waitForURL(`chrome-extension://${extensionId}/agent-tab.html`);
+  await agent.bringToFront();
+  const agentPopup=await openActionPopup(browser,extensionId,agent.url());
+  assert.equal(await agentPopup.evaluate("document.querySelector('#share').disabled"),false);
+  assert.equal(await agentPopup.evaluate("document.querySelector('#share').textContent"),'Connect agent tab');
+  const requested=await agentPopup.evaluate("(async()=>{let requested;chrome.permissions.request=async p=>{requested=p;return false;};document.querySelector('#connector').value='https://maverick-fixture.test/app/browser?connector=1';document.querySelector('#share').click();await new Promise(r=>setTimeout(r,50));return requested;})()");
+  for(const host of ['www.instagram.com','x.com','www.reddit.com','www.facebook.com','www.linkedin.com','www.youtube.com'])assert(requested.origins.includes(`https://${host}/*`));
+  assert(!requested.origins.includes('https://*/*'));
+  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
+  await agentPopup.close();
+  console.log("Companion popup passed with production permissions: restricted Chrome pages, existing platform via activeTab, new empty agent tab, six explicit platform permissions, and invalid connector guidance.");
 } finally {if(context)await context.close();rmSync(temporary,{recursive:true,force:true});}

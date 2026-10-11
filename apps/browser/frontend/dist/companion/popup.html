@@ -1,6 +1,8 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Browser Companion</title><link rel="stylesheet" href="popup.css"></head>
-<body><h1>Maverick Browser</h1><p>Open a profile, post or video on a supported platform, then click this extension on that tab.</p>
+<body><h1>Maverick Browser</h1><p>Share a platform tab, or open a dedicated tab and let the agent choose where to go.</p>
 <section class="selected" aria-label="Selected tab"><strong id="tab-title">Checking the selected tab…</strong><p id="tab-url"></p></section>
 <label for="connector">Connector address copied from Browser</label><input id="connector" type="url" placeholder="https://…/app/browser?connector=1">
 <button id="share" disabled>Share this tab</button><button id="stop" class="secondary">Stop sharing</button><p id="status" role="status"></p>
+<button id="open-agent" class="secondary">Open agent tab</button>
+<p class="note">Agent tab supports Instagram, X, Reddit, Facebook, LinkedIn and YouTube. It can navigate, read and analyze content. Posting, messaging and form entry are not available.</p>
 <p class="note">Keep the Browser window open. Captures may bring your shared tab to the foreground. Cookies and passwords are not sent to Maverick. You can revoke sharing at any time.</p><script type="module" src="popup.mjs"></script></body></html>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import secrets
 import sqlite3
@@ -10,7 +11,8 @@ import time
 from uuid import uuid4
 
 from companion_store import database, encoded, public_connection, public_operation, sweep
-from platform_scope import platform_url, platform_for_url
+from platform_scope import PLATFORMS, platform_url, platform_for_url
+from errors import BrowserValidationError
 
 
 class CompanionError(Exception):
@@ -38,7 +40,10 @@ def require_connector(db: sqlite3.Connection, session_id: str, workspace_id: str
     return row
 
 
-def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str) -> dict:
+def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str, allowed_platforms: object = None) -> dict:
+    approved = [] if allowed_platforms is None else allowed_platforms
+    if not isinstance(approved, list) or len(approved) > len(PLATFORMS) or any(not isinstance(key, str) or key not in PLATFORMS for key in approved) or len(set(approved)) != len(approved):
+        raise BrowserValidationError("Choose supported platforms without duplicates.", field="allowed_platforms")
     now = time.time()
     secret = secrets.token_urlsafe(32)
     session_id = "chrome-" + str(uuid4())
@@ -51,9 +56,9 @@ def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str)
         if active >= 4:
             raise CompanionError("connection_limit", "Disconnect an existing Chrome connection first.", 409)
         db.execute(
-            "INSERT INTO connections(session_id,workspace_id,user_id,display_name,secret_hash,status,created_at,seen_at,expires_at) "
-            "VALUES(?,?,?,?,?,'connecting',?,?,?)",
-            (session_id, workspace_id, user_id, display_name[:100], hashlib.sha256(secret.encode()).hexdigest(), now, now, now + 120),
+            "INSERT INTO connections(session_id,workspace_id,user_id,display_name,secret_hash,status,created_at,seen_at,expires_at,allowed_platforms_json) "
+            "VALUES(?,?,?,?,?,'connecting',?,?,?,?)",
+            (session_id, workspace_id, user_id, display_name[:100], hashlib.sha256(secret.encode()).hexdigest(), now, now, now + 120, encoded(approved)),
         )
         row = require_owner(db, session_id, workspace_id, user_id)
         return {"connection": public_connection(row), "connector_secret": secret}
@@ -87,10 +92,22 @@ def overview(data_root: Path, workspace_id: str, user_id: str) -> dict:
         }
 
 
+def connection_url(row: sqlite3.Row, url: object, *, allow_empty: bool = False) -> str:
+    approved = json.loads(row["allowed_platforms_json"])
+    if approved:
+        if allow_empty and url == "":
+            return ""
+        sanitized = platform_url(url)
+        if platform_for_url(sanitized) not in approved:
+            raise BrowserValidationError("This platform was not approved for the agent tab.", field="url")
+        return sanitized
+    return platform_url(url, expected_platform=platform_for_url(row["tab_url"]) if row["tab_url"] else None)
+
+
 def heartbeat(db: sqlite3.Connection, row: sqlite3.Row, *, url: object, title: object) -> None:
     if row["expires_at"] <= time.time():
         raise CompanionError("connection_expired", "Open Browser and share the tab again.", 410)
-    sanitized_url = platform_url(url, expected_platform=platform_for_url(row["tab_url"]) if row["tab_url"] else None)
+    sanitized_url = connection_url(row, url, allow_empty=True)
     now = time.time()
     db.execute(
         "UPDATE connections SET status='connected',seen_at=?,expires_at=?,tab_url=?,tab_title=? WHERE session_id=?",

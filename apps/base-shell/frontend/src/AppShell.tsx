@@ -48,6 +48,7 @@ import {
   subscribeShellAuthorizationRevocation,
 } from "./pwaCacheRuntime";
 import { useShellAppEvents } from "./hooks/useShellAppEvents";
+import { installFrameReferenceDragBroker } from "./lib/frameReferenceDragBroker";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { useMountedAppIds } from "./hooks/useMountedAppIds";
 import {
@@ -177,6 +178,7 @@ export function AppShell() {
   useEffect(() => { setAppSettingsScope(null); }, [activeAppId, frameScope?.sessionGeneration]);
   useDeviceUseBroker(frameScope);
   useShellAppEvents(frameScope);
+  useEffect(() => frameScope ? installFrameReferenceDragBroker(frameScope) : undefined, [frameScope]);
   const cancelShellLoading = useCallback(({ resetRecovery = false } = {}) => {
     shellLoadAbortRef.current?.abort();
     shellLoadAbortRef.current = null;

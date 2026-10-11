@@ -2226,6 +2226,22 @@ Public static assets remain cross-origin readable and must never carry
 user-specific data, but their document interpretation is sandboxed and
 `nosniff`.
 
+Cross-app reference drags use the shell's `maverick.reference-drag` broker:
+native browser drag events can be blocked between isolated origins. The source
+captures the pointer after a movement threshold and sends `start`, `move`,
+`end`, or `cancel` to the exact platform origin. `start` carries a bounded
+app-owned MIME payload and display label; pointer messages carry coordinates
+in the source viewport. Base Shell accepts only the registered frame's exact
+origin and Window in the current workspace/session generation. A temporary
+shell overlay receives movement and release after the pointer leaves the source
+frame; the shell removes it before hit-testing the visible registered target
+iframe. Only that target receives `drop` with target-local coordinates, and the
+source receives `finished` to release capture. The shell never reads app DOM
+or interprets reference entities. Chat accepts the exact parent message and
+runs its normal payload validation and composer drop handlers. Escape, pointer
+cancellation, and source cleanup cancel rather than attach a reference;
+ordinary clicks and native file drops retain their existing paths.
+
 On mobile, the shell may render transparent chrome above mounted app iframes.
 To let app content scroll visually underneath that chrome while keeping the
 first app content below it, the isolated document bootstrap applies the initial

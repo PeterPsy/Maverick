@@ -1,4 +1,5 @@
 import { StrictMode } from "react";
+import { listenForShellReferenceDrops } from "../../lib/shellReferenceDrop";
 import { createRoot } from "react-dom/client";
 import "../../styles/main.css";
 import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
@@ -9,6 +10,7 @@ import { useFloatingWindows } from "./useFloatingWindows";
 
 applyInitialMaverickTheme();
 listenForMaverickThemeMessages();
+listenForShellReferenceDrops();
 
 function ChatFloatingMount() {
   const floating = useFloatingWindows();

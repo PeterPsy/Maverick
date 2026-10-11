@@ -1,4 +1,5 @@
 import { StrictMode, useEffect, useRef, useState } from "react";
+import { listenForShellReferenceDrops } from "../../lib/shellReferenceDrop";
 import { createRoot } from "react-dom/client";
 import "../../styles/main.css";
 import "../chat-floating/styles.css";
@@ -20,6 +21,7 @@ import { debugThreadSync, loadFloatingDockContext, postDockClose } from "../chat
 
 applyInitialMaverickTheme();
 listenForMaverickThemeMessages();
+listenForShellReferenceDrops();
 
 function ChatFloatingDockMount() {
   const dock = useFloatingDockWindow();

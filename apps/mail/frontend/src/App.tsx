@@ -36,6 +36,7 @@ import {
   type MailThread
 } from './api';
 import { mailThreadDragPayloadFromThread, mountMailThreadDragPreview, writeMailThreadDragData } from './lib/mailThreadDragDrop';
+import { startMailThreadPointerDrag } from './lib/mailThreadPointerDrag';
 import {
   isMailbox,
   mailboxScopeIdsFromParams,
@@ -712,6 +713,8 @@ export function App() {
   const selectedThreadRef = useRef<MailThread | null>(null);
   const selectedDraftRef = useRef<MailDraft | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
+  const pointerDragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => pointerDragCleanupRef.current?.(), []);
   const syncContinuationRef = useRef<{ scope: string; pending: boolean } | null>(null);
   const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
   const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
@@ -1235,6 +1238,10 @@ export function App() {
   }
 
   function handleThreadDragStart(event: DragEvent<HTMLElement>, thread: MailThread) {
+    if (pointerDragCleanupRef.current) {
+      event.preventDefault();
+      return;
+    }
     cleanupThreadDragPreview();
     setDraggingThreadId(thread.id);
     writeMailThreadDragData(event.dataTransfer, mailThreadDragPayloadFromThread(thread));
@@ -1341,6 +1348,13 @@ export function App() {
                   draggable={!isDraft}
                   onDragEnd={handleThreadDragEnd}
                   onDragStart={(event) => handleThreadDragStart(event, thread)}
+                  onPointerDown={(event) => {
+                    if (isDraft || !(event.target instanceof Element)) return;
+                    const button = event.target.closest('button');
+                    if (button && !button.classList.contains('thread-row__body')) return;
+                    pointerDragCleanupRef.current?.();
+                    pointerDragCleanupRef.current = startMailThreadPointerDrag(event, event.currentTarget, thread, setDraggingThreadId);
+                  }}
                 >
                   <button
                     className="thread-row__body"

@@ -129,6 +129,18 @@ export function registeredMaverickFrameOwner(
     : null;
 }
 
+export function registeredMaverickFrameElement(event: MessageEvent, scope: MaverickFrameScope): HTMLIFrameElement | null {
+  for (const [frame, identity] of registeredFrames) {
+    if (frame.isConnected && sameMaverickFrameScope(identity.scope, scope) && isMaverickFrameMessage(event, frame)) return frame;
+  }
+  return null;
+}
+
+export function isMaverickFrameInScope(frame: HTMLIFrameElement, scope: MaverickFrameScope): boolean {
+  const identity = registeredFrames.get(frame);
+  return Boolean(frame.isConnected && identity && sameMaverickFrameScope(identity.scope, scope));
+}
+
 export function isMaverickOwnerMessage(
   event: MessageEvent,
   ownerAppId: string,

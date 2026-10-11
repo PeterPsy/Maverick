@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatComposer } from "../../src/components/ChatComposer";
+import type { AppReference } from "../../src/api/client";
+import { listenForShellReferenceDrops } from "../../src/lib/shellReferenceDrop";
 import "../../src/styles/main.css";
 import "../../src/widgets/chat-floating/styles.css";
 
@@ -8,14 +10,17 @@ const params = new URLSearchParams(location.search);
 const width = Number(params.get("width") || 390);
 const widget = params.get("widget") === "true";
 const count = Number(params.get("count") || 1);
+if (params.has('shell_origin')) Object.defineProperty(window, '__MAVERICK_PLATFORM_ORIGIN__', { value: params.get('shell_origin') });
+listenForShellReferenceDrops();
 
 function ComposerFixture() {
   const [value, setValue] = useState("");
+  const [references, setReferences] = useState<AppReference[]>([]);
   const [sent, setSent] = useState(0);
   const [stopped, setStopped] = useState(0);
   const [multiAgentMode, setMultiAgentMode] = useState<"off" | "auto" | "multi" | "group_chat">("off");
   return (
-    <div className={widget ? "chat-floating-widget-shell__body" : ""} style={{ width, alignItems: "center" }}>
+    <div className={widget ? "chatapp-root chat-floating-widget-shell__body" : "chatapp-root"} style={{ width, alignItems: "center" }}>
       <div style={{ width: "100%" }}>
         <ChatComposer
           activeProviderId="codex"
@@ -30,6 +35,7 @@ function ComposerFixture() {
           multiAgentMode={multiAgentMode}
           onAddAttachments={() => undefined}
           onChange={setValue}
+          onReferenceAdd={(reference) => setReferences((current) => [...current, reference])}
           onSelectAgent={() => undefined}
           onSelectMultiAgentMode={setMultiAgentMode}
           onSelectProvider={() => undefined}
@@ -44,6 +50,7 @@ function ComposerFixture() {
         />
         <output data-testid="sent">{sent}</output>
         <output data-testid="stopped">{stopped}</output>
+        <output data-testid="references">{JSON.stringify(references)}</output>
       </div>
     </div>
   );

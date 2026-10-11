@@ -43,6 +43,16 @@ with a page counter to keep large page counts clear of the search field.
 On narrow screens, opening a thread or draft replaces the list with the reader;
 the close control restores the retained list and its filters.
 
+The toolbar keeps search, range, pagination and refresh on one row. Search
+starts as an icon; activating it replaces the row with a full-width field.
+Closing it, pressing Escape or moving focus outside returns to the compact
+row and preserves the current query. Refresh is a bare icon.
+
+Mouse and pen drags from an email row to Chat use pointer capture and the
+shell's scoped reference-drag broker, so an open floating or docked composer
+receives the email reference across isolated app origins. A normal click opens
+the email; Escape cancels a drag. Standalone views retain native drag payloads.
+
 The Drafts mailbox combines provider-synchronized draft threads with Mail's own
 local drafts, including pending, partial and uncertain submission results.
 Local drafts are read through the live-only

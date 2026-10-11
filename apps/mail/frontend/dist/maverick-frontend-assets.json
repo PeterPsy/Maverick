@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "36b697a1e539b37b2f8086588dbf225e324924cf911e6060380b89bad92c9149",
+  "build_id": "cd227f11462f1dd5645893157a1f3234218240032c71c32951e6a8a646b6ec8a",
   "entrypoints": [
     "index.html",
     "widgets/mail-sidebar/index.html",
@@ -8,14 +8,14 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-BGBdJ5Hq.css",
-      "sha256": "b2a4cb08afc5285557c1f6b2647cba44a34d2f7a135916d0375fbbbc1daba639",
-      "size_bytes": 24567
+      "path": "assets/app-BE8TQSmX.css",
+      "sha256": "4473a63222d9da4859e251f29eea490688302bbf0e36f80d3091b8d9845e48e6",
+      "size_bytes": 24252
     },
     {
-      "path": "assets/app-BvXirghM.js",
-      "sha256": "2593b0745d7035b029a4f1ef0ee37945c8b7530896fd38c8786095cfd2238dac",
-      "size_bytes": 47413
+      "path": "assets/app-DJwfk5Hv.js",
+      "sha256": "78eb39a44cf231b28313de96bdc57b356dda1a6adbb48b7c415307dfedc8fc76",
+      "size_bytes": 50823
     },
     {
       "path": "assets/createLucideIcon-CwCer74m.js",
@@ -51,7 +51,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "120a05249d22ee876804b5ec7cf87bbfa67fda44f58b3976a5b861002581992c",
+      "sha256": "32605e3e025fb6f51183519e618dfda5712f01b462df33cad3d1765a6743665d",
       "size_bytes": 599
     },
     {

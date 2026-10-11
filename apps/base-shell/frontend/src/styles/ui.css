@@ -1,3 +1,27 @@
+.bs-reference-drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  cursor: copy;
+}
+
+.bs-reference-drag-preview {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  max-width: 22rem;
+  padding: 0.7rem 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: 12px;
+  background: var(--maverick-surface);
+  color: var(--maverick-text);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+  font-size: 0.85rem;
+}
+
 .bs-ui-button,
 .bs-ui-surface,
 .bs-ui-badge {

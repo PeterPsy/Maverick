@@ -233,6 +233,27 @@ The app restart disconnected PC use from this chat. At that post-install
 checkpoint the physical Calculator calculations were still unverified; the
 user was asked to reconnect. This does not change the saved Luna `low` choice.
 
+After reconnection on 2026-10-11, the installed Mac bundle's `Info.plist`
+confirmed version 0.3.2 (63). Fresh observations of the actual Calculator
+(`com.apple.calculator`, window 46765) exposed its Accessibility controls and
+display, without `MC-TOOL-30` or `MC-PEEKABOO-27`. The initial bounded `17 × 23`
+task entered an incomplete sequence and ended at `3`. A subsequent attempt
+stopped after clearing, despite a fresh observation proving the display changed
+to `0`, because the operator treated `dispatched_unverified` as a blocker.
+Neither partial task is counted as a pass.
+
+With an explicit button sequence and a reminder to continue with the next input
+once fresh evidence proves the previous effect, the physical Calculator reached
+`17 × 23 = 391` and `27 × 14 = 378`. Each intermediate value and both final
+results were read from fresh native observations. Core Device Use audit records
+the two completed tasks and successful underlying observations/clicks; the
+second final display was also independently observed by the planner. No Settings
+or model-selection mutation was made. These are guided physical smoke passes,
+not evidence of general autonomous target-selection reliability or a latency
+improvement. This Calculator session used AX-backed `ps1_` observations, so it
+does not directly exercise the new `px1_` fallback; that path retains the signed
+physical-host acceptance recorded above.
+
 Authenticated Codex evaluations used a synthetic native callback with a rendered
 calculator, newly numbered element IDs for every observation and delayed input
 effects. The fixture has no physical Mac connection. Results were:

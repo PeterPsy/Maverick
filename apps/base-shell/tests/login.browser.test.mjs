@@ -54,6 +54,7 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       const box = await panel.boundingBox();
       assert.ok(box.x >= 0 && box.x + box.width <= viewport.width);
       assert.ok(box.y >= 0 && box.y + box.height <= viewport.height);
+      if (viewport.width > 680) assert.ok(box.height < 800, "Server dialog should fit its content");
       assert.equal(await panel.evaluate(element => element.scrollWidth > element.clientWidth), false);
       await panel.getByLabel("Name", { exact: true }).fill("Offline test server");
       await panel.getByLabel("Server address", { exact: true }).fill("http://offline.example");

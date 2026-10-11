@@ -45,7 +45,7 @@
 .bs-server-form input:disabled { opacity: .6; }
 .bs-server-launcher { position: fixed; z-index: 20; right: max(16px, env(safe-area-inset-right)); top: max(16px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 6px; padding: 10px 14px; border: 1px solid var(--maverick-border); border-radius: 18px; background: var(--maverick-dialog-surface); color: var(--maverick-text); cursor: pointer; font: inherit; }
 .bs-server-launcher .material-symbols-rounded { font-size: 18px; }
-.bs-connected-accounts--servers { width: min(44rem, calc(100vw - 2rem)); height: auto; }
+.bs-connected-accounts--servers { width: min(44rem, calc(100vw - 2rem)); height: fit-content; }
 .bs-connected-accounts--servers .bs-connected-accounts__body { flex: 1; box-sizing: border-box; }
 .bs-server-dialog-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .bs-server-dialog-heading > .material-symbols-rounded { display: grid; place-items: center; flex: 0 0 44px; height: 44px; border: 1px solid var(--maverick-border); border-radius: 14px; font-size: 22px; background: var(--maverick-surface); }
@@ -88,7 +88,7 @@
   .bs-account-nav button { flex-shrink: 0; white-space: nowrap; }
   .bs-account-nav .bs-account-nav__logout { margin-top: 0; }
   .bs-connected-accounts__body { padding: 20px; }
-  .bs-connected-accounts--servers { height: auto; }
+  .bs-connected-accounts--servers { height: fit-content; }
   .bs-server-form { grid-template-columns: minmax(0,1fr); }
   .bs-server-card__heading { flex-wrap: wrap; }
 }

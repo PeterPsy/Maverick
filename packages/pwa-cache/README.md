@@ -48,6 +48,15 @@ resume refreshes display state once. Reconnect uses bounded exponential backoff
 with jitter. `observeMaverickVisibility` intersects shell, document and connectivity
 hints so subscribers can suspend nonessential work; these hints never authorize
 cached data or change persistence policy.
+
+`startMaverickReferencePointerDrag` handles mouse/pen reference drags in isolated
+app frames: it waits for movement, asks the app for its MIME payload and label,
+captures the pointer, and sends bounded drag messages to the exact shell origin.
+It suppresses a release click and cleans up on Escape, pointer cancellation,
+host completion or unmount. It returns `null` for standalone frames and touch,
+so apps retain their native paths. Payload meaning and drop validation remain
+app-owned; the helper grants no cache or filesystem authority.
+
 Display consumers can pass `{ requireOnline: false }` to visibility reads and
 subscriptions when a foreground view must render an already authorized offline
 cache. Network work keeps the default connectivity requirement. Safe HTTP reads

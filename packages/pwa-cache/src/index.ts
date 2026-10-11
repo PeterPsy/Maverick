@@ -1,5 +1,6 @@
 export { readCacheModelJson, type ReadModelRequest } from "./readModelRetry";
 export { maverickAppIsVisible, observeMaverickVisibility } from './appVisibility';
+export { startMaverickReferencePointerDrag, type MaverickDragReference } from './referencePointerDrag';
 export {
   isStandaloneWebApp,
   requestParentExternalUrl,

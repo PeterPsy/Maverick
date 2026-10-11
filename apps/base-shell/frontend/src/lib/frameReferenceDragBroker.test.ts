@@ -43,7 +43,9 @@ describe('isolated reference drag broker', () => {
     const post = vi.spyOn(target.contentWindow!, 'postMessage');
     send('start'); send('end'); send('end');
     expect(hitTest).toHaveBeenCalledWith(500, 150);
-    expect(post).toHaveBeenCalledExactlyOnceWith({ type: 'maverick.reference-drag.drop', drag_id: 'drag-1', transfer, x: 100, y: 150 }, 'https://chat.example');
+    expect(post.mock.calls.filter(([message]) => message.type === 'maverick.reference-drag.drop')).toEqual([
+      [{ type: 'maverick.reference-drag.drop', drag_id: 'drag-1', transfer, x: 100, y: 150 }, 'https://chat.example'],
+    ]);
     expect(document.querySelector('.bs-reference-drag-preview')).toBeNull();
   });
   it('rejects forged origins, other sources, and stale workspace/session identities', () => {
@@ -52,14 +54,28 @@ describe('isolated reference drag broker', () => {
     send('start'); send('end', {}, target);
     setMaverickFrameOrigin(source, 'https://mail.example', 'fixture-app', { ...scope, sessionGeneration: 'old-login' });
     send('end');
-    expect(post).not.toHaveBeenCalled();
+    expect(post.mock.calls.some(([message]) => message.type === 'maverick.reference-drag.drop')).toBe(false);
   });
   it('cancels without a drop and ignores malformed data or coordinates', () => {
     const post = vi.spyOn(target.contentWindow!, 'postMessage');
     send('start'); send('cancel'); send('end');
     send('start', { transfer: { type: 'text/html', data: 'bad' } }); send('end');
     send('start', { x: Infinity }); send('end');
-    expect(post).not.toHaveBeenCalled();
+    expect(post.mock.calls.some(([message]) => message.type === 'maverick.reference-drag.drop')).toBe(false);
+  });
+  it('sends hover and leave only to the visible scoped frame and clears hover on cancellation', () => {
+    const targetPost = vi.spyOn(target.contentWindow!, 'postMessage');
+    const sourcePost = vi.spyOn(source.contentWindow!, 'postMessage');
+    send('start');
+    hitTest.mockReturnValue(source);
+    send('move', { x: 120 });
+    send('cancel');
+    expect(targetPost.mock.calls.map(([message]) => message.type)).toEqual([
+      'maverick.reference-drag.over', 'maverick.reference-drag.leave',
+    ]);
+    expect(sourcePost.mock.calls.map(([message]) => message.type)).toEqual([
+      'maverick.reference-drag.over', 'maverick.reference-drag.leave', 'maverick.reference-drag.finished',
+    ]);
   });
   it('does not drop onto shell chrome or a frame from a different workspace', () => {
     const post = vi.spyOn(target.contentWindow!, 'postMessage');

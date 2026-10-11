@@ -13,9 +13,20 @@ type DragMessage = {
 
 /** Route a captured pointer drag without reading either isolated frame's DOM. */
 export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () => void {
-  let active: { frame: HTMLIFrameElement; origin: string; message: DragMessage; preview: HTMLElement; overlay: HTMLElement } | null = null;
+  let active: { frame: HTMLIFrameElement; origin: string; message: DragMessage; preview: HTMLElement; overlay: HTMLElement; hoverFrame: HTMLIFrameElement | null } | null = null;
+  function postTarget(frame: HTMLIFrameElement, type: 'over' | 'leave', x: number, y: number) {
+    if (!active || !isMaverickFrameInScope(frame, scope)) return;
+    const rect = frame.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    postToMaverickFrame(frame, {
+      type: `maverick.reference-drag.${type}`, drag_id: active.message.drag_id, transfer: active.message.transfer,
+      x: (x - rect.left) * frame.offsetWidth / rect.width - frame.clientLeft,
+      y: (y - rect.top) * frame.offsetHeight / rect.height - frame.clientTop,
+    });
+  }
   function clear() {
     if (active) {
+      if (active.hoverFrame) postTarget(active.hoverFrame, 'leave', 0, 0);
       active.preview.remove();
       active.overlay.remove();
       postToMaverickFrame(active.frame, { type: 'maverick.reference-drag.finished', drag_id: active.message.drag_id });
@@ -26,6 +37,13 @@ export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () =
     if (!active) return;
     active.preview.style.left = `${x + 14}px`;
     active.preview.style.top = `${y + 14}px`;
+    active.overlay.style.pointerEvents = 'none';
+    const hit = document.elementFromPoint(x, y);
+    active.overlay.style.pointerEvents = '';
+    const target = hit instanceof HTMLIFrameElement && isMaverickFrameInScope(hit, scope) ? hit : null;
+    if (active.hoverFrame !== target && active.hoverFrame) postTarget(active.hoverFrame, 'leave', x, y);
+    active.hoverFrame = target;
+    if (target) postTarget(target, 'over', x, y);
   }
   function drop(x: number, y: number) {
     if (!active) return;
@@ -68,7 +86,7 @@ export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () =
       overlay.onpointerup = (event) => drop(event.clientX, event.clientY);
       overlay.onpointercancel = clear;
       document.body.append(overlay, preview);
-      active = { frame, origin: event.origin, message, preview, overlay };
+      active = { frame, origin: event.origin, message, preview, overlay, hoverFrame: null };
     }
     if (!active || active.frame !== frame || active.message.drag_id !== message.drag_id) return;
     const rect = frame.getBoundingClientRect();

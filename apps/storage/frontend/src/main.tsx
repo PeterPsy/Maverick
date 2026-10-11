@@ -18,6 +18,7 @@ import { applyStorageFilesDelta, applyStorageFoldersDelta, type StorageCatalogDe
 import { driveBreadcrumbItems, driveBreadcrumbTargetsFromInput, driveBreadcrumbTrailForFolder, driveBreadcrumbTrailForTarget, type DriveBreadcrumbTarget } from './lib/storageDriveBreadcrumbs';
 import { fileFolderSelection, folderParentPath, folderStatsForSelection, normalizeFolderPath } from './lib/storageFolderLayer';
 import { attachStorageFolderDragImage } from './lib/storageDragImage';
+import { installStoragePointerDrags } from './lib/storagePointerDrag';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFile, storageDragPayloadFromFolder, storageDragPayloadFromSelection, storageDriveDragPayloadFromFile, storageDriveDragPayloadFromFolder, storageMoveDropStatus, writeStorageDriveFileDragData, writeStorageDriveFolderDragData, writeStorageFileDragData, writeStorageFolderDragData, writeStorageSelectionDragData, type StorageFileDragPayload, type StorageMoveDropStatus, type StorageSelectionDragPayload } from './lib/storageDragDrop';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from './lib/browserFullscreen';
 import { StorageCatalogRequests } from './lib/storageCatalogRequests';
@@ -456,6 +457,7 @@ function isFolderLongPressIgnored(target: EventTarget | null) {
 
 function App() {
   const storageAppId = useMemo(() => currentStorageAppId(), []);
+  useEffect(() => installStoragePointerDrags(storageAppId), [storageAppId]);
   const initialNavigationParams = useMemo<StorageNavigationParams>(() => Object.fromEntries(new URLSearchParams(window.location.search).entries()), []);
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [folders, setFolders] = useState<StorageFolder[]>([]);

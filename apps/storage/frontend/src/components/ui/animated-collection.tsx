@@ -27,11 +27,11 @@ import {
   TextIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { FileCardPreview } from "@/filePreview";
-import { useLongPressSelection } from "@/hooks/useLongPressSelection";
-import { formatBytes, formatStorageTimestamp, kindLabels, roleLabels } from "@/storageMeta";
-import { cn } from "@/lib/utils";
-import type { StorageFile, PreviewKind } from "@/types";
+import { FileCardPreview } from "../../filePreview";
+import { useLongPressSelection } from "../../hooks/useLongPressSelection";
+import { formatBytes, formatStorageTimestamp, kindLabels, roleLabels } from "../../storageMeta";
+import { cn } from "../../lib/utils";
+import type { StorageFile, PreviewKind } from "../../types";
 
 export type CollectionViewMode = "list" | "card";
 

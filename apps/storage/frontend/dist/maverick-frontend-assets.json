@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "3623dc39ee6aed7c1e82e738b50f5cfb3da2d5dddf3bc3fa4e9d859d8accf933",
+  "build_id": "edc91e2caa51c3ed946e8efd57f19ff6ac0be0aee506a78f02f16d5f74f06b68",
   "entrypoints": [
     "index.html",
     "widgets/file-preview/index.html",
@@ -14,9 +14,9 @@
       "size_bytes": 43048
     },
     {
-      "path": "assets/app-CgBPu5Dw.js",
-      "sha256": "8b94e5c0638b15e88ecf073554492041dce85c4bc20520952c92fa8f2dad5bd4",
-      "size_bytes": 108178
+      "path": "assets/app-BREtZdLt.js",
+      "sha256": "157c72595bbc421dd5bf7d3cf30267c409cc17fe039aa156d85beb8dc18fe2cb",
+      "size_bytes": 108219
     },
     {
       "path": "assets/docx-preview-Dn8hcw_K.js",
@@ -59,9 +59,9 @@
       "size_bytes": 777
     },
     {
-      "path": "assets/storageViewFilterEvents-nLXXmXH7.js",
-      "sha256": "14de4c41ebd8b9e9ed36c9318bc09e8ab2b2856b2d7711db3fbfa4efca06059c",
-      "size_bytes": 175020
+      "path": "assets/storageViewFilterEvents-TffyeDt3.js",
+      "sha256": "b834c88983ffeeca06c6cc69e1a2d43b0eca89605ed51575e04ccb125085f2c4",
+      "size_bytes": 181629
     },
     {
       "path": "assets/useStorageVisibility-BVNazp7h.js",
@@ -74,9 +74,9 @@
       "size_bytes": 427679
     },
     {
-      "path": "assets/widgets/storage-sidebar/index-BxKVAath.js",
-      "sha256": "9f324d151e0c651486c7f45cc678dbc1d70d6fce46ccf7452ed3b935eca771e0",
-      "size_bytes": 31221
+      "path": "assets/widgets/storage-sidebar/index-C3W1g8RT.js",
+      "sha256": "0dfe62414028709a0da9e9608c726fa65a5effe69e2e68a30f3a5f4aa1d9a2f6",
+      "size_bytes": 31261
     },
     {
       "path": "assets/widgets/storage-sidebar-footer/index-CK-tH4Lt.js",
@@ -97,7 +97,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "0133d6ddd9863df6e29a47c101afc15900a02430ae06645d9bb0e7eec5d2b171",
+      "sha256": "4a5f32346059bd4bfb75d6e3b8edda923d412b1afd935619eae6e7a517e0a5aa",
       "size_bytes": 1161
     },
     {
@@ -107,7 +107,7 @@
     },
     {
       "path": "widgets/storage-sidebar/index.html",
-      "sha256": "1404b734e9638e8247d7325b4e039f848bda74603cd28623be4c404bbf61ea7d",
+      "sha256": "238ddf48f396192e1054951b9ed5f5a0c984bec839802fc4044eff954108a0fb",
       "size_bytes": 906
     },
     {

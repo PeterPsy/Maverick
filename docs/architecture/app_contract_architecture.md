@@ -2237,7 +2237,13 @@ shell overlay receives movement and release after the pointer leaves the source
 frame; the shell removes it before hit-testing the visible registered target
 iframe. Only that target receives `drop` with target-local coordinates, and the
 source receives `finished` to release capture. The shell never reads app DOM
-or interprets reference entities. Chat accepts the exact parent message and
+or interprets reference entities. Its scoped `over` and `leave` messages preserve
+hover feedback for app-owned move targets, including Storage's main and sidebar
+frames. The SDK's `startMaverickReferencePointerDrag` shares pointer capture,
+movement threshold, exact-origin messaging and cleanup between Mail and Storage;
+each app produces and validates its own payload. Storage rehydrates native role
+markers through its existing parsers and writers before invoking move handlers.
+Chat accepts the exact parent message and
 runs its normal payload validation and composer drop handlers. Escape, pointer
 cancellation, and source cleanup cancel rather than attach a reference;
 ordinary clicks and native file drops retain their existing paths.

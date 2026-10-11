@@ -23,6 +23,7 @@ import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta, type StorageCatalogDelta } from '../../lib/storageCatalogDelta';
 import { attachStorageFolderDragImage } from '../../lib/storageDragImage';
+import { installStoragePointerDrags } from '../../lib/storagePointerDrag';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFolder, storageMoveDropStatus, writeStorageFolderDragData, type StorageMoveDropStatus, type StorageSelectionDragPayload } from '../../lib/storageDragDrop';
 import type { DriveBreadcrumbTarget } from '../../lib/storageDriveBreadcrumbs';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
@@ -678,6 +679,7 @@ function KindFilterRail({ activeKind, availableKinds, onSelect }: {
 
 function StorageSidebarWidget() {
   const storageAppId = useMemo(() => currentStorageAppId(), []);
+  useEffect(() => installStoragePointerDrags(storageAppId), [storageAppId]);
   const [driveConnections, setDriveConnections] = useState<DriveConnection[]>([]);
   const [driveChildrenCache, setDriveChildrenCache] = useState<DriveChildrenCache>({});
   const [folders, setFolders] = useState<StorageFolder[]>([]);

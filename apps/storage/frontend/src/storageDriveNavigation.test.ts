@@ -86,7 +86,8 @@ describe('storage Drive navigation stability', () => {
     expect(source).toContain('function GoogleDriveIcon');
     expect(source).toContain('if (node.id === STORAGE_ROOT_ID)');
     expect(source).toContain('return <Home className="h-4 w-4" />;');
-    expect(source).toContain("return isDriveAccountNode(node) ? <GoogleDriveIcon className=\"h-4 w-4\" /> : undefined;");
+    expect(source).toContain('return isDriveAccountNode(node) ? <AccountAvatar');
+    expect(source).toContain('fallback={<GoogleDriveIcon className="h-4 w-4" />}');
     expect(source).toContain('hasChildren={true}');
     expect(source).toContain('const lazy = cached?.loaded');
     expect(source).toContain('? children.length > 0 || Boolean(cached.error)');

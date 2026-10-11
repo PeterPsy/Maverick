@@ -168,6 +168,20 @@ Account UI uses email as the primary identity and the display name as secondary
 copy. Inline sender and calendar destination labels use `email (name)` when the
 name differs. Account IDs continue to drive all operations and selections.
 
+Google account records also retain a bounded `picture_url` from verified OpenID
+claims or the authenticated UserInfo endpoint. Existing consented profiles are
+hydrated on the first authorized app invocation or Connected accounts read; a
+failed or missing photo backs off for one day. UserInfo must return the same
+Google subject. Conditional metadata writes cannot overwrite a concurrent
+disconnect or OAuth update. Profile metadata never includes provider credentials.
+Calendar, Mail and Storage project this display field into their own connection
+records; Mail includes it in the bounded mailbox read model. The shared
+`@maverick/account-avatar` browser component shows circular photos in account
+sidebar rows and the shell's Connected accounts panel, accepts HTTPS Google image
+hosts only, sends no referrer and keeps the owning app's icon when the photo is
+missing, loading or fails. Switching accounts does not retain another account's
+photo. Manual Calendar and Drive OAuth also preserve UserInfo photos when supplied.
+
 Storage's sidebar uses the connected status of a valid Core-managed account
 projection rather than requiring an app-owned Vault credential reference. Its
 provider requests still require the matching invocation-scoped Core handle;

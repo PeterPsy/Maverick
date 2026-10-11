@@ -45,6 +45,7 @@ export interface Event {
 }
 
 export interface CalendarConnection {
+  picture_url?: string
   id: string
   resource_type?: string
   provider: "google" | string

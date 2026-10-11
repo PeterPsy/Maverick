@@ -88,6 +88,7 @@ export interface CalendarEventPayload {
 }
 
 export interface CalendarConnectionPayload {
+  picture_url?: string;
   id: string;
   resource_type?: string;
   provider: string;

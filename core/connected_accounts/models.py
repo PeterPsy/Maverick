@@ -17,6 +17,8 @@ class ConnectedAccount:
     status: str
     created_at: datetime
     updated_at: datetime
+    picture_url: str = ""
+    profile_checked_at: datetime | None = None
 
 
 @dataclass(frozen=True)

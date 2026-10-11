@@ -1,4 +1,5 @@
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { AccountAvatar } from '@maverick/account-avatar';
 import { readMailDisplay } from '../../pwaCache';
 import { accountEmail as accountName, accountDisplayName } from '../../accountLabels';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -540,7 +541,7 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
 
 function accountProviderIcon(account?: MailConnection) {
   if (account?.provider === 'gmail') {
-    return <GmailIcon className="mail-folder-tree-provider-icon h-4 w-4" />;
+    return <AccountAvatar pictureUrl={account.picture_url} fallback={<GmailIcon className="mail-folder-tree-provider-icon h-4 w-4" />} />;
   }
   return <Mail className="mail-folder-tree-provider-icon h-4 w-4" />;
 }

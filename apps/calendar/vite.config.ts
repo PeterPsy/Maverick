@@ -10,6 +10,7 @@ export default defineConfig({
   root: 'frontend',
   base: '/apps/calendar/',
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': fileURLToPath(new URL('./frontend/src', import.meta.url))
     }

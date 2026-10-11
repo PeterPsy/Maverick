@@ -17,6 +17,7 @@ from urllib.request import Request
 
 from core.connected_accounts import google
 from core.connected_accounts.app_context import account_context, account_payload
+from core.connected_accounts.profile import refresh_profile
 from core.secrets.errors import SecretError
 from core.apps.errors import AppHostingError
 
@@ -156,6 +157,11 @@ class AccountInvocation:
         self.context = account_context(identity_store=identity_store, workspace_store=workspace_store,
             permissions=parsed.contract.permissions, user_id=actor_user_id,
             workspace_id=binding.workspace_id, app_id=binding.app_id, data_root=binding.data_root)
+        if self.context:
+            for item in self.context["accounts"]:
+                if item["services"]:
+                    item["account"] = refresh_profile(item["account"], account_store=identity_store.account_store,
+                                                      secret_store=secret_store)
         self.brokers = [AccountBroker(context={**self.context, **item}, identity_store=identity_store,
             workspace_store=workspace_store, secret_store=secret_store, app_store=app_store,
             permissions=parsed.contract.permissions, user_id=actor_user_id,

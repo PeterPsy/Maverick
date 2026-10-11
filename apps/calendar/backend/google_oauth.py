@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.app_sdk.google_profile import google_picture_url
+
 from core.app_sdk.connected_accounts import has_platform_access
 
 from datetime import UTC, datetime, timedelta
@@ -213,6 +215,7 @@ def complete_oauth(
             "provider": GOOGLE_PROVIDER,
             "account_id": account_id,
             "account_label": account_label,
+            "picture_url": google_picture_url(profile.get("picture")),
             "status": "connected",
             "scopes": scopes,
             "updated_at": updated_at,

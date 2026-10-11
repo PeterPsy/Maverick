@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { AccountAvatar } from '@maverick/account-avatar';
 import { CalendarDays, ChevronRight, CircleUserRound, RefreshCw } from 'lucide-react';
 import type { CalendarConnection, CalendarRemoteCalendar } from '../../components/ui/calendar-types';
 import { t } from '../../preferences';
@@ -29,7 +30,7 @@ export function CalendarAccountItem({ account, busy, filtered, syncing, onSync, 
           <button className="calendar-account-toggle" type="button" aria-expanded={expanded} aria-controls={calendarsId}
             onClick={() => setExpanded(!expanded)}>
             <ChevronRight className={`calendar-account-chevron${expanded ? ' is-expanded' : ''}`} aria-hidden="true" />
-            <CircleUserRound aria-hidden="true" />{copy}
+            <AccountAvatar pictureUrl={account.connection?.picture_url} fallback={<CircleUserRound />} />{copy}
           </button>
         )}
         {account.connection && <button className="calendar-account-sync" type="button" disabled={busy}

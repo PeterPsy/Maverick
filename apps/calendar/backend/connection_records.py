@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from core.app_sdk.google_profile import google_picture_url
 
 from constants import (
     ALLOWED_CONNECTION_STATUSES,
@@ -53,6 +54,7 @@ def normalize_connection(payload: dict[str, Any]) -> dict[str, Any]:
         "provider": provider,
         "account_id": account_id,
         "account_label": account_label,
+        "picture_url": google_picture_url(payload.get("picture_url")),
         "status": _connection_status(payload.get("status")),
         "scopes": string_list(payload.get("scopes")),
         "created_at": optional_time_string(payload.get("created_at") or payload.get("createdAt"), "created_at"),

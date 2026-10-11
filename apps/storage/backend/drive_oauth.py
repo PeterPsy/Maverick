@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.app_sdk.google_profile import google_picture_url
+
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 import hashlib
@@ -261,6 +263,7 @@ def complete_oauth(
         "id": target_connection_id,
         "account_email": account_email,
         "display_name": str(profile.get("name") or account_email).strip(),
+        "picture_url": google_picture_url(profile.get("picture")),
         "status": "connected",
         "access_mode": access_mode,
         "scopes": scopes,

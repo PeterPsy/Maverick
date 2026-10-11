@@ -12,6 +12,7 @@ from core.api.session_api import resolve_request_session, session_cookie_header,
 from core.api.google_handoff_context import source_context
 from core.connected_accounts import google
 from core.connected_accounts import browser_handoff
+from core.connected_accounts.profile import refresh_profile
 from core.connected_accounts.service import complete_claimed_flow, digest, disconnect_account, public_account, select_account, set_workspace_account_access, start_flow
 from core.identity.errors import UserNotFoundError
 from core.identity.service import build_auth_session, session_expiry
@@ -174,7 +175,8 @@ def handle_connected_accounts_api(state, environ, start_response):
         if path == "/api/connected-accounts" and method == "GET":
             selection = state.account_store.get_selection(context.user.user_id, context.workspace_id)
             return json_response(start_response, {"workspace_id": context.workspace_id,
-                "items": [public_account(account) for account in state.account_store.list_accounts(context.user.user_id)],
+                "items": [public_account(refresh_profile(account, account_store=state.account_store, secret_store=state.secret_store))
+                          for account in state.account_store.list_accounts(context.user.user_id)],
                 "selection": {"account_id": selection.account_id, "account_ids": selection.account_ids,
                               "disabled_apps": selection.disabled_apps} if selection else None,
                 "apps": _app_inventory(state, context), "google": provider_status(state)})

@@ -16,7 +16,8 @@
     "lucide-react": "^0.468.0",
     "motion": "^12.38.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "@maverick/account-avatar": "file:../../packages/account-avatar"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

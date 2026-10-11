@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react(), maverickIsolatedFrameAssetUrls(), maverickFrontendAssets()],
   base: '/apps/mail/',
   root: 'frontend',
+  resolve: { dedupe: ['react', 'react-dom'] },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

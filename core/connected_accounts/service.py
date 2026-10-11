@@ -9,6 +9,7 @@ import secrets
 from urllib.parse import urlencode
 
 from core.connected_accounts import google
+from core.app_sdk.google_profile import google_picture_url
 from core.connected_accounts.google_identity import verify_identity
 from core.connected_accounts.models import AccountSelection, ConnectedAccount, OAuthFlow
 from core.identity.service import build_user_record
@@ -24,6 +25,7 @@ def digest(value):
 def public_account(account):
     return {"account_id": account.account_id, "provider": account.provider,
             "email": account.email, "display_name": account.display_name,
+            "picture_url": google_picture_url(account.picture_url),
             "status": account.status, "services": google.available_services(account.scopes)}
 
 
@@ -133,7 +135,8 @@ def complete_claimed_flow(state, *, flow, browser, code, context=None, now=None,
         raise google.AccountError("google_offline_consent_required")
     account = ConnectedAccount(account_id, "google", claims["sub"], user.user_id, claims["email"],
                                str(claims.get("name") or claims["email"]), sorted(set(token_scopes)),
-                               secret_ref, "connected", existing.created_at if existing else timestamp, timestamp)
+                               secret_ref, "connected", existing.created_at if existing else timestamp, timestamp,
+                               google_picture_url(claims.get("picture")))
     account = state.account_store.claim_account(account)
     selection = resolve_active_workspace_for_user(state.workspace_store, user_id=user.user_id, now=timestamp)
     if selection:

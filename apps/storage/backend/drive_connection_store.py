@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.app_sdk.google_profile import google_picture_url
+
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -195,6 +197,7 @@ def normalize_connection(payload: dict[str, Any]) -> dict[str, Any]:
         "provider": "google_drive",
         "account_email": str(payload.get("account_email") or payload.get("email_address") or "").strip(),
         "display_name": str(payload.get("display_name") or payload.get("account_email") or "").strip(),
+        "picture_url": google_picture_url(payload.get("picture_url")),
         "status": status,
         "access_mode": str(payload.get("access_mode") or "full_rw").strip(),
         "scopes": [str(scope).strip() for scope in scopes if str(scope or "").strip()],

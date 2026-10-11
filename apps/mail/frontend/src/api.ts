@@ -4,6 +4,7 @@ export type MailAddress = {
 };
 
 export type MailConnection = {
+  picture_url?: string;
   id: string;
   provider: string;
   email_address: string;

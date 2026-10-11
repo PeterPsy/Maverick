@@ -18,7 +18,8 @@ def attach_platform_account(payload):
         connection_id = "platform_" + account["account_id"]
         ready = "drive" in account.get("services", []) and bool(account.get("access_handle"))
         projected[connection_id] = {"id": connection_id, "provider": "google_drive", "account_email": account["email"],
-            "display_name": account["display_name"], "status": "connected" if ready else "disconnected",
+            "display_name": account["display_name"], "picture_url": account.get("picture_url", ""),
+            "status": "connected" if ready else "disconnected",
             "access_mode": "full_rw", "scopes": account.get("scopes", []),
             "external_refs": {"platform_account_id": account["account_id"], "google_subject": account["account_id"],
                 "managed_by": "platform", "is_default": account.get("default", False)}}

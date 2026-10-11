@@ -70,6 +70,7 @@ export type StorageProviderCapabilities = {
 };
 
 export type DriveConnection = {
+  picture_url?: string;
   id: string;
   resource_type: 'drive_connection';
   provider: 'google_drive';

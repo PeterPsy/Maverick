@@ -25,7 +25,8 @@ def attach_platform_account(payload):
             ready = "gmail" in account.get("services", []) and bool(account.get("access_handle"))
             existing = db.execute("SELECT settings_json FROM connections WHERE id=?", (connection_id,)).fetchone()
             settings = json.loads(existing[0]) if existing else {}
-            settings.update(platform_account_id=account["account_id"], managed_by="platform", is_default=account.get("default", False))
+            settings.update(platform_account_id=account["account_id"], managed_by="platform", is_default=account.get("default", False),
+                            picture_url=account.get("picture_url", ""))
             db.execute("""INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, settings_json, created_at, updated_at)
                 VALUES (?, 'gmail', ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
                 email_address=excluded.email_address, display_name=excluded.display_name, status=excluded.status,

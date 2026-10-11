@@ -18,7 +18,8 @@ def attach_platform_account(payload):
         connection_id = "platform_" + account["account_id"]
         ready = "calendar" in account.get("services", []) and bool(account.get("access_handle"))
         projected[connection_id] = {"id": connection_id, "provider": "google", "account_id": account["email"],
-            "account_label": account["display_name"], "status": "connected" if ready else "disabled",
+            "account_label": account["display_name"], "picture_url": account.get("picture_url", ""),
+            "status": "connected" if ready else "disabled",
             "scopes": account.get("scopes", []), "external_refs": {"platform_account_id": account["account_id"],
                 "managed_by": "platform", "is_default": account.get("default", False)}}
         if ready:

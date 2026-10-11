@@ -7,6 +7,7 @@ import { maverickFrontendAssets } from "../../scripts/vite-frontend-assets.mjs";
 export default defineConfig({
   base: "/apps/base-shell/",
   resolve: {
+    dedupe: ["react", "react-dom"],
     alias: { "@": fileURLToPath(new URL("./frontend/src", import.meta.url)) },
   },
   plugins: [

@@ -25,8 +25,9 @@ def transport(method, url, request):
     raise AssertionError(url)
 with tempfile.TemporaryDirectory() as scratch:
     root = Path(scratch)
-    payload = {"data_root": str(root), "external_accounts": [{"account_id": f"google_{i}", "provider": "google", "email": f"{i}@example.com", "display_name": str(i), "services": ["calendar"], "access_handle": f"handle-{i}"} for i in range(2)]}
+    payload = {"data_root": str(root), "external_accounts": [{"account_id": f"google_{i}", "provider": "google", "email": f"{i}@example.com", "display_name": str(i), "picture_url": f"https://lh3.googleusercontent.com/a/{i}", "services": ["calendar"], "access_handle": f"handle-{i}"} for i in range(2)]}
     attach_platform_account(payload)
+    assert {c["picture_url"] for c in read_state(root)["connections"]} == {f"https://lh3.googleusercontent.com/a/{i}" for i in range(2)}
     for i in range(2):
         sync_google_calendar(root, {"connection_id": f"platform_google_{i}"}, app_secrets=payload["app_secrets"], transport=transport)
     events = read_state(root)["events"]
@@ -43,6 +44,7 @@ from pathlib import Path
 from platform_account import attach_platform_account
 from providers.gmail import GmailProvider
 from database import connect
+from store import list_connections
 calls = []
 def transport(request):
     authorization = request.get_header("Authorization")
@@ -59,8 +61,9 @@ def transport(request):
     raise AssertionError(url)
 with tempfile.TemporaryDirectory() as scratch:
     root = Path(scratch)
-    payload = {"data_root": str(root), "external_accounts": [{"account_id": f"google_{i}", "provider": "google", "email": f"{i}@example.com", "display_name": str(i), "services": ["gmail"], "access_handle": f"handle-{i}"} for i in range(2)]}
+    payload = {"data_root": str(root), "external_accounts": [{"account_id": f"google_{i}", "provider": "google", "email": f"{i}@example.com", "display_name": str(i), "picture_url": f"https://lh3.googleusercontent.com/a/{i}", "services": ["gmail"], "access_handle": f"handle-{i}"} for i in range(2)]}
     attach_platform_account(payload)
+    assert {c["picture_url"] for c in list_connections(root)} == {f"https://lh3.googleusercontent.com/a/{i}" for i in range(2)}
     provider = GmailProvider(transport=transport)
     for i in range(2):
         provider.sync_incremental(root, f"platform_google_{i}", app_secrets=payload["app_secrets"])
@@ -88,8 +91,9 @@ def transport(method, url, request):
     return 200, {"drives": []}
 with tempfile.TemporaryDirectory() as scratch:
     root = Path(scratch)
-    payload = {"data_root": str(root), "external_accounts": [{"account_id": f"google_{i}", "provider": "google", "email": f"{i}@example.com", "display_name": str(i), "services": ["drive"], "access_handle": f"handle-{i}"} for i in range(2)]}
+    payload = {"data_root": str(root), "external_accounts": [{"account_id": f"google_{i}", "provider": "google", "email": f"{i}@example.com", "display_name": str(i), "picture_url": f"https://lh3.googleusercontent.com/a/{i}", "services": ["drive"], "access_handle": f"handle-{i}"} for i in range(2)]}
     attach_platform_account(payload)
+    assert {c["picture_url"] for c in list_connections(root)} == {f"https://lh3.googleusercontent.com/a/{i}" for i in range(2)}
     results = [GoogleDriveProvider(connection=item, app_secrets=payload["app_secrets"], transport=transport).list_roots() for item in list_connections(root)]
     assert calls == ["Bearer handle-0", "Bearer handle-1"], calls
     assert len(results) == 2

@@ -51,8 +51,8 @@ def provider_request(request, *, timeout=30, max_bytes=MAX_RESPONSE_BYTES):
         return response.code, dict(response.headers.items()), data
 
 
-def json_request(url, *, data=None):
-    headers = {"Accept": "application/json"}
+def json_request(url, *, data=None, headers=None):
+    headers = {"Accept": "application/json", **(headers or {})}
     if data is not None:
         headers["Content-Type"] = "application/x-www-form-urlencoded"
     status, _, raw = provider_request(Request(url, data=urlencode(data).encode() if data is not None else None, headers=headers), max_bytes=1024 * 1024)

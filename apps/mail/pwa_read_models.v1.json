@@ -7,7 +7,8 @@
           "id": "string",
           "provider": "string",
           "email_address": "string",
-          "display_name": "string"
+          "display_name": "string",
+          "picture_url": "string"
         },
         "required": [
           "id"

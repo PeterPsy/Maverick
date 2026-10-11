@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.app_sdk.google_profile import google_picture_url
+
 import json
 from pathlib import Path
 import re
@@ -581,6 +583,7 @@ def _connection(row) -> dict[str, object]:
     item = _row(row)
     item["scopes"] = _loads_list(item.pop("scopes_json"))
     item["settings"] = _loads_object(item.pop("settings_json", "{}"))
+    item["picture_url"] = google_picture_url(item["settings"].get("picture_url"))
     return item
 
 

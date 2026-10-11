@@ -643,7 +643,7 @@ export function logout(): Promise<SessionPayload> {
 
 export type GoogleService = "calendar" | "gmail" | "drive";
 export type GoogleStatus = { configured: boolean; registration_enabled: boolean; services: { id: GoogleService; label: string }[] };
-export type ConnectedAccount = { account_id: string; provider: string; email: string; display_name: string; status: string; services: GoogleService[] };
+export type ConnectedAccount = { picture_url?: string; account_id: string; provider: string; email: string; display_name: string; status: string; services: GoogleService[] };
 export type ConnectedAccountsPayload = {
   workspace_id: string;
   items: ConnectedAccount[];

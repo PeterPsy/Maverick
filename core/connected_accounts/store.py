@@ -1,6 +1,6 @@
 """Control-plane persistence for federated identity and OAuth consent."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Protocol
@@ -11,6 +11,7 @@ from core.connected_accounts.models import AccountSelection, ConnectedAccount, O
 
 class AccountStore(Protocol):
     def get_account(self, account_id: str) -> ConnectedAccount | None: ...
+    def update_profile(self, account: ConnectedAccount, *, picture_url: str, checked_at: datetime) -> ConnectedAccount | None: ...
     def find_subject(self, provider: str, subject: str) -> ConnectedAccount | None: ...
     def list_accounts(self, user_id: str) -> list[ConnectedAccount]: ...
     def save_account(self, account: ConnectedAccount) -> ConnectedAccount: ...
@@ -49,6 +50,16 @@ class AccountDocumentStore:
     def save_account(self, account):
         self.collections.accounts.update_one({"account_id": account.account_id}, {"$set": asdict(account)}, upsert=True)
         return account
+
+    def update_profile(self, account, *, picture_url, checked_at):
+        # Metadata hydration must not revive a concurrently disconnected account
+        # or overwrite a newer OAuth identity/credential update.
+        query = {key: getattr(account, key) for key in
+                 ("account_id", "status", "secret_ref", "updated_at", "profile_checked_at")}
+        if self.collections.accounts.compare_and_set(query, {"$set": {
+                "picture_url": picture_url, "profile_checked_at": checked_at}}):
+            return replace(account, picture_url=picture_url, profile_checked_at=checked_at)
+        return None
 
     def claim_account(self, account):
         from core.connected_accounts.google import AccountError

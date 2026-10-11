@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type SVGProps } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home, LogOut, RefreshCw } from 'lucide-react';
+import { AccountAvatar } from '@maverick/account-avatar';
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import {
   TreeExpander,
@@ -78,6 +79,7 @@ type ViewFilterPayload = {
 
 type FolderTreeNode = {
   accountDisplayName?: string;
+  accountPictureUrl?: string;
   children: FolderTreeNode[];
   connectionId?: string;
   displayPath?: string;
@@ -297,6 +299,7 @@ function buildDriveTreeNodes(connections: DriveConnection[], cache: DriveChildre
         id: nodeId,
         label: driveConnectionLabel(connection),
         accountDisplayName: connection.display_name && connection.display_name !== driveConnectionLabel(connection) ? connection.display_name : undefined,
+        accountPictureUrl: connection.picture_url,
         lazy: status === 'connected',
         loading: cached?.loading,
         provider: 'google_drive',
@@ -331,7 +334,7 @@ function folderTreeIcon(node: FolderTreeNode) {
   if (node.id === STORAGE_ROOT_ID) {
     return <Home className="h-4 w-4" />;
   }
-  return isDriveAccountNode(node) ? <GoogleDriveIcon className="h-4 w-4" /> : undefined;
+  return isDriveAccountNode(node) ? <AccountAvatar pictureUrl={node.accountPictureUrl} fallback={<GoogleDriveIcon className="h-4 w-4" />} /> : undefined;
 }
 
 function normalizeDriveDisplayPath(path: string) {

@@ -39,7 +39,7 @@ def account_context(*, identity_store, workspace_store, permissions, user_id, wo
             accounts.append({"account": account, "services": capabilities,
                 "previous_data_root": str(_private_path(data_root, parent / account.account_id))})
     selected = next(iter(accounts), {"account": None, "services": []})
-    return {**selected, "accounts": accounts, "data_root": str(root),
+    return {**selected, "accounts": accounts, "data_root": str(root), "workspace_data_root": str(data_root),
             "replaces_secrets": declaration.replaces_secrets, "selection": selection}
 
 

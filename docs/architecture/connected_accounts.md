@@ -61,10 +61,11 @@ App invocations using personal accounts receive an app-owned data subtree under
 workspace and user and stays stable when the default or enabled set changes.
 This prevents private Mail,
 Calendar and Drive caches from appearing in another workspace member's app.
-Existing manually connected app data is retained in its original location; it is
-not automatically attributed to a personal Google identity. Disabling use of
+Existing manually connected app data remains in its original location. Apps may
+explicitly import their workspace providers into the personal view without
+attributing those providers to a Google identity; Mail retains IMAP/SMTP this way. Disabling use of
 personal connections keeps the private root and removes provider authority;
-it never falls back to workspace credentials or another member's cache.
+Google operations never fall back to workspace credentials or another member's cache.
 Apps mark removed connections unavailable and retain cached data and drafts.
 Individual-account roots from the original implementation are trusted migration
 sources in the invocation payload. Apps import their own records once, retain
@@ -143,3 +144,26 @@ must appear in Calendar, Mail and Storage for the approved services without app
 OAuth prompts. A later Google login must resolve to that same Maverick user.
 Disconnecting or disabling an app should be checked with a dedicated test account
 to avoid disrupting existing personal connections.
+
+
+### Existing workspace mailboxes
+
+Core supplies `workspace_data_root` from the authorized app binding alongside
+its personal `data_root`. The SDK migration coordinator accepts an optional,
+app-owned workspace importer, guarded by the same lock and one-time marker. It
+requires the destination to be directly under that workspace app root at
+`connected-accounts/<user>/shared/` and rejects symlink roots. Caller arguments
+cannot override the host-owned source.
+
+Mail opts in to retain pre-existing workspace IMAP/SMTP connections and their
+folders, labels, message cache, attachments, drafts, sync state and associated
+links/audit records. Shared Google rows, OAuth credentials, OAuth flows and send
+approvals are excluded. The importer retains connection IDs, reconstructs Vault
+grant metadata for the same workspace and mailbox resource, leaves source files
+untouched and preserves later edits or disconnects in the personal store.
+Existing Core password grants remain the authority for provider operations;
+importing metadata does not create or broaden a grant.
+
+Account UI uses email as the primary identity and the display name as secondary
+copy. Inline sender and calendar destination labels use `email (name)` when the
+name differs. Account IDs continue to drive all operations and selections.

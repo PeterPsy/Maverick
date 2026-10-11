@@ -167,6 +167,7 @@ class AccountInvocation:
     def start(self):
         if self.context:
             self.payload["data_root"] = self.context["data_root"]
+            self.payload["workspace_data_root"] = self.context["workspace_data_root"]
             replaced = set(self.context["replaces_secrets"])
             self.payload["app_secrets"] = {
                 name: value for name, value in self.payload.get("app_secrets", {}).items()

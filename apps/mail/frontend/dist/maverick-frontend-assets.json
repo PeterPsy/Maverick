@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "ac184b45b0154ee27e3413d3d5bac1eb2bc74fdd616549c8dbcb516cb566987f",
+  "build_id": "36b697a1e539b37b2f8086588dbf225e324924cf911e6060380b89bad92c9149",
   "entrypoints": [
     "index.html",
     "widgets/mail-sidebar/index.html",
@@ -13,9 +13,9 @@
       "size_bytes": 24567
     },
     {
-      "path": "assets/app-BTBGP6lY.js",
-      "sha256": "0eeb5f69dc7138bb7194b9aa2cee052b6abc45a3b904e439fa3606a009c8efd1",
-      "size_bytes": 47540
+      "path": "assets/app-BvXirghM.js",
+      "sha256": "2593b0745d7035b029a4f1ef0ee37945c8b7530896fd38c8786095cfd2238dac",
+      "size_bytes": 47413
     },
     {
       "path": "assets/createLucideIcon-CwCer74m.js",
@@ -23,9 +23,9 @@
       "size_bytes": 193950
     },
     {
-      "path": "assets/index-C0MXWiOC.css",
-      "sha256": "4ce85c14ba79604763956b7b0f000e59b800159be63ac4ac0cac13c6ec489591",
-      "size_bytes": 7574
+      "path": "assets/index-C1UoBPll.css",
+      "sha256": "c0f7b5c14cccdf63249a5d595b1e147fd108d332ca689163ba975f96073e41a9",
+      "size_bytes": 7828
     },
     {
       "path": "assets/index-DNIaBwDn.css",
@@ -33,14 +33,14 @@
       "size_bytes": 1969
     },
     {
-      "path": "assets/mailboxSelection-Gi0lxcsv.js",
-      "sha256": "ae15c4af4df9d067ea69e235279628953675cf58a12e6bd78e55aedff0c0b2bd",
-      "size_bytes": 35656
+      "path": "assets/mailboxSelection-DR-jPcfL.js",
+      "sha256": "f8f2c8c9cd71853192e50bd09a34cdf3227030bd19e47ba9398d20b350cefeb3",
+      "size_bytes": 35912
     },
     {
-      "path": "assets/widgets/mail-sidebar/index-5eoDoEfz.js",
-      "sha256": "8a472cdd0e24c171d1226db0fc1132a25caa0ab8aab96540af2327d60e47798a",
-      "size_bytes": 142520
+      "path": "assets/widgets/mail-sidebar/index-CgcnyBa2.js",
+      "sha256": "052a257979ad1273ea3f752014d42c751eecb7be78131d401176b0f7d068c16b",
+      "size_bytes": 142631
     },
     {
       "path": "assets/widgets/mail-sidebar-footer/index-CR-QvGq2.js",
@@ -51,12 +51,12 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "7465dfed3feee7c31534236d055203a7923b1d4bf12ae7dede55fa9cda21fb2b",
+      "sha256": "120a05249d22ee876804b5ec7cf87bbfa67fda44f58b3976a5b861002581992c",
       "size_bytes": 599
     },
     {
       "path": "widgets/mail-sidebar/index.html",
-      "sha256": "c3ce1275d2a478f47c8d63b2319f9c9917e7c68edb2724fd6edca2a867945776",
+      "sha256": "05485e5e97d689d2b4f8d14dbb528833b517e3af36f96f4e6dc011cbd5073433",
       "size_bytes": 645
     },
     {

@@ -16,7 +16,10 @@ it.each(['gmail', 'imap_smtp'])('toggles sidebar filters without refetching and 
   vi.resetModules();
   vi.clearAllMocks();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  const accounts = [{ id: 'a', provider, email_address: 'a@example.com', display_name: 'Account A', status: 'connected' }];
+  const accounts = [
+    { id: 'a', provider, email_address: 'a@example.com', display_name: 'Same Name', status: 'connected' },
+    { id: 'b', provider, email_address: 'b@example.com', display_name: 'Same Name', status: 'connected' },
+  ];
   vi.mocked(readMailDisplay).mockResolvedValue({ items: accounts });
   vi.mocked(callBackend).mockImplementation(async (params) => {
     if (params.action === 'threads.sync') {
@@ -37,6 +40,8 @@ it.each(['gmail', 'imap_smtp'])('toggles sidebar filters without refetching and 
   document.body.append(container);
   try {
     await act(async () => { await import('./main'); });
+    expect([...container.querySelectorAll('.mail-account-label > span')].map(node => node.textContent)).toEqual(['a@example.com', 'b@example.com']);
+    expect([...container.querySelectorAll('.mail-account-label > small')].map(node => node.textContent)).toEqual(['Same Name', 'Same Name']);
     const checkboxes = [...container.querySelectorAll<HTMLElement>('[role="checkbox"]')];
     const inbox = checkboxes.find((node) => node.textContent?.includes('All inbox'))!;
     const sent = checkboxes.find((node) => node.textContent?.includes('All sent'))!;
@@ -57,7 +62,7 @@ it.each(['gmail', 'imap_smtp'])('toggles sidebar filters without refetching and 
     expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(displayReads);
     expect(container.querySelector('.mail-sidebar-skeleton')).toBeNull();
 
-    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Sync Account A"]')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Sync a@example.com"]')!.click());
     await vi.waitFor(() => expect(container.textContent).toContain('Account sync completed (40 messages checked).'));
     expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({
       action: 'threads.sync', connection_id: 'a', max_threads: 25,

@@ -166,7 +166,7 @@ describe("calendar viewport helpers", () => {
 
     expect(calendarAccountValue(accountEvents[1])).toBe("calendar")
     expect(calendarAccountOptions(accountEvents)).toEqual([
-      { name: "Ana Work", value: "ana@example.com", accountId: "ana@example.com" },
+      { name: "ana@example.com (Ana Work)", value: "ana@example.com", accountId: "ana@example.com" },
       { name: "Calendar", value: "calendar" },
     ])
   })
@@ -191,8 +191,8 @@ describe("calendar viewport helpers", () => {
       { id: "cal_conn_work", provider: "google", account_id: "ana@example.com", account_label: "Ana Work", status: "connected" },
       { id: "cal_conn_empty", provider: "google", account_id: "empty@example.com", account_label: "Empty", status: "connected" },
     ])).toEqual([
-      { name: "Ana Work", value: "cal_conn_work", accountId: "ana@example.com", connectionId: "cal_conn_work", provider: "google", status: "connected" },
-      { name: "Empty", value: "cal_conn_empty", accountId: "empty@example.com", connectionId: "cal_conn_empty", provider: "google", status: "connected" },
+      { name: "ana@example.com (Ana Work)", value: "cal_conn_work", accountId: "ana@example.com", connectionId: "cal_conn_work", provider: "google", status: "connected" },
+      { name: "empty@example.com (Empty)", value: "cal_conn_empty", accountId: "empty@example.com", connectionId: "cal_conn_empty", provider: "google", status: "connected" },
     ])
     expect(calendarAccountFilterValues(accountEvents[0])).toContain("cal_conn_work")
   })
@@ -226,8 +226,10 @@ describe("calendar viewport helpers", () => {
       externalRefs: {
         calendar_connection_id: "cal_conn_work",
         provider_calendar_id: "primary",
+        calendar_account_label: "Ana Work",
       },
     })
+    expect(eventSourceDetails({ source: "google_calendar", external_refs: options[1].externalRefs }).accountName).toBe("ana@example.com (Ana Work)")
     expect(selectedCalendarSourceValue(googleEvent, options)).toBe("connection:cal_conn_work")
     expect(eventSourceDetails(googleEvent).remoteLink).toBe("https://calendar.google.com/event?eid=abc")
     expect(calendarSourcePatch(googleEvent, "local", options)).toEqual({
@@ -250,7 +252,7 @@ describe("calendar viewport helpers", () => {
       "calendar:cal_conn_work:empty@example.com",
     ])
     expect(withEmptyCalendar[1]).toMatchObject({
-      name: "Ana Work / Empty",
+      name: "ana@example.com (Ana Work) / Empty",
       providerCalendarId: "empty@example.com",
       writable: true,
       externalRefs: {

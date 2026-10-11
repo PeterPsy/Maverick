@@ -15,3 +15,15 @@ it('keeps OAuth attempts out of the account tree and shows the account once comp
   const completed = { ...attempt, account_label: 'other@example.com', status: 'connected' };
   expect(buildAccountGroups([], [completed, existing], []).map((group) => group.id)).toEqual(['calendar', 'work', 'attempt']);
 });
+
+
+it('distinguishes mailboxes with the same display name using email first', () => {
+  const groups = buildAccountGroups([], [
+    { id: 'second', provider: 'google', account_id: 'b@example.com', account_label: 'Same Name', status: 'connected' },
+    { id: 'first', provider: 'google', account_id: 'a@example.com', account_label: 'Same Name', status: 'connected' },
+  ], []);
+  expect(groups.slice(1).map(({ id, name, displayName }) => ({ id, name, displayName }))).toEqual([
+    { id: 'first', name: 'a@example.com', displayName: 'Same Name' },
+    { id: 'second', name: 'b@example.com', displayName: 'Same Name' },
+  ]);
+});

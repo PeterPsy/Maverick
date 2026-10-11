@@ -114,7 +114,7 @@ export function calendarAccountOptions(events: Event[], connections: CalendarCon
     }
     byValue.set(value, compactAccountOption({
       value,
-      name: scalarString(connection.account_label) || accountId || accountLabel(value),
+      name: accountDisplayLabel(accountId, scalarString(connection.account_label), value),
       accountId,
       connectionId,
       provider: scalarString(connection.provider),
@@ -129,7 +129,7 @@ export function calendarAccountOptions(events: Event[], connections: CalendarCon
     if (!byValue.has(value)) {
       byValue.set(value, compactAccountOption({
         value,
-        name: externalAccount.label || accountLabel(value),
+        name: accountDisplayLabel(externalAccount.value, externalAccount.label, value),
         accountId: externalAccount.value,
         connectionId: externalAccount.connectionId,
         provider: externalAccount.provider,
@@ -171,7 +171,7 @@ export function calendarSourceOptions(
     const accessRole = scalarString(defaultCalendar?.access_role)
     const writable = !accessRole || isWritableGoogleAccessRole(accessRole)
     const accountId = scalarString(connection.account_id)
-    const accountName = scalarString(connection.account_label) || accountId || accountLabel(connectionId)
+    const accountName = accountDisplayLabel(accountId, scalarString(connection.account_label), connectionId)
     byValue.set(`connection:${connectionId}`, {
       value: `connection:${connectionId}`,
       name: accountName,
@@ -186,7 +186,7 @@ export function calendarSourceOptions(
       writable,
       externalRefs: {
         calendar_account_id: accountId,
-        calendar_account_label: accountName,
+        calendar_account_label: scalarString(connection?.account_label) || accountId,
         calendar_connection_id: connectionId,
         provider,
         provider_calendar_id: providerCalendarId,
@@ -203,7 +203,7 @@ export function calendarSourceOptions(
     }
     const connection = connections.find((item) => scalarString(item.id) === connectionId)
     const accountId = scalarString(connection?.account_id)
-    const accountName = scalarString(connection?.account_label) || accountId || accountLabel(connectionId)
+    const accountName = accountDisplayLabel(accountId, scalarString(connection?.account_label), connectionId)
     const calendarName = scalarString(calendar.summary) || providerCalendarId
     const accessRole = scalarString(calendar.access_role)
     byValue.set(`calendar:${connectionId}:${providerCalendarId}`, {
@@ -221,7 +221,7 @@ export function calendarSourceOptions(
       externalRefs: {
         provider: scalarString(calendar.provider) || scalarString(connection?.provider) || "google",
         calendar_account_id: accountId,
-        calendar_account_label: accountName,
+        calendar_account_label: scalarString(connection?.account_label) || accountId,
         calendar_connection_id: connectionId,
         provider_calendar_id: providerCalendarId,
         provider_calendar_summary: calendarName,
@@ -305,7 +305,7 @@ export function eventSourceDetails(event: Pick<Event, "source" | "external_refs"
   })
   const accountId = refs.value || scalarString(connection?.account_id)
   const connectionId = refs.connectionId || scalarString(connection?.id)
-  const accountName = refs.label || scalarString(connection?.account_label) || accountId || accountLabel(connectionId)
+  const accountName = accountDisplayLabel(accountId, refs.label || scalarString(connection?.account_label), connectionId)
   const provider = refs.provider || scalarString(connection?.provider) || (scalarString(event.source) === "google_calendar" ? "google" : "")
   const source = scalarString(event.source) || (provider === "google" ? "google_calendar" : "calendar")
   return {
@@ -550,4 +550,8 @@ export function inputDate(date?: Date) {
 
 export function eventDisplayDate(event: Event) {
   return event.all_day && event.all_day_start ? new Date(`${event.all_day_start}T12:00:00`) : event.startTime
+}
+
+function accountDisplayLabel(email: string, name: string, fallback: string) {
+  return email ? email + (name && name !== email ? ` (${name})` : "") : name || accountLabel(fallback)
 }

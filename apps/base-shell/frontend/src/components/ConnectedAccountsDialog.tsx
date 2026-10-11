@@ -78,7 +78,7 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
       {!data && !error && <p role="status">Loading accounts…</p>}
       {data && <>
         {data.items.map(account => <section key={account.account_id} className="bs-connected-accounts__account">
-          <div><strong>{account.display_name}</strong><small>{account.email}</small><small>{account.status === "connected"
+          <div><strong>{account.email || account.display_name}</strong>{account.display_name && account.display_name !== account.email && <small>{account.display_name}</small>}<small>{account.status === "connected"
             ? (account.services.length ? account.services.join(" · ") : "Google sign-in only") : "Reconnect required"}</small></div>
           <div className="bs-connected-accounts__actions">
             <label className="bs-connected-accounts__workspace-access">

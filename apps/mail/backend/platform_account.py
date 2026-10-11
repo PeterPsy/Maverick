@@ -4,14 +4,15 @@ import json
 from pathlib import Path
 from core.app_sdk.account_state import migrate_account_state
 from database import connect, ensure_schema, now_timestamp
-from platform_account_migration import migrate_state
+from platform_account_migration import migrate_state, migrate_workspace_state
 
 
 def attach_platform_account(payload):
     if "external_accounts" not in payload:
         return
     root = Path(payload["data_root"])
-    migrate_account_state(payload, migrate_state)
+    migrate_account_state(payload, migrate_state,
+        migrate_workspace=lambda source, destination: migrate_workspace_state(source, destination, payload["workspace_id"]))
     ensure_schema(root)
     now = now_timestamp()
     projected = set()

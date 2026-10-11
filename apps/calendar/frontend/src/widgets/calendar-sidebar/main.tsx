@@ -199,7 +199,10 @@ function CalendarTreeNodeView({ node, level, isLast, onSelect, onSyncConnection,
       >
         <TreeExpander hasChildren={hasChildren} />
         <TreeIcon hasChildren={hasChildren} icon={icon} />
-        <TreeLabel title={node.title}>{node.loading ? `${label}...` : label}</TreeLabel>
+        <TreeLabel title={node.title} className={node.type === 'account' ? 'calendar-account-label' : undefined}>
+          <span>{node.loading ? `${label}...` : label}</span>
+          {node.type === 'account' && node.account?.displayName ? <small>{node.account.displayName}</small> : null}
+        </TreeLabel>
         {node.type === 'account' && node.account?.connection ? (
           <button
             aria-label={`Sync ${node.label}`}

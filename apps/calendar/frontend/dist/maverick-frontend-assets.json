@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "4cf5b4ed6d68f3d57e12f50b24fb2b10470cc3d599518e27cb8311706e5f0b2f",
+  "build_id": "ff6a924f39a799028388ff822c75eef263a4beb22296e034343f3242d6720508",
   "entrypoints": [
     "index.html",
     "widgets/calendar-sidebar/index.html",
@@ -8,9 +8,14 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-Bq4bfiXd.js",
-      "sha256": "076152cb62fca49bc93f573873744ecbb6752a04a25f63a59edfb7d8b87a05a3",
-      "size_bytes": 140509
+      "path": "assets/app-6siU8Vlz.js",
+      "sha256": "e98c276a88ac1bad779862968d28e935a4058aca394f7fd3c573d33b63804d41",
+      "size_bytes": 216442
+    },
+    {
+      "path": "assets/app-C-Ym-XG9.js",
+      "sha256": "b508194f73978da66b7d3eb7914b5dc794a2c3a9c403e16bec492809f2a011c2",
+      "size_bytes": 140770
     },
     {
       "path": "assets/app-C9-BLuM1.css",
@@ -23,24 +28,19 @@
       "size_bytes": 3780
     },
     {
-      "path": "assets/app-kz7r1aRV.js",
-      "sha256": "163bd6ea4058282c79b94a5f512dd1847e39b83cf924d75adb153f68705af4a3",
-      "size_bytes": 216442
-    },
-    {
       "path": "assets/index-BkWb-iKo.css",
       "sha256": "6843641853683b06f02904d8a241232163451b72cfdf1a1364ccaf2a5a65cdca",
       "size_bytes": 2248
     },
     {
-      "path": "assets/index-xz4v3uo8.css",
-      "sha256": "fcdd598f83a9ff6c4f2c309e91ce9a084eeb7fe6e2be7a141d90b2af0c10dccd",
-      "size_bytes": 8632
+      "path": "assets/index-uhPc8r4p.css",
+      "sha256": "7616fef2c007ce65f886beea2383d0e2512c570f6e928d88ec216c5f6a309210",
+      "size_bytes": 8902
     },
     {
-      "path": "assets/refresh-cw-gVHa-OJO.js",
-      "sha256": "6a443770f3ac119636ad76b245446105056ed9a4112edaecf3cc3c91fa325df4",
-      "size_bytes": 14385
+      "path": "assets/refresh-cw-D4I46dW1.js",
+      "sha256": "87344d8d8774b8f8175b10530d876b579344e19ab257778a463ed8be8bd0aaa8",
+      "size_bytes": 14489
     },
     {
       "path": "assets/useCalendarPreferences-CtStjOPo.js",
@@ -51,12 +51,12 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "69f23b9790f3648763e0f0979d5bf4cff1709eedeba3a50df44315e5a381a2a1",
+      "sha256": "f5677b6397e31cf0bf121e8eafc30fd59960efd17da3e6bf9fe9e93cfff814fc",
       "size_bytes": 619
     },
     {
       "path": "widgets/calendar-sidebar/index.html",
-      "sha256": "de8ea8578913884082b6a7dddb65aa444c498ac18559b805679d0cd735ad6816",
+      "sha256": "a78e379f154e4204ca2c1b3eed7bee0147e1c7e5a05e17e9e9942b3a0dc90aa3",
       "size_bytes": 638
     },
     {

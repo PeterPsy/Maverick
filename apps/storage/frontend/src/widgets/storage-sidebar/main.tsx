@@ -76,6 +76,7 @@ type ViewFilterPayload = {
 };
 
 type FolderTreeNode = {
+  accountDisplayName?: string;
   children: FolderTreeNode[];
   connectionId?: string;
   displayPath?: string;
@@ -294,6 +295,7 @@ function buildDriveTreeNodes(connections: DriveConnection[], cache: DriveChildre
         error: cached?.error,
         id: nodeId,
         label: driveConnectionLabel(connection),
+        accountDisplayName: connection.display_name && connection.display_name !== driveConnectionLabel(connection) ? connection.display_name : undefined,
         lazy: status === 'connected',
         loading: cached?.loading,
         provider: 'google_drive',
@@ -1270,7 +1272,10 @@ function FolderTreeNodeView({ activeOperation, ancestors, dropTarget, node, leve
           hasChildren={true}
           icon={folderTreeIcon(node)}
         />
-        <TreeLabel title={node.error || node.workspaceRelativePath}>{node.loading ? `${label}...` : label}</TreeLabel>
+        <TreeLabel title={node.error || node.workspaceRelativePath} className={isDriveAccount ? 'storage-account-label' : undefined}>
+          <span>{node.loading ? `${label}...` : label}</span>
+          {isDriveAccount && node.accountDisplayName ? <small>{node.accountDisplayName}</small> : null}
+        </TreeLabel>
         {isStorageRoot || isDriveAccount ? (
           <span className="storage-folder-tree-actions">
             <button

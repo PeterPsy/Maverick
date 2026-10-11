@@ -62,7 +62,15 @@ never issues a global EXPUNGE or CLOSE on a writable folder.
 
 The app owns `workspaces/<workspace_id>/data/mail/`.
 
-Primary data lives in:
+When Core projects personal Google accounts, the active database is under
+`data/mail/connected-accounts/<user>/shared/`. The one-time app-owned importer
+retains existing workspace IMAP/SMTP mailboxes and their cache/drafts in this
+store, with unchanged connection IDs and existing resource-scoped Vault grants.
+It excludes shared Google data, credential values and pending send approvals.
+The original workspace database remains untouched. Account rows show email
+first and the display name below; sender labels use the same email-first order.
+
+Without a personal projection, primary data lives in:
 
 ```text
 data/mail/mail.sqlite

@@ -9,6 +9,7 @@ import { useMailList } from './useMailList';
 import { MailToolbar } from './MailToolbar';
 import { mergeThreadState, threadScopeKey } from './threadUpdates';
 import { DraftReader } from './DraftReader';
+import { accountLabel as connectionLabel } from './accountLabels';
 import { MailHtmlFrame } from './MailHtmlFrame';
 import { filterThreadsByMailboxScopes } from './threadFilters';
 import { mailboxScopeIdsForConnections } from './mailboxSelection';
@@ -185,10 +186,6 @@ function addressLabel(address?: MailAddress | null) {
   const name = String(address?.name || '').trim();
   const email = String(address?.email || '').trim();
   return name || email || 'Mail';
-}
-
-function connectionLabel(connection?: MailConnection | null) {
-  return String(connection?.display_name || connection?.email_address || '').trim() || 'Mail account';
 }
 
 function isConnectionParticipant(participant: MailAddress, connection?: MailConnection | null) {

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import type { MailAddress, MailConnection, MailDraft } from './api';
+import { accountLabel } from './accountLabels';
 
 function formatAddress(address: MailAddress) {
   return address.name ? `${address.name} <${address.email}>` : address.email;
@@ -27,7 +28,7 @@ export function DraftReader({
   draft: MailDraft;
   onClose: () => void;
 }) {
-  const sender = connection?.display_name || connection?.email_address || 'Mail account';
+  const sender = accountLabel(connection);
   const updatedAt = draft.updated_at ? new Date(draft.updated_at).toLocaleString() : '';
   const delivery = deliveryCopy[draft.status] || deliveryCopy.unknown;
   const accepted = draft.send_result?.accepted_recipients || [];

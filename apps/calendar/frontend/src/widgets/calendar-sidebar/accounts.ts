@@ -4,6 +4,7 @@ import { calendarAccountConnections, calendarAccountFilterValues } from '../../c
 export type AccountGroup = {
   id: string;
   name: string;
+  displayName?: string;
   provider: 'local' | string;
   status: string;
   connection?: CalendarConnection;
@@ -30,6 +31,7 @@ export function buildAccountGroups(events: Event[], connections: CalendarConnect
       groups.push({
         id: accountId,
         name: accountName(connection),
+        displayName: connection.account_label && connection.account_label !== accountName(connection) ? connection.account_label : undefined,
         provider: connection.provider || 'google',
         status: connection.status || 'connected',
         connection,
@@ -41,5 +43,5 @@ export function buildAccountGroups(events: Event[], connections: CalendarConnect
 }
 
 function accountName(connection: CalendarConnection) {
-  return connection.account_label || connection.account_id || connection.id || 'Google Calendar';
+  return connection.account_id || connection.account_label || connection.id || 'Google Calendar';
 }

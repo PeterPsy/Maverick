@@ -64,7 +64,7 @@ def prepare_imap_smtp(data_root: Path, payload: dict[str, object]) -> dict[str, 
                 now,
             ),
         )
-        _upsert_credential_metadata(db, connection_id, workspace_id, now)
+        upsert_credential_metadata(db, connection_id, workspace_id, now)
     audit(data_root, "imap_smtp.prepare", "mail_connection", connection_id, {"provider": IMAP_SMTP_PROVIDER})
     return {
         "status": get_connection(data_root, connection_id)["status"],
@@ -106,7 +106,7 @@ def update_imap_smtp(data_root: Path, payload: dict[str, object]) -> dict[str, o
                 connection_id,
             ),
         )
-        _upsert_credential_metadata(db, connection_id, workspace_id, now)
+        upsert_credential_metadata(db, connection_id, workspace_id, now)
     audit(data_root, "imap_smtp.update", "mail_connection", connection_id, {"provider": IMAP_SMTP_PROVIDER})
     return {"status": next_status, "connection_id": connection_id, "connection": get_connection(data_root, connection_id)}
 
@@ -174,7 +174,7 @@ def secret_resource_inventory(data_root: Path) -> dict[str, object]:
     return {"resources": resources}
 
 
-def _upsert_credential_metadata(db, connection_id: str, workspace_id: str, now: str) -> None:
+def upsert_credential_metadata(db, connection_id: str, workspace_id: str, now: str) -> None:
     secret_ref = _scoped_secret_ref(workspace_id, connection_id)
     grant_id = _scoped_grant_id(workspace_id, connection_id)
     db.execute(

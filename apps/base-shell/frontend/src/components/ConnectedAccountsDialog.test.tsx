@@ -44,6 +44,14 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("workspace Google account selection", () => {
+  it("shows email before an identical display name for each account", async () => {
+    data.items.forEach(account => { account.display_name = "Same Name"; });
+    await render();
+    const rows = [...host.querySelectorAll(".bs-connected-accounts__account")];
+    expect(rows.map(row => row.querySelector("strong")?.textContent)).toEqual(["a@example.com", "b@example.com"]);
+    expect(rows.map(row => row.querySelector("small")?.textContent)).toEqual(["Same Name", "Same Name"]);
+  });
+
   it("adds another account without replacing the workspace default", async () => {
     await render();
     expect(checkbox("a@example.com").checked).toBe(true);

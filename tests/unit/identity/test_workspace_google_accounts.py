@@ -118,9 +118,10 @@ class WorkspaceGoogleAccountsTests(unittest.TestCase):
             parsed = parse_app_contract_file(ROOT / "apps/calendar")
             invocation = AccountInvocation(identity_store=self.f.identity, workspace_store=self.f.workspace,
                 secret_store=self.f.secrets, app_store=None, binding=SimpleNamespace(workspace_id="default", app_id="calendar", data_root=root),
-                parsed=parsed, actor_user_id=self.f.user.user_id, payload={"data_root": root}, timeout_seconds=30)
+                parsed=parsed, actor_user_id=self.f.user.user_id, payload={"data_root": root, "workspace_data_root": "/untrusted-source"}, timeout_seconds=30)
             self.addCleanup(invocation.close)
             payload = invocation.start()
+            self.assertEqual(payload["workspace_data_root"], root)
             forwarded = []
             for broker in invocation.brokers:
                 broker.sender = lambda request: (forwarded.append(request.get_header("Authorization")) or (200, {}, b'{}'))

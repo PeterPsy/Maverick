@@ -310,7 +310,7 @@ describe('Live Mail sidebar filtering', () => {
     await mount();
     await navigate({ mailbox_scopes: 'all:sent,all:inbox' });
     const incoming = [...container.querySelectorAll('.thread-row')].find((row) => row.textContent?.includes('A inbox'))!;
-    expect(incoming.querySelector('.thread-route')?.getAttribute('title')).toBe('sender@example.com to a');
+    expect(incoming.querySelector('.thread-route')?.getAttribute('title')).toBe('sender@example.com to a@example.com (a)');
   });
 
   it('honors a direct empty-scope URL instead of restoring the default Inbox', async () => {

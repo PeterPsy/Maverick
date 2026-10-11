@@ -1,5 +1,6 @@
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { readMailDisplay } from '../../pwaCache';
+import { accountEmail as accountName, accountDisplayName } from '../../accountLabels';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LogOut, Mail, RefreshCw, Square, SquareCheck, Trash2 } from 'lucide-react';
@@ -339,7 +340,7 @@ function MailSidebarWidget() {
           connection_id: targetConnection.id,
           ...noSecretRequest()
         });
-        const removedLabel = payload.delete?.display_name || payload.delete?.email_address || targetConnection.display_name || targetConnection.email_address;
+        const removedLabel = payload.delete?.email_address || targetConnection.email_address || payload.delete?.display_name || targetConnection.display_name;
         setNotice(`${removedLabel} removed.`);
         await refresh();
         return;
@@ -477,7 +478,10 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
       >
         <TreeExpander hasChildren={hasChildren} />
         <TreeIcon hasChildren={hasChildren} icon={icon} />
-        <TreeLabel title={node.title}>{label}</TreeLabel>
+        <TreeLabel title={node.title} className={node.type === 'account' ? 'mail-account-label' : undefined}>
+          <span>{label}</span>
+          {node.type === 'account' && accountDisplayName(node.account) ? <small>{accountDisplayName(node.account)}</small> : null}
+        </TreeLabel>
         {node.type === 'mailbox' && displayCount > 0 ? <b className="mail-folder-tree-count">{displayCount}</b> : null}
         {node.type === 'mailbox' && displayCount === 0 ? (
           <span className="mail-folder-tree-meta">{node.mailbox === 'inbox' ? '0 unread' : countLabel(0)}</span>
@@ -638,10 +642,6 @@ function aggregateMailboxIdentity(folder: string) {
 
 function mailboxIdentity(connectionId: string, folder: string) {
   return `mailbox:${connectionId}:${folder}`;
-}
-
-function accountName(connection: MailConnection) {
-  return connection.display_name || connection.email_address || connection.id || 'Gmail';
 }
 
 function aggregateMailboxCount(

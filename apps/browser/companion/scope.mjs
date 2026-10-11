@@ -74,9 +74,12 @@ export function sameConnectorFrame(sender, binding) {
 
 export function sameConnector(tab, binding) {
   try {
-    const url = connectorUrl(tab.url);
-    return tab.id === binding.connectorTabId && url.origin === binding.origin && url.pathname === binding.path
-      && new URL(tab.url).searchParams.get("connector") === "1";
+    const url = new URL(tab.url);
+    // The native shell retains Browser's exact frame while its visible app/params
+    // change. Launch parameters enable setup; they do not grant command authority.
+    const shellRoute = url.pathname === "/" || /^\/app(?:\/|$)/u.test(url.pathname);
+    return tab.id === binding.connectorTabId && binding.path === "/app/browser"
+      && url.origin === binding.origin && !url.username && !url.password && shellRoute;
   } catch { return false; }
 }
 

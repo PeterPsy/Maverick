@@ -78,7 +78,7 @@ try {
   await wait(async()=>{
     const page=context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));if(page)return page;
     const status=await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"");
-    if(status && !["Tab shared", "Opening your Browser"].some(prefix=>status.startsWith(prefix)))throw new Error(`share_failed: ${status}`);
+    if(status && !["Tab selected", "Opening your Browser"].some(prefix=>status.startsWith(prefix)))throw new Error(`share_failed: ${status}`);
     return context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));
   }).catch(async error=>{
     console.error(JSON.stringify({phase:"sharing",popup_status:await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"closed"),worker_state:await worker.evaluate(async()=>({contexts:await chrome.runtime.getContexts({}),binding:await chrome.storage.session.get("binding")}))}));
@@ -204,16 +204,34 @@ try {
   await agent.bringToFront();
   const agentPopup=await openActionPopup(browser,extensionId,agent.url());
   assert.equal(await agentPopup.evaluate("document.querySelector('#share').textContent"),"Connect agent tab");
+  assert.equal(await agentPopup.evaluate("document.querySelector('#reuse').checked"),true);
+  const reused=connectorWindow.waitForEvent('framenavigated',{predicate:frame=>frame === connectorWindow.mainFrame()});
   await agentPopup.evaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
-  const agentWindow=await wait(()=>context.pages().find(page=>page !== connectorWindow && page.url().startsWith(`${origin}/app/browser`)));
+  await reused;
+  const agentWindow=connectorWindow;
+  assert.equal(context.pages().filter(page=>page.url().startsWith(`${origin}/app/browser`)).length,1,'Sharing a new agent tab must reuse the existing Browser bridge.');
   const agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
   await agentFrame.waitForFunction(()=>document.querySelector('#connect') && !document.querySelector('#connect').disabled);
   await agentFrame.locator('#connect').click();
   const agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.sharing_mode === 'agent_tab'));
   assert.equal(agentConnection.url,"");assert.deepEqual(agentConnection.allowed_platforms,Object.keys(platforms));
+  // Native rail navigation can remove connector=1 and hide the retained Browser
+  // frame. The authorized shell tab/document remains the bridge in both cases.
+  await agentWindow.evaluate(()=>history.replaceState({},"","/app/browser"));
+  assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,"");
+  await agentWindow.evaluate(frameOrigin=>{
+    history.pushState({},"","/app/chat");
+    const frame=document.querySelector('iframe');frame.style.display='none';
+    frame.contentWindow.postMessage({type:'maverick.app.visibility-changed',app_id:'browser',visible:false},frameOrigin);
+  },frameOrigin);
   assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,"");
   await run('navigate',{url:'https://x.com/home/'},agentConnection);
   assert((await run('content.read',{},agentConnection)).text.includes('X research fixture'));
+  await agentWindow.evaluate(frameOrigin=>{
+    history.pushState({},"","/app/browser");
+    const frame=document.querySelector('iframe');frame.style.display='';
+    frame.contentWindow.postMessage({type:'maverick.app.visibility-changed',app_id:'browser',visible:true},frameOrigin);
+  },frameOrigin);
   const agentShot=await run('screenshot',{},agentConnection);
   assert(Buffer.from(agentShot.base64,'base64').subarray(0,3).equals(Buffer.from([255,216,255])));
   writeFileSync(path.join(tmpdir(),'maverick-agent-x-screenshot.jpg'),Buffer.from(agentShot.base64,'base64'));
@@ -231,6 +249,11 @@ try {
   assert((await mcp('connectors_status')).connections.some(c=>c.session_id === agentConnection.session_id && c.sharing_mode === 'agent_tab'));
   await agent.goto('https://unapproved-fixture.test/');
   await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id)?.status === 'revoked');
+  const stopped=(await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id);
+  assert(stopped.stop_reason && stopped.stop_reason !== 'user_stopped','Automatic revocation must retain a diagnostic cause.');
+  const stoppedMessage=await agentFrame.locator('#status').textContent();
+  assert.match(stoppedMessage,/Sharing stopped:/u);
+  console.log(JSON.stringify({phase:'scope-stopped',reason:stopped.stop_reason,message:stoppedMessage}));
   console.log(JSON.stringify({status:"passed",real_chromium:true,fresh_chrome_login:true,exact_connector_document:true,anonymous_download_verified:true,...mediaSummary,empty_agent_tab:true,cross_platform_navigation:true,cross_platform_screenshot:true,agent_scope_revocation:true,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,connectors_mcp_workflow:true,connectors_frontend_absent:true,scope_revocation:true,browser_desktop_mobile_layout:true,instagram_access_verified:false}));
 }finally {
   if(context)await context.close();

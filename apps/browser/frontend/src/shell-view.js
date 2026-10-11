@@ -25,9 +25,9 @@ export function mountShell(connectorMode) {
         <div class="setup-body">
           <p>A dedicated agent tab can navigate between Instagram, X, Reddit, Facebook, LinkedIn and YouTube. An existing shared tab can navigate throughout its selected platform. Sign in to the platforms in your usual Chrome profile.</p>
           <ol class="setup-steps">
-            <li><strong>Install Companion 0.5.0</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. After an update, replace the extracted files and reload the extension.</p></li>
+            <li><strong>Install Companion 0.5.2</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. After an update, replace the extracted files and reload the extension.</p></li>
             <li><strong>Choose an agent tab or an existing page</strong><p>In Companion, choose Open agent tab. On that new tab, click Companion again, paste this connector address and choose Connect agent tab. To share an existing platform page instead, open Companion on it and choose Share this tab. You do not need to select a profile first.</p></li>
-            <li><strong>Use the window it opens</strong><p>Sign in to Maverick there if asked. When your selected tab appears below, press Connect selected tab. Keep that window open; opening this address manually does not share a tab.</p></li>
+            <li><strong>Connect in the Browser bridge</strong><p>Companion reuses an open Browser tab in the same Chrome profile, or opens a connection window. Desktop apps and other browser profiles need that separate bridge. Sign in there if asked, then press Connect selected tab. Keep the bridge and the shared tab open; the agent navigates the shared tab.</p></li>
           </ol>
           <label for="url">Connector address</label>
           <div class="copy"><input id="url" readonly spellcheck="false"><button id="copy" class="secondary">Copy address</button></div>

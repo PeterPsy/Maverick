@@ -30,11 +30,11 @@ share.onclick = async () => {
     if (selected.allowed_platforms) {
       if (tab?.url !== chrome.runtime.getURL("agent-tab.html")) throw new Error("active_tab_unavailable");
     } else platformUrl(tab?.url, platformForUrl(selected.url));
-    status.textContent = "Opening your Browser connection window…";
-    const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: tab.id, url: url.href, agentTab: Boolean(selected.allowed_platforms)});
-    if (result?.error) throw new Error(result.detail || result.error);
+    status.textContent = "Opening your Browser connection…";
     await chrome.storage.local.set({connectorUrl: url.href});
-    status.textContent = "Tab shared. Sign in to Maverick in the Chrome window that opened, then connect the selected tab.";
+    const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: tab.id, url: url.href, agentTab: Boolean(selected.allowed_platforms), reuseConnector: document.querySelector("#reuse").checked});
+    if (result?.error) throw new Error(result.detail || result.error);
+    status.textContent = "Tab selected. In the Browser tab that opened or was reused, press Connect selected tab. Keep it and the shared tab open.";
   } catch (error) { status.textContent = setupError(error); }
   finally { share.disabled = false; }
 };

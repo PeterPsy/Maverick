@@ -7,6 +7,7 @@ import {createRecords, label, timestamp} from "./records.js";
 import {showResult} from "./result-view.js";
 import {createLab} from "./lab.js";
 import {createPlatformState} from "./platform-state.js";
+import {connectionDetail} from "./sharing-state.js";
 import companionArchiveUrl from "../package/maverick-browser-companion.zip?url";
 
 const launchParams = new URLSearchParams(location.search);
@@ -50,7 +51,7 @@ function render() {
   connections(overview.connections.map(connection => ({
     id: connection.session_id, title: connection.title || connection.display_name,
     status: connection.status,
-    detail: connection.sharing_mode === "agent_tab" ? `Agent tab · ${connection.allowed_platforms.join(", ")} · ${connection.url || "Ready for agent navigation"}` : `${connection.platform || "Chrome"} · ${connection.url || "Waiting for Chrome to share a page"}`,
+    detail: connectionDetail(connection),
     action: ["connecting", "connected", "offline"].includes(connection.status) ? {
       label: "Stop sharing", run: async () => {
         await request({action: "companion.disconnect", session_id: connection.session_id});
@@ -114,7 +115,7 @@ function checkSelectedTab(retry = false) {
   checking = bridge("status", undefined, 2500).then(shared => {
     $("#connect").disabled = false;
     $("#error").hidden = true;
-    $("#status").textContent = `Selected tab: ${shared.title || shared.url}. Ready to connect.`;
+    $("#status").textContent = `Selected tab: ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}. Ready to connect.`;
   }).catch(error => { $("#status").textContent = error.message; })
     .finally(() => { checking = null; if (checkAgain) { checkAgain = false; void checkSelectedTab(); } });
   return checking;

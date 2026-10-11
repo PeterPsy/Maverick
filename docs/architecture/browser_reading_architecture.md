@@ -26,7 +26,14 @@ Platform home pages are approved content routes. Sharing a profile never binds
 navigation to that profile.
 The popup requests optional permissions for the selected platform or dedicated
 tab’s approved platforms, chosen Maverick origin and its isolated app-frame namespace, then opens the stable
-`/app/browser?connector=1` shell route in a dedicated connector window. Chrome 120
+`/app/browser?connector=1` shell route. Companion 0.5.2 defaults to reusing the most
+recent Browser tab at the exact chosen Maverick origin in the same Chrome profile,
+with a fresh document for the new binding. It rechecks the candidate before
+navigation, excludes the source tab and never redirects another app. The popup
+can disable reuse. A dedicated connector window remains the fallback when no
+matching Browser tab exists; desktop applications and other browser profiles
+cannot be selected through Chrome's tabs API. The shared agent/platform tab is
+the navigation target; Browser is the authenticated bridge. Chrome 120
 or later is required. The connector uses ordinary Core-hosted backend calls and a
 scoped content-script channel. Passwords, cookies, browser history, raw CDP,
 selectors and arbitrary caller scripts are never exposed to agent tools.
@@ -46,7 +53,7 @@ Browser Lab with public-page reading, health and individual session closure.
 The existing shell/App Store `language` glyph owns Browser's native icon
 presentation; no Browser-specific platform rendering branch or raster override
 is added. The app header uses an inline vector and the favicon an app-owned SVG.
-Companion 0.5.0 packages its reproducible ZIP as a Vite-imported, hashed public
+Companion 0.5.2 packages its reproducible ZIP as a Vite-imported, hashed public
 asset under `/apps/browser/assets/`, with immutable manifest/cache metadata.
 Download uses the platform origin and requires no login or app-frame cookie.
 The copied connector address uses the stable platform shell route, never an
@@ -57,8 +64,14 @@ Native `maverick.app.navigate` parameters enable Connect controls in that frame.
 Companion binds the connector tab and probes only app identity across its frames.
 Exactly one Core-generated Browser frame with the chosen platform origin is
 required; commands then require that frame's exact origin, frame id and document
-id. A shell observer retries after sign-in and iframe replacement, with the
-30-second alarm as a wake-up fallback. Other tabs, app frames, shell documents
+id. The selected shell tab can navigate between Maverick apps while retaining its
+bound Browser document. Removing the launch parameter `connector=1` is also
+allowed. That parameter enables setup UI; authority comes from the selected
+tab, exact Browser origin/frame/document and sharing generation. Other shell
+documents and non-shell/API routes remain outside the bridge. Full document
+reload still requires a fresh user connection. A shell observer retries after
+sign-in and iframe replacement, with the 30-second alarm as a wake-up fallback.
+Other tabs, app frames, shell documents
 and replaced connector documents cannot issue commands. Installations whose
 app-frame domain differs from the platform host retain it in `frame_domain`.
 The extension popup binds the active tab when opened and shows its title and
@@ -86,9 +99,17 @@ bundle loading; `maverick.shell.theme-changed` events update the effective theme
 Visible views refresh at 3 seconds for pending operations, 10 seconds for active
 Chrome connections and 30 seconds when idle; Lab uses 30 seconds. Chrome transport
 continues its independent heartbeat while management is hidden, renewing its
-app-frame authentication at most once per minute. Setup is single-flight and
+app-frame authentication at most once per minute. Renewal has a five-second
+timeout and runs independently of the command loop; a hung renewal cannot prevent
+subsequent heartbeats. The connector status shows the installed Companion version.
+Setup is single-flight and
 stopping it fences and revokes a late lease. Automatic revocation reports the
 stopped state to the UI so reconnect controls become available again.
+The stopped report retains the original error instead of replacing it with a
+generic message. A bounded diagnostic reason is persisted on the owned lease and
+exposed to management/agents; repeated stops preserve the first cause. Versioned
+SQLite migration adds that field without changing existing scopes. Empty stopped
+or offline tabs never advertise readiness for navigation.
 The progress heartbeat captures the active command before awaiting its status.
 An `operation_not_running` race cancels/drains that task without revoking the
 connection or cancelling unrelated queued work. Bridge scope failures revoke on
@@ -107,8 +128,8 @@ shows sample times, captured duration/audio and Storage links for saved frames;
 it does not request another app's protected media routes. Collections expose
 items, per-page progress, stop reasons and coverage independently of raw JSON.
 
-Management verification includes 79 Python tests (including the built document
-and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 45 Node
+Management verification includes 81 Python tests (including the built document
+and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 48 Node
 tests, an offline Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
 public-page form, 320/390px layout, image/video/collection rendering and blob
 cleanup), a cross-origin shell fixture with platform-served bundles, a protected
@@ -149,6 +170,18 @@ audio. Leaving approved platforms revoked it. Mounted authenticated inspection
 confirmed the new setup guide and readiness controls; an anonymous download
 returned 200 and matched the generated 0.5.0 archive byte for byte.
 The Companion fixture does not establish access to a real authenticated profile.
+The 0.5.2 correction adds actor-owned stop diagnostics, migration from both earlier
+schemas, exact-origin Browser-tab reuse and a regression for a hung authentication
+renewal. The Chromium fixture verifies reuse without another Maverick window,
+removal of the connector launch parameter and command delivery while the selected
+shell navigates to Chat and hides its retained Browser document. Native mounted
+inspection confirmed that the Browser rail action removes the launch parameter,
+the updated stopped/offline guidance and the 0.5.2 setup/download. The public ZIP
+returned 200 and matched the generated package. Live human-owned Chrome checks
+observed an extension-unavailable stop and a later 0.5.1 heartbeat lapse; the tab
+probe stayed queued and was cancelled without revoking the human's connection.
+Those failed live probes are not successful page observations. The final release
+still needs a fresh human connection before live platform access can be confirmed.
 
 ## Ownership, transport and queues
 

@@ -21,6 +21,8 @@ test("Connector is restricted to the selected secure Browser window",()=>{
   assert.equal(connectorUrl("https://maverick.test/app/browser?secret=discard").search,"?connector=1");
   const b={connectorTabId:10,origin:url.origin,path:url.pathname};
   assert(sameConnector({id:10,url:url.href},b));assert(!sameConnector({id:11,url:url.href},b));assert(!sameConnector({id:10,url:"https://evil.test/app/browser?connector=1"},b));
+  for (const path of ["/app/browser", "/app/chat", "/app/storage/folder", "/"]) assert(sameConnector({id:10,url:`${url.origin}${path}`},b), `Shell navigation must retain the bridge: ${path}`);
+  for (const path of ["/apps/browser/", "/api/apps/browser/backend", "/login"]) assert(!sameConnector({id:10,url:`${url.origin}${path}`},b));
   for(const url of ["https://maverick.test/apps/browser/?connector=1","https://maverick.test/apps/chat/","http://maverick.test/app/browser","https://user:pass@maverick.test/app/browser"])assert.throws(()=>connectorUrl(url));
 });
 test("Connector commands require the exact isolated Browser document in the selected shell window",()=>{
@@ -30,6 +32,7 @@ test("Connector commands require the exact isolated Browser document in the sele
   const b={connectorTabId:10,origin:url.origin,path:url.pathname,connectorFrameId:3,connectorDocumentId:"fresh-document",connectorFrameOrigin:new URL(frameUrl).origin};
   const sender={tab:{id:10,url:url.href},url:frameUrl,frameId:3,documentId:"fresh-document"};
   assert(sameConnectorFrame(sender,b));
+  assert(sameConnectorFrame({...sender,tab:{id:10,url:`${url.origin}/app/chat`}},b));
   for(const change of [{frameId:0},{documentId:"old-document"},{url:frameUrl.replace("browser/","chat/")},{tab:{id:11,url:url.href}},{url:frameUrl.replace("maverick.test","evil.test")}])assert(!sameConnectorFrame({...sender,...change},b));
   assert(!connectorFrameUrl("https://maverick.test/apps/browser/",url.origin));
 });

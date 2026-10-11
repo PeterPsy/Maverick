@@ -77,7 +77,7 @@ class BrowserCompanionTests(unittest.TestCase):
     def test_existing_connection_database_preserves_platform_scope_during_migration(self):
         import sqlite3
         from companion_store import SCHEMA
-        old = SCHEMA.replace(",\n allowed_platforms_json TEXT NOT NULL DEFAULT '[]'", "")
+        old = SCHEMA.replace(",\n allowed_platforms_json TEXT NOT NULL DEFAULT '[]'", "").replace(",\n stop_reason TEXT NOT NULL DEFAULT ''", "")
         with closing(sqlite3.connect(self.root / "companion.sqlite3")) as db:
             db.executescript(old)
             db.execute("INSERT INTO connections VALUES(?,?,?,?,?,?,?,?,?,?,?)", ("chrome-existing", "default", "alice", "Existing", "hashed", "connected", time.time(), time.time(), time.time()+120, "https://www.instagram.com/", "Instagram"))
@@ -86,6 +86,32 @@ class BrowserCompanionTests(unittest.TestCase):
         self.assertEqual(overview["connections"][0]["sharing_mode"], "platform")
         self.assertEqual(overview["connections"][0]["allowed_platforms"], ["instagram"])
         self.assertEqual(self.call("navigate", session_id="chrome-existing", url="https://www.youtube.com/")[0], 400)
+        self.assertIsNone(overview["connections"][0]["stop_reason"])
+
+    def test_stop_cause_is_bounded_actor_owned_and_preserved_on_repeated_stop(self):
+        credentials = self.sharing()
+        for invalid in ["secret-or-arbitrary-detail", {"error":"sharing_revoked"}, None]:
+            self.assertEqual(self.call("companion.disconnect", session_id=credentials["session_id"], reason=invalid)[0], 400)
+        self.assertEqual(handle_action(self.root, {"action":"companion.disconnect", "session_id":credentials["session_id"], "reason":"extension_unavailable"}, workspace_id="default", user_id="bob", surface="backend")[0], 404)
+        self.assertEqual(self.call("companion.disconnect", session_id=credentials["session_id"], reason="extension_unavailable")[0], 200)
+        self.call("companion.disconnect", session_id=credentials["session_id"])
+        _, overview = self.call("companion.overview")
+        self.assertEqual(overview["connections"][0]["stop_reason"], "extension_unavailable")
+        self.assertEqual(overview["connections"][0]["status"], "revoked")
+
+    def test_agent_tab_v1_migration_preserves_approved_platforms_and_adds_stop_cause(self):
+        import sqlite3
+        from companion_store import SCHEMA
+        with closing(sqlite3.connect(self.root / "companion.sqlite3")) as db:
+            db.executescript(SCHEMA.replace(",\n stop_reason TEXT NOT NULL DEFAULT ''", ""))
+            db.execute("PRAGMA user_version=1")
+            db.execute("INSERT INTO connections VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", ("chrome-existing", "default", "alice", "Agent", "hashed", "connected", time.time(), time.time(), time.time()+120, "", "Agent", '["instagram","youtube"]'))
+            db.commit()
+        _, overview = self.call("companion.overview")
+        self.assertEqual(overview["connections"][0]["allowed_platforms"], ["instagram", "youtube"])
+        self.assertIsNone(overview["connections"][0]["stop_reason"])
+        with database(self.root) as db:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
 
     def media_completion(self):
         credentials = self.sharing()

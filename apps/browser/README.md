@@ -8,7 +8,7 @@ proxy, hosted-browser or remote transcription service is used.
 
 ## Connect a platform tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.5.0,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.5.2,
 then load its folder with Chrome's “Load unpacked” developer-mode action. Copy
 the connector address displayed by Browser. Use Chrome 120 or later. Open a
 supported platform page in Chrome, log in directly if needed, and share it from
@@ -19,8 +19,14 @@ To start empty, choose **Open agent tab** in Companion, even from Chrome's New
 Tab page. On the new dedicated tab, click Companion in Chrome's toolbar again,
 paste the connector address and choose **Connect agent tab**. This explicit
 invocation grants Chrome's tab-capture permission for that tab. The popup asks
-for the six supported platform hosts plus Maverick, not every website. Connect
-in the Browser window it opens and keep both tabs open. The agent can then
+for the six supported platform hosts plus Maverick, not every website. By default
+it reuses the most recently used Browser tab at the chosen Maverick origin in the
+same Chrome profile. Other apps and the source tab are never redirected. Uncheck
+the reuse option to open a separate bridge window. A new window is also necessary
+when no matching Browser tab exists, including Maverick in another profile,
+browser or desktop application. Connect in the reused or new Browser bridge and
+keep both tabs open. The agent navigates the dedicated source tab, not the bridge.
+It can then
 navigate across Instagram, X, Reddit, Facebook, LinkedIn and YouTube, using your
 usual Chrome platform sessions. It can read, scroll, collect content and analyze
 images/video/audio; clicks, form entry, posting and messages have no command.
@@ -49,6 +55,11 @@ extension requests optional access to the selected Maverick origin, its isolated
 frame namespace and the selected platform, or the six supported platforms for a
 dedicated agent tab. It probes only app identity in the selected connector window and attaches to one exact Browser frame/document;
 other tabs, shell frames and replaced documents cannot execute its fixed commands.
+Within that selected Maverick shell tab, switching apps or returning to Browser
+from the rail keeps the connection alive while its bound Browser iframe remains
+mounted. The `connector=1` parameter starts setup; dropping it during native
+navigation does not revoke sharing. Leaving the Maverick origin or loading a
+non-shell route still stops the bridge. A full document reload requires reconnecting.
 Closing either tab, leaving approved platform routes, or revoking sharing stops
 capture. Reloading the connector requires a fresh user-owned connection.
 Frame captures may bring the shared platform window to the foreground.
@@ -81,8 +92,15 @@ seconds). Hidden documents and frames hidden by the shell's
 invalidations; returning refreshes immediately. Failures back off to 60
 seconds. Chrome transport keeps its separate heartbeat so active observations
 continue when the management view is hidden. Its app-frame renewal is limited to
-once per minute. Connection starts are deduplicated; stopping during setup revokes
+once per minute. Renewal runs independently, with a five-second timeout, so a
+stalled authentication response cannot block command polling or heartbeats.
+The connector status identifies the installed Companion version.
+Connection starts are deduplicated; stopping during setup revokes
 any late lease instead of resurrecting sharing.
+Automatic stops retain the original error in the connection status. A bounded
+reason code is saved in the actor-owned lease and returned by overview/MCP;
+repeated manual stops cannot overwrite the first cause. SQLite migration preserves
+existing leases. Stopped or offline empty tabs do not advertise navigation readiness.
 An operation becoming terminal between its status read and progress update
 cancels/drains that worker task without revoking sharing or queued observations.
 An inline head script applies the initial `maverick_theme`/`maverick_color_scheme`

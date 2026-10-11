@@ -14,7 +14,7 @@ COMPANION_ACTIONS = USER_ACTIONS | {"companion.overview", "operation.get", "oper
 FIELDS = {
     "companion.connect": {"display_name", "allowed_platforms"},
     "companion.overview": set(),
-    "companion.disconnect": {"session_id"},
+    "companion.disconnect": {"session_id", "reason"},
     "companion.poll": {"session_id", "connector_secret", "url", "title", "active_operation_id"},
     "companion.progress": {"session_id", "connector_secret", "operation_id", "lease_id", "phase"},
     "companion.complete": {"session_id", "connector_secret", "operation_id", "lease_id", "result"},
@@ -60,7 +60,7 @@ def handle(
         if action == "companion.complete":
             return 200, operations.complete(data_root, workspace_id, user_id, body, dependencies)
         if action == "companion.disconnect":
-            return 200, connections.disconnect(data_root, workspace_id, user_id, str(body.get("session_id") or ""))
+            return 200, connections.disconnect(data_root, workspace_id, user_id, str(body.get("session_id") or ""), body.get("reason", "user_stopped"))
         if action == "operation.get":
             return 200, operations.get(data_root, workspace_id, user_id, str(body.get("operation_id") or ""))
         if action == "operation.cancel":

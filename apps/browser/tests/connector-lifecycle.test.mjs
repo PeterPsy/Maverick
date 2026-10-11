@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {setImmediate as nextTurn} from "node:timers/promises";
 
 test("connector starts once, throttles renewal, fences stop and preserves sharing across cancellation races", async t => {
-  const origin = "https://browser-fixture.test", listeners = [], calls = [], states = [];
+  const origin = "https://browser-fixture.test", listeners = [], calls = [], states = [], reports = [], renewals = [];
   let delayed = false, release, serial = 0, connector, nextCommand, executing, cancelled = false, statusFailure = true;
   const previous = {window: globalThis.window, location: globalThis.location};
   globalThis.location = {origin};
@@ -20,6 +20,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   t.mock.method(globalThis, "fetch", async (url, options) => {
     const body = options.body ? JSON.parse(options.body) : {};
     calls.push({url, ...body});
+    if (url.startsWith("/.well-known")) return new Promise(resolve => renewals.push(() => resolve({ok:true,status:204})));
     let result = {};
     if (body.action === "companion.connect") {
       result = {connection: {session_id: `session-${++serial}`}, connector_secret: "fixture"};
@@ -33,6 +34,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
     return {ok: true, status: 200, async json() { return result; }};
   });
   t.after(async () => {
+    renewals.forEach(resolve => resolve());
     release?.(); await connector?.stop();
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete globalThis[key]; else globalThis[key] = value;
@@ -43,7 +45,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
     assert.fail("Connector did not settle.");
   };
   const {createConnector} = await import("../frontend/src/connector.js");
-  connector = createConnector((_text, state) => states.push(state));
+  connector = createConnector((text, state) => {states.push(state); reports.push(text);});
   await assert.rejects(connector.start(), /Share this tab/u);
   assert.equal(states.at(-1), "stopped", "A failed start must leave Connecting and permit retry");
   assert.equal(calls.filter(call => call.action === "companion.connect").length, 0);
@@ -52,6 +54,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   await until(() => calls.filter(call => call.url.startsWith("/.well-known")).length === 1);
   await nextTurn(); dispatch({type: "maverick.browser.wake"});
   await until(() => calls.filter(call => call.action === "companion.poll").length === 2);
+  renewals.shift()();
   assert.equal(calls.filter(call => call.url.startsWith("/.well-known")).length, 1);
   assert.equal(calls.filter(call => call.action === "companion.connect").length, 1);
   await connector.stop(); assert.equal(states.at(-1), "stopped");
@@ -77,4 +80,6 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   dispatch({type: "maverick.browser.wake"});
   await until(() => calls.filter(call => call.action === "companion.disconnect").length === disconnects + 1);
   assert.equal(states.at(-1), "stopped", "A scoped bridge failure must revoke on the first response even when its message contains friendly guidance");
+  assert.match(reports.at(-1), /Sharing stopped:.*Connect in the Browser window/u);
+  assert.equal(calls.filter(call => call.action === "companion.disconnect").at(-1).reason, "connector_scope_required");
 });

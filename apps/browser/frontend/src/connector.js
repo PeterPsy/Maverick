@@ -1,15 +1,16 @@
 import {request,bridge} from "./api.js";
+import {stopReason} from "./sharing-state.js";
 
 // Secrets stay in this authenticated page's memory. Reloading requires a fresh lease.
 export function createConnector(report) {
   let lease=null,command=null,timer=null,stopped=true,ticking=false,failures=0;
   let starting=null,generation=0,lastRenewed=0;
-  const revoke=async()=>{
+  const revoke=async(error)=>{
     stopped=true;generation++;clearTimeout(timer);
     const previous=lease;lease=null;command=null;
-    report("Sharing stopped.","stopped");
+    report(error ? `Sharing stopped: ${error.message}` : "Sharing stopped.","stopped");
     await bridge("stop").catch(()=>{});
-    if(previous)await request({action:"companion.disconnect",session_id:previous.connection.session_id}).catch(()=>{});
+    if(previous)await request({action:"companion.disconnect",session_id:previous.connection.session_id,reason:stopReason(error)}).catch(()=>{});
   };
   const fields=()=>({session_id:lease.connection.session_id,connector_secret:lease.connector_secret});
   const deliver=async(next,result,attempt)=>{
@@ -62,16 +63,17 @@ export function createConnector(report) {
       if(attempt!==generation || stopped || !lease)return;
       failures=0;
       if(result.command && !activeOperationId)void execute(result.command);
-      if(!activeOperationId)report(`Connected · ${shared.title || shared.url}`,"connected");
+      if(!activeOperationId)report(`Connected · ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}`,"connected");
       // Maintain the app-frame auth lease independently of shell visibility.
       if(Date.now()-lastRenewed>=60000) {
         lastRenewed=Date.now();
-        await fetch("/.well-known/maverick-app-frame-session",{method:"POST",credentials:"same-origin",cache:"no-store"}).catch(()=>{});
+        // Authentication maintenance must never hold up commands/heartbeats.
+        void fetch("/.well-known/maverick-app-frame-session",{method:"POST",credentials:"same-origin",cache:"no-store",signal:AbortSignal.timeout(5000)}).catch(()=>{});
       }
     } catch(error) {
       if(attempt!==generation || stopped)return;
       report(error.message);failures++;
-      if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|sharing_revoked|platform_route_unavailable|extension_unavailable)/u.test(error.code || error.message) || failures>=10)await revoke();
+      if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|sharing_revoked|platform_route_unavailable|shared_platform_scope_required|invalid_platform_url|extension_unavailable)/u.test(error.code || error.message) || failures>=10)await revoke(error);
     }
     finally {ticking=false;if(!stopped)timer=setTimeout(tick,3000);}
   };

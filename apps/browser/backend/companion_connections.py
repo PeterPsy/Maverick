@@ -14,6 +14,12 @@ from companion_store import database, encoded, public_connection, public_operati
 from platform_scope import PLATFORMS, platform_url, platform_for_url
 from errors import BrowserValidationError
 
+STOP_REASONS = frozenset({
+    "user_stopped", "connector_scope_required", "sharing_revoked", "extension_unavailable",
+    "companion_unavailable", "platform_route_unavailable", "connection_expired", "connection_revoked",
+    "connection_unavailable", "connector_unauthorized", "authentication_failed", "heartbeat_failed",
+})
+
 
 class CompanionError(Exception):
     def __init__(self, code: str, detail: str, status: int = 400):
@@ -115,10 +121,12 @@ def heartbeat(db: sqlite3.Connection, row: sqlite3.Row, *, url: object, title: o
     )
 
 
-def disconnect(data_root: Path, workspace_id: str, user_id: str, session_id: str) -> dict:
+def disconnect(data_root: Path, workspace_id: str, user_id: str, session_id: str, reason: object = "user_stopped") -> dict:
+    if not isinstance(reason, str) or reason not in STOP_REASONS:
+        raise BrowserValidationError("Choose a supported sharing stop reason.", field="reason")
     with database(data_root) as db:
         require_owner(db, session_id, workspace_id, user_id, allow_revoked=True)
-        db.execute("UPDATE connections SET status='revoked',secret_hash='' WHERE session_id=?", (session_id,))
+        db.execute("UPDATE connections SET status='revoked',secret_hash='',stop_reason=? WHERE session_id=? AND status!='revoked'", (reason, session_id))
         db.execute(
             "UPDATE operations SET status='cancelled',result_json=? WHERE session_id=? AND status IN ('queued','running','processing_media')",
             (encoded({"error": "connection_revoked"}), session_id),

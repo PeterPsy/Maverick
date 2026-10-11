@@ -1,6 +1,7 @@
 import {boundedCommand,connectorUrl,platformUrl,platformForUrl,sharedTabUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
 import {platforms} from "./platforms.mjs";
 import {attachConnectorFrame} from "./connector-frame.mjs";
+import {openConnectorWindow} from "./connector-window.mjs";
 import {observe} from "./dom-actions.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
 
@@ -130,8 +131,7 @@ async function share(message) {
     // Chrome 116+ permits worker-issued stream IDs in the offscreen document.
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     await capture("start",{streamId});
-    const window=await chrome.windows.create({url:url.href,type:"popup",width:1040,height:850});
-    const connector=window.tabs[0];
+    const connector=await openConnectorWindow(url,{sourceTabId:tab.id,reuse:message.reuseConnector !== false});
     await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:agentTab ? null : platformForUrl(tab.url),allowedPlatforms:agentTab ? approved : []}});
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
     await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#5665df"});
@@ -166,7 +166,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return {cancelled:true};
     }
     if(message.action === "status") {
-      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
+      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
     }
     if(message.action === "execute")return execute(b,message.command);
     throw new Error("bridge_action_unavailable");

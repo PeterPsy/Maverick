@@ -40,6 +40,28 @@ export type RegisteredMaverickFrameIdentity = Readonly<{
 }>;
 
 const registeredFrames = new Map<HTMLIFrameElement, RegisteredMaverickFrameIdentity>();
+const frameRegistryListeners = new Set<() => void>();
+let frameRegistryRevision = 0;
+
+export function subscribeMaverickFrameRegistry(listener: () => void): () => void {
+  frameRegistryListeners.add(listener);
+  return () => { frameRegistryListeners.delete(listener); };
+}
+
+export function maverickFrameRegistryRevision(): number {
+  return frameRegistryRevision;
+}
+
+export function registeredMaverickAppIds(scope: MaverickFrameScope): string[] {
+  return [...new Set([...registeredFrames]
+    .filter(([frame, identity]) => frame.isConnected && sameMaverickFrameScope(identity.scope, scope))
+    .map(([, identity]) => identity.ownerAppId))];
+}
+
+function notifyFrameRegistryChanged() {
+  frameRegistryRevision += 1;
+  for (const listener of frameRegistryListeners) listener();
+}
 
 export function setMaverickFrameOrigin(
   frame: HTMLIFrameElement,
@@ -48,8 +70,9 @@ export function setMaverickFrameOrigin(
   scope: MaverickFrameScope,
 ) {
   if (!origin) {
-    registeredFrames.delete(frame);
+    const removed = registeredFrames.delete(frame);
     delete frame.dataset.maverickFrameOrigin;
+    if (removed) notifyFrameRegistryChanged();
     return;
   }
   const parsed = new URL(origin);
@@ -67,6 +90,7 @@ export function setMaverickFrameOrigin(
     ownerAppId,
     scope: Object.freeze({ ...scope }),
   }));
+  notifyFrameRegistryChanged();
 }
 
 export function isMaverickFrameMessage(event: MessageEvent, frame: HTMLIFrameElement | null | undefined): boolean {

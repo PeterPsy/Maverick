@@ -61,7 +61,6 @@ export function AppFrameHost({
   cacheUserId,
   frameScope,
   isMobileLayout,
-  onMountedAppsChange,
   onOpenApp,
   sessionExpiresAt,
   shellTheme = DEFAULT_SHELL_THEME_STATE,
@@ -73,7 +72,6 @@ export function AppFrameHost({
   cacheUserId: string;
   frameScope: MaverickFrameScope;
   isMobileLayout: boolean;
-  onMountedAppsChange?: (appIds: string[]) => void;
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
   sessionExpiresAt: string;
   shellTheme?: ShellThemeState;
@@ -122,12 +120,6 @@ export function AppFrameHost({
   });
   const activeFramePending = !activeFrameReady;
   const showPendingState = activeFramePending && (!visibleFrameIsMounted || showDelayedPendingOverlay);
-
-  useEffect(() => {
-    onMountedAppsChange?.(scopedMountedApps.map(({ app }) => app.app_id));
-  }, [onMountedAppsChange, scopedMountedApps]);
-
-  useEffect(() => () => onMountedAppsChange?.([]), [onMountedAppsChange]);
 
   async function refreshDependencies(appId = activeApp.app_id) {
     logDependencySetup("fetch:start", {

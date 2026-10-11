@@ -95,21 +95,22 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).not.toHaveBeenCalled();
   });
 
-  it("marks only mounted background apps, including static shortcuts, and removes stale dots", async () => {
+  it("marks mounted apps including the selected app and static shortcuts, and removes stale dots", async () => {
     const railApps = [...apps, app("settings", "Settings")];
     await renderSidebar({ apps: railApps, mountedAppIds: ["chat", "agents", "app-store", "settings"] });
-    expect(railButton("Chat").querySelector(".bs-sidebar__rail-background-dot")).toBeNull();
-    expect(railButton("Skills").querySelector(".bs-sidebar__rail-background-dot")).toBeNull();
+    expect(railButton("Chat").querySelector(".bs-sidebar__rail-loaded-dot")).not.toBeNull();
+    expect(railButton("Chat").getAttribute("aria-description")).toBe("Loaded");
+    expect(railButton("Skills").querySelector(".bs-sidebar__rail-loaded-dot")).toBeNull();
     for (const name of ["Agents", "App Store", "Settings"]) {
-      expect(railButton(name).querySelector(".bs-sidebar__rail-background-dot")).not.toBeNull();
+      expect(railButton(name).querySelector(".bs-sidebar__rail-loaded-dot")).not.toBeNull();
       expect(railButton(name).getAttribute("aria-description")).toBe("Open in background");
     }
     await renderSidebar({ apps: railApps, activeAppId: "agents", mountedAppIds: ["chat", "agents"] });
-    expect(container.querySelectorAll(".bs-sidebar__rail-background-dot")).toHaveLength(1);
-    expect(railButton("Chat").querySelector(".bs-sidebar__rail-background-dot")).not.toBeNull();
-    expect(railButton("Agents").getAttribute("aria-description")).toBeNull();
+    expect(container.querySelectorAll(".bs-sidebar__rail-loaded-dot")).toHaveLength(2);
+    expect(railButton("Chat").querySelector(".bs-sidebar__rail-loaded-dot")).not.toBeNull();
+    expect(railButton("Agents").getAttribute("aria-description")).toBe("Loaded");
     await renderSidebar({ apps: railApps, mountedAppIds: [] });
-    expect(container.querySelectorAll(".bs-sidebar__rail-background-dot")).toHaveLength(0);
+    expect(container.querySelectorAll(".bs-sidebar__rail-loaded-dot")).toHaveLength(0);
   });
 
   it("reorders after long press and suppresses the trailing click", async () => {

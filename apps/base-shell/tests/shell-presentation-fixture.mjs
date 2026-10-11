@@ -44,11 +44,28 @@ export function fixtureServer(requests, feed) {
     ],
   );
   const capabilities = feed?.capabilities ?? {};
-  return createServer(async (request, response) => {
+  const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
     requests.push(url.pathname + url.search);
     const json = (body, status = 200) =>
       send(response, JSON.stringify(body), "application/json", status);
+    // Use a distinct localhost origin for app frame registration and lifecycle.
+    const port = server.address().port;
+    if (url.pathname === "/api/app-frames/browser-launch") {
+      let bytes = "";
+      for await (const chunk of request) bytes += chunk;
+      const body = JSON.parse(bytes);
+      const origin = `http://localhost:${port}`;
+      return json({
+        origin,
+        bootstrap_url: `${origin}/.well-known/maverick-app-frame-bootstrap?app_id=${encodeURIComponent(body.app_id)}`,
+        method: "POST", ticket: "fixture-ticket", ticket_field: "ticket",
+      });
+    }
+    if (url.pathname === "/.well-known/maverick-app-frame-bootstrap") {
+      const appId = url.searchParams.get("app_id");
+      return send(response, `<!doctype html><body><script>parent.postMessage(${JSON.stringify({ type: "maverick.app.ready", app_id: appId })}, "http://127.0.0.1:${port}")</script>`, "text/html");
+    }
     if (url.pathname === "/api/session")
       return json({
         authenticated: true,
@@ -121,7 +138,7 @@ export function fixtureServer(requests, feed) {
         dependencies: [],
       });
     if (url.pathname === "/api/apps/widgets") return json({ items: [] });
-    // App documents and sidecars are outside this shell-only fixture.
+    // Other app data surfaces are outside this shell-only fixture.
     if (url.pathname.startsWith("/api/"))
       return json({ error: "fixture_surface_unavailable" }, 503);
     const assetPath = url.pathname.startsWith("/apps/base-shell/")
@@ -151,4 +168,5 @@ export function fixtureServer(requests, feed) {
       send(response, "", "text/plain", 404);
     }
   });
+  return server;
 }

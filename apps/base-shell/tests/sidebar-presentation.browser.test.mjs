@@ -30,7 +30,9 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
       return [parseFloat(style.paddingTop), parseFloat(style.paddingBottom)];
     });
     assert.ok(railPadding.every((padding) => padding < 8));
-    assert.equal(await rail.locator(".bs-sidebar__rail-background-dot").count(), 0);
+    await rail.locator(".bs-sidebar__rail-button.is-active .bs-sidebar__rail-loaded-dot").waitFor();
+    assert.equal(await rail.locator(".bs-sidebar__rail-loaded-dot").count(), 1);
+    assert.equal(await rail.locator(".bs-sidebar__rail-button.is-active").getAttribute("aria-description"), "Loaded");
     assert.equal(await page.locator(".bs-sidebar.is-open").count(), 0);
     assert.equal(await page.locator(".bs-sidebar__resize-handle").count(), 0);
     assert.ok((await page.locator(".bs-workspace-view-shell").boundingBox()).x < 100);
@@ -111,15 +113,21 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await page.getByRole("button", { name: "chat. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-shell.is-sidebar-mode-fixed").waitFor();
     const canvasButton = page.getByRole("button", { name: "canvas. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true });
-    const canvasDot = canvasButton.locator(".bs-sidebar__rail-background-dot");
+    const canvasDot = canvasButton.locator(".bs-sidebar__rail-loaded-dot");
     await canvasDot.waitFor({ state: "visible" });
     assert.equal(await canvasButton.getAttribute("aria-description"), "Open in background");
+    assert.deepEqual(await canvasDot.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const railStyle = getComputedStyle(element.closest(".bs-sidebar__rail"));
+      return [parseFloat(style.width), style.backgroundColor, railStyle.getPropertyValue("--maverick-text").trim()];
+    }), [3, "rgb(17, 24, 39)", "#111827"]);
     const dotBox = await canvasDot.boundingBox();
     const canvasBox = await canvasButton.boundingBox();
     const railBox = await rail.boundingBox();
     assert.ok(dotBox.x >= railBox.x && dotBox.x + dotBox.width < canvasBox.x);
     assert.ok(Math.abs(dotBox.y + dotBox.height / 2 - canvasBox.y - canvasBox.height / 2) < 1);
-    assert.equal(await rail.locator(".bs-sidebar__rail-button.is-active .bs-sidebar__rail-background-dot").count(), 0);
+    await rail.locator(".bs-sidebar__rail-button.is-active .bs-sidebar__rail-loaded-dot").waitFor();
+    assert.equal(await rail.locator(".bs-sidebar__rail-loaded-dot").count(), 2);
     if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-background-light.png") });
     assert.equal(await page.getByRole("button", { name: "Sidebar fissa", exact: true }).getAttribute("aria-pressed"), "true");
     assert.equal(await page.getByRole("button", { name: "Solo app in overlay", exact: true }).count(), 1);
@@ -135,8 +143,8 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await page.waitForFunction(() => document.querySelector(".bs-notifications__toggle")?.getAttribute("aria-expanded") === "false");
     await page.getByRole("button", { name: "canvas. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-sidebar--disabled").waitFor();
-    await page.waitForFunction(() => document.querySelector('.bs-sidebar__rail-button[aria-current="page"] .bs-sidebar__rail-background-dot') === null);
-    assert.equal(await rail.locator(".bs-sidebar__rail-background-dot").count(), 1);
+    await page.waitForFunction(() => document.querySelector('.bs-sidebar__rail-button[aria-current="page"] .bs-sidebar__rail-loaded-dot') !== null);
+    assert.equal(await rail.locator(".bs-sidebar__rail-loaded-dot").count(), 2);
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x < 100);
     for (const height of [320, 240]) {
       await page.setViewportSize({ width: 1440, height });
@@ -146,7 +154,7 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
       });
       const compactRailBox = await rail.boundingBox();
       assert.ok(compactRailBox.y >= 32 && compactRailBox.y + compactRailBox.height <= height - 32);
-      const backgroundDot = rail.locator(".bs-sidebar__rail-background-dot");
+      const backgroundDot = rail.locator('.bs-sidebar__rail-button[aria-description="Open in background"] .bs-sidebar__rail-loaded-dot');
       await backgroundDot.scrollIntoViewIfNeeded();
       const compactDotBox = await backgroundDot.boundingBox();
       const scrollport = await rail.locator(".bs-sidebar__rail-apps").boundingBox();

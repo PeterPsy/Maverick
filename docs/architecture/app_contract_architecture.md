@@ -2222,6 +2222,13 @@ mobile header chrome.
 
 The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
 
+The desktop app rail derives its loaded-app dots from the shared, authenticated
+frame registry, including both main views and app-owned widgets. A hibernated
+main view does not remove the dot while another frame of that app remains
+mounted. Removing the last frame clears it. Indicators include the selected app
+and exclude frames outside the current workspace/session generation; they
+describe loaded UI, not runtime busyness.
+
 The shared visibility observer includes connectivity by default. Display-only
 consumers can use `requireOnline: false` to observe foreground state and render
 authorized offline cached data. This option neither enables network work nor

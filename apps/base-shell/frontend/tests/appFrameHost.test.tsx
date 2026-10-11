@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
 import { useShellAppEvents } from "../src/hooks/useShellAppEvents";
 import { AppFrameHost } from "../src/components/AppFrameHost";
-import type { MaverickFrameScope } from "../src/iframePolicy";
+import { registeredMaverickAppIds, type MaverickFrameScope } from "../src/iframePolicy";
 import { StorageFileCacheBroker } from "../src/storageFileCacheBroker";
 import type { ShellThemeState } from "../src/theme";
 
@@ -92,38 +92,37 @@ describe("AppFrameHost app frame readiness", () => {
   });
 
   it("hibernates only after an exact inactive-frame acknowledgement and restores its RAM snapshot", async () => {
-    const mountedAppsChanged = vi.fn();
     const resumableChat = { ...chat, frontend_resumable: true };
-    await renderHost(root, resumableChat, {}, defaultTheme, FRAME_SCOPE, mountedAppsChanged);
+    await renderHost(root, resumableChat, {}, defaultTheme, FRAME_SCOPE);
     const first = await waitForFrame(container, "Chat viewport", "chat");
     const posted = vi.spyOn(first.contentWindow!, "postMessage");
-    await renderHost(root, storage, {}, defaultTheme, FRAME_SCOPE, mountedAppsChanged);
+    await renderHost(root, storage, {}, defaultTheme, FRAME_SCOPE);
     const second = await waitForFrame(container, "Storage viewport", "storage");
     await dispatchAppReady(second, "storage");
     expect(container.querySelectorAll('iframe')).toHaveLength(2);
-    await renderHost(root, agents, {}, defaultTheme, FRAME_SCOPE, mountedAppsChanged);
+    await renderHost(root, agents, {}, defaultTheme, FRAME_SCOPE);
     const third = await waitForFrame(container, "Agents viewport", "agents");
     await dispatchAppReady(third, "agents");
     const request = posted.mock.calls.map(([message]) => message).find((message) => message.type === 'maverick.app.hibernate');
     expect(request).toBeDefined();
-    expect(mountedAppsChanged).toHaveBeenLastCalledWith(["chat", "storage", "agents"]);
+    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["chat", "storage", "agents"]);
     const snapshot = { params: { thread_id: 'thread-a' }, state: { composer: 'unsent', scroll: 400 } };
     const reply = { type: 'maverick.app.hibernated', app_id: 'chat', request_id: request.request_id, snapshot };
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
       data: reply, source: second.contentWindow, origin: first.dataset.maverickFrameOrigin,
     })));
     expect(container.querySelectorAll('iframe')).toHaveLength(3);
-    expect(mountedAppsChanged).toHaveBeenLastCalledWith(["chat", "storage", "agents"]);
+    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["chat", "storage", "agents"]);
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
       data: reply, source: first.contentWindow, origin: first.dataset.maverickFrameOrigin,
     })));
     expect(container.querySelectorAll('iframe')).toHaveLength(2);
-    expect(mountedAppsChanged).toHaveBeenLastCalledWith(["storage", "agents"]);
+    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["storage", "agents"]);
     expect(container.querySelector('iframe[title="Storage viewport"]')).toBe(second);
-    await renderHost(root, resumableChat, {}, defaultTheme, FRAME_SCOPE, mountedAppsChanged);
+    await renderHost(root, resumableChat, {}, defaultTheme, FRAME_SCOPE);
     const resumed = await waitForFrame(container, "Chat viewport", "chat");
     expect(resumed).not.toBe(first);
-    expect(mountedAppsChanged).toHaveBeenLastCalledWith(["storage", "agents", "chat"]);
+    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["storage", "agents", "chat"]);
     const resumePost = vi.spyOn(resumed.contentWindow!, 'postMessage');
     await dispatchAppReady(resumed, 'chat');
     expect(resumePost.mock.calls.some(([message]) => message.type === 'maverick.app.resume'
@@ -131,15 +130,15 @@ describe("AppFrameHost app frame readiness", () => {
   });
 
   it("reports only current-scope mounted apps and clears them when the host unmounts", async () => {
-    const mountedAppsChanged = vi.fn();
-    await renderHost(root, chat, {}, defaultTheme, FRAME_SCOPE, mountedAppsChanged);
-    await renderHost(root, agents, {}, defaultTheme, FRAME_SCOPE, mountedAppsChanged);
-    expect(mountedAppsChanged).toHaveBeenLastCalledWith(["chat", "agents"]);
+    await renderHost(root, chat, {}, defaultTheme, FRAME_SCOPE);
+    await renderHost(root, agents, {}, defaultTheme, FRAME_SCOPE);
+    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["chat", "agents"]);
     const nextScope = Object.freeze({ sessionGeneration: "session-next", workspaceId: "default" });
-    await renderHost(root, storage, {}, defaultTheme, nextScope, mountedAppsChanged);
-    expect(mountedAppsChanged).toHaveBeenLastCalledWith(["storage"]);
+    await renderHost(root, storage, {}, defaultTheme, nextScope);
+    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual([]);
+    expect(registeredMaverickAppIds(nextScope)).toEqual(["storage"]);
     await act(async () => root.render(null));
-    expect(mountedAppsChanged).toHaveBeenLastCalledWith([]);
+    expect(registeredMaverickAppIds(nextScope)).toEqual([]);
   });
 
   it.each([
@@ -338,7 +337,6 @@ async function renderHost(
   activeAppParams: AppFrameParams = {},
   shellTheme: ShellThemeState = defaultTheme,
   frameScope: MaverickFrameScope = FRAME_SCOPE,
-  onMountedAppsChange?: (appIds: string[]) => void,
 ) {
   await act(async () => {
     root.render(
@@ -351,7 +349,6 @@ async function renderHost(
         cacheUserId="user-test"
         frameScope={frameScope}
         isMobileLayout={true}
-        onMountedAppsChange={onMountedAppsChange}
         onOpenApp={vi.fn()}
         sessionExpiresAt="2099-01-01T00:00:00Z"
         shellTheme={shellTheme}

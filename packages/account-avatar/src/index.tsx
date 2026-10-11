@@ -13,7 +13,7 @@ export function googlePictureUrl(value?: string): string {
 export function AccountAvatar({ pictureUrl, fallback, size = 22 }: {
   pictureUrl?: string;
   fallback: ReactNode;
-  size?: number;
+  size?: number | string;
 }) {
   const src = googlePictureUrl(pictureUrl);
   const [failedSrc, setFailedSrc] = useState('');

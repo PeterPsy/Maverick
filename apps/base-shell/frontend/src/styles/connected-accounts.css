@@ -16,10 +16,13 @@
 .bs-account-heading, .bs-account-profile { display: flex; align-items: center; gap: .9rem; min-width: 0; }
 .bs-account-heading > div { min-width: 0; }
 .bs-account-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bs-user-avatar { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; background: var(--maverick-surface-hover); font-size: .65rem; font-weight: 600; overflow: hidden; color: var(--maverick-text); }
+.bs-user-avatar { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 var(--bs-user-avatar-size, 26px); width: var(--bs-user-avatar-size, 26px); height: var(--bs-user-avatar-size, 26px); border-radius: 50%; background: var(--maverick-surface-hover); font-size: .65rem; font-weight: 600; overflow: hidden; color: var(--maverick-text); }
 .bs-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.bs-account-heading .bs-user-avatar { flex-basis: 44px; width: 44px; height: 44px; font-size: 1rem; }
-.bs-account-profile .bs-user-avatar { flex-basis: 64px; width: 64px; height: 64px; font-size: 1.3rem; }
+.bs-sidebar__header .bs-sidebar__account-button { padding: 0; box-shadow: none; }
+.bs-sidebar__account-button .bs-user-avatar { flex-basis: auto; width: 100%; height: 100%; background: transparent; font-size: calc(var(--bs-sidebar-header-control-size) / 3); line-height: 1; }
+.bs-sidebar__account-button:focus-visible { outline: 2px solid var(--maverick-focus); outline-offset: 3px; }
+.bs-account-heading .bs-user-avatar { font-size: 1rem; }
+.bs-account-profile .bs-user-avatar { font-size: 1.3rem; }
 .bs-account-section { display: flex; flex-direction: column; gap: 1.25rem; }
 .bs-account-section p, .bs-connected-accounts__body > p { line-height: 1.5; font-size: .875rem; }
 .bs-account-nav { display: flex; flex-direction: column; gap: .25rem; border-right: 1px solid var(--maverick-border); padding: .85rem; overflow-y: auto; }

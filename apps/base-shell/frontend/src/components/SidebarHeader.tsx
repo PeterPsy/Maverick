@@ -28,7 +28,7 @@ export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorks
         disabled={!activeApp || isLoading} onClick={onOpenAppSettings} type="button">
         <span aria-hidden="true" className="material-symbols-rounded">settings</span>
       </button>
-      <button className="bs-sidebar__app-settings" aria-label="Account and servers" title="Account and servers" type="button"
+      <button className="bs-sidebar__app-settings bs-sidebar__account-button" aria-label="Account and servers" title="Account and servers" type="button"
         onClick={() => window.dispatchEvent(new Event("maverick.connected-accounts.open"))}>
         <UserAvatar user={user} />
       </button>

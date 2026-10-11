@@ -192,8 +192,10 @@ retain their local credential metadata check.
 ## Account panel and installation profiles
 
 The shell's existing account button stays at the top of the sidebar next to the
-app settings button. It opens Account and servers, a 960px desktop dialog with
-section navigation and an independently scrolling content area. On narrow
+app settings button. Its photo or centered initials fill a single circular
+control, sized with the adjacent header buttons on desktop and touch screens;
+keyboard focus has an explicit outline. It opens Account and servers, a 960px
+desktop dialog with section navigation and an independently scrolling content area. On narrow
 screens the navigation scrolls horizontally and the panel fills the available
 viewport. The panel remembers its last section per signed-in user and origin.
 Keyboard dismissal returns to the launcher; an open panel prevents the hover

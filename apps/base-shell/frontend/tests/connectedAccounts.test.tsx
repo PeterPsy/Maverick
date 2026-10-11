@@ -15,7 +15,7 @@ const data = {
   items: [{ account_id: "google-1", provider: "google", email: "alice@example.com", display_name: "Alice", status: "connected", services: ["calendar"] }],
   selection: { account_id: "google-1", account_ids: ["google-1"], disabled_apps: [] },
   apps: [{ app_id: "calendar", name: "Calendar", services: ["calendar"] }, { app_id: "mail", name: "Mail", services: ["gmail"] }],
-  google: { configured: true, registration_enabled: true, services: [] },
+  google: { configured: true, registration_enabled: true, services: [], login_services: ["calendar", "gmail", "drive"] },
 };
 
 describe("Google login and connected accounts", () => {
@@ -36,11 +36,12 @@ describe("Google login and connected accounts", () => {
   afterEach(() => { act(() => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
   const button = (label: string) => [...container.querySelectorAll("button")].find(item => item.textContent === label)!;
 
-  it("keeps Google services optional and submits precisely the chosen services", async () => {
+  it("requests the Google services required by installed apps in one consent", async () => {
     await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
-    await act(async () => container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1].click());
+    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    expect(container.textContent).toContain("Connect the services your apps use");
     await act(async () => button("Continue with Google").click());
-    expect(api.startGoogle).toHaveBeenCalledWith("login", ["gmail"], expect.any(AbortSignal));
+    expect(api.startGoogle).toHaveBeenCalledWith("login", ["calendar", "gmail", "drive"], expect.any(AbortSignal));
     expect(api.login).not.toHaveBeenCalled();
   });
 
@@ -49,6 +50,59 @@ describe("Google login and connected accounts", () => {
     await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
     expect(button("Continue with Google").disabled).toBe(true);
     expect(container.textContent).toContain("not configured");
+  });
+
+  it("keeps identity-only consent when enabled apps require no Google services", async () => {
+    api.googleStatus.mockResolvedValue({ ...data.google, login_services: [] });
+    await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
+    expect(container.textContent).not.toContain("Connect the services your apps use");
+    await act(async () => button("Continue with Google").click());
+    expect(api.startGoogle).toHaveBeenCalledWith("login", [], expect.any(AbortSignal));
+  });
+
+  it("releases login immediately after cancelling and ignores a delayed completion", async () => {
+    let complete!: (value: string) => void;
+    api.startGoogle.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+    const authenticated = vi.fn();
+    await act(async () => root.render(<LoginScreen onAuthenticated={authenticated} />));
+    await act(async () => button("Continue with Google").click());
+    const signal = api.startGoogle.mock.calls[0][2] as AbortSignal;
+    await act(async () => button("Cancel Google sign-in").click());
+    expect(signal.aborted).toBe(true);
+    expect(button("Continue with Google").disabled).toBe(false);
+    await act(async () => complete("completed"));
+    expect(api.getSession).not.toHaveBeenCalled();
+    expect(authenticated).not.toHaveBeenCalled();
+  });
+
+  it("restores login when returning from Google with the browser back button", async () => {
+    api.startGoogle.mockResolvedValue("redirecting");
+    await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
+    await act(async () => button("Continue with Google").click());
+    const event = new Event("pageshow"); Object.defineProperty(event, "persisted", { value: true });
+    await act(async () => window.dispatchEvent(event));
+    expect(button("Continue with Google").disabled).toBe(false);
+    expect(container.textContent).not.toContain("Continue in your browser");
+  });
+
+  it("releases login when an offline server switch cancels Google consent", async () => {
+    const postMessage = vi.fn().mockImplementation(async ({ action }: { action: string }) => {
+      if (action === "switch") throw new Error("Server unavailable");
+      return { profiles: [
+        { id: "current", name: "Current", origin: "https://current.example", current: true },
+        { id: "offline", name: "Offline", origin: "https://offline.example", current: false },
+      ] };
+    });
+    vi.stubGlobal("webkit", { messageHandlers: { maverickServers: { postMessage } } });
+    api.startGoogle.mockImplementation(() => new Promise(() => {}));
+    await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
+    await act(async () => button("Continue with Google").click());
+    await act(async () => button("dns Servers").click());
+    await act(async () => button("Switch server").click());
+    expect(container.textContent).toContain("Server unavailable");
+    expect(api.startGoogle.mock.calls[0][2].aborted).toBe(true);
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Close servers"]')!.click());
+    expect(button("Continue with Google").disabled).toBe(false);
   });
 
   it("explains missing consent while allowing independent app access changes", async () => {

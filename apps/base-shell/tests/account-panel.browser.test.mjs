@@ -15,7 +15,7 @@ test("account panel supports desktop, mobile, keyboard and separated Google/logo
         { account_id: "primary", email: "primary@example.com", display_name: "Primary Google", status: "connected", services: ["gmail"] },
         { account_id: "secondary", email: "secondary@example.com", display_name: "Secondary Google", status: "connected", services: ["calendar"] },
       ], selection: { account_id: "primary", account_ids: ["primary", "secondary"], disabled_apps: [] },
-      apps: [{ app_id: "calendar", name: "Calendar", services: ["calendar"] }], google: { configured: true, services: [], registration_enabled: true },
+      apps: [{ app_id: "calendar", name: "Calendar", services: ["calendar"] }], google: { configured: true, services: [], registration_enabled: true, login_services: [] },
     } }));
     const page = await context.newPage();
     const errors = [];
@@ -56,7 +56,7 @@ test("account panel supports desktop, mobile, keyboard and separated Google/logo
     // A fresh mobile session also mounts the account entry and fits short viewports.
     await context.close();
     const mobile = await browser.newContext({ viewport: { width: 390, height: 650 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
-    await mobile.route("**/api/connected-accounts", route => route.fulfill({ json: { workspace_id: "default", items: [], selection: null, apps: [], google: { configured: true, services: [], registration_enabled: true } } }));
+    await mobile.route("**/api/connected-accounts", route => route.fulfill({ json: { workspace_id: "default", items: [], selection: null, apps: [], google: { configured: true, services: [], registration_enabled: true, login_services: [] } } }));
     const phone = await mobile.newPage();
     await phone.goto(`${origin}/app/chat`);
     await phone.getByRole("button", { name: "Apri sidebar", exact: true }).click();

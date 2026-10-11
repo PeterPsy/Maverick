@@ -6,8 +6,13 @@ Google is the initial provider; apps declare `permissions.external_accounts`
 with provider declarations containing `capabilities` (currently `calendar`, `gmail`,
 `drive`) and optional `replaces_secrets` for manually managed credentials.
 
-The shell offers Google login and service selection, including identity-only
-login. Password users can link Google from Connected accounts. An authenticated
+The login screen requests the Google services declared by enabled app contracts
+in active installation workspaces through one Google consent. The public provider
+status returns only their deduplicated `login_services` identifiers, without
+workspace or app inventory. Installations with no such apps use identity-only
+login. The screen lists the requested services before continuing; Google consent
+still controls the scopes actually granted. Password users can link Google from
+Connected accounts, where service selection remains explicit. An authenticated
 link establishes the Google subject's association with the Maverick user. Email
 equality alone never links an existing account. New Google registrations create
 ordinary members without workspace membership; an administrator assigns access.
@@ -42,7 +47,7 @@ Workspace updates bind the intended workspace ID to the active request context
 and use conditional persistence retries so concurrent changes preserve both
 account enablement and app-access choices.
 App capabilities
-are enabled by default for services that user selected, and can be disabled
+are enabled by default for services the user approved at Google, and can be disabled
 individually. Declared capability, current membership, user identity, account
 ownership, connection status and granted scopes gate every broker request.
 Unknown capabilities require a new Core provider capability definition and
@@ -105,7 +110,8 @@ Only that webview can consume the result and receive a Maverick login cookie.
 Neither raw session IDs nor provider tokens are passed through URLs or JavaScript.
 Cancellation, provider errors and expiry release the shell's pending controls;
 an unsuccessful server switch also releases an interrupted Google flow without
-leaving connection or logout controls disabled. Retired flow completions cannot
+leaving login, connection or logout controls disabled. Login cancellation
+clears pending state immediately and rejects delayed results from retired flows. Retired flow completions cannot
 overwrite a later connection or logout operation.
 Closing the panel stops polling and cancels pending server authority. Browser
 back navigation restores usable controls. Older native builds without the bridge

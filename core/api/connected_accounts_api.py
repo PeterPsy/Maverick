@@ -13,6 +13,7 @@ from core.api.google_handoff_context import source_context
 from core.connected_accounts import google
 from core.connected_accounts import browser_handoff
 from core.connected_accounts.profile import refresh_profile
+from core.connected_accounts.login_services import required_login_services
 from core.connected_accounts.service import complete_claimed_flow, digest, disconnect_account, public_account, select_account, set_workspace_account_access, start_flow
 from core.identity.errors import UserNotFoundError
 from core.identity.service import build_auth_session, session_expiry
@@ -43,7 +44,8 @@ def provider_status(state):
     except (google.AccountError, SecretError, ValueError):
         configured = False
     return {"configured": bool(configured), "registration_enabled": os.environ.get("MAVERICK_GOOGLE_ALLOW_REGISTRATION", "1") == "1",
-            "services": [{"id": key, "label": value["label"]} for key, value in google.SERVICES.items()]}
+            "services": [{"id": key, "label": value["label"]} for key, value in google.SERVICES.items()],
+            "login_services": required_login_services(state)}
 
 
 def _same_origin(environ):

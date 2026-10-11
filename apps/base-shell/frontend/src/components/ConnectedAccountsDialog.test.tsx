@@ -32,7 +32,7 @@ beforeEach(() => {
       { account_id: "google_b", provider: "google", email: "b@example.com", display_name: "B", status: "connected", services: ["calendar"] }],
     selection: { account_id: "google_a", account_ids: ["google_a"], disabled_apps: [] },
     apps: [{ app_id: "calendar", name: "Calendar", services: ["calendar"] }],
-    google: { configured: true, registration_enabled: true, services: [] },
+    google: { configured: true, registration_enabled: true, services: [], login_services: [] },
   };
   api.connectedAccounts.mockImplementation(async () => structuredClone(data));
   api.setConnectedWorkspaceAccess.mockImplementation(async (_workspace: string, id: string, enabled: boolean) => {

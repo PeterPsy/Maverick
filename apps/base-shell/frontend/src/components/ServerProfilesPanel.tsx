@@ -23,13 +23,13 @@ export function ServerProfilesPanel({ beforeSwitch }: { beforeSwitch?: () => voi
     finally { if (alive.current) setBusy(false); }
   }
   return <section className="bs-account-section" aria-labelledby="bs-servers-heading">
-    <div><h3 id="bs-servers-heading">Servers</h3><p>{data?.native
+    <div><h3 id="bs-servers-heading">Saved connections</h3><p>{data?.native
       ? "Saved on this device. Each server has its own login, workspaces and data."
       : "Open another Maverick installation in this browser. Bookmarks are saved for this site; each installation has its own login."}</p></div>
     {error && <p role="alert">{error}</p>}
     {!data && !error && <p role="status">Loading servers…</p>}
-    {data?.profiles.map(profile => <article className="bs-connected-accounts__account" key={profile.id}>
-      <div><strong>{profile.name}</strong><small>{profile.origin}</small>{profile.current && <small>Current server</small>}</div>
+    {data?.profiles.map(profile => <article className={`bs-connected-accounts__account bs-server-card${profile.current ? " is-current" : ""}`} key={profile.id}>
+      <div className="bs-server-card__heading"><span className="material-symbols-rounded" aria-hidden="true">dns</span><div><strong>{profile.name}</strong><small>{profile.origin}</small></div>{profile.current && <span className="bs-server-card__badge">Current server</span>}</div>
       <div className="bs-connected-accounts__actions">
         {!profile.current && <button type="button" disabled={busy} onClick={() => void run(async () => { beforeSwitch?.(); await switchServerProfile(profile); })}>{data.native ? "Switch server" : "Open server"}</button>}
         {(data.native || !profile.current) && <button type="button" disabled={busy} onClick={() => { setEditing(profile); setName(profile.name); setOrigin(profile.origin); }}>Rename</button>}
@@ -57,7 +57,13 @@ export function ServerProfilesPanel({ beforeSwitch }: { beforeSwitch?: () => voi
 
 export function ServerProfilesLauncher({ beforeSwitch }: { beforeSwitch?: () => void }) {
   const [open, setOpen] = useState(false);
-  return <><button type="button" className="bs-server-launcher" onClick={() => setOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">dns</span> Servers</button>
+  const launcher = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !open) launcher.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
+  return <><button ref={launcher} type="button" className="bs-server-launcher" onClick={() => setOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">dns</span> Servers</button>
     {open && <ServerProfilesDialog onClose={() => setOpen(false)} beforeSwitch={beforeSwitch} />}</>;
 }
 
@@ -65,7 +71,7 @@ function ServerProfilesDialog({ onClose, beforeSwitch }: { onClose: () => void; 
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { dialog.current?.showModal(); return () => dialog.current?.close(); }, []);
   return <dialog ref={dialog} className="bs-connected-accounts bs-connected-accounts--servers" aria-label="Servers" onCancel={event => { event.preventDefault(); onClose(); }}>
-    <header><h2>Servers</h2><button className="bs-connected-accounts__close" aria-label="Close servers" onClick={onClose}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
+    <header><div className="bs-server-dialog-heading"><span className="material-symbols-rounded" aria-hidden="true">dns</span><div><h2>Servers</h2><p>Choose where you connect.</p></div></div><button className="bs-connected-accounts__close" aria-label="Close servers" onClick={onClose}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
     <div className="bs-connected-accounts__body"><ServerProfilesPanel beforeSwitch={beforeSwitch} /></div>
   </dialog>;
 }

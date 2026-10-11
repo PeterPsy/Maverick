@@ -152,6 +152,27 @@ class ConnectedAccountsTests(unittest.TestCase):
         self.assertNotIn("test-client", json.dumps(status))
         self.assertNotIn("private-client-secret", json.dumps(status))
 
+    def test_login_services_follow_enabled_contracts_and_hide_installation_inventory(self):
+        apps = AppDocumentStore(AppCollections(*(InMemoryCollection() for _ in range(5))))
+        self.state.app_store = apps
+        archived = replace(build_workspace_record(workspace_id="private-archive", name="Private archive", slug="archive", now=self.now), status="archived")
+        self.workspace.save_workspace(archived)
+        bindings = []
+        for workspace_id, app, status in [("default", "calendar", "enabled"), ("default", "storage", "enabled"),
+                                           ("default", "mail", "disabled"), (archived.workspace_id, "mail", "enabled")]:
+            source = register_app_source_from_contract(apps, source_kind="platform", source_path=str(ROOT / "apps" / app))
+            binding = build_workspace_app_binding_record(workspace_id=workspace_id, app_id=app,
+                source_record_id=source.source_id, source_kind="platform", status=status, active_version=source.version, data_root="/unused")
+            apps.save_workspace_app_binding(binding)
+            bindings.append(binding)
+        status = provider_status(self.state)
+        self.assertEqual(status["login_services"], ["calendar", "drive"])
+        self.assertNotIn(archived.workspace_id, json.dumps(status))
+        apps.save_workspace_app_binding(replace(bindings[2], status="enabled"))
+        self.assertEqual(provider_status(self.state)["login_services"], ["calendar", "gmail", "drive"])
+        apps.save_workspace_app_binding(replace(bindings[0], status="disabled"))
+        self.assertEqual(provider_status(self.state)["login_services"], ["gmail", "drive"])
+
     def test_start_rejects_cross_origin_and_isolated_frame_requests(self):
         for origin, frame in [("https://evil.example", False), ("https://maverick.example", True)]:
             headers = []

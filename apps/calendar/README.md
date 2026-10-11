@@ -235,6 +235,16 @@ incomplete calendar discovery. The account tree reports completion time, coverag
 partial results and errors; a visible online app refreshes stale provider data
 (after fifteen minutes), coalesces requests and backs off after failures.
 
+The sidebar shows a compact, localized account sync summary instead of raw
+provider status codes. Calendar rows retain a visibility checkbox, provider color
+and readable primary/read-only labels. Each row's Options disclosure contains the
+independent sync and availability controls, last completion time and labeled
+downloaded period. Partial syncs, failures and paused sources remain visible when
+Options is closed. Account disclosures and calendar selections use native keyboard
+controls, keep their expansion state through metadata refreshes and reserve shell
+scroll clearance on desktop and mobile. Setting changes update the returned source
+immediately and notify other mounted Calendar surfaces.
+
 All-day events retain civil `all_day_start`/`all_day_end` dates in the event's IANA
 timezone. The end is exclusive. Google serialization and drag moves preserve
 civil dates across positive/negative offsets and daylight-saving transitions.

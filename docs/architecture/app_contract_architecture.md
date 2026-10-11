@@ -1549,8 +1549,11 @@ This rule matters because the Maverick product shell should still be replaceable
 `capabilities` and optional `replaces_secrets`. Replaced logical names must also
 be declared in `permissions.secrets.read`. Personal account selection never
 bypasses grants for unrelated secrets. Backend, CLI and MCP use the same
-invocation-scoped Core broker and app-owned personal data subtree. See
-[`connected_accounts.md`](connected_accounts.md) and `maverick sdk docs` for the
+invocation-scoped Core broker and app-owned personal data subtree.
+Workspace selections contain multiple enabled accounts and one default. Each
+payload account has its own broker handle; operations must select the handle for
+their concrete connection ID. Account defaults never merge provider authority.
+See [`connected_accounts.md`](connected_accounts.md) and `maverick sdk docs` for the
 Google capability definitions and SDK transport.
 
 ## Secret references

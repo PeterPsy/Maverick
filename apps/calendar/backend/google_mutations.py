@@ -111,6 +111,7 @@ def create_google_event(
     )
     _ensure_writable_calendar(calendar, operation="create")
     access_token = refresh_access_token(
+        connection_id=ref["calendar_connection_id"],
         app_secrets=app_secrets,
         app_secret_errors=app_secret_errors,
         transport=transport,
@@ -171,6 +172,7 @@ def attach_google_event(
     )
     _ensure_writable_calendar(calendar, operation="create")
     access_token = refresh_access_token(
+        connection_id=ref["calendar_connection_id"],
         app_secrets=app_secrets,
         app_secret_errors=app_secret_errors,
         transport=transport,
@@ -230,6 +232,7 @@ def update_google_event(
     )
     _ensure_writable_calendar(calendar, operation="update")
     access_token = refresh_access_token(
+        connection_id=ref["calendar_connection_id"],
         app_secrets=app_secrets,
         app_secret_errors=app_secret_errors,
         transport=transport,
@@ -341,6 +344,7 @@ def delete_google_event_local_first_validated(
     )
     _ensure_writable_calendar(calendar, operation="delete")
     access_token = refresh_access_token(
+        connection_id=ref["calendar_connection_id"],
         app_secrets=app_secrets,
         app_secret_errors=app_secret_errors,
         transport=transport,

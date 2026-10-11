@@ -12,7 +12,7 @@ from core.api.session_api import resolve_request_session, session_cookie_header,
 from core.api.google_handoff_context import source_context
 from core.connected_accounts import google
 from core.connected_accounts import browser_handoff
-from core.connected_accounts.service import complete_claimed_flow, digest, disconnect_account, public_account, select_account, start_flow
+from core.connected_accounts.service import complete_claimed_flow, digest, disconnect_account, public_account, select_account, set_workspace_account_access, start_flow
 from core.identity.errors import UserNotFoundError
 from core.identity.service import build_auth_session, session_expiry
 from core.secrets.errors import SecretError
@@ -55,6 +55,13 @@ def _same_origin(environ):
     # Authentication/account linking is reserved for the top-level shell.
     if environ.get("maverick.app_frame_proxy") or environ.get("HTTP_ORIGIN") != expected:
         raise google.AccountError("origin_not_allowed", status=403)
+
+
+def _workspace_body(environ, context):
+    body = read_json_body(environ)
+    if body.get("workspace_id") != context.workspace_id:
+        raise google.AccountError("workspace_context_changed", status=409)
+    return body
 
 
 def _app_inventory(state, context):
@@ -166,25 +173,34 @@ def handle_connected_accounts_api(state, environ, start_response):
             _same_origin(environ)
         if path == "/api/connected-accounts" and method == "GET":
             selection = state.account_store.get_selection(context.user.user_id, context.workspace_id)
-            return json_response(start_response, {"items": [public_account(account) for account in state.account_store.list_accounts(context.user.user_id)],
-                "selection": {"account_id": selection.account_id, "disabled_apps": selection.disabled_apps} if selection else None,
+            return json_response(start_response, {"workspace_id": context.workspace_id,
+                "items": [public_account(account) for account in state.account_store.list_accounts(context.user.user_id)],
+                "selection": {"account_id": selection.account_id, "account_ids": selection.account_ids,
+                              "disabled_apps": selection.disabled_apps} if selection else None,
                 "apps": _app_inventory(state, context), "google": provider_status(state)})
         if path == "/api/connected-accounts/select" and method == "POST":
-            body = read_json_body(environ)
+            body = _workspace_body(environ, context)
             select_account(state, user_id=context.user.user_id, workspace_id=context.workspace_id, account_id=str(body.get("account_id") or ""))
             _publish_account_change(state, context)
             return json_response(start_response, {"status": "selected"})
+        if path == "/api/connected-accounts/workspace-access" and method == "POST":
+            body = _workspace_body(environ, context)
+            set_workspace_account_access(state, user_id=context.user.user_id, workspace_id=context.workspace_id,
+                account_id=str(body.get("account_id") or ""), enabled=body.get("enabled"))
+            _publish_account_change(state, context)
+            return json_response(start_response, {"status": "updated"})
         if path == "/api/connected-accounts/app-access" and method == "POST":
-            body = read_json_body(environ)
+            body = _workspace_body(environ, context)
             app_id = str(body.get("app_id") or "")
             if not isinstance(body.get("enabled"), bool) or app_id not in {item["app_id"] for item in _app_inventory(state, context)}:
                 raise google.AccountError("invalid_app_access")
-            selection = state.account_store.get_selection(context.user.user_id, context.workspace_id)
-            if not selection:
-                raise google.AccountError("account_not_selected")
-            disabled = set(selection.disabled_apps)
-            disabled.discard(app_id) if body["enabled"] else disabled.add(app_id)
-            state.account_store.save_selection(replace(selection, disabled_apps=sorted(disabled)))
+            def update(selection):
+                if not selection:
+                    raise google.AccountError("account_not_selected")
+                disabled = set(selection.disabled_apps)
+                disabled.discard(app_id) if body["enabled"] else disabled.add(app_id)
+                return replace(selection, disabled_apps=sorted(disabled))
+            state.account_store.update_selection(context.user.user_id, context.workspace_id, update)
             _publish_account_change(state, context)
             return json_response(start_response, {"status": "updated"})
         if path.startswith("/api/connected-accounts/") and method == "DELETE":

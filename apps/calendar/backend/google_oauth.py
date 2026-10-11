@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.app_sdk.connected_accounts import has_platform_access
+
 from datetime import UTC, datetime, timedelta
 import hashlib
 import json
@@ -52,7 +54,7 @@ def provider_status(
     """Return redaction-safe Google Calendar provider setup status."""
     connections = _active_connections(read_state(data_root).get("connections", []))
     secrets_payload = app_secrets or {}
-    missing = [] if secrets_payload.get("platform-google-access") else _missing_secret_names(secrets_payload, ["google-oauth-client-id", "google-oauth-client-secret"])
+    missing = [] if has_platform_access(secrets_payload) else _missing_secret_names(secrets_payload, ["google-oauth-client-id", "google-oauth-client-secret"])
     errors = _secret_error_names(app_secret_errors)
     configured = not missing and not errors
     return {
@@ -73,6 +75,7 @@ def list_connections(data_root, *, now: datetime | None = None) -> dict[str, Any
     update_state(data_root, lambda state: _prune_expired_pending_connections(state, now=current_time))
     state = read_state(data_root)
     connections = [_public_connection(item) for item in state.get("connections", [])]
+    connections.sort(key=lambda item: not (item.get("status") == "connected" and item.get("external_refs", {}).get("is_default")))
     return {"action": "calendar_connections.list", "connections": connections}
 
 

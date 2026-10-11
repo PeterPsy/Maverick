@@ -42,7 +42,8 @@ def list_connections(data_root: Path) -> list[dict[str, object]]:
     ensure_schema(data_root)
     with connect(data_root) as db:
         rows = db.execute("SELECT * FROM connections ORDER BY updated_at DESC").fetchall()
-    return [_connection(row) for row in rows]
+    return sorted([_connection(row) for row in rows],
+                  key=lambda item: not (item.get("status") == "connected" and item.get("settings", {}).get("is_default")))
 
 
 def get_connection(data_root: Path, connection_id: str) -> dict[str, object]:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.app_sdk.connected_accounts import has_platform_access
+
 import json
 import re
 import secrets
@@ -34,7 +36,7 @@ def provider_status(app_secrets: object | None = None, connections: list[dict[st
             _provider_payload(
                 "gmail",
                 connected=has_gmail,
-                configured=bool(secrets_map.get(GMAIL_CLIENT_ID_SECRET) or secrets_map.get("platform-google-access")),
+                configured=bool(secrets_map.get(GMAIL_CLIENT_ID_SECRET) or has_platform_access(secrets_map)),
                 status="connected" if has_gmail else ("needs_secret_grant" if not secrets_map.get(GMAIL_CLIENT_ID_SECRET) else "ready_for_oauth"),
             ),
             _provider_payload(

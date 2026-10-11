@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 from urllib.parse import quote, urlencode
+from core.app_sdk.connected_accounts import platform_access_handle
 
 from constants import GOOGLE_REFRESH_TOKEN_LOGICAL_NAME
 from google_oauth import CalendarOAuthError, HttpTransport, default_transport
@@ -29,12 +30,14 @@ class GoogleSyncTokenGone(CalendarOAuthError):
 def refresh_access_token(
     *,
     app_secrets: dict[str, str] | None,
+    connection_id: str | None = None,
     app_secret_errors: list[dict[str, Any]] | None = None,
     transport: HttpTransport | None = None,
 ) -> str:
     """Exchange the resource-scoped refresh token for a short-lived access token."""
-    if app_secrets and app_secrets.get("platform-google-access"):
-        return app_secrets["platform-google-access"]
+    handle = platform_access_handle(app_secrets, connection_id)
+    if handle:
+        return handle
     client_id = _required_secret(
         app_secrets,
         app_secret_errors,

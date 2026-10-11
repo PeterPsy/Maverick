@@ -1,6 +1,7 @@
 """Control-plane persistence for federated identity and OAuth consent."""
 
 from dataclasses import asdict, dataclass
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -16,6 +17,7 @@ class AccountStore(Protocol):
     def claim_account(self, account: ConnectedAccount) -> ConnectedAccount: ...
     def get_selection(self, user_id: str, workspace_id: str) -> AccountSelection | None: ...
     def save_selection(self, selection: AccountSelection) -> AccountSelection: ...
+    def update_selection(self, user_id: str, workspace_id: str, updater: Callable) -> AccountSelection: ...
     def save_flow(self, flow: OAuthFlow) -> None: ...
     def consume_flow(self, state_hash: str, browser_hash: str, now) -> OAuthFlow | None: ...
     def get_flow(self, state_hash: str) -> OAuthFlow | None: ...
@@ -58,7 +60,22 @@ class AccountDocumentStore:
 
     def get_selection(self, user_id, workspace_id):
         item = self.collections.selections.find_one({"user_id": user_id, "workspace_id": workspace_id})
-        return AccountSelection(**item) if item else None
+        return _selection(item)
+
+    def update_selection(self, user_id, workspace_id, updater):
+        from core.connected_accounts.google import AccountError
+        collection = self.collections.selections
+        identity = {"user_id": user_id, "workspace_id": workspace_id}
+        for _ in range(32):
+            original = collection.find_one(identity)
+            updated = updater(_selection(original))
+            if original is None:
+                _, inserted = collection.insert_one_if_absent(identity, asdict(updated))
+                if inserted:
+                    return updated
+            elif collection.compare_and_set({**original, "account_ids": original.get("account_ids")}, {"$set": asdict(updated)}):
+                return updated
+        raise AccountError("account_selection_conflict", status=409)
 
     def save_selection(self, selection):
         self.collections.selections.update_one({"selection_id": selection.selection_id}, {"$set": asdict(selection)}, upsert=True)
@@ -87,3 +104,11 @@ class AccountDocumentStore:
     def transition_flow(self, flow, expected_status):
         return self.collections.flows.compare_and_set(
             {"state_hash": flow.state_hash, "status": expected_status}, {"$set": asdict(flow)})
+
+
+def _selection(item):
+    # Upgrade the original single-account selection without enabling any
+    # additional personal accounts in an existing workspace.
+    if item and "account_ids" not in item:
+        item = {**item, "account_ids": [item["account_id"]] if item["account_id"] else []}
+    return AccountSelection(**item) if item else None

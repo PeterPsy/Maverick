@@ -29,14 +29,24 @@ assignment. Enable the Calendar, Gmail and Drive APIs in the selected Google
 project and register the callback on a Web application OAuth client. The client
 must have the required consent-screen audience and approved scopes before use.
 
-Each user selects one personal Google account per workspace. App capabilities
+Each user explicitly enables a set of personal Google accounts per workspace,
+with one default account within that set. Workspace account sets are independent;
+linking an account enables it only in the workspace used for the OAuth flow.
+The Connected accounts panel separates workspace checkboxes from Make default.
+Removing an account from a workspace does not disconnect it in other workspaces.
+Existing single-account selections upgrade to a one-item set, preserving the
+original consent boundary. An empty set retains the private app store.
+Workspace updates bind the intended workspace ID to the active request context
+and use conditional persistence retries so concurrent changes preserve both
+account enablement and app-access choices.
+App capabilities
 are enabled by default for services that user selected, and can be disabled
 individually. Declared capability, current membership, user identity, account
 ownership, connection status and granted scopes gate every broker request.
 Unknown capabilities require a new Core provider capability definition and
 consent. Adding an app using an existing capability requires no Google consent.
 
-An invocation-scoped private Unix broker gives apps an opaque capability in place
+An invocation-scoped private Unix broker per account gives apps an opaque capability in place
 of a Google access token. Core refreshes credentials and forwards only allowed
 provider API paths and methods. Apps never receive Google client secrets, refresh
 tokens or access tokens. Broker capability cleanup follows entrypoint cleanup,
@@ -45,16 +55,29 @@ Google's combined consent may also be revoked explicitly. App disabling is local
 and never revokes the shared Google token.
 
 App invocations using personal accounts receive an app-owned data subtree under
-`data/<app_id>/connected-accounts/<user>/<account>/`. This prevents private Mail,
+`data/<app_id>/connected-accounts/<user>/shared/`. It is scoped to the owning
+workspace and user and stays stable when the default or enabled set changes.
+This prevents private Mail,
 Calendar and Drive caches from appearing in another workspace member's app.
 Existing manually connected app data is retained in its original location; it is
-not automatically attributed to a personal Google identity. Disabling use of the
-personal connection for an app returns that app to its original data root.
-Selected but disconnected accounts retain their private subtree so disconnection
-cannot accidentally expose another account's cached data.
+not automatically attributed to a personal Google identity. Disabling use of
+personal connections keeps the private root and removes provider authority;
+it never falls back to workspace credentials or another member's cache.
+Apps mark removed connections unavailable and retain cached data and drafts.
+Individual-account roots from the original implementation are trusted migration
+sources in the invocation payload. Apps import their own records once, retain
+source files, preserve newer shared edits, and keep provider IDs namespaced by
+connection. Mail does not migrate OAuth authority or pending send approvals.
+Storage retains the selected inventory adapter when importing an indexed source.
 
-Calendar, Mail and Storage project the shared account into their existing domain
-connection models and use the SDK broker-aware HTTP transport. CLI and MCP share
+Calendar, Mail and Storage project every workspace-enabled account into their
+existing domain connection models and use the SDK broker-aware HTTP transport.
+Each operation resolves the handle for its concrete connection; an unavailable
+managed handle cannot fall back to another account or a manual credential.
+Changing the default does not revoke other enabled accounts. Removing workspace
+access, disabling an app, losing membership or disconnecting Google withdraws
+the applicable broker authority on the next request, including existing handles.
+CLI and MCP share
 the same account selection and execution boundary as mounted HTTP entrypoints.
 SDK documentation specifies the declaration and payload for new apps.
 App-owned OAuth/connect/disconnect operations direct platform-managed connections

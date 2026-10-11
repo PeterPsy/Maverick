@@ -50,6 +50,7 @@ def mutate_google_occurrence(
     )
     _ensure_writable_calendar(calendar, operation=action)
     token = refresh_access_token(
+        connection_id=connection["id"],
         app_secrets=secrets, app_secret_errors=secret_errors, transport=transport
     )
     series_remote_id = (

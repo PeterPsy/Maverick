@@ -110,6 +110,7 @@ def _sync_connection(
 
     connection_id = connection["id"]
     access_token = refresh_access_token(
+        connection_id=connection_id,
         app_secrets=app_secrets,
         app_secret_errors=app_secret_errors,
         transport=transport,

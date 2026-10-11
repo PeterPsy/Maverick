@@ -13,6 +13,7 @@
 .bs-connected-accounts__account { padding: 1rem; border: 1px solid var(--maverick-border); border-radius: 18px; display: grid; gap: .8rem; }
 .bs-connected-accounts small { display: block; overflow-wrap: anywhere; margin-top: .25rem; }
 .bs-connected-accounts__actions, .bs-connected-accounts__confirmation { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; font-size: .8rem; }
+.bs-connected-accounts__workspace-access { display: flex; gap: .5rem; align-items: center; }
 .bs-connected-accounts__confirmation p { flex-basis: 100%; }
 .bs-connected-accounts button { color: inherit; background: var(--maverick-surface); border: 1px solid var(--maverick-border); border-radius: 18px; padding: .6rem .85rem; cursor: pointer; }
 .bs-connected-accounts button:hover { background: var(--maverick-surface-hover); }

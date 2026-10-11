@@ -7,12 +7,13 @@ import { LoginScreen } from "../src/components/LoginScreen";
 import { googleCallbackMessage } from "../src/components/GoogleServices";
 
 const api = vi.hoisted(() => ({ connectedAccounts: vi.fn(), disconnectConnectedAccount: vi.fn(), selectConnectedAccount: vi.fn(),
-  setConnectedAppAccess: vi.fn(), startGoogle: vi.fn(), googleStatus: vi.fn(), login: vi.fn(), getSession: vi.fn() }));
+  setConnectedAppAccess: vi.fn(), setConnectedWorkspaceAccess: vi.fn(), startGoogle: vi.fn(), googleStatus: vi.fn(), login: vi.fn(), getSession: vi.fn() }));
 vi.mock("../src/api", () => api);
 vi.mock("../src/components/LoginPaperBackground", () => ({ LoginPaperBackground: () => <div /> }));
 const data = {
+  workspace_id: "default",
   items: [{ account_id: "google-1", provider: "google", email: "alice@example.com", display_name: "Alice", status: "connected", services: ["calendar"] }],
-  selection: { account_id: "google-1", disabled_apps: [] },
+  selection: { account_id: "google-1", account_ids: ["google-1"], disabled_apps: [] },
   apps: [{ app_id: "calendar", name: "Calendar", services: ["calendar"] }, { app_id: "mail", name: "Mail", services: ["gmail"] }],
   google: { configured: true, registration_enabled: true, services: [] },
 };
@@ -55,7 +56,7 @@ describe("Google login and connected accounts", () => {
     expect(container.querySelector("dialog")?.open).toBe(true);
     expect(container.textContent).toContain("Additional consent needed: gmail");
     await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Allow Calendar to use Google"]')!.click());
-    expect(api.setConnectedAppAccess).toHaveBeenCalledWith("calendar", false);
+    expect(api.setConnectedAppAccess).toHaveBeenCalledWith("default", "calendar", false);
     expect(changed).toHaveBeenCalledOnce();
     expect(api.disconnectConnectedAccount).not.toHaveBeenCalled();
   });

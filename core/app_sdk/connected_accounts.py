@@ -10,9 +10,24 @@ from urllib.request import Request, urlopen as direct_urlopen
 from urllib.response import addinfourl
 
 
-def account_for_capability(payload, capability):
+def account_for_capability(payload, capability, *, account_id=None):
     return next((item for item in payload.get("external_accounts", [])
-                 if item.get("provider") == "google" and capability in item.get("services", [])), None)
+                 if item.get("provider") == "google" and capability in item.get("services", [])
+                 and (account_id is None or item.get("account_id") == account_id)), None)
+
+
+def platform_access_handle(app_secrets, connection_id):
+    """Select exactly one managed connection; never fall back to another account."""
+    if not str(connection_id or "").startswith("platform_google_"):
+        return None
+    handle = (app_secrets or {}).get("platform-google-access:" + connection_id)
+    if not handle:
+        raise ValueError("Enable this Google account in Maverick Connected accounts for this workspace.")
+    return str(handle)
+
+
+def has_platform_access(app_secrets):
+    return any(key.startswith("platform-google-access:") and value for key, value in (app_secrets or {}).items())
 
 
 def account_urlopen(request, *args, **kwargs):

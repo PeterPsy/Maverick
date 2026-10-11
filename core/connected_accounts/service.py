@@ -14,6 +14,7 @@ from core.connected_accounts.models import AccountSelection, ConnectedAccount, O
 from core.identity.service import build_user_record
 from core.secrets.service import build_secret_ref, create_platform_secret, rotate_platform_secret, revoke_platform_secret
 from core.workspaces.service import resolve_active_workspace_for_user
+from core.workspaces.errors import WorkspaceMembershipError
 
 
 def digest(value):
@@ -148,10 +149,43 @@ def owned_account(state, user_id, account_id):
 
 
 def select_account(state, *, user_id, workspace_id, account_id):
-    owned_account(state, user_id, account_id)
-    current = state.account_store.get_selection(user_id, workspace_id)
-    return state.account_store.save_selection(AccountSelection(digest(user_id + "\0" + workspace_id), user_id,
-        workspace_id, account_id, current.disabled_apps if current else []))
+    account = owned_account(state, user_id, account_id)
+    _require_membership(state, user_id, workspace_id)
+    if account.status != "connected":
+        raise google.AccountError("google_reconnect_required", status=409)
+    def update(current):
+        account_ids = list(dict.fromkeys([*(current.account_ids if current else []), account_id]))
+        return AccountSelection(digest(user_id + "\0" + workspace_id), user_id,
+            workspace_id, account_id, current.disabled_apps if current else [], account_ids)
+    return state.account_store.update_selection(user_id, workspace_id, update)
+
+
+def set_workspace_account_access(state, *, user_id, workspace_id, account_id, enabled):
+    account = owned_account(state, user_id, account_id)
+    _require_membership(state, user_id, workspace_id)
+    if not isinstance(enabled, bool):
+        raise google.AccountError("invalid_account_access")
+    if enabled and account.status != "connected":
+        raise google.AccountError("google_reconnect_required", status=409)
+    def update(current):
+        account_ids = list(current.account_ids if current else [])
+        if enabled and account_id not in account_ids:
+            account_ids.append(account_id)
+        elif not enabled:
+            account_ids = [item for item in account_ids if item != account_id]
+        default = current.account_id if current and current.account_id in account_ids else next(iter(account_ids), "")
+        return AccountSelection(digest(user_id + "\0" + workspace_id), user_id,
+            workspace_id, default, current.disabled_apps if current else [], account_ids)
+    return state.account_store.update_selection(user_id, workspace_id, update)
+
+
+def _require_membership(state, user_id, workspace_id):
+    try:
+        membership = state.workspace_store.get_membership(user_id=user_id, workspace_id=workspace_id)
+    except WorkspaceMembershipError:
+        raise google.AccountError("workspace_access_required", status=403) from None
+    if membership.status != "active" or not state.identity_store.get_user(user_id).is_active:
+        raise google.AccountError("workspace_access_required", status=403)
 
 
 def disconnect_account(state, *, user_id, account_id):

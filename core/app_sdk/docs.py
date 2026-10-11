@@ -71,13 +71,25 @@ that the broker replaces; unrelated secret grants remain enforced.
 
 The trusted backend/CLI/MCP payload includes `external_accounts` with public
 account metadata, actually available capabilities, and an opaque `access_handle`.
+There can be multiple accounts: these are the current user's explicitly enabled
+accounts for this workspace. Each has its own handle and `default` flag. Select
+the account using the operation's account/connection ID; never reuse the first
+account's handle for another connection. `account_for_capability` accepts an
+optional `account_id` for exact selection. Built-in connection projections use
+`platform_access_handle(app_secrets, connection_id)` with invocation-only handles
+keyed by `platform-google-access:<connection_id>`, failing closed when unavailable.
 It also supplies a personal app-owned `data_root`; use that root for all private
 mail, calendar, provider metadata and caches. Never copy those caches into shared
 workspace app state or include the handle in responses, events, logs or files.
+The root stays stable across default and workspace account-set changes, including
+an empty set or disabled app. `previous_data_root` identifies a trusted original
+individual-account subtree. Apps may import their own schema with
+`core.app_sdk.account_state.migrate_account_state`; it serializes imports and
+records completed sources without moving files or provider authority.
 
 Use `core.app_sdk.connected_accounts.account_urlopen` with a `urllib.request.Request`
 and `Authorization: Bearer <access_handle>`. Core validates current user ownership,
-membership, selected account, app enablement and granted capabilities on each
+membership, workspace account enablement, app enablement and granted capabilities on each
 request, refreshes Google credentials, and proxies only the declared provider API
 paths. The handle is valid for the invocation only. No Google token is delivered
 to the app. When the service is missing, direct the user to the shell's Connected

@@ -1794,8 +1794,10 @@ class GoogleDriveProvider:
             total -= size
 
     def _token(self) -> str:
-        if self.app_secrets.get("platform-google-access"):
-            return str(self.app_secrets["platform-google-access"])
+        from core.app_sdk.connected_accounts import platform_access_handle
+        handle = platform_access_handle(self.app_secrets, self.connection_id)
+        if handle:
+            return handle
         if self._access_token:
             return self._access_token
         client_id = _required_secret(self.app_secrets, GOOGLE_DRIVE_CLIENT_ID_SECRET)

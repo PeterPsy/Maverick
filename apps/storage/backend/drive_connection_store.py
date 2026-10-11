@@ -39,7 +39,8 @@ def update_state(data_root: Path, updater) -> dict[str, Any]:
 
 
 def list_connections(data_root: Path) -> list[dict[str, Any]]:
-    return [public_connection(item) for item in read_state(data_root).get("connections", [])]
+    return sorted([public_connection(item) for item in read_state(data_root).get("connections", [])],
+                  key=lambda item: not (item.get("status") == "connected" and item.get("external_refs", {}).get("is_default")))
 
 
 def get_connection(data_root: Path, connection_id: str) -> dict[str, Any]:

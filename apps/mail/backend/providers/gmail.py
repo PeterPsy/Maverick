@@ -17,7 +17,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request
-from core.app_sdk.connected_accounts import account_urlopen as urlopen
+from core.app_sdk.connected_accounts import account_urlopen as urlopen, platform_access_handle
 from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
@@ -114,14 +114,10 @@ class GmailProvider:
         max_body_html_chars: int | None = None,
         app_secrets: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        if app_secrets and (app_secrets.get(GMAIL_REFRESH_TOKEN_SECRET) or app_secrets.get("platform-google-access")):
-            thread = get_thread(
-                data_root,
-                thread_id,
-                max_body_chars=max_body_chars,
-                max_body_html_chars=max_body_html_chars,
-            )
-            self._fetch_and_cache_thread(data_root, str(thread["connection_id"]), str(thread["provider_thread_id"]), app_secrets)
+        thread = get_thread(data_root, thread_id, max_body_chars=max_body_chars, max_body_html_chars=max_body_html_chars)
+        if not app_secrets or not (app_secrets.get(GMAIL_REFRESH_TOKEN_SECRET) or app_secrets.get("platform-google-access:" + str(thread["connection_id"]))):
+            return thread
+        self._fetch_and_cache_thread(data_root, str(thread["connection_id"]), str(thread["provider_thread_id"]), app_secrets)
         return get_thread(
             data_root,
             thread_id,
@@ -140,7 +136,7 @@ class GmailProvider:
         secrets = _require_app_secrets(app_secrets)
         thread = get_thread(data_root, thread_id)
         resolved_thread_id = str(thread["id"])
-        access_token = self._access_token(secrets)
+        access_token = self._access_token(secrets, str(thread["connection_id"]))
         provider_thread_id = str(thread["provider_thread_id"])
         self._gmail_json(
             "POST",
@@ -216,7 +212,7 @@ class GmailProvider:
             require_confirmation_token(data_root=data_root, draft_id=draft_id, preview=confirmation_preview, confirmation_token=confirmation_token)
         try:
             secrets = _require_app_secrets(app_secrets)
-            access_token = self._access_token(secrets)
+            access_token = self._access_token(secrets, str(draft["connection_id"]))
         except Exception:
             record_delivery(data_root, draft_id, "failed", error_code="provider_authentication")
             raise
@@ -256,7 +252,7 @@ class GmailProvider:
         ensure_schema(data_root)
         connection_id = _required_string(connection_id, "connection_id")
         secrets = _require_app_secrets(app_secrets)
-        access_token = self._access_token(secrets)
+        access_token = self._access_token(secrets, connection_id)
         max_total = _bounded_int(max_threads, 100, 1, 2000)
         history_more = False
         history_synced = 0
@@ -383,10 +379,11 @@ class GmailProvider:
             return {**metadata, "status": "too_large", "max_bytes": max_bytes}
         secrets = _require_app_secrets(app_secrets)
         message = _message(data_root, str(attachment["message_id"]))
+        connection_id = str(get_thread(data_root, str(message["thread_id"]))["connection_id"])
         fetched = self._gmail_json(
             "GET",
             f"messages/{message['provider_message_id']}/attachments/{attachment['provider_attachment_id']}",
-            access_token=self._access_token(secrets),
+            access_token=self._access_token(secrets, connection_id),
         )
         data_base64url = str(fetched.get("data") or "")
         declared_size = _bounded_int(fetched.get("size") or known_size, known_size, 0, 1_000_000_000)
@@ -435,9 +432,10 @@ class GmailProvider:
             "storage_state": "not_saved",
         }
 
-    def _access_token(self, app_secrets: dict[str, object]) -> str:
-        if app_secrets.get("platform-google-access"):
-            return str(app_secrets["platform-google-access"])
+    def _access_token(self, app_secrets: dict[str, object], connection_id: str) -> str:
+        handle = platform_access_handle(app_secrets, connection_id)
+        if handle:
+            return handle
         body = urlencode(
             {
                 "client_id": _required_secret(app_secrets, GMAIL_CLIENT_ID_SECRET),
@@ -469,7 +467,7 @@ class GmailProvider:
     ) -> None:
         thread = self._fetch_thread(
             provider_thread_id,
-            access_token=access_token or self._access_token(app_secrets),
+            access_token=access_token or self._access_token(app_secrets, connection_id),
         )
         _cache_thread(data_root, connection_id, thread)
 

@@ -46,7 +46,8 @@ class AccountBroker:
         self.context = context
         self.identity_store, self.workspace_store = identity_store, workspace_store
         self.secret_store, self.app_store = secret_store, app_store
-        self.scope = dict(permissions=permissions, user_id=user_id, workspace_id=workspace_id, app_id=app_id, data_root=data_root)
+        self.scope = dict(permissions=permissions, user_id=user_id, workspace_id=workspace_id, app_id=app_id, data_root=data_root,
+                          account_id=context["account"].account_id if context and context.get("account") else None)
         self.sender = sender or google.provider_request
         self.deadline = time.monotonic() + max(30, timeout_seconds)
         self.capability = secrets.token_urlsafe(32)
@@ -59,7 +60,7 @@ class AccountBroker:
         self.request_count = 0
 
     def start(self):
-        if not self.context or self.context["account"].status != "connected" or not self.context["services"]:
+        if not self.context or not self.context.get("account") or self.context["account"].status != "connected" or not self.context["services"]:
             return None
         self.root = Path(tempfile.mkdtemp(prefix="maverick-account-"))
         os.chmod(self.root, 0o700)
@@ -82,7 +83,7 @@ class AccountBroker:
                     raise google.AccountError("account_capability_expired", status=403)
                 self.request_count += 1
             context = account_context(identity_store=self.identity_store, workspace_store=self.workspace_store, **self.scope)
-            if (context is None or context["account"].account_id != self.context["account"].account_id
+            if (context is None or not context.get("account") or context["account"].account_id != self.context["account"].account_id
                     or context["account"].status != "connected"):
                 raise google.AccountError("account_access_revoked", status=403)
             account = context["account"]
@@ -155,11 +156,12 @@ class AccountInvocation:
         self.context = account_context(identity_store=identity_store, workspace_store=workspace_store,
             permissions=parsed.contract.permissions, user_id=actor_user_id,
             workspace_id=binding.workspace_id, app_id=binding.app_id, data_root=binding.data_root)
-        self.broker = AccountBroker(context=self.context, identity_store=identity_store,
+        self.brokers = [AccountBroker(context={**self.context, **item}, identity_store=identity_store,
             workspace_store=workspace_store, secret_store=secret_store, app_store=app_store,
             permissions=parsed.contract.permissions, user_id=actor_user_id,
             workspace_id=binding.workspace_id, app_id=binding.app_id,
             data_root=binding.data_root, timeout_seconds=timeout_seconds)
+            for item in (self.context["accounts"] if self.context else [])]
         self.payload = dict(payload)
 
     def start(self):
@@ -171,11 +173,13 @@ class AccountInvocation:
                 if name not in replaced
             }
             accounts = account_payload(self.context)
-            handle = self.broker.start()
-            if handle:
-                accounts[0]["access_handle"] = handle
+            for account, broker in zip(accounts, self.brokers, strict=True):
+                handle = broker.start()
+                if handle:
+                    account["access_handle"] = handle
             self.payload["external_accounts"] = accounts
         return self.payload
 
     def close(self):
-        self.broker.close()
+        for broker in self.brokers:
+            broker.close()

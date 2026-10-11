@@ -179,7 +179,9 @@ class ConnectedAccountsTests(unittest.TestCase):
             self.assertEqual([item.logical_names for item in requests], [["unrelated-secret"]])
             selection = self.accounts.get_selection(self.user.user_id, "default")
             self.accounts.save_selection(replace(selection, disabled_apps=["calendar"]))
-            self.assertIsNone(self.personal_context(root))
+            disabled = self.personal_context(root)
+            self.assertEqual(disabled["accounts"], [])
+            self.assertEqual(disabled["data_root"], context["data_root"])
 
     def test_broker_forwards_scoped_api_without_exposing_google_token(self):
         query, browser = self.flow(["calendar"])

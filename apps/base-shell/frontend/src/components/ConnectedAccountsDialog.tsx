@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { connectedAccounts, disconnectConnectedAccount, selectConnectedAccount, setConnectedAppAccess, startGoogle,
+import { connectedAccounts, disconnectConnectedAccount, selectConnectedAccount, setConnectedAppAccess, setConnectedWorkspaceAccess, startGoogle,
   type ConnectedAccountsPayload, type GoogleService } from "../api";
 import { GoogleMark, GoogleServices, googleCallbackMessage } from "./GoogleServices";
 import { GoogleAuthError } from "../lib/googleAuth";
@@ -72,7 +72,7 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
     <header><div><p>Personal settings</p><h2 id="bs-accounts-title">Connected accounts</h2></div>
       <button type="button" aria-label="Close connected accounts" onClick={close} autoFocus><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
     <div className="bs-connected-accounts__body">
-      <p>Your Google connection is personal. Apps in this workspace can reuse the services you approve.</p>
+      <p>Choose which personal Google accounts apps can use in this workspace. Each workspace has its own selection.</p>
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
       {!data && !error && <p role="status">Loading accounts…</p>}
@@ -81,12 +81,20 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
           <div><strong>{account.display_name}</strong><small>{account.email}</small><small>{account.status === "connected"
             ? (account.services.length ? account.services.join(" · ") : "Google sign-in only") : "Reconnect required"}</small></div>
           <div className="bs-connected-accounts__actions">
-            {data.selection?.account_id === account.account_id ? <span>Selected for this workspace</span>
-              : <button type="button" disabled={busy || account.status !== "connected"} onClick={() => void mutate(() => selectConnectedAccount(account.account_id))}>Use in this workspace</button>}
+            <label className="bs-connected-accounts__workspace-access">
+              <input type="checkbox" aria-label={`Use ${account.email} in this workspace`}
+                checked={data.selection?.account_ids.includes(account.account_id) ?? false}
+                disabled={busy || (account.status !== "connected" && !data.selection?.account_ids.includes(account.account_id))}
+                onChange={event => void mutate(() => setConnectedWorkspaceAccess(data.workspace_id, account.account_id, event.target.checked))} />
+              Use in this workspace
+            </label>
+            {data.selection?.account_ids.includes(account.account_id) && (data.selection.account_id === account.account_id
+              ? <span>Default account</span>
+              : <button type="button" disabled={busy || account.status !== "connected"} onClick={() => void mutate(() => selectConnectedAccount(data.workspace_id, account.account_id))}>Make default</button>)}
             {account.status === "connected" && <button type="button" disabled={busy} onClick={() => setConfirmDisconnect(account.account_id)}>Disconnect</button>}
           </div>
           {confirmDisconnect === account.account_id && <div className="bs-connected-accounts__confirmation">
-            <p>Disconnect {account.email} from Maverick apps? Maverick will also ask Google to revoke permissions for this connection.</p>
+            <p>Disconnect {account.email} from Maverick in all workspaces? Maverick will also ask Google to revoke permissions for this connection.</p>
             <button type="button" disabled={busy} onClick={() => void mutate(async () => {
               const result = await disconnectConnectedAccount(account.account_id);
               if (alive.current) { setConfirmDisconnect(null); setNotice(result.revoked_at_google ? "Google disconnected." : "Disconnected from Maverick. Revocation at Google could not be confirmed."); }
@@ -95,15 +103,17 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
           </div>}
         </section>)}
         {data.selection && data.apps.length > 0 && <section>
-          <h3>Apps using this account</h3>
+          <h3>Apps using workspace accounts</h3>
           {data.apps.map(app => {
-            const selected = data.items.find(item => item.account_id === data.selection?.account_id);
-            const missing = app.services.filter(service => !selected?.services.includes(service));
+            const selected = data.items.filter(item => data.selection?.account_ids.includes(item.account_id) && item.status === "connected");
+            const available = selected.filter(item => app.services.some(service => item.services.includes(service)));
+            const missing = app.services.filter(service => !selected.some(item => item.services.includes(service)));
             return <label className="bs-connected-accounts__app" key={app.app_id}>
-              <span><strong>{app.name}</strong><small>{missing.length ? `Additional consent needed: ${missing.join(", ")}` : app.services.join(" · ")}</small></span>
+              <span><strong>{app.name}</strong><small>{available.length ? `${available.length} account${available.length === 1 ? "" : "s"} available · ${app.services.join(" · ")}`
+                : selected.length ? `Additional consent needed: ${missing.join(", ")}` : "Select an account with the required Google permissions"}</small></span>
               <input aria-label={`Allow ${app.name} to use Google`} type="checkbox" disabled={busy}
                 checked={!data.selection!.disabled_apps.includes(app.app_id)}
-                onChange={event => void mutate(() => setConnectedAppAccess(app.app_id, event.target.checked))} />
+                onChange={event => void mutate(() => setConnectedAppAccess(data.workspace_id, app.app_id, event.target.checked))} />
             </label>;
           })}
         </section>}

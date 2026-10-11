@@ -645,8 +645,9 @@ export type GoogleService = "calendar" | "gmail" | "drive";
 export type GoogleStatus = { configured: boolean; registration_enabled: boolean; services: { id: GoogleService; label: string }[] };
 export type ConnectedAccount = { account_id: string; provider: string; email: string; display_name: string; status: string; services: GoogleService[] };
 export type ConnectedAccountsPayload = {
+  workspace_id: string;
   items: ConnectedAccount[];
-  selection: { account_id: string; disabled_apps: string[] } | null;
+  selection: { account_id: string; account_ids: string[]; disabled_apps: string[] } | null;
   apps: { app_id: string; name: string; services: GoogleService[] }[];
   google: GoogleStatus;
 };
@@ -668,12 +669,16 @@ export function connectedAccounts(signal?: AbortSignal): Promise<ConnectedAccoun
   return requestJson("/api/connected-accounts", { signal });
 }
 
-export function selectConnectedAccount(account_id: string): Promise<{ status: string }> {
-  return requestJson("/api/connected-accounts/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account_id }) });
+export function selectConnectedAccount(workspace_id: string, account_id: string): Promise<{ status: string }> {
+  return requestJson("/api/connected-accounts/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id, account_id }) });
 }
 
-export function setConnectedAppAccess(app_id: string, enabled: boolean): Promise<{ status: string }> {
-  return requestJson("/api/connected-accounts/app-access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ app_id, enabled }) });
+export function setConnectedWorkspaceAccess(workspace_id: string, account_id: string, enabled: boolean): Promise<{ status: string }> {
+  return requestJson("/api/connected-accounts/workspace-access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id, account_id, enabled }) });
+}
+
+export function setConnectedAppAccess(workspace_id: string, app_id: string, enabled: boolean): Promise<{ status: string }> {
+  return requestJson("/api/connected-accounts/app-access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id, app_id, enabled }) });
 }
 
 export function disconnectConnectedAccount(account_id: string): Promise<{ status: string; revoked_at_google: boolean }> {

@@ -26,6 +26,7 @@ class AccountSelection:
     workspace_id: str
     account_id: str
     disabled_apps: list[str] = field(default_factory=list)
+    account_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

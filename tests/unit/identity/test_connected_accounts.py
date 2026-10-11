@@ -270,11 +270,13 @@ class ConnectedAccountsTests(unittest.TestCase):
         query, browser = self.flow(["calendar"])
         user, account, _, selection = self.complete(query, browser)
         for membership in [selection, None]:
+            login_query, login_browser = self.flow(mode="login")
             captured = []
             environ = {"PATH_INFO": "/api/auth/google/callback", "REQUEST_METHOD": "GET", "wsgi.url_scheme": "https",
-                "HTTP_COOKIE": "maverick_google_flow=browser", "QUERY_STRING": "code=code&state=state"}
+                "HTTP_COOKIE": "maverick_google_flow=" + login_browser,
+                "QUERY_STRING": "code=code&state=" + login_query["state"][0]}
             with patch("core.api.connected_accounts_api.resolve_request_session", return_value=None), patch(
-                    "core.api.connected_accounts_api.complete_flow", return_value=(user, account, "login", membership)):
+                    "core.api.connected_accounts_api.complete_claimed_flow", return_value=(user, account, "login", membership)):
                 handle_connected_accounts_api(self.state, environ, lambda status, headers: captured.extend(headers))
             cookies = [value for name, value in captured if name == "Set-Cookie"]
             self.assertTrue(any("maverick_google_flow=;" in cookie for cookie in cookies))

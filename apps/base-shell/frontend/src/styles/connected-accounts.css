@@ -32,3 +32,18 @@
 .bs-login__google details[open] summary { margin-bottom: 1rem; }
 .bs-login__google > small { color: var(--maverick-text-muted); text-align: center; }
 @media (max-width: 600px) { .bs-connected-accounts { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); } .bs-connected-accounts__body { padding: 1rem; } }
+.bs-google-handoff {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+  background: var(--maverick-bg);
+  color: var(--maverick-text);
+}
+.bs-google-handoff__brand { width: 48px; height: 48px; }
+.bs-google-handoff h1 { margin: 0; font-size: 24px; }
+.bs-google-handoff p { margin: 0; max-width: 420px; color: var(--maverick-text-muted); }

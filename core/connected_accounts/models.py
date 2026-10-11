@@ -40,3 +40,8 @@ class OAuthFlow:
     redirect_uri: str
     status: str
     expires_at: datetime
+    initiator_hash: str | None = None
+    handoff_hash: str | None = None
+    result_user_id: str | None = None
+    result_workspace_id: str | None = None
+    result_error: str | None = None

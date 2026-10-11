@@ -18,6 +18,8 @@ class AccountStore(Protocol):
     def save_selection(self, selection: AccountSelection) -> AccountSelection: ...
     def save_flow(self, flow: OAuthFlow) -> None: ...
     def consume_flow(self, state_hash: str, browser_hash: str, now) -> OAuthFlow | None: ...
+    def get_flow(self, state_hash: str) -> OAuthFlow | None: ...
+    def transition_flow(self, flow: OAuthFlow, expected_status: str) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -77,3 +79,11 @@ class AccountDocumentStore:
         if not self.collections.flows.compare_and_set(query, {"$set": {"status": "consumed"}}):
             return None
         return OAuthFlow(**item)
+
+    def get_flow(self, state_hash):
+        item = self.collections.flows.find_one({"state_hash": state_hash})
+        return OAuthFlow(**item) if item else None
+
+    def transition_flow(self, flow, expected_status):
+        return self.collections.flows.compare_and_set(
+            {"state_hash": flow.state_hash, "status": expected_status}, {"$set": asdict(flow)})

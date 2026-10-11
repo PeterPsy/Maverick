@@ -30,14 +30,14 @@ def run(origin):
     cookies = CookieJar()
     client = build_opener(NoRedirect(), HTTPCookieProcessor(cookies))
 
-    def request(path, *, body=None, request_origin=None):
+    def request(path, *, body=None, request_origin=None, transport=None):
         headers = {"Accept": "application/json"}
         if request_origin is not None:
             headers["Origin"] = request_origin
         if body is not None:
             headers["Content-Type"] = "application/json"
         try:
-            response = client.open(Request(origin + path,
+            response = (transport or client).open(Request(origin + path,
                 data=json.dumps(body).encode() if body is not None else None,
                 headers=headers), timeout=20)
         except HTTPError as error:
@@ -95,7 +95,34 @@ def run(origin):
                 status, headers, _ = request(callback)
                 check(status == 303 and headers.get("location") == "/?google_error=google_flow_invalid",
                       "A consumed OAuth flow cannot be replayed")
-    print("Application checks passed. Google Cloud callback registration and a human-approved login still require an end-to-end check.")
+    browser = build_opener(NoRedirect(), HTTPCookieProcessor(CookieJar()))
+    status, headers, started = request("/api/auth/google/start", body={"mode": "login", "services": [],
+        "transport": "system-browser"}, request_origin=origin)
+    check(status == 200 and "browser_url" in started, "Native login starts a system-browser handoff")
+    target = urlsplit(started["browser_url"])
+    raw_state, handoff = target.fragment.split(".")
+    check(target.scheme + "://" + target.netloc == origin and target.path == "/"
+          and target.query == "google_handoff=1", "Handoff authority stays in a same-origin URL fragment")
+    status, _, launched = request("/api/auth/google/handoff", body={"state": raw_state, "handoff": handoff},
+        request_origin=origin, transport=browser)
+    check(status == 200, "Independent system-browser cookies can launch Google authorization")
+    params = parse_qs(urlsplit(launched["authorization_url"]).query)
+    check(params.get("state") == [raw_state] and params.get("code_challenge_method") == ["S256"],
+          "The system browser uses its own protected OAuth and PKCE flow")
+    status, _, _ = request("/api/auth/google/handoff", body={"state": raw_state, "handoff": handoff},
+        request_origin=origin, transport=browser)
+    check(status == 400, "A browser handoff cannot be launched twice")
+    status, _, receipt = request("/api/auth/google/result", body={"flow_id": started["flow_id"]}, request_origin=origin)
+    check(status == 200 and receipt.get("status") == "pending", "The original native session waits for browser consent")
+    status, headers, _ = request("/api/auth/google/callback?" + urlencode({"error": "access_denied", "state": raw_state}), transport=browser)
+    check(status == 303 and headers.get("location") == "/?google_handoff_done=1&google_error=google_consent_cancelled",
+          "Cancelled browser consent returns a native completion page")
+    status, _, receipt = request("/api/auth/google/result", body={"flow_id": started["flow_id"]}, request_origin=origin)
+    check(status == 200 and receipt == {"status": "failed", "error": "google_consent_cancelled"},
+          "The original native session receives the cancelled result")
+    status, _, _ = request("/api/auth/google/result", body={"flow_id": started["flow_id"]}, request_origin=origin)
+    check(status == 400, "A native login result cannot be collected twice")
+    print("Application checks passed. A human-approved Google login still requires an end-to-end check.")
 
 
 if __name__ == "__main__":

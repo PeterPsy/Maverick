@@ -26,33 +26,48 @@ def public_account(account):
             "status": account.status, "services": google.available_services(account.scopes)}
 
 
-def start_flow(state, *, mode, services, context=None, now=None):
+def authorization_url(state, flow, raw_state, browser):
+    client_id, _ = google.credentials(state.secret_store)
+    scopes = {"openid", "email", "profile"}
+    for service in flow.services:
+        scopes.update(google.SERVICES[service]["scopes"])
+    query = {"client_id": client_id, "redirect_uri": flow.redirect_uri, "response_type": "code",
+             "scope": " ".join(sorted(scopes)), "state": raw_state, "nonce": digest(browser),
+             "code_challenge": base64.urlsafe_b64encode(sha256(browser.encode()).digest()).decode().rstrip("="),
+             "code_challenge_method": "S256", "include_granted_scopes": "true"}
+    if flow.services:
+        query.update(access_type="offline", prompt="consent")
+    else:
+        query["prompt"] = "select_account"
+    return google.AUTH_URL + "?" + urlencode(query)
+
+
+def start_flow(state, *, mode, services, context=None, now=None, transport="browser"):
     timestamp = now or datetime.now(UTC)
     selected_services = google.validate_services(services)
-    if mode not in {"login", "connect"} or (mode == "connect" and context is None):
+    if not isinstance(mode, str) or mode not in {"login", "connect"} or (mode == "connect" and context is None):
         raise google.AccountError("authentication_required", status=401)
-    client_id, _ = google.credentials(state.secret_store)
+    if not isinstance(transport, str) or transport not in {"browser", "system-browser"}:
+        raise google.AccountError("invalid_google_transport")
+    google.credentials(state.secret_store)
     redirect = google.redirect_uri()
     browser = secrets.token_urlsafe(48)
     raw_state = secrets.token_urlsafe(32)
-    scopes = {"openid", "email", "profile"}
-    for service in selected_services:
-        scopes.update(google.SERVICES[service]["scopes"])
     flow = OAuthFlow(digest(raw_state), digest(browser), mode,
                      context.user.user_id if context else None,
                      context.workspace_id if context else None,
                      digest(context.session.session_id) if context else None,
                      selected_services, redirect, "pending", timestamp + timedelta(minutes=10))
+    if transport == "system-browser":
+        handoff = secrets.token_urlsafe(48)
+        flow = replace(flow, status="awaiting_browser", initiator_hash=digest(browser), handoff_hash=digest(handoff))
+        state.account_store.save_flow(flow)
+        # Neither handoff authority nor OAuth state is sent in URL query logs.
+        origin = redirect.removesuffix(google.CALLBACK_PATH)
+        return {"browser_url": origin + "/?google_handoff=1#" + raw_state + "." + handoff,
+                "flow_id": flow.state_hash}, browser
     state.account_store.save_flow(flow)
-    query = {"client_id": client_id, "redirect_uri": redirect, "response_type": "code",
-             "scope": " ".join(sorted(scopes)), "state": raw_state, "nonce": digest(browser),
-             "code_challenge": base64.urlsafe_b64encode(sha256(browser.encode()).digest()).decode().rstrip("="),
-             "code_challenge_method": "S256", "include_granted_scopes": "true"}
-    if selected_services:
-        query.update(access_type="offline", prompt="consent")
-    else:
-        query["prompt"] = "select_account"
-    return {"authorization_url": google.AUTH_URL + "?" + urlencode(query)}, browser
+    return {"authorization_url": authorization_url(state, flow, raw_state, browser)}, browser
 
 
 def complete_flow(state, *, raw_state, browser, code, context=None, now=None,
@@ -61,6 +76,14 @@ def complete_flow(state, *, raw_state, browser, code, context=None, now=None,
     flow = state.account_store.consume_flow(digest(raw_state), digest(browser), timestamp)
     if not flow:
         raise google.AccountError("google_flow_invalid")
+    return complete_claimed_flow(state, flow=flow, browser=browser, code=code, context=context,
+                                 now=timestamp, exchange=exchange, identity_verifier=identity_verifier)
+
+
+def complete_claimed_flow(state, *, flow, browser, code, context=None, now=None,
+                          exchange=None, identity_verifier=None):
+    """Process a flow already atomically consumed by this Core request."""
+    timestamp = now or datetime.now(UTC)
     if flow.mode == "connect" and (context is None or context.user.user_id != flow.user_id
             or context.workspace_id != flow.workspace_id or digest(context.session.session_id) != flow.session_generation):
         raise google.AccountError("google_flow_session_changed", status=403)

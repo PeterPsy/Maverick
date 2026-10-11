@@ -40,6 +40,10 @@ export function googleCallbackMessage(code: string | null): string | null {
     google_not_configured: "Google sign-in is not configured. Contact your administrator.",
     google_flow_session_changed: "Your Maverick session changed. Start the Google connection again.",
     google_registration_disabled: "This Google account is not authorised to sign in. Contact your administrator.",
+    google_native_update_required: "Update the Maverick app to connect Google, then try again.",
+    google_browser_unavailable: "Unable to open your browser. Please try again.",
+    google_flow_expired: "The Google connection timed out. Please try again.",
+    google_flow_invalid: "This Google connection has expired. Please start again.",
   };
   return messages[code] ?? "Google sign-in could not be completed. Please try again.";
 }

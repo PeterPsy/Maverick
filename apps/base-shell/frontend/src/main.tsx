@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AppShell } from "./AppShell";
+import { GoogleBrowserHandoff, isGoogleBrowserHandoff } from "./components/GoogleBrowserHandoff";
 import { registerShellServiceWorker } from "./pwa";
 import { initializeShellPwaCacheRuntime } from "./pwaCacheRuntime";
 import { applyInitialShellTheme } from "./theme";
@@ -13,6 +14,6 @@ registerShellServiceWorker();
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
-    <AppShell />
+    {isGoogleBrowserHandoff ? <GoogleBrowserHandoff /> : <AppShell />}
   </StrictMode>,
 );

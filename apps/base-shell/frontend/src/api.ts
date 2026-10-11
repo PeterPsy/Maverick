@@ -655,13 +655,13 @@ export function googleStatus(signal?: AbortSignal): Promise<GoogleStatus> {
   return requestJson("/api/auth/google/status", { signal });
 }
 
-export async function startGoogle(mode: "login" | "connect", services: GoogleService[]): Promise<void> {
-  const result = await requestJson<{ authorization_url: string }>("/api/auth/google/start", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, services }),
-  });
-  const target = new URL(result.authorization_url);
-  if (target.origin !== "https://accounts.google.com" || target.pathname !== "/o/oauth2/v2/auth") throw new Error("Invalid Google sign-in URL.");
-  window.location.assign(target.href);
+export function googlePost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  return requestJson<T>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+}
+
+export async function startGoogle(mode: "login" | "connect", services: GoogleService[], signal?: AbortSignal) {
+  const { runGoogleFlow } = await import("./lib/googleAuth");
+  return runGoogleFlow(mode, services, googlePost, signal);
 }
 
 export function connectedAccounts(signal?: AbortSignal): Promise<ConnectedAccountsPayload> {

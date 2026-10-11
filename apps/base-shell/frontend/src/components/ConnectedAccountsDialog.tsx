@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { connectedAccounts, disconnectConnectedAccount, selectConnectedAccount, setConnectedAppAccess, startGoogle,
   type ConnectedAccountsPayload, type GoogleService } from "../api";
 import { GoogleMark, GoogleServices, googleCallbackMessage } from "./GoogleServices";
+import { GoogleAuthError } from "../lib/googleAuth";
 
 export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = null }: {
   onClose: () => void; onChanged: () => void; callbackError?: string | null;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const alive = useRef(true);
+  const googleController = useRef<AbortController | null>(null);
   const [data, setData] = useState<ConnectedAccountsPayload | null>(null);
   const [services, setServices] = useState<GoogleService[]>([]);
   const [busy, setBusy] = useState(false);
@@ -22,10 +24,17 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
     connectedAccounts(controller.signal).then(result => {
       if (alive.current) { setData(result); setServices(result.items.find(item => item.account_id === result.selection?.account_id)?.services ?? []); }
     }).catch(() => { if (!controller.signal.aborted) setError("Unable to load connected accounts. Please reopen this panel to try again."); });
-    return () => { alive.current = false; controller.abort(); dialog.current?.close(); };
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted && !googleController.current) {
+        setBusy(false); setNotice(null);
+        void connectedAccounts(controller.signal).then(setData).catch(() => {});
+      }
+    };
+    window.addEventListener("pageshow", restore);
+    return () => { alive.current = false; controller.abort(); googleController.current?.abort(); window.removeEventListener("pageshow", restore); dialog.current?.close(); };
   }, []);
 
-  function close() { dialog.current?.close(); onClose(); }
+  function close() { googleController.current?.abort(); dialog.current?.close(); onClose(); }
 
   async function mutate(action: () => Promise<unknown>) {
     if (busy) return;
@@ -41,9 +50,21 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
   }
 
   async function connect() {
-    setBusy(true); setError(null);
-    try { await startGoogle("connect", services); }
-    catch { if (alive.current) { setBusy(false); setError("Unable to open Google. Please try again."); } }
+    if (busy) return;
+    const controller = new AbortController(); googleController.current = controller;
+    setBusy(true); setError(null); setNotice("Continue in your browser. Maverick will update automatically.");
+    try {
+      if (await startGoogle("connect", services, controller.signal) === "completed" && alive.current) {
+        onChanged();
+        const result = await connectedAccounts(controller.signal);
+        if (alive.current) { setData(result); setNotice("Google connected."); setBusy(false); }
+      }
+    } catch (error) {
+      if (alive.current && !controller.signal.aborted) {
+        setBusy(false); setNotice(null);
+        setError(error instanceof GoogleAuthError ? googleCallbackMessage(error.code) : "Unable to complete the Google connection. Please try again.");
+      }
+    } finally { if (googleController.current === controller) googleController.current = null; }
   }
 
   return <dialog ref={dialog} className="bs-connected-accounts" aria-labelledby="bs-accounts-title"
@@ -91,6 +112,9 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
           <button className="bs-google-button" type="button" disabled={busy || !data.google.configured} onClick={() => void connect()}>
             <GoogleMark /><span>{busy ? "Connecting…" : data.items.length ? "Update permissions or add an account" : "Connect Google"}</span>
           </button>
+          {busy && googleController.current && <button type="button" onClick={() => {
+            googleController.current?.abort(); setBusy(false); setNotice(null); setError("Google connection cancelled. You can try again.");
+          }}>Cancel connection</button>}
           {!data.google.configured && <p>Google sign-in is not configured on this installation. Your administrator must configure the Google connection.</p>}
         </section>
       </>}

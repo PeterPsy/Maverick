@@ -9,8 +9,10 @@ from types import SimpleNamespace
 
 from core.api.http import json_response, query_params, read_json_body, request_cookies, status_line
 from core.api.session_api import resolve_request_session, session_cookie_header, _request_is_https
+from core.api.google_handoff_context import source_context
 from core.connected_accounts import google
-from core.connected_accounts.service import complete_flow, digest, disconnect_account, public_account, select_account, start_flow
+from core.connected_accounts import browser_handoff
+from core.connected_accounts.service import complete_claimed_flow, digest, disconnect_account, public_account, select_account, start_flow
 from core.identity.errors import UserNotFoundError
 from core.identity.service import build_auth_session, session_expiry
 from core.secrets.errors import SecretError
@@ -88,21 +90,36 @@ def handle_connected_accounts_api(state, environ, start_response):
     if path == "/api/auth/google/status" and method == "GET":
         return json_response(start_response, provider_status(state))
     context = resolve_request_session(state, environ)
+    callback = None
     try:
         if path == google.CALLBACK_PATH and method == "GET":
             clear = [_flow_cookie("", secure=secure, clear=True)]
             params = query_params(environ)
             browser = request_cookies(environ).get(FLOW_COOKIE, "")
+            if not browser or not params.get("state"):
+                raise google.AccountError("google_flow_invalid")
+            callback = state.account_store.consume_flow(digest(params["state"]), digest(browser), datetime.now(UTC))
+            if callback is None:
+                raise google.AccountError("google_flow_invalid")
             if params.get("error"):
-                if not browser or not state.account_store.consume_flow(digest(params.get("state", "")), digest(browser), datetime.now(UTC)):
-                    raise google.AccountError("google_flow_invalid")
-                return _redirect(start_response, "/?google_error=google_consent_cancelled", clear)
+                browser_handoff.finish(state, callback, error="google_consent_cancelled")
+                target = "/?google_handoff_done=1&google_error=google_consent_cancelled" if callback.initiator_hash else "/?google_error=google_consent_cancelled"
+                return _redirect(start_response, target, clear)
             if not browser or not params.get("code") or not params.get("state"):
                 raise google.AccountError("google_flow_invalid")
-            user, _, mode, selection = complete_flow(state, raw_state=params["state"], browser=browser,
-                                                      code=params["code"], context=context)
+            if callback.initiator_hash:
+                context = source_context(state, callback, environ)
+            user, _, mode, selection = complete_claimed_flow(state, flow=callback, browser=browser,
+                                                              code=params["code"], context=context)
             if selection is None:
+                browser_handoff.finish(state, callback, error="google_workspace_pending")
+                if callback.initiator_hash:
+                    return _redirect(start_response, "/?google_handoff_done=1&google_error=google_workspace_pending", clear)
                 return _redirect(start_response, "/?google_error=google_workspace_pending", clear)
+            if callback.initiator_hash:
+                browser_handoff.finish(state, callback, user_id=user.user_id, workspace_id=selection.workspace_id)
+                _publish_account_change(state, context or SimpleNamespace(user=user, workspace_id=selection.workspace_id))
+                return _redirect(start_response, "/?google_handoff_done=1", clear)
             if mode == "login":
                 expires_at = session_expiry()
                 session = state.identity_store.save_auth_session(build_auth_session(
@@ -117,8 +134,28 @@ def handle_connected_accounts_api(state, environ, start_response):
             if environ.get("HTTP_ORIGIN") != f"{configured.scheme}://{configured.netloc}":
                 raise google.AccountError("origin_not_allowed", status=403)
             body = read_json_body(environ)
-            result, browser = start_flow(state, mode=body.get("mode", "login"), services=body.get("services", []), context=context)
+            result, browser = start_flow(state, mode=body.get("mode", "login"), services=body.get("services", []), context=context,
+                                         transport=body.get("transport", "browser"))
             return json_response(start_response, result, headers=[_flow_cookie(browser, secure=secure)])
+        if path in {"/api/auth/google/handoff", "/api/auth/google/result", "/api/auth/google/cancel"} and method == "POST":
+            _same_origin(environ)
+            body = read_json_body(environ)
+            if path.endswith("/handoff"):
+                result, browser = browser_handoff.launch(state, raw_state=body.get("state"), handoff=body.get("handoff"),
+                                                         resolve_context=lambda flow: source_context(state, flow, environ))
+                return json_response(start_response, result, headers=[_flow_cookie(browser, secure=secure)])
+            browser = request_cookies(environ).get(FLOW_COOKIE, "")
+            result, user = browser_handoff.collect(state, flow_id=body.get("flow_id"), browser=browser,
+                                                  context=context, cancel=path.endswith("/cancel"))
+            headers = []
+            if result["status"] != "pending" and not path.endswith("/cancel"):
+                headers.append(_flow_cookie("", secure=secure, clear=True))
+            if user:
+                expires_at = session_expiry()
+                session = state.identity_store.save_auth_session(build_auth_session(
+                    session_id=str(uuid4()), user_id=user.user_id, expires_at=expires_at))
+                headers.append(session_cookie_header(session.session_id, expires_at=expires_at, secure=secure))
+            return json_response(start_response, result, headers=headers)
         if not path.startswith("/api/connected-accounts"):
             return json_response(start_response, {"error": "not_found"}, status="404 Not Found")
         if context is None:
@@ -159,5 +196,8 @@ def handle_connected_accounts_api(state, environ, start_response):
     except (google.AccountError, UserNotFoundError) as error:
         code = error.code if isinstance(error, google.AccountError) else "google_user_unavailable"
         if path == google.CALLBACK_PATH:
-            return _redirect(start_response, "/?google_error=" + code, [_flow_cookie("", secure=secure, clear=True)])
+            if callback and callback.initiator_hash:
+                browser_handoff.finish(state, callback, error=code)
+            target = "/?google_handoff_done=1&google_error=" if callback and callback.initiator_hash else "/?google_error="
+            return _redirect(start_response, target + code, [_flow_cookie("", secure=secure, clear=True)])
         return json_response(start_response, {"error": code}, status=status_line(getattr(error, "status", 400)))

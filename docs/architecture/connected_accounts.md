@@ -61,9 +61,26 @@ App-owned OAuth/connect/disconnect operations direct platform-managed connection
 to the central panel. Unattributed workspace background hooks receive no personal
 Google authority; a background job must supply a trusted owning user context.
 
-The flow uses a regular web browser, including mobile browsers. Native clients
-using embedded webviews need a system-browser authentication handoff; that native
-flow is outside this web implementation.
+Web and installed PWA clients use ordinary browser OAuth. Native Mac and iOS/iPadOS
+clients launch the system browser through the trusted top-level
+`maverickExternalURL` bridge. `/api/auth/google/start` with transport
+`system-browser` creates an expiring, one-use handoff. Its authority travels in
+the URL fragment, which the shell removes before rendering or requesting data.
+The browser posts it to `/api/auth/google/handoff` and receives its own HttpOnly
+flow cookie and PKCE verifier. Browser cookies are never assumed to be shared
+with native webviews.
+
+For account linking, Core revalidates the original user's session generation,
+active user and workspace membership through the canonical session resolver,
+even if the system browser is signed into another Maverick user. Google callbacks
+never replace that browser's Maverick login. The original webview polls
+`/api/auth/google/result`, protected by its separate HttpOnly initiating cookie.
+Only that webview can consume the result and receive a Maverick login cookie.
+Neither raw session IDs nor provider tokens are passed through URLs or JavaScript.
+Cancellation, provider errors and expiry release the shell's pending controls;
+closing the panel stops polling and cancels pending server authority. Browser
+back navigation restores usable controls. Older native builds without the bridge
+show an explicit app-update message rather than starting a blocked navigation.
 
 Public Google deployments must configure consent and verification for their
 requested scopes; Gmail restricted scopes can require a security assessment.
@@ -91,7 +108,8 @@ it does not verify Google Cloud callback registration or a user's consent.
 Run `python3 scripts/google_accounts_smoke.py --origin https://<platform-host>`
 against the restarted backend. This checks deployed routes, anonymous access,
 origin enforcement, exact requested scopes, PKCE, protected flow cookies,
-cancellation and replay protection. It cancels its own short-lived flows without
+cancellation, independent native/browser cookie jars, one-use handoff and result
+replay protection. It cancels its own short-lived flows without
 granting Google consent and never prints credentials or authorization URLs.
 
 For the final end-to-end check, an existing password user opens Connected accounts,

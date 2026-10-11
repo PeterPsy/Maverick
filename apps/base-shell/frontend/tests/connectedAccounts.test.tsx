@@ -7,7 +7,7 @@ import { LoginScreen } from "../src/components/LoginScreen";
 import { googleCallbackMessage } from "../src/components/GoogleServices";
 
 const api = vi.hoisted(() => ({ connectedAccounts: vi.fn(), disconnectConnectedAccount: vi.fn(), selectConnectedAccount: vi.fn(),
-  setConnectedAppAccess: vi.fn(), startGoogle: vi.fn(), googleStatus: vi.fn(), login: vi.fn() }));
+  setConnectedAppAccess: vi.fn(), startGoogle: vi.fn(), googleStatus: vi.fn(), login: vi.fn(), getSession: vi.fn() }));
 vi.mock("../src/api", () => api);
 vi.mock("../src/components/LoginPaperBackground", () => ({ LoginPaperBackground: () => <div /> }));
 const data = {
@@ -39,7 +39,7 @@ describe("Google login and connected accounts", () => {
     await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
     await act(async () => container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1].click());
     await act(async () => button("Continue with Google").click());
-    expect(api.startGoogle).toHaveBeenCalledWith("login", ["gmail"]);
+    expect(api.startGoogle).toHaveBeenCalledWith("login", ["gmail"], expect.any(AbortSignal));
     expect(api.login).not.toHaveBeenCalled();
   });
 
@@ -74,5 +74,46 @@ describe("Google login and connected accounts", () => {
     expect(googleCallbackMessage("google_workspace_pending")).toContain("assign you a workspace");
     expect(googleCallbackMessage("google_account_link_required")).toContain("password first");
     expect(googleCallbackMessage("<script>untrusted</script>")).not.toContain("untrusted");
+  });
+
+  it("refreshes native accounts and releases the connecting button after browser consent", async () => {
+    api.startGoogle.mockResolvedValue("completed");
+    await act(async () => root.render(<ConnectedAccountsDialog onClose={vi.fn()} onChanged={changed} />));
+    await act(async () => button("Update permissions or add an account").click());
+    expect(changed).toHaveBeenCalledOnce();
+    expect(api.connectedAccounts).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Google connected.");
+    expect(button("Update permissions or add an account").disabled).toBe(false);
+  });
+
+  it("finishes native Google login using the session saved in the webview", async () => {
+    const session = { authenticated: true, user: { username: "alice" }, workspace_id: "default" };
+    const authenticated = vi.fn();
+    api.startGoogle.mockResolvedValue("completed"); api.getSession.mockResolvedValue(session);
+    await act(async () => root.render(<LoginScreen onAuthenticated={authenticated} />));
+    await act(async () => button("Continue with Google").click());
+    expect(authenticated).toHaveBeenCalledExactlyOnceWith(session);
+    expect(button("Continue with Google").disabled).toBe(false);
+  });
+
+  it("allows cancellation while the system browser is open and stops polling on unmount", async () => {
+    api.startGoogle.mockImplementation(() => new Promise(() => {}));
+    await act(async () => root.render(<ConnectedAccountsDialog onClose={vi.fn()} onChanged={changed} />));
+    await act(async () => button("Update permissions or add an account").click());
+    const signal = api.startGoogle.mock.calls[0][2] as AbortSignal;
+    expect(container.textContent).toContain("Maverick will update automatically");
+    await act(async () => button("Cancel connection").click());
+    expect(signal.aborted).toBe(true);
+    expect(button("Update permissions or add an account").disabled).toBe(false);
+  });
+
+  it("restores an ordinary browser panel when returning through the back button", async () => {
+    api.startGoogle.mockResolvedValue("redirecting");
+    await act(async () => root.render(<ConnectedAccountsDialog onClose={vi.fn()} onChanged={changed} />));
+    await act(async () => button("Update permissions or add an account").click());
+    expect(button("Connecting…").disabled).toBe(true);
+    const event = new Event("pageshow"); Object.defineProperty(event, "persisted", { value: true });
+    await act(async () => window.dispatchEvent(event));
+    expect(button("Update permissions or add an account").disabled).toBe(false);
   });
 });

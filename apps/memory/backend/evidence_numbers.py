@@ -18,6 +18,7 @@ IDENTIFIER = re.compile(IDENTIFIER_PATTERN, re.IGNORECASE)
 # Scan a whole numeric-looking expression before tokenizing it: an unsupported
 # exponent, grouping, fraction glyph or malformed sign must not become digits.
 NUMBER_CANDIDATE = re.compile(r"(?:[+\-±∓–—~≈≃≅∼]+\s*)?[.,]*\d[\w.,:/+\-⁄'’^×*·÷√]*")
+QUANTITY_END = re.compile(r'(?:\d|\))\s*(?:[^\W\d_]+|[%€$£])?\s*$', re.UNICODE)
 
 
 def normalized_numeric_text(text: str) -> str | None:
@@ -40,12 +41,15 @@ def normalized_numeric_text(text: str) -> str | None:
             literal = literal[:-1]
         if NUMBER.fullmatch(literal) is None:
             return None
-        if literal.startswith(('+', '-')) and re.search(r'(?:\d|\))\s*$', numeric[:match.start()]):
+        if literal.startswith(('+', '-')) and QUANTITY_END.search(numeric[:match.start()]):
             return None  # A binary sign must not become a second unary number.
         remaining[match.start():match.end()] = ' ' * (match.end() - match.start())
     # Operators outside a recognized literal (including dates/ratios) cannot
     # disappear between spaced operands. Arithmetic is deliberately unverified.
     remainder = ''.join(remaining)
+    for sign in re.finditer(r'[+-]', remainder):
+        if QUANTITY_END.search(numeric[:sign.start()]) or re.match(r'\s*\(', remainder[sign.end():]):
+            return None  # Signed parentheses/symbolic operands are unsupported too.
     if re.search(r'[/\*^·&]', remainder) or any(
         unicodedata.category(char) == 'Sm' and char not in '<>=≥≤≠' for char in remainder
     ):

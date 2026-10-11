@@ -70,9 +70,10 @@ def apply_additive_migrations(db: sqlite3.Connection, *, data_root: Path) -> Non
       (SELECT sv.id FROM source_versions sv WHERE sv.source_id = sources.id ORDER BY sv.observed_at DESC, sv.id DESC LIMIT 1), '')
       WHERE current_version_id = ''""")
     previous = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
-    if previous is not None and previous["value"] in {"4", "5", "6"}:
+    if previous is not None and previous["value"] in {"4", "5", "6", "7"}:
         # Earlier checks discarded signs/operators/questions (v4) and leading
-        # decimal separators (v5) or spaced arithmetic operators (v6).
+        # decimal separators (v5), spaced arithmetic operators (v6), or an
+        # operator after a paragraph break (v7).
         # Retain original passages, but revoke verification until recompilation.
         db.execute("UPDATE citations SET evidence_relation = 'unverified' WHERE evidence_relation = 'supports'")
         # Reconsider missing verification too: v6's whole-chunk guard blocked
@@ -82,7 +83,7 @@ def apply_additive_migrations(db: sqlite3.Connection, *, data_root: Path) -> Non
     db.execute("UPDATE wiki_pages SET freshness = 'stale' WHERE id IN (SELECT wiki_page_id FROM claims JOIN citations ON claims.id = citations.claim_id WHERE evidence_relation = 'unverified')")
     db.execute("UPDATE claims SET stale = 1 WHERE id IN (SELECT claim_id FROM citations WHERE evidence_relation = 'unverified')")
     for row in db.execute("SELECT wp.node_id FROM wiki_pages wp JOIN nodes n ON n.id = wp.node_id WHERE wp.freshness = 'stale' AND n.status = 'active'"):
-        dedupe = "compile_node:migration:7:" + row["node_id"]
+        dedupe = "compile_node:migration:8:" + row["node_id"]
         if db.execute("""SELECT 1 FROM ingest_jobs WHERE dedupe_key = ? OR
             (job_type = 'compile_node' AND node_id = ? AND status IN ('ready', 'running'))""",
             (dedupe, row["node_id"])).fetchone():

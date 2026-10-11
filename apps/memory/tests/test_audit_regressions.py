@@ -297,7 +297,7 @@ class MemoryAuditRegressions(unittest.TestCase):
             self.assertEqual(db.execute('SELECT current_version_id FROM sources WHERE id=?', (a['source']['id'],)).fetchone()[0], a['source_version']['id'])
             self.assertNotEqual(a['source_version']['id'], b['source_version']['id'])
             self.assertEqual(db.execute('SELECT freshness FROM wiki_pages WHERE node_id=?', (a['node']['id'],)).fetchone()[0], 'stale')
-            self.assertEqual(db.execute("SELECT count(*) FROM ingest_jobs WHERE dedupe_key=?", ('compile_node:migration:7:' + a['node']['id'],)).fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT count(*) FROM ingest_jobs WHERE dedupe_key=?", ('compile_node:migration:8:' + a['node']['id'],)).fetchone()[0], 1)
         self.call('maintenance')
         self.assertEqual(self.call('inspect', node_id=a['node']['id'])['node']['compiled_page']['verification'], 'verified')
 

@@ -8,6 +8,7 @@ from typing import Any
 from citation_matching import citation_quote, contradiction_quote, related_quote
 from content_store import read_body
 from database import json_text, new_id, row_payload
+from evidence_propositions import complete_chunk_bodies
 from wiki_content import claim_texts
 
 
@@ -45,11 +46,11 @@ def replace_claims(
             """,
             claim,
         )
-        for source, version, chunk, chunk_body in candidates:
-            quote = citation_quote(claim_text, chunk_body)
+        for source, version, chunk, chunk_body, complete_body in candidates:
+            quote = citation_quote(claim_text, complete_body)
             relation = "supports"
             if not quote:
-                quote = contradiction_quote(claim_text, chunk_body)
+                quote = contradiction_quote(claim_text, complete_body)
                 relation = "contradicts"
             if not quote:
                 quote = related_quote(claim_text, chunk_body)
@@ -93,8 +94,8 @@ def citation_sources(
     sources: list[dict[str, Any]],
     *,
     data_root: Path,
-) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]]:
-    claim_sources: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]] = []
+) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str, str]]:
+    claim_sources: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str, str]] = []
     for source in sources:
         version_id = str(source.get("source_version_id") or "")
         if not version_id:
@@ -105,6 +106,7 @@ def citation_sources(
             "SELECT * FROM source_chunks WHERE source_version_id = ? ORDER BY chunk_index",
             (version_id,),
         )
+        version_chunks = []
         for chunk_row in chunk_rows:
             chunk = row_payload(chunk_row) or {}
             if not chunk:
@@ -112,7 +114,10 @@ def citation_sources(
             chunk_body = read_body(data_root, relative_path=str(chunk.get("body_path") or ""), expected_sha256=str(chunk.get("body_sha256") or ""))
             if not chunk_body.strip():
                 continue
-            claim_sources.append((source, version, chunk, chunk_body))
+            version_chunks.append((chunk, chunk_body))
+        complete_bodies = complete_chunk_bodies([body for _chunk, body in version_chunks])
+        for (chunk, chunk_body), complete_body in zip(version_chunks, complete_bodies):
+            claim_sources.append((source, version, chunk, chunk_body, complete_body))
     return claim_sources
 
 

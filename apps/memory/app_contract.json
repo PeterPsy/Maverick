@@ -237,7 +237,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "7",
+    "data_schema_version": "8",
     "primary_paths": [
       "data/memory/memory.sqlite",
       "data/memory/artifacts",

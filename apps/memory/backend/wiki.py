@@ -370,4 +370,4 @@ def compile_source_aware_input_hash(
         )
         for source in sorted(sources, key=lambda item: str(item.get("id") or ""))
     ]
-    return sha256("\n".join(["support-v7", base_hash, *source_parts]).encode("utf-8")).hexdigest()
+    return sha256("\n".join(["support-v8", base_hash, *source_parts]).encode("utf-8")).hexdigest()

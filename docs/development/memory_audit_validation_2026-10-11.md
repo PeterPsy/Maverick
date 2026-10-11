@@ -7,7 +7,7 @@ Learning's approved-fact save path. Tests use isolated temporary Memory data.
 
 | Audit finding | Change and regression evidence |
 | --- | --- |
-| Opposing citations accepted | Conservative ordered compatibility gates support. Regressions cover negation, changed values/dates/units, swapped participants, uncertainty, signed numbers including Unicode minus, comparison operators and interrogatives. Decimal cases include `.5` versus `-.5`, `5` and `.05`, signed leading decimals and leading-comma decimals through ingestion/compilation. Complete candidate propositions are validated before tokenization; unsupported numeric formats and arithmetic stay unverified, even when identical or separated by spaces, tabs or newlines. Regression pairs include `100 / 10` versus `100 * 10` and `5 ^ 2` versus `5 * 2`. Recognized contradictions and unverified relevant passages retain original text separately. This is not general semantic entailment. |
+| Opposing citations accepted | Conservative ordered compatibility gates support. Regressions cover negation, changed values/dates/units, swapped participants, uncertainty, signed numbers including Unicode minus, comparison operators and interrogatives. Decimal cases include `.5` versus `-.5`, `5` and `.05`, signed leading decimals and leading-comma decimals through ingestion/compilation. Complete candidate propositions are validated before tokenization; unsupported numeric formats and arithmetic stay unverified, even when identical or separated by spaces, tabs or newlines. Operators on either side of paragraph breaks (LF, CRLF and whitespace-only blank lines) cannot certify a numeric prefix. Unit-bearing quantities and signed parentheses/symbolic operands also remain unverified. Already loaded neighboring chunks identify expression fragments crossing chunk boundaries; these fragments cannot support or contradict claims, while complete neighboring assertions remain usable. Original chunks and citation offsets are preserved without additional content reads. Regression pairs include `100 / 10` versus `100 * 10` and `5 ^ 2` versus `5 * 2`. Recognized contradictions and unverified relevant passages retain original text separately. This is not general semantic entailment. |
 | Old facts marked fresh | Generated nodes track current source content; explicit attachment/update/replacement operations and guarded revisions preserve curated notes and expose conflicts. Stale compiled facts are omitted from compact context. Current `body_text` is preserved before and after recompilation; historical or contradictory source excerpts may still appear in dedicated evidence fields. |
 | Graph search crash and hidden source hits | Normalized timestamps feed graph projection; sidebar trusts backend matches. A source-only query traverses search, graph and backend response. |
 | Evidence lost to partial notes; zero edges expanded | Candidates from nodes, pages, claims and current chunks are ranked before the final limit. Project/person scope applies in SQL before every channel limit and related expansion. A regression with 110 out-of-scope matches retains the scoped result in all four channels. Complete matches precede partial matches; direct results precede related nodes. Weight/confidence thresholds preserve zero. |
@@ -19,7 +19,7 @@ Learning's approved-fact save path. Tests use isolated temporary Memory data.
 | Chat saves evidence but retains old fact | Approved text is separate from evidence, replacement is explicit, reviewed match guards are forwarded, and callback verifies the persisted fact and revision before accepting success. Type/confirmation/project/conversation provenance reaches context. |
 | Chat Learning evidence blocked by UUID headers | Proposition extraction separates source headers and neighboring assertions while keeping malformed numeric expressions whole. UUIDs, file locators and URLs remain opaque literal tokens. Real Chat `save_request` → Memory ingestion/compilation → Chat callback coverage verifies the approved fact and its original citation with both simple and UUID session IDs, including a cited file URL. Unrelated unsupported numbers no longer block a simple fact elsewhere in the chunk. |
 
-Schema v7 retains the v4 foundation and invalidates previously supporting v4/v5/v6
+Schema v8 retains the v4 foundation and invalidates previously supporting v4/v5/v6/v7
 citations pending the stricter numeric support check. Original passages remain stored;
 existing active compiled pages become stale and receive deduplicated recompilation
 jobs, including pages previously unverified due to whole-chunk validation. The
@@ -28,18 +28,17 @@ migration does not rewrite existing confidence values or curated facts.
 
 ## Validation
 
-Third reviewer follow-up checks: Memory backend full profile **125 tests passed**;
-Chat fast profile **114 tests, 2 expected skips**, successful, including the real
-Learning → Memory UUID/citation regression. The full Chat profile ran 114 tests
-with one failure in the unchanged CLI sidecar contract test: it expects the
-description to contain `runtime-thread references`, while the unchanged Chat
-contract declares `Inspect Chat references and view state`. The same failure
-reproduces when running that test file alone with the full profile. No production
-Chat code or that contract test changed in this follow-up.
+Current follow-up checks: Memory backend full profile **132 tests passed**;
+Chat full profile **114 tests passed, no skips**, including the real Learning →
+Memory UUID/citation regression and the CLI sidecar contract integration. The
+obsolete Chat CLI test expectation now checks the declared reference/view
+description and the boundary keeping runtime messages and turns in Core.
+Production Chat behavior is unchanged. The Chat suite still emits non-failing
+`ResourceWarning`s for subprocess streams.
 
 `core.app-sdk.validate` returned `valid: true` with no issues. Unused-import
 checking and the scoped Git whitespace check passed. This follow-up changes only
-Memory backend logic, schema metadata, tests and documentation; frontend build
+Memory backend logic, schema metadata, Memory/Chat tests and documentation; frontend build
 and browser checks were not rerun.
 
 The second follow-up passed **119 Memory backend tests** and SDK validation.
@@ -51,7 +50,7 @@ Backend regressions are in `apps/memory/tests/test_audit_regressions.py`,
 `test_proposition_regressions.py`, with existing contract/integration coverage
 retained. `apps/chat/tests/test_learning_memory_evidence.py` covers the real
 Learning save request and citation verification. Current migration tests cover
-v4/v5/v6→v7 verification revocation, recovered UUID evidence, job deduplication and
+v4/v5/v6/v7→v8 verification revocation, recovered UUID evidence, job deduplication and
 cache behavior. Earlier follow-ups cover unsupported numeric forms, positive
 decimal cases and retained audit data.
 Earlier coverage includes all six first-review sequences, the v4 migration and

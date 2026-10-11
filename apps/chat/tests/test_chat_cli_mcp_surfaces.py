@@ -268,7 +268,8 @@ class ChatCliMcpSurfaceTests(unittest.TestCase):
             if item.tool_name == "app.chat.chat_reference_search"
         )
 
-        self.assertIn("runtime-thread references", command.description)
+        self.assertIn("Inspect Chat references and view state", command.description)
+        self.assertIn("Runtime messages and turns remain core operations", command.description)
         self.assertIn("operations.manifest", command.argument_schema["properties"]["action"]["enum"])
         self.assertNotIn("projects.create", command.argument_schema["properties"]["action"]["enum"])
         self.assertIn("Search Chat app-owned project references", tool.description)

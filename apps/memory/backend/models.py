@@ -1,6 +1,6 @@
 """Memory app constants and schema metadata."""
 
-SCHEMA_VERSION = "7"
+SCHEMA_VERSION = "8"
 APP_ID = "memory"
 
 NODE_TYPES = {

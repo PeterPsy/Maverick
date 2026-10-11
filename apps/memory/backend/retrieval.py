@@ -40,8 +40,6 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10, compact: bool 
             if "source_chunk" in candidate["match_sources"] and not matches.get(node_id) and candidate["match_sources"] == ["source_chunk"]:
                 continue
             node["source_chunk_matches"] = matches.get(node_id, [])
-            if compact and candidate.get("excerpt"):
-                node["body_text"] = candidate["excerpt"][:520]
             results.append(memory_node_result(db, data_root, node, relevance=candidate["relevance"], compact=compact, projection=projections.get(node_id)))
             if len(results) >= normalized_limit:
                 break
@@ -52,21 +50,20 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
     normalized_limit = normalize_limit(limit, default=8, minimum=1, maximum=50)
     items = search_nodes(data_root, query, limit=normalized_limit, compact=True, scope=scope)
     seen = {item["id"] for item in items}
+    scope_clause, scope_values = scope_sql(scope, alias="n")
     with connect(data_root) as db:
         if len(items) < normalized_limit:
             for node in list(items):
-                related = db.execute("""SELECT n.id, n.type, n.title, n.summary, substr(n.body_text,1,520) AS body_text,
+                related = db.execute(f"""SELECT n.id, n.type, n.title, n.summary, substr(n.body_text,1,520) AS body_text,
                     n.status, n.importance, n.confidence, n.updated_at, n.metadata_json,
                     e.weight AS relation_weight, e.confidence AS relation_confidence, e.kind, e.reason
                     FROM edges e JOIN nodes n ON n.id = CASE WHEN e.source_node_id = ? THEN e.target_node_id ELSE e.source_node_id END
                     WHERE (e.source_node_id = ? OR e.target_node_id = ?) AND e.status = 'active' AND n.status = 'active'
                       AND e.weight >= .5 AND e.confidence >= .5 AND e.kind IN ('supports','about','depends_on','derived_from','related_to')
-                    ORDER BY e.weight * e.confidence DESC LIMIT 3""", (node["id"], node["id"], node["id"]))
+                    {scope_clause} ORDER BY e.weight * e.confidence DESC LIMIT 3""", (node["id"], node["id"], node["id"], *scope_values))
                 for row in related:
                     payload = row_payload(row) or {}
                     if payload["id"] in seen or len(items) >= normalized_limit:
-                        continue
-                    if scope and any(str(payload.get("metadata", {}).get(key) or "") != str(value) for key, value in scope.items() if value):
                         continue
                     seen.add(payload["id"])
                     items.append(memory_node_result(db, data_root, payload, compact=True,

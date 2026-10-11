@@ -14,7 +14,8 @@ def compact_projections(db: sqlite3.Connection, node_ids: list[str], *, data_roo
     marks = ",".join("?" for _ in node_ids)
     result = {node_id: {"provenance": [], "storage_references": [], "compiled": {}} for node_id in node_ids}
     refs = [row_payload(row) or {} for row in db.execute(
-        f"SELECT * FROM external_refs WHERE node_id IN ({marks}) ORDER BY created_at", node_ids)]
+        f"""SELECT r.* FROM external_refs r LEFT JOIN sources s ON s.external_ref_id = r.id
+        WHERE r.node_id IN ({marks}) AND (s.id IS NULL OR s.status = 'active') ORDER BY r.created_at""", node_ids)]
     ref_by_id = {ref["id"]: ref for ref in refs}
     for ref in refs:
         projection = result[ref["node_id"]]

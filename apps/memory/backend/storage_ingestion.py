@@ -73,6 +73,9 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         old_node_id = str(existing_ref["node_id"] or "") if existing_ref is not None else ""
         old_source_version = source_version_for_ref(existing_ref)
         old_materialized_source_version_id = latest_source_version_id_for_ref(db, str(existing_ref["id"] or "")) if existing_ref is not None else ""
+        restoring_source = existing_ref is not None and db.execute(
+            "SELECT 1 FROM sources WHERE external_ref_id = ? AND status != 'active'", (existing_ref["id"],)
+        ).fetchone() is not None
         external_ref, ref_created = upsert_storage_ref(
             db,
             request=request,
@@ -82,10 +85,12 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         timestamp = now_timestamp()
         ref_row = db.execute("SELECT * FROM external_refs WHERE id = ?", (external_ref["id"],)).fetchone()
         ingested_sources = (
-            sync_sources(db, data_root=data_root, node_id=target_node_id, refs=[ref_row], timestamp=timestamp)
+            sync_sources(db, data_root=data_root, node_id=target_node_id, refs=[ref_row], timestamp=timestamp, restore_removed=True)
             if ref_row is not None
             else []
         )
+        external_ref = row_payload(db.execute("SELECT * FROM external_refs WHERE id = ?", (external_ref["id"],)).fetchone()) or external_ref
+        ref_changed = existing_ref is not None and external_ref["updated_at"] != existing_ref["updated_at"]
         if old_node_id and old_node_id != target_node_id:
             mark_wiki_stale(db, old_node_id, timestamp=timestamp, reason="storage_source_moved", data_root=data_root)
         record_event(
@@ -109,6 +114,8 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         )
         work_changed = (
             ref_created
+            or ref_changed
+            or restoring_source
             or node_created
             or source_version_changed
             or materialized_source_version_changed

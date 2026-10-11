@@ -278,10 +278,12 @@ def update_remote_ref_metadata(
     if not snapshot.get("metadata") or not is_remote_storage_ref(ref):
         return
     metadata = ref_metadata(ref)
-    metadata.update(snapshot["metadata"])
+    revised = {**metadata, **snapshot["metadata"]}
+    if revised == metadata:
+        return
     db.execute(
         "UPDATE external_refs SET metadata_json = ?, updated_at = ? WHERE id = ?",
-        (json_text(metadata), timestamp, ref["id"]),
+        (json_text(revised), timestamp, ref["id"]),
     )
 
 

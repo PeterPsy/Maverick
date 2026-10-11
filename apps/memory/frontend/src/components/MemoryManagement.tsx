@@ -15,6 +15,7 @@ export function MemoryManagement({ node, onSelect, onClose }: { node: NodeDetail
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const excluded = node.status === "excluded";
 
   async function perform(action: string, values: Record<string, unknown> = {}) {
     setBusy(true);
@@ -41,11 +42,12 @@ export function MemoryManagement({ node, onSelect, onClose }: { node: NodeDetail
     <h3>Manage memory</h3>
     {error && <p role="alert">{error}</p>}
     <div className="memory-actions">
-      <button type="button" disabled={busy} onClick={() => setEditing(!editing)}>Correct fact</button>
-      <button type="button" disabled={busy} onClick={() => void perform("compile")}>Verify evidence</button>
+      <button type="button" disabled={busy || excluded} onClick={() => setEditing(!editing)}>Correct fact</button>
+      <button type="button" disabled={busy || excluded} onClick={() => void perform("compile")}>Verify evidence</button>
       <button type="button" disabled={busy} onClick={() => void perform("exclude_node", { excluded: node.status !== "excluded" })}>{node.status === "excluded" ? "Include in retrieval" : "Exclude from retrieval"}</button>
     </div>
-    {editing && <form onSubmit={(event) => { event.preventDefault(); void perform("update_node", { title, body, summary: body.slice(0, 320), metadata: { person_id: personId, project_id: projectId, valid_from: validFrom, valid_until: validUntil, confirmation: "user_corrected", confidence_basis: "user_confirmed" } }); }}>
+    {excluded && <p className="muted">Include this memory in retrieval to correct, verify or merge it.</p>}
+    {editing && !excluded && <form onSubmit={(event) => { event.preventDefault(); void perform("update_node", { title, body, summary: body.slice(0, 320), metadata: { person_id: personId, project_id: projectId, valid_from: validFrom, valid_until: validUntil, confirmation: "user_corrected", confidence_basis: "user_confirmed" } }); }}>
       <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
       <label>Fact<textarea value={body} onChange={(event) => setBody(event.target.value)} required rows={5} /></label>
       <label>Person<input value={personId} onChange={(event) => setPersonId(event.target.value)} /></label>
@@ -57,8 +59,8 @@ export function MemoryManagement({ node, onSelect, onClose }: { node: NodeDetail
     <details>
       <summary>Merge into another memory</summary>
       <p className="muted">The target keeps its fact. Evidence and relationships are transferred; both histories are retained.</p>
-      <form onSubmit={(event) => { event.preventDefault(); void findTargets(); }}><label>Find target<input value={mergeQuery} onChange={(event) => setMergeQuery(event.target.value)} required /></label><button type="submit" disabled={busy}>Find</button></form>
-      {targets.map((target) => <button type="button" disabled={busy} key={target.id} onClick={() => void perform("merge_nodes", { target_node_id: target.id, target_updated_at: target.updated_at })}>Merge into {target.title}</button>)}
+      <form onSubmit={(event) => { event.preventDefault(); void findTargets(); }}><label>Find target<input disabled={excluded} value={mergeQuery} onChange={(event) => setMergeQuery(event.target.value)} required /></label><button type="submit" disabled={busy || excluded}>Find</button></form>
+      {targets.map((target) => <button type="button" disabled={busy || excluded} key={target.id} onClick={() => void perform("merge_nodes", { target_node_id: target.id, target_updated_at: target.updated_at })}>Merge into {target.title}</button>)}
     </details>
     <details>
       <summary>Remove a source</summary>

@@ -7,36 +7,44 @@ Learning's approved-fact save path. Tests use isolated temporary Memory data.
 
 | Audit finding | Change and regression evidence |
 | --- | --- |
-| Opposing citations accepted | Ordered assertion compatibility gates support; negation, changed values/dates/units, swapped participants and uncertainty cannot become supporting citations. Recognized contradictions and unverified relevant passages retain their original text separately; ambiguous curated facts receive reconciliation findings. |
-| Old facts marked fresh | Generated nodes track current source content; explicit attachment/update/replacement operations and guarded revisions preserve curated notes and expose conflicts. Stale compiled facts are omitted from compact context. |
+| Opposing citations accepted | Conservative ordered compatibility gates support. Regressions cover negation, changed values/dates/units, swapped participants, uncertainty, signed numbers including Unicode minus, comparison operators and interrogatives. Recognized contradictions and unverified relevant passages retain their original text separately; ambiguous curated facts receive reconciliation findings. This is not general semantic entailment. |
+| Old facts marked fresh | Generated nodes track current source content; explicit attachment/update/replacement operations and guarded revisions preserve curated notes and expose conflicts. Stale compiled facts are omitted from compact context. Current `body_text` is preserved before and after recompilation; historical or contradictory source excerpts may still appear in dedicated evidence fields. |
 | Graph search crash and hidden source hits | Normalized timestamps feed graph projection; sidebar trusts backend matches. A source-only query traverses search, graph and backend response. |
-| Evidence lost to partial notes; zero edges expanded | Candidates from nodes, pages, claims and current chunks are ranked before the final limit. Complete matches precede partial matches; direct results precede related nodes. Weight/confidence thresholds preserve zero. |
+| Evidence lost to partial notes; zero edges expanded | Candidates from nodes, pages, claims and current chunks are ranked before the final limit. Project/person scope applies in SQL before every channel limit and related expansion. A regression with 110 out-of-scope matches retains the scoped result in all four channels. Complete matches precede partial matches; direct results precede related nodes. Weight/confidence thresholds preserve zero. |
 | Archive scanned on every read | Schema/version/shape checks replace whole-index integrity scans. Explicit maintenance verifies/repairs the index; selected chunks are still hash checked. |
 | Oversized reads and repeated compilation I/O | Compact SQL and batched evidence avoid full pages/claims; chunks load once per compile; unchanged input hashes reuse completed runs. Source versions/chunks have bounded pagination. |
-| A → B → A; identical imports; leases; read writes | Explicit current pointer is independent of immutable deduplication. Identical import does not invalidate or enqueue. Exhausted leases fail terminally. Read-only freshness is persisted by explicit operations. |
-| Confidence, duplicates, removal | New unspecified confidence defaults to 0.5; zero survives claims and context. Scoped content identity deduplicates repeated remember. Explicit exclusion, source removal and merge preserve audit data and suppress ordinary retrieval. Deleted generated nodes can be reimported. |
-| Missing inspector controls | Supporting/conflicting passages, checked chunk expansion, source history, revisions, complete relationships, correction, scope/validity, duplicate merge, exclusion, source removal and node deletion are available. |
+| A → B → A; identical imports; leases; read writes | Explicit current pointer is independent of immutable deduplication. Identical inline and remote Storage imports keep an already fresh page current and add no ready job. Unchanged remote observations preserve reference revisions and consecutive compilations reuse the same completed run. Exhausted leases fail terminally. Read-only freshness is persisted by explicit operations. |
+| Confidence, duplicates, removal | New unspecified confidence defaults to 0.5; zero survives claims and context. Scoped content identity deduplicates repeated remember. Exclusion, source removal and merge preserve audit data and suppress ordinary retrieval. Maintenance and ordinary compile neither fetch nor restore removed remote sources. Explicit remote reimport restores the source and queues reconciliation. Deleted generated nodes can be reimported. |
+| Missing inspector controls | Supporting/conflicting passages, checked chunk expansion, source history, revisions, complete relationships, correction, scope/validity, duplicate merge, exclusion, source removal and node deletion are available. Excluded nodes remain deletable with revision checks; correction, verification and merge controls require restoration first. |
 | Chat saves evidence but retains old fact | Approved text is separate from evidence, replacement is explicit, reviewed match guards are forwarded, and callback verifies the persisted fact and revision before accepting success. Type/confirmation/project/conversation provenance reaches context. |
 
-Schema v4 migration invalidates legacy unverified citations, recovers current
-observation pointers from logical source hashes, and queues deduplicated
-recompilation. It does not rewrite existing confidence values or curated facts.
+Schema v5 retains the v4 foundation and invalidates previously supporting v4
+citations pending the stricter support check. Original passages remain stored;
+affected pages become stale and receive deduplicated recompilation jobs. The
+compiler's semantic revision also prevents reuse of old support decisions. The
+migration does not rewrite existing confidence values or curated facts.
 
 ## Validation
 
-Final checks: Memory backend full profile **107 tests passed**; Chat fast profile
-**113 tests, 2 expected skips**; frontend **17 tests passed**. The official
+Reviewer follow-up checks: Memory backend full profile **115 tests passed**;
+frontend **18 tests passed**. The official
 `maverick app memory frontend build --json` succeeded, including TypeScript;
 `core.app-sdk.validate` returned `valid: true` with no issues. Unused-import
 checking and the scoped Git whitespace check passed.
 
-Backend regression coverage is in `apps/memory/tests/test_audit_regressions.py`,
-with existing Memory contract/integration coverage retained. Chat tests include an
-actual temporary Memory save replacing an existing fact and rejection of a save
-receipt retaining the old body. Frontend tests cover native inspector actions,
-conflicts and zero confidence; TypeScript and the official frontend build are
-required. Browser screenshots check the installed desktop and mobile inspector
-without modifying workspace knowledge.
+Backend regressions are in `apps/memory/tests/test_audit_regressions.py` and
+`test_review_regressions.py`, with existing contract/integration coverage retained.
+The follow-up adds all six reviewer sequences, a v4 verification migration
+case, and meaningful remote reference changes that require recompilation.
+Frontend coverage includes disabled active-only actions and enabled
+restore/delete actions for excluded nodes, alongside conflicts and zero confidence.
+All reproduction data is temporary; workspace memories are untouched.
+
+Earlier audit validation ran Chat's fast profile (**113 tests, 2 expected skips**),
+including an actual temporary Memory replacement and rejection of a receipt
+retaining the old body, and captured the installed desktop/mobile inspector.
+These Chat/browser checks were not rerun for this Memory-only follow-up; excluded
+UI state is checked through rendered markup rather than workspace mutations.
 
 Local synthetic no-result context measurement, five runs per archive size:
 
@@ -46,7 +54,9 @@ Local synthetic no-result context measurement, five runs per archive size:
 | 98 | 4.15 ms | 0 |
 | 980 | 4.05 ms | 0 |
 
-These are function-level local measurements, not production latency promises.
+These are the earlier audit's function-level local measurements, not production
+latency promises. Returned-result queries and remote compilation latency have not
+been benchmarked by this follow-up.
 The regression also forbids archive reads on a missing query. Returned evidence
 continues to use SHA verification.
 

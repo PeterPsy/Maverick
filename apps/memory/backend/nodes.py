@@ -150,7 +150,7 @@ def soft_delete_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             """
             UPDATE nodes
             SET status = 'deleted', deleted_at = ?, deleted_by = ?, delete_reason = ?, updated_at = ?
-            WHERE id = ? AND status = 'active'
+            WHERE id = ? AND status IN ('active', 'excluded')
             """,
             (timestamp, str(body.get("actor_id") or ""), str(body.get("reason") or ""), timestamp, node_id),
         )

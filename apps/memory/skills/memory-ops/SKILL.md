@@ -182,7 +182,10 @@ Deletion is a Memory soft delete: the node is marked `deleted`, active edges are
 
 `exclude_node` offers reversible exclusion from ordinary retrieval.
 `remove_source` excludes a Memory source while retaining its audit content and
-external original. `merge_nodes` requires an explicitly chosen target, preserves
+external original. Ordinary compilation and maintenance respect this removal;
+an explicit remote reimport restores the source and queues reconciliation.
+Excluded nodes can be restored or deleted with revision guards. Restore them
+before correcting, verifying or merging. `merge_nodes` requires an explicitly chosen target, preserves
 its fact text and transfers evidence and relationships. Inspect duplicate
 suggestions and revisions before merging; use source and target revision guards.
 The node inspector exposes these management actions, evidence passages, source

@@ -9,21 +9,24 @@ from __future__ import annotations
 import re
 import unicodedata
 
-TOKEN = re.compile(r"\d+(?:[.,:/-]\d+)*|[^\W\d_]+(?:'[^\W\d_]+)?|[%€$£]", re.UNICODE)
+TOKEN = re.compile(r"[+-]?\s*\d+(?:[.,:/-]\d+)*|[^\W\d_]+(?:'[^\W\d_]+)?|>=|<=|!=|[><=≥≤≠±%€$£]", re.UNICODE)
 NEGATIONS = {"non", "no", "not", "never", "mai", "senza", "without", "neither", "nessuno", "cannot", "can't", "isn't", "doesn't", "won't"}
 UNCERTAIN = {"if", "unless", "maybe", "might", "could", "perhaps", "se", "forse", "potrebbe", "ipotetico"}
 ARTICLES = {"the", "a", "an", "il", "lo", "la", "i", "gli", "le", "un", "uno", "una"}
 
 
 def assertion_tokens(text: str) -> list[str]:
-    value = unicodedata.normalize("NFKC", text).casefold().strip()
+    value = unicodedata.normalize("NFKC", text).casefold().strip().replace("−", "-")
     value = re.sub(r"^(?:user|utente):\s*", "", value)
     # An explicitly supported grammatical transformation, not bag-of-words.
     value = re.sub(r"(.+?)\s+is\s+owned\s+by\s+([^.!?]+)", r"\2 owns \1", value)
-    return [token for token in TOKEN.findall(value) if token not in ARTICLES | {"and", "e"}]
+    return [re.sub(r"\s+", "", token) for token in TOKEN.findall(value) if token.strip() not in ARTICLES | {"and", "e"}]
 
 
 def support_relation(claim: str, candidate: str) -> str:
+    # Interrogatives do not assert the proposition, even when every word agrees.
+    if any(symbol in unicodedata.normalize("NFKC", claim + candidate) for symbol in ("?", "¿")):
+        return "related"
     left, right = assertion_tokens(claim), assertion_tokens(candidate)
     if not left or not right:
         return "related"
@@ -35,11 +38,12 @@ def support_relation(claim: str, candidate: str) -> str:
         # A conflict also requires the same directed assertion. Overlap alone
         # can relate different prices, people, or events without opposing them.
         without_negation = lambda tokens: [token for token in tokens if token not in NEGATIONS]
-        without_numbers = lambda tokens: [token for token in tokens if not token[0].isdigit()]
+        is_number = lambda token: token.lstrip("+-")[0].isdigit()
+        without_numbers = lambda tokens: [token for token in tokens if not is_number(token)]
         if (left_set & NEGATIONS) != (right_set & NEGATIONS) and without_negation(left) == without_negation(right):
             return "contradicts"
-        left_numbers = [token for token in left if token[0].isdigit()]
-        right_numbers = [token for token in right if token[0].isdigit()]
+        left_numbers = [token for token in left if is_number(token)]
+        right_numbers = [token for token in right if is_number(token)]
         if left_numbers and right_numbers and left_numbers != right_numbers and without_numbers(left) == without_numbers(right):
             return "contradicts"
         # Reversed participants cannot establish the same directed assertion.

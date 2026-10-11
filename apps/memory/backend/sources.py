@@ -30,10 +30,15 @@ def sync_sources(
     refs: list[sqlite3.Row],
     timestamp: str,
     prepared_snapshots: dict[str, dict[str, Any]] | None = None,
+    restore_removed: bool = False,
 ) -> list[dict[str, Any]]:
     sources: list[dict[str, Any]] = []
     for ref in refs:
         source_id = _source_id_for_ref(db, ref)
+        if source_id and not restore_removed:
+            status = db.execute("SELECT status FROM sources WHERE id = ?", (source_id,)).fetchone()["status"]
+            if status != "active":
+                continue
         snapshot = (prepared_snapshots or {}).get(str(ref["id"])) or source_snapshot(ref, data_root, include_remote_preview=True)
         update_remote_ref_metadata(db, ref, snapshot, timestamp=timestamp)
         source = {
@@ -100,7 +105,8 @@ def prepare_source_snapshots(data_root: Path, node_id: str) -> dict[str, dict[st
 
     snapshots: dict[str, dict[str, Any]] = {}
     with connect(data_root) as db:
-        refs = list(db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node_id,)))
+        refs = list(db.execute("""SELECT r.* FROM external_refs r LEFT JOIN sources s ON s.external_ref_id = r.id
+            WHERE r.node_id = ? AND (s.id IS NULL OR s.status = 'active') ORDER BY r.created_at""", (node_id,)))
     for ref in refs:
         snapshots[str(ref["id"])] = source_snapshot(ref, data_root, include_remote_preview=True)
     return snapshots
@@ -124,7 +130,8 @@ def ensure_source_version(
     if existing is not None:
         ensure_source_chunks(db, data_root=data_root, version=row_payload(existing) or {}, snapshot=snapshot, timestamp=timestamp)
         observe_version(db, source["id"], existing["id"])
-        return row_payload(existing) or {}
+        db.execute("UPDATE source_versions SET observed_at = ? WHERE id = ?", (timestamp, existing["id"]))
+        return {**(row_payload(existing) or {}), "observed_at": timestamp}
     snapshot_metadata = snapshot.get("metadata", {})
     preview_truncated = bool(snapshot_metadata.get("preview_truncated"))
     extraction_status = "truncated" if preview_truncated else "available" if snapshot["extracted_text"] else "unavailable"

@@ -1,9 +1,22 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FloatingNodePanel } from "./FloatingNodePanel";
+import { MemoryManagement } from "./MemoryManagement";
 import type { NodeDetails } from "../types";
 
 describe("Memory inspector", () => {
+  it("allows restoring and removing an excluded memory and disables active-only actions", () => {
+    const markup = renderToStaticMarkup(<MemoryManagement node={{
+      id: "excluded", title: "Preference", type: "fact", status: "excluded", updated_at: "revision-2",
+      duplicate_candidates: [{ id: "target", title: "Other preference", updated_at: "target-revision" }],
+    }} onSelect={() => {}} onClose={() => {}} />);
+    for (const action of ["Correct fact", "Verify evidence", "Find", "Merge into Other preference"]) {
+      expect(markup).toMatch(new RegExp(`<button[^>]*disabled=""[^>]*>${action}</button>`));
+    }
+    for (const action of ["Include in retrieval", "Remove memory"]) {
+      expect(markup).toContain(`<button type="button">${action}</button>`);
+    }
+  });
   it("separates source currency, compilation and contradictory evidence with correction actions", () => {
     const node: NodeDetails = {
       id: "node-1", title: "Renewal", type: "fact", updated_at: "2026-10-11", confidence: 0,

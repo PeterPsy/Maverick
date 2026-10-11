@@ -158,7 +158,7 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("memory_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["memory"])
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite+files")
-        self.assertEqual(parsed.contract.storage.data_schema_version, "4")
+        self.assertEqual(parsed.contract.storage.data_schema_version, "5")
         self.assertIn("data/memory/content", parsed.contract.storage.primary_paths)
         required_interfaces = {requirement.alias: requirement for requirement in parsed.contract.requires}
         self.assertEqual(required_interfaces["storage-file-catalog"].interface, "file.catalog")
@@ -323,7 +323,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue((data_root / "artifacts" / "extracted").is_dir())
             self.assertTrue((data_root / "content").is_dir())
             health = run_json_entrypoint(MEMORY_ROOT / "hooks" / "health_check.py", payload=payload, cwd=MEMORY_ROOT)
-            self.assertEqual(health["schema_version"], "4")
+            self.assertEqual(health["schema_version"], "5")
 
     def test_schema_v2_database_migrates_to_v3_source_chunk_foundation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -400,8 +400,8 @@ class MemoryAppTestCase(unittest.TestCase):
                 migrated_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
                 migrated_chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
 
-            self.assertEqual(migrated["schema_version"], "4")
-            self.assertEqual(schema_version, "4")
+            self.assertEqual(migrated["schema_version"], "5")
+            self.assertEqual(schema_version, "5")
             self.assertIn("source_document_id", source_version_columns)
             self.assertIn("body_path", source_version_columns)
             self.assertIn("body_sha256", source_version_columns)
@@ -533,7 +533,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     for row in db.execute("SELECT * FROM source_versions ORDER BY created_at")
                 ]
 
-            self.assertEqual(migrated["schema_version"], "4")
+            self.assertEqual(migrated["schema_version"], "5")
             self.assertEqual(status, 200)
             self.assertEqual(document_count, 1)
             self.assertEqual(document["adapter_id"], "remote_storage_file")
@@ -2341,11 +2341,13 @@ class MemoryAppTestCase(unittest.TestCase):
                     "file": {"display_path": "/Drive/Prepared.md"},
                 }
 
-                def guarded_sync(db, *, data_root, node_id, refs, timestamp, prepared_snapshots=None):
+                def guarded_sync(db, *, data_root, node_id, refs, timestamp, prepared_snapshots=None, restore_removed=False):
                     ref_payload = database.row_payload(refs[0]) if refs else {}
                     metadata = ref_payload.get("metadata") if isinstance(ref_payload.get("metadata"), dict) else {}
                     self.assertIn("ingest_preview_text", metadata)
-                    return original_sync(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp, prepared_snapshots=prepared_snapshots)
+                    self.assertTrue(restore_removed)
+                    return original_sync(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp,
+                        prepared_snapshots=prepared_snapshots, restore_removed=restore_removed)
 
                 database = self.import_backend_module("database")
                 storage_ingestion.sync_sources = guarded_sync

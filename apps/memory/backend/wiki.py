@@ -37,6 +37,9 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             prepared_snapshots=prepared_snapshots,
         )
         sources = merged_source_candidates(db, node_id=node_id, synced_sources=sources)
+        # Sync may revise remote metadata. Hash the persisted revision and omit
+        # retained references to removed evidence from ordinary compilation.
+        refs = _external_refs(db, node_id)
         origin = (row_payload(node) or {}).get("metadata", {})
         if origin.get("content_mode") == "source_generated" or (origin.get("created_from") == "source_ingest" and origin.get("content_mode") != "curated"):
             primary = next((source for source in sources if source.get("source_document_id") == origin.get("source_document_id")), sources[0] if len(sources) == 1 else None)
@@ -104,7 +107,8 @@ def _active_node(db: sqlite3.Connection, node_id: str) -> sqlite3.Row:
 
 
 def _external_refs(db: sqlite3.Connection, node_id: str) -> list[sqlite3.Row]:
-    return list(db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node_id,)))
+    return list(db.execute("""SELECT r.* FROM external_refs r LEFT JOIN sources s ON s.external_ref_id = r.id
+        WHERE r.node_id = ? AND (s.id IS NULL OR s.status = 'active') ORDER BY r.created_at""", (node_id,)))
 
 
 def _relationships(db: sqlite3.Connection, node_id: str) -> list[sqlite3.Row]:
@@ -366,4 +370,4 @@ def compile_source_aware_input_hash(
         )
         for source in sorted(sources, key=lambda item: str(item.get("id") or ""))
     ]
-    return sha256("\n".join(["support-v4", base_hash, *source_parts]).encode("utf-8")).hexdigest()
+    return sha256("\n".join(["support-v5", base_hash, *source_parts]).encode("utf-8")).hexdigest()

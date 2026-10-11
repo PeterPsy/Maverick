@@ -1,5 +1,5 @@
 {
-  "build_id": "b5fe1dc60316bdb53491b73a76c3e7b7d023de0e587993e029d833601adea021",
+  "build_id": "1d0ae421bd7251188811b4d8659c99a531e2267aebc686c8a119ae4eb66a6e4e",
   "entrypoints": [
     "index.html",
     "widgets/memory-sidebar/index.html",
@@ -18,9 +18,9 @@
       "size_bytes": 6693
     },
     {
-      "path": "assets/app-Bt0RhiKF.js",
-      "sha256": "e0e480c44471d63bdf140286849616c6a410a3b862ec6c749d01d7d6e928d3be",
-      "size_bytes": 36698
+      "path": "assets/app-Cgf_Gp9g.js",
+      "sha256": "eae3d02ff6a375b0f0797dfdee33b2f435ceda46ae161eac25cd929842ccc90d",
+      "size_bytes": 36859
     },
     {
       "path": "assets/app-DaEty9WW.css",
@@ -44,7 +44,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "aa7c5393b53b10652b09f9c9237acde7fae9ae19a68180ff33ed35cf296d3cc8",
+      "sha256": "5706a8797e5e0d3186dd2b52d62f69012ff3bf6d2117e453992eb02750c51a2b",
       "size_bytes": 636
     },
     {

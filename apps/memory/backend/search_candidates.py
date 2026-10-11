@@ -2,7 +2,6 @@
 
 import re
 import sqlite3
-import json
 
 TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
 QUERY_STOPWORDS = {"il", "lo", "la", "i", "gli", "le", "un", "una", "di", "del", "della", "a", "da", "in", "e", "è", "che", "quale", "chi", "come", "the", "a", "an", "of", "is", "and", "what", "who"}
@@ -31,28 +30,30 @@ def ranked_candidates(db: sqlite3.Connection, query: str, *, limit: int, scope: 
     if not terms:
         return []
     candidate_limit = max(100, min(500, limit * 10))
+    scope_clause, scope_values = scope_sql(scope, alias="n")
     candidates: dict[str, dict] = {}
     for complete in (True, False):
         expression = query_expression(query, complete=complete)
-        rows = list(db.execute("""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
+        rows = list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
             n.metadata_json, bm25(memory_fts, 0, 5, 3, 1, 0.5) AS rank,
             snippet(memory_fts, 3, '', '', '…', 64) AS excerpt, 'node' AS channel
             FROM memory_fts JOIN nodes n ON n.id = memory_fts.node_id
-            WHERE memory_fts MATCH ? AND n.status = 'active' ORDER BY rank LIMIT ?""", (expression, candidate_limit)))
-        rows += list(db.execute("""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
+            WHERE memory_fts MATCH ? AND n.status = 'active' {scope_clause}
+            ORDER BY rank LIMIT ?""", (expression, *scope_values, candidate_limit)))
+        rows += list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
             n.metadata_json, bm25(compiled_fts, 0, 5, 3, 1, 2) AS rank,
             snippet(compiled_fts, 3, '', '', '…', 64) AS excerpt, 'wiki_page' AS channel
             FROM compiled_fts JOIN nodes n ON n.id = compiled_fts.node_id
             JOIN wiki_pages wp ON wp.node_id = n.id
             WHERE compiled_fts MATCH ? AND n.status = 'active' AND wp.status = 'active' AND wp.freshness = 'fresh'
-            ORDER BY rank LIMIT ?""", (expression, candidate_limit)))
-        rows += list(db.execute("""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
+            {scope_clause} ORDER BY rank LIMIT ?""", (expression, *scope_values, candidate_limit)))
+        rows += list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
             n.metadata_json, bm25(compiled_fts, 0, 5, 3, 1, 2) AS rank,
             snippet(compiled_fts, 4, '', '', '…', 64) AS excerpt, 'claim' AS channel
             FROM compiled_fts JOIN nodes n ON n.id = compiled_fts.node_id JOIN wiki_pages wp ON wp.node_id = n.id
             WHERE compiled_fts MATCH ? AND n.status = 'active' AND wp.status = 'active' AND wp.freshness = 'fresh'
-            ORDER BY rank LIMIT ?""", ("claim_text : (" + expression + ")", candidate_limit)))
-        rows += list(db.execute("""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
+            {scope_clause} ORDER BY rank LIMIT ?""", ("claim_text : (" + expression + ")", *scope_values, candidate_limit)))
+        rows += list(db.execute(f"""SELECT n.id, n.title, n.summary, n.importance, n.confidence, n.updated_at,
             n.metadata_json, bm25(source_chunk_fts, 0, 0, 0, 0, 4, 1, 0.5, 0.5, 0.5) AS rank,
             snippet(source_chunk_fts, 5, '', '', '…', 64) AS excerpt, 'source_chunk' AS channel,
             sc.id AS chunk_id, s.id AS source_id, sv.id AS source_version_id
@@ -61,13 +62,9 @@ def ranked_candidates(db: sqlite3.Connection, query: str, *, limit: int, scope: 
             JOIN sources s ON s.id = sv.source_id AND s.current_version_id = sv.id
             JOIN node_source_links nl ON nl.source_id = s.id JOIN nodes n ON n.id = nl.node_id
             WHERE source_chunk_fts MATCH ? AND s.status = 'active' AND n.status = 'active'
-            ORDER BY rank LIMIT ?""", (expression, candidate_limit)))
+            {scope_clause} ORDER BY rank LIMIT ?""", (expression, *scope_values, candidate_limit)))
         for row in rows:
             item = dict(row)
-            if scope:
-                metadata = json.loads(item["metadata_json"] or "{}")
-                if any(str(metadata.get(key) or "") != str(value) for key, value in scope.items() if value):
-                    continue
             text = " ".join((item["title"], item["summary"], item["excerpt"])).casefold()
             coverage = 1.0 if complete else sum(term in TOKEN_PATTERN.findall(text) for term in terms) / len(terms)
             # Relevance is a ranking score, explicitly not a probability.

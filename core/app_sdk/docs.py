@@ -53,6 +53,37 @@ Do not declare surfaces that are not implemented.
 
 The contract is not documentation-only metadata. It is an executable promise to the rest of Maverick.
 
+## Personal Google accounts
+
+Apps can reuse a user's Google connection without another OAuth flow. Declare
+provider capabilities in the app contract:
+
+```json
+"external_accounts": {
+  "google": {"capabilities": ["calendar"]}
+}
+```
+
+This declaration belongs under `permissions`. Supported Google capabilities are
+`calendar`, `gmail`, and `drive`. For an existing manually connected app, optional
+`replaces_secrets` lists only already declared `permissions.secrets.read` names
+that the broker replaces; unrelated secret grants remain enforced.
+
+The trusted backend/CLI/MCP payload includes `external_accounts` with public
+account metadata, actually available capabilities, and an opaque `access_handle`.
+It also supplies a personal app-owned `data_root`; use that root for all private
+mail, calendar, provider metadata and caches. Never copy those caches into shared
+workspace app state or include the handle in responses, events, logs or files.
+
+Use `core.app_sdk.connected_accounts.account_urlopen` with a `urllib.request.Request`
+and `Authorization: Bearer <access_handle>`. Core validates current user ownership,
+membership, selected account, app enablement and granted capabilities on each
+request, refreshes Google credentials, and proxies only the declared provider API
+paths. The handle is valid for the invocation only. No Google token is delivered
+to the app. When the service is missing, direct the user to the shell's Connected
+accounts panel for additional consent. New apps declaring an already approved
+capability reuse the connection automatically.
+
 ## Centralized App Notifications
 
 Assess notifications when creating or porting an app. If reminders, messages,

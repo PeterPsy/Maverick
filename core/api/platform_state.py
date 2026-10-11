@@ -21,6 +21,7 @@ from core.apps.runtime_root_capabilities import RuntimeRootCapabilityStore
 from core.apps.sidecar_browser_sessions import SidecarBrowserSessionStore
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
+from core.connected_accounts.store import AccountDocumentStore
 from core.inter_agent.store import InterAgentDocumentStore, build_inter_agent_document_store
 from core.jobs.events import JobEventBus
 from core.jobs.service import JobService
@@ -98,6 +99,7 @@ class PlatformState:
     runtime_root_capabilities: RuntimeRootCapabilityStore
     device_use_service: DeviceUseService
     root_shell_app_id: str
+    account_store: AccountDocumentStore | None = None
     background_generation_shutdown_controller: EntrypointShutdownController | None = None
     runtime_tool_ledger: RuntimeToolLedger | None = None
     provider_private_state_service: ProviderPrivateStateService | None = None
@@ -136,7 +138,7 @@ def bootstrap_platform_state(
     run_pending_cleanup_plans(repository_root=repository_root, active_settings=control_settings)
     control_collections = build_control_plane_collections(control_settings)
     workspace_store = WorkspaceDocumentStore(control_collections.workspace)
-    identity_store = IdentityDocumentStore(control_collections.identity)
+    identity_store = IdentityDocumentStore(control_collections.identity, account_store=AccountDocumentStore(control_collections.accounts))
     app_store = AppDocumentStore(control_collections.apps)
     provider_store = ProviderDocumentStore(control_collections.provider)
     provider_registry = builtin_provider_registry()
@@ -269,6 +271,7 @@ def bootstrap_platform_state(
         control_plane_collections=control_collections,
         workspace_store=workspace_store,
         identity_store=identity_store,
+        account_store=identity_store.account_store,
         app_store=app_store,
         provider_store=provider_store,
         provider_registry=provider_registry,

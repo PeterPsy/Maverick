@@ -87,6 +87,7 @@ def build_core_cli_registry(
                     provider_store=provider_store,
                     runtime_store=runtime_store,
                     context=context,
+                    identity_store=identity_store,
                     secret_store=secret_store,
                     observability_store=observability_store,
                     app_event_bus=app_event_bus,

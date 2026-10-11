@@ -11,7 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from service import app_events_for_action, handle_action, secret_lookup_for_remote_mutation
 
 
+from platform_account import attach_platform_account
+
 payload = read_entrypoint_payload()
+attach_platform_account(payload.raw)
 if payload.raw.get("surface") == "secret_selector":
     selector = secret_lookup_for_remote_mutation(Path(payload.data_root), payload.body)
     if selector.get("requires_secrets"):

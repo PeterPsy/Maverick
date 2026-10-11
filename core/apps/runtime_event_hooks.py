@@ -138,6 +138,10 @@ def dispatch_source_app_runtime_event(
             actor_user_id=session.owner_user_id,
             runtime_session_id=session.session_id,
             observability_store=state.observability_store,
+            identity_store=getattr(state, "identity_store", None),
+            workspace_store=getattr(state, "workspace_store", None),
+            secret_store=getattr(state, "secret_store", None),
+            app_store=state.app_store,
             timeout_seconds=30,
         )
     except Exception as error:

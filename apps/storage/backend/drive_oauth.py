@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from core.app_sdk.connected_accounts import account_urlopen as urlopen
 
 from drive_oauth_constants import (
     GOOGLE_DRIVE_CLIENT_ID_SECRET,
@@ -111,6 +112,8 @@ def list_drive_connections(data_root: Path, payload: dict[str, Any]) -> dict[str
 
 def start_oauth(data_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
     provider = _provider(payload.get("provider"))
+    if any(item.get("external_refs", {}).get("managed_by") == "platform" for item in list_connections(data_root)):
+        raise StorageValidationError("Manage Google permissions and accounts from Maverick Connected accounts.", operation="drive_connections.start_oauth")
     access_mode = _access_mode(payload.get("access_mode") or payload.get("mode") or "full_rw")
     secrets_map = _secret_map(payload.get("_app_secrets"))
     client_id = str(secrets_map.get(GOOGLE_DRIVE_CLIENT_ID_SECRET) or "").strip()
@@ -329,6 +332,8 @@ def disconnect_connection(data_root: Path, payload: dict[str, Any]) -> dict[str,
         connection = get_connection(data_root, connection_id)
     except ValueError as error:
         raise StorageValidationError(str(error), operation="drive_connections.disconnect") from error
+    if connection.get("external_refs", {}).get("managed_by") == "platform":
+        raise StorageValidationError("Disconnect Google or disable Storage from Maverick Connected accounts.", operation="drive_connections.disconnect")
     previous_status = str(connection.get("status") or "")
     now = now_timestamp()
     disconnected = {

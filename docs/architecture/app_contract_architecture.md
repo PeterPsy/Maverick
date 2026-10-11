@@ -1543,6 +1543,16 @@ It remains an app mounted by the core like every other app.
 
 This rule matters because the Maverick product shell should still be replaceable, versionable, and governable as an app.
 
+## Personal external accounts
+
+`permissions.external_accounts` maps provider ids to declarations containing
+`capabilities` and optional `replaces_secrets`. Replaced logical names must also
+be declared in `permissions.secrets.read`. Personal account selection never
+bypasses grants for unrelated secrets. Backend, CLI and MCP use the same
+invocation-scoped Core broker and app-owned personal data subtree. See
+[`connected_accounts.md`](connected_accounts.md) and `maverick sdk docs` for the
+Google capability definitions and SDK transport.
+
 ## Secret references
 
 If an app depends on external credentials or provider secrets, the app may declare secret references as part of its configuration model.

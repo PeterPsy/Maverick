@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any, BinaryIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from core.app_sdk.connected_accounts import account_urlopen as urlopen
 
 from drive_oauth import (
     GOOGLE_DRIVE_CLIENT_ID_SECRET,
@@ -1793,6 +1794,8 @@ class GoogleDriveProvider:
             total -= size
 
     def _token(self) -> str:
+        if self.app_secrets.get("platform-google-access"):
+            return str(self.app_secrets["platform-google-access"])
         if self._access_token:
             return self._access_token
         client_id = _required_secret(self.app_secrets, GOOGLE_DRIVE_CLIENT_ID_SECRET)

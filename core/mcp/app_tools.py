@@ -8,6 +8,7 @@ from typing import Any
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
+from core.connected_accounts.app_context import account_context, filter_secret_requests
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.models import WorkspaceAppBindingRecord
 from core.apps.runtime_requests import apply_app_runtime_requests
@@ -131,6 +132,10 @@ def _workspace_app_tool_definitions(
                 _app_event_bus=app_event_bus,
                 _start_path: Path | None = start_path,
             ) -> dict[str, Any]:
+                personal_account = account_context(identity_store=_identity_store, workspace_store=_workspace_store,
+                    permissions=_parsed.contract.permissions, user_id=context.user_id,
+                    workspace_id=str(context.workspace_id), app_id=_app_id, data_root=_data_root)
+                invocation_data_root = personal_account["data_root"] if personal_account else _data_root
                 def _lookup_secret_resource(selector: AppSurfaceSecretSelector) -> dict[str, Any] | None:
                     return _app_secret_resource_lookup(
                         _entrypoint_path,
@@ -141,7 +146,7 @@ def _workspace_app_tool_definitions(
                         app_id=_app_id,
                         public_app_id=_public_app_id,
                         source_root=_source_root,
-                        data_root=_data_root,
+                        data_root=invocation_data_root,
                         workspace_root=_workspace_root,
                         uploaded_storage_root=_uploaded_storage_root,
                         generated_storage_root=_generated_storage_root,
@@ -152,7 +157,7 @@ def _workspace_app_tool_definitions(
                     workspace_id=str(context.workspace_id),
                     app_id=_app_id,
                     requests=app_secret_requests_for_arguments(
-                        _secret_selectors,
+                        filter_secret_requests(_secret_selectors, personal_account),
                         arguments,
                         resource_lookup=_lookup_secret_resource,
                     ),
@@ -212,6 +217,8 @@ def _workspace_app_tool_definitions(
                         actor_user_id=context.user_id,
                         runtime_session_id=context.runtime_session_id,
                         observability_store=_observability_store,
+                        identity_store=_identity_store, workspace_store=_workspace_store,
+                        secret_store=_secret_store, app_store=store,
                         shutdown_controller=context.shutdown_controller,
                     )
                 finally:

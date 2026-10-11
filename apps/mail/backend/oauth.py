@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 from database import connect, ensure_schema, now_timestamp, oauth_flow_expiry
 from providers.gmail import GMAIL_SCOPES, GmailProvider
-from store import audit
+from store import audit, list_connections
 
 GMAIL_CLIENT_ID_SECRET = "gmail-oauth-client-id"
 GMAIL_CLIENT_SECRET_SECRET = "gmail-oauth-client-secret"
@@ -34,7 +34,7 @@ def provider_status(app_secrets: object | None = None, connections: list[dict[st
             _provider_payload(
                 "gmail",
                 connected=has_gmail,
-                configured=bool(secrets_map.get(GMAIL_CLIENT_ID_SECRET)),
+                configured=bool(secrets_map.get(GMAIL_CLIENT_ID_SECRET) or secrets_map.get("platform-google-access")),
                 status="connected" if has_gmail else ("needs_secret_grant" if not secrets_map.get(GMAIL_CLIENT_ID_SECRET) else "ready_for_oauth"),
             ),
             _provider_payload(
@@ -54,6 +54,8 @@ def start_oauth(data_root: Path, payload: dict[str, object]) -> dict[str, object
     provider = str(payload.get("provider") or "gmail").strip().lower()
     if provider != "gmail":
         raise ValueError(f"Unsupported OAuth provider `{provider}`")
+    if any(item.get("settings", {}).get("managed_by") == "platform" for item in list_connections(data_root)):
+        raise ValueError("Manage Google permissions and accounts from Maverick Connected accounts.")
     secrets_map = _secret_map(payload.get("_app_secrets"))
     client_id = str(secrets_map.get(GMAIL_CLIENT_ID_SECRET) or "").strip()
     redirect_uri = _allowed_redirect_uri(payload.get("redirect_uri") or DEFAULT_REDIRECT_PATH)

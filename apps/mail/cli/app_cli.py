@@ -16,7 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from service import app_events_for_action, handle_action, resolve_secret_resource, resolve_secret_resource_inventory
 
 
+from platform_account import attach_platform_account
+
 payload = read_entrypoint_payload()
+attach_platform_account(payload.raw)
 arguments = dict(payload.arguments)
 if payload.raw.get("surface") == "secret_resource_inventory":
     emit_json(resolve_secret_resource_inventory(Path(payload.data_root)))

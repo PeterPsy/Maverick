@@ -16,7 +16,8 @@ import re
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from core.app_sdk.connected_accounts import account_urlopen as urlopen
 from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
@@ -113,7 +114,7 @@ class GmailProvider:
         max_body_html_chars: int | None = None,
         app_secrets: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        if app_secrets and app_secrets.get(GMAIL_REFRESH_TOKEN_SECRET):
+        if app_secrets and (app_secrets.get(GMAIL_REFRESH_TOKEN_SECRET) or app_secrets.get("platform-google-access")):
             thread = get_thread(
                 data_root,
                 thread_id,
@@ -435,6 +436,8 @@ class GmailProvider:
         }
 
     def _access_token(self, app_secrets: dict[str, object]) -> str:
+        if app_secrets.get("platform-google-access"):
+            return str(app_secrets["platform-google-access"])
         body = urlencode(
             {
                 "client_id": _required_secret(app_secrets, GMAIL_CLIENT_ID_SECRET),

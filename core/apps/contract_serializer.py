@@ -53,6 +53,13 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             **({"sidebar_enabled": False} if not parsed.contract.presentation.sidebar_enabled else {}),
         },
         "permissions": {
+            **({"external_accounts": {
+                provider: {
+                    "capabilities": declaration.capabilities,
+                    **({"replaces_secrets": declaration.replaces_secrets} if declaration.replaces_secrets else {}),
+                }
+                for provider, declaration in parsed.contract.permissions.external_accounts.items()
+            }} if parsed.contract.permissions.external_accounts else {}),
             "secrets": {
                 "read": parsed.contract.permissions.secrets.read,
                 "write": parsed.contract.permissions.secrets.write,

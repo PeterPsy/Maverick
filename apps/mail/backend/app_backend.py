@@ -16,7 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from service import app_events_for_action, handle_action, resolve_secret_resource
 
 
+from platform_account import attach_platform_account
+
 payload = read_entrypoint_payload()
+attach_platform_account(payload.raw)
 body = dict(payload.body)
 if payload.raw.get("surface") == "secret_selector":
     action = str(body.get("action") or "")

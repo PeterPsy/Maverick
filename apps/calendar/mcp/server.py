@@ -11,7 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from service import app_events_for_action, mcp_result_for_tool, secret_lookup_for_remote_mutation
 
 
+from platform_account import attach_platform_account
+
 payload = read_entrypoint_payload()
+attach_platform_account(payload.raw)
 local_app_id = payload.app_id or "calendar"
 tool_name = str(payload.raw.get("tool_name") or "")
 arguments = dict(payload.arguments)

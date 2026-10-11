@@ -86,8 +86,9 @@ class IdentityCollections:
 class IdentityDocumentStore:
     """Persist identity-domain records in document collections."""
 
-    def __init__(self, collections: IdentityCollections) -> None:
+    def __init__(self, collections: IdentityCollections, *, account_store=None) -> None:
         self.collections = collections
+        self.account_store = account_store
 
     def save_user(self, record: UserRecord) -> UserRecord:
         payload = asdict(record)

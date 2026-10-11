@@ -9,6 +9,7 @@ from typing import Any
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
+from core.connected_accounts.app_context import account_context, filter_secret_requests
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.models import WorkspaceAppBindingRecord
 from core.apps.runtime_requests import apply_app_runtime_requests
@@ -121,6 +122,7 @@ def _workspace_app_command_specs(
     provider_store=None,
     runtime_store=None,
     context: CliInvocationContext | None = None,
+    identity_store=None,
     secret_store: SecretStore | None = None,
     observability_store=None,
     app_event_bus=None,
@@ -190,6 +192,7 @@ def _workspace_app_command_specs(
                 ),
                 _parsed=parsed,
                 _binding=binding,
+                _identity_store=identity_store,
                 _secret_store: SecretStore | None = secret_store,
                 _workspace_store=workspace_store,
                 _provider_store=provider_store,
@@ -198,6 +201,10 @@ def _workspace_app_command_specs(
                 _app_event_bus=app_event_bus,
                 _start_path: Path | None = start_path,
             ) -> dict[str, Any]:
+                personal_account = account_context(identity_store=_identity_store, workspace_store=_workspace_store,
+                    permissions=_parsed.contract.permissions, user_id=context.user_id,
+                    workspace_id=str(context.workspace_id), app_id=_app_id, data_root=_data_root)
+                invocation_data_root = personal_account["data_root"] if personal_account else _data_root
                 def _lookup_secret_resource(selector: AppSurfaceSecretSelector) -> dict[str, Any] | None:
                     return _app_secret_resource_lookup(
                         _entrypoint_path,
@@ -207,7 +214,7 @@ def _workspace_app_command_specs(
                         app_id=_app_id,
                         public_app_id=_public_app_id,
                         source_root=_source_root,
-                        data_root=_data_root,
+                        data_root=invocation_data_root,
                         workspace_root=_workspace_root,
                         uploaded_storage_root=_uploaded_storage_root,
                         generated_storage_root=_generated_storage_root,
@@ -218,7 +225,7 @@ def _workspace_app_command_specs(
                     workspace_id=str(context.workspace_id),
                     app_id=_app_id,
                     requests=app_secret_requests_for_arguments(
-                        _secret_selectors,
+                        filter_secret_requests(_secret_selectors, personal_account),
                         arguments,
                         resource_lookup=_lookup_secret_resource,
                     ),
@@ -267,6 +274,8 @@ def _workspace_app_command_specs(
                     actor_user_id=context.user_id,
                     runtime_session_id=context.runtime_session_id,
                     observability_store=_observability_store,
+                    identity_store=_identity_store, workspace_store=_workspace_store,
+                    secret_store=_secret_store, app_store=store,
                     timeout_seconds=(
                         _command_timeout_seconds
                         if _command_timeout_seconds is not None

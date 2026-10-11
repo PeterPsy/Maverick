@@ -51,6 +51,8 @@ TOOL_ACTIONS = {
 
 
 def handle_payload(payload: dict) -> dict:
+    from platform_account import attach_platform_account
+    attach_platform_account(payload)
     arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
     tool_name = str(payload.get("tool_name") or "")
     raw_action = TOOL_ACTIONS.get(tool_name) or str(arguments.get("action") or "operations.manifest")

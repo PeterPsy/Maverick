@@ -58,6 +58,18 @@
     },
     "host": {
       "telemetry": false
+    },
+    "external_accounts": {
+      "google": {
+        "capabilities": [
+          "gmail"
+        ],
+        "replaces_secrets": [
+          "gmail-oauth-client-id",
+          "gmail-oauth-client-secret",
+          "gmail-refresh-token"
+        ]
+      }
     }
   },
   "capabilities": {

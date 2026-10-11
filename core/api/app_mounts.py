@@ -25,6 +25,7 @@ from core.api.secret_grant_targets import (
 from core.api.http import StartResponse, json_response, max_json_body_bytes, query_params, read_json_body, read_request_body_bytes, status_line, text_response
 from core.api.http_validators import format_etag, if_none_match_matches, if_range_matches, is_strong_etag
 from core.api.platform_state import PlatformState
+from core.connected_accounts.app_context import account_context, filter_secret_requests
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.frontend_assets import FrontendAssetManifestError, load_frontend_asset_manifest, verify_frontend_asset_bytes
@@ -635,15 +636,18 @@ def handle_app_backend(
         route_path=str(environ.get("PATH_INFO") or ""),
         query=request_query,
     )
+    personal_account = account_context(identity_store=state.identity_store, workspace_store=state.workspace_store,
+        permissions=parsed.contract.permissions, user_id=None if user is None else user.user_id,
+        workspace_id=workspace_id, app_id=app_id, data_root=binding.data_root)
     try:
         app_secret_result = _resolve_app_secret_payload_requests(
             state,
             workspace_id=workspace_id,
             app_id=app_id,
-            requests=_requested_backend_secret_requests(
+            requests=filter_secret_requests(_requested_backend_secret_requests(
                 declared_logical_names=parsed.contract.permissions.secrets.read,
                 body=secret_request_body,
-            ),
+            ), personal_account),
             surface="backend",
             actor_user_id=None if user is None else user.user_id,
             request_context={
@@ -722,6 +726,8 @@ def handle_app_backend(
                 actor_user_id=None if user is None else user.user_id,
                 runtime_session_id="",
                 observability_store=state.observability_store,
+                identity_store=state.identity_store, workspace_store=state.workspace_store,
+                secret_store=state.secret_store, app_store=state.app_store,
             )
             result = streaming_entrypoint.result
         else:
@@ -738,6 +744,8 @@ def handle_app_backend(
                 actor_user_id=None if user is None else user.user_id,
                 runtime_session_id="",
                 observability_store=state.observability_store,
+                identity_store=state.identity_store, workspace_store=state.workspace_store,
+                secret_store=state.secret_store, app_store=state.app_store,
                 entrypoint_runner=run_json_entrypoint,
             )
     except EntrypointInterruptedError as error:

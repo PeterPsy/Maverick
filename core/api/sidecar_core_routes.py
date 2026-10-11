@@ -262,6 +262,8 @@ def _invoke_core_sidecar_route(
         actor_user_id=None if user is None else user.user_id,
         runtime_session_id=None,
         observability_store=state.observability_store,
+        identity_store=state.identity_store, workspace_store=state.workspace_store,
+        secret_store=state.secret_store, app_store=state.app_store,
         timeout_seconds=int(context.parsed.contract.hook_timeouts.backend_seconds),
         shutdown_controller=shutdown_controller,
     )

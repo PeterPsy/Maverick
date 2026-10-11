@@ -143,6 +143,11 @@ The core is responsible for the following domains.
 
 ### 1. Identity and access
 
+Federated Google identity, personal OAuth connections, scope consent, workspace
+account selection and invocation-scoped provider proxying are defined in
+[`connected_accounts.md`](connected_accounts.md). The platform owns credentials;
+app contracts declare capabilities and apps own private account data.
+
 The core owns:
 
 - users

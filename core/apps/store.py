@@ -17,6 +17,7 @@ from core.apps.models import (
     AppDataEventDeclaration,
     AppDistributionDeclaration,
     AppEntrypoints,
+    AppExternalAccountPermissionDeclaration,
     AppFailureSemantics,
     AppHealthContract,
     AppHostPermissionDeclaration,
@@ -220,6 +221,10 @@ class AppDocumentStore:
             visibility=AppVisibilityDeclaration(**payload.get("visibility", {"platform_roles": None})),
             presentation=AppPresentationDeclaration(**payload["presentation"]),
             permissions=AppPermissionsDeclaration(
+                external_accounts={
+                    provider: AppExternalAccountPermissionDeclaration(**declaration)
+                    for provider, declaration in payload.get("permissions", {}).get("external_accounts", {}).items()
+                },
                 secrets=AppSecretPermissionDeclaration(
                     **payload.get("permissions", {}).get("secrets", {"read": [], "write": []})
                 ),

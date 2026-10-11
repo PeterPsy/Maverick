@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from core.apps.store import AppCollections
 from core.identity.store import IdentityCollections
+from core.connected_accounts.store import AccountCollections
 from core.jobs.store import JobCollections
 from core.providers.store import ProviderCollections
 from core.secrets.bootstrap import resolve_bootstrap_secret
@@ -39,6 +40,9 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "identity_users": (("user_id",), ("username",)),
     "identity_credentials": (("user_id",),),
     "identity_auth_sessions": (("session_id",),),
+    "connected_accounts": (("account_id",), ("provider", "subject")),
+    "connected_account_selections": (("selection_id",), ("user_id", "workspace_id")),
+    "connected_account_flows": (("state_hash",),),
     "app_sources": (("source_id",),),
     "workspace_local_app_projects": (("workspace_id", "app_id"),),
     "workspace_app_bindings": (("workspace_id", "app_id"),),
@@ -133,6 +137,7 @@ class ControlPlaneCollections:
     jobs: JobCollections
     secrets: SecretCollections
     usage: UsageCollections
+    accounts: AccountCollections | None = None
 
 
 @dataclass(frozen=True)
@@ -209,6 +214,12 @@ def control_plane_collection_specs(collections: ControlPlaneCollections, *, incl
         ControlPlaneCollectionSpec("usage_buckets", collections.usage.buckets),
         ControlPlaneCollectionSpec("provider_quota_snapshots", collections.usage.quota_snapshots),
     ]
+    if collections.accounts is not None:
+        specs.extend([
+            ControlPlaneCollectionSpec("connected_accounts", collections.accounts.accounts),
+            ControlPlaneCollectionSpec("connected_account_selections", collections.accounts.selections),
+            ControlPlaneCollectionSpec("connected_account_flows", collections.accounts.flows),
+        ])
     include_usage = selected_adapter() == 'document' if include_usage is None else include_usage
     usage_names = {'usage_samples', 'usage_buckets', 'provider_quota_snapshots'}
     return [spec for spec in specs if spec.collection is not None and (include_usage or spec.name not in usage_names)]
@@ -241,6 +252,11 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
                 workspace_state_root / "data_governance_audits.json",
                 append_only_upserts=True,
             ),
+        ),
+        accounts=AccountCollections(
+            accounts=JsonFileCollection(json_root / "accounts" / "accounts.json"),
+            selections=JsonFileCollection(json_root / "accounts" / "selections.json"),
+            flows=JsonFileCollection(json_root / "accounts" / "flows.json"),
         ),
         identity=IdentityCollections(
             users=JsonFileCollection(identity_state_root / "users.json"),
@@ -310,6 +326,11 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             data_attestations=collection("workspace_data_attestations"),
             resource_classifications=collection("workspace_resource_classifications"),
             data_governance_audits=collection("workspace_data_governance_audits"),
+        ),
+        accounts=AccountCollections(
+            accounts=collection("connected_accounts"),
+            selections=collection("connected_account_selections"),
+            flows=collection("connected_account_flows"),
         ),
         identity=IdentityCollections(
             users=collection("identity_users"),

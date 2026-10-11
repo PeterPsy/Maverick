@@ -9,6 +9,7 @@ from core.api.sidecar_entrypoint_broker import (
     AppSidecarEntrypointBroker,
     SidecarEntrypointServiceTarget,
 )
+from core.connected_accounts.broker import AccountInvocation
 from core.api.sidecar_proxy import AuthorizedSidecarTarget
 from core.apps.models import (
     HttpSidecarEntrypointSurface,
@@ -56,6 +57,10 @@ def run_json_entrypoint_with_sidecars(
     actor_user_id: str | None,
     runtime_session_id: str | None,
     observability_store=None,
+    identity_store=None,
+    workspace_store=None,
+    secret_store=None,
+    app_store=None,
     timeout_seconds: int | float = 30,
     shutdown_controller: EntrypointShutdownController | None = None,
     entrypoint_runner: Callable[..., dict[str, Any]] = run_json_entrypoint,
@@ -72,9 +77,12 @@ def run_json_entrypoint_with_sidecars(
         observability_store=observability_store,
         shutdown_controller=shutdown_controller,
     )
-    descriptor = broker.start()
+    account_invocation = AccountInvocation(identity_store=identity_store, workspace_store=workspace_store,
+        secret_store=secret_store, app_store=app_store, binding=binding, parsed=parsed,
+        actor_user_id=actor_user_id, payload=payload, timeout_seconds=timeout_seconds)
     try:
-        entrypoint_payload = dict(payload)
+        descriptor = broker.start()
+        entrypoint_payload = account_invocation.start()
         if descriptor is not None:
             entrypoint_payload["app_sidecar"] = descriptor
             entrypoint_payload["entrypoint_invocation_id"] = broker.invocation_id
@@ -100,6 +108,7 @@ def run_json_entrypoint_with_sidecars(
             shutdown_controller=shutdown_controller,
         )
     finally:
+        account_invocation.close()
         broker.close()
 
 
@@ -115,6 +124,10 @@ def run_streaming_json_entrypoint_with_sidecars(
     actor_user_id: str | None,
     runtime_session_id: str | None,
     observability_store=None,
+    identity_store=None,
+    workspace_store=None,
+    secret_store=None,
+    app_store=None,
     timeout_seconds: int | float = 30,
     shutdown_controller: EntrypointShutdownController | None = None,
 ) -> StreamingJsonEntrypointResult:
@@ -130,9 +143,12 @@ def run_streaming_json_entrypoint_with_sidecars(
         observability_store=observability_store,
         shutdown_controller=shutdown_controller,
     )
-    descriptor = broker.start()
+    account_invocation = AccountInvocation(identity_store=identity_store, workspace_store=workspace_store,
+        secret_store=secret_store, app_store=app_store, binding=binding, parsed=parsed,
+        actor_user_id=actor_user_id, payload=payload, timeout_seconds=timeout_seconds)
     try:
-        entrypoint_payload = dict(payload)
+        descriptor = broker.start()
+        entrypoint_payload = account_invocation.start()
         if descriptor is not None:
             entrypoint_payload["app_sidecar"] = descriptor
             entrypoint_payload["entrypoint_invocation_id"] = broker.invocation_id
@@ -144,11 +160,14 @@ def run_streaming_json_entrypoint_with_sidecars(
             shutdown_controller=shutdown_controller,
         )
     except Exception:
+        account_invocation.close()
         broker.close()
         raise
     if result.has_stream:
+        result.add_cleanup(account_invocation.close)
         result.add_cleanup(broker.close)
     else:
+        account_invocation.close()
         broker.close()
     return result
 

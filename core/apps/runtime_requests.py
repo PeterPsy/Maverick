@@ -1524,6 +1524,10 @@ def _invoke_dependency_backend_request_callback(
         actor_user_id=actor_user_id,
         runtime_session_id=None,
         observability_store=state.observability_store,
+        identity_store=getattr(state, "identity_store", None),
+        workspace_store=getattr(state, "workspace_store", None),
+        secret_store=getattr(state, "secret_store", None),
+        app_store=state.app_store,
         timeout_seconds=int(parsed.contract.hook_timeouts.backend_seconds),
     )
     publish_declared_app_events(

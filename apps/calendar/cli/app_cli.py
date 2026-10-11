@@ -12,7 +12,10 @@ from service import AGENT_DEFAULT_LIST_LIMIT, app_events_for_action, handle_acti
 from surface_contract import normalize_action
 
 
+from platform_account import attach_platform_account
+
 payload = read_entrypoint_payload()
+attach_platform_account(payload.raw)
 local_app_id = payload.app_id or "calendar"
 arguments = dict(payload.arguments)
 command_id = str(payload.raw.get("command_id") or "")

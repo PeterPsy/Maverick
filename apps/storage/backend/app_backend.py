@@ -30,6 +30,8 @@ def main() -> None:
 
 
 def handle_payload(payload: dict) -> dict | None:
+    from platform_account import attach_platform_account
+    attach_platform_account(payload)
     body, media_route = _body_from_payload(payload)
     body = {
         **body,

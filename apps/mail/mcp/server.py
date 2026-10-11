@@ -42,7 +42,10 @@ TOOL_ACTIONS = {
 }
 
 
+from platform_account import attach_platform_account
+
 payload = read_entrypoint_payload()
+attach_platform_account(payload.raw)
 arguments = dict(payload.arguments)
 if payload.raw.get("surface") == "secret_resource_inventory":
     emit_json(resolve_secret_resource_inventory(Path(payload.data_root)))

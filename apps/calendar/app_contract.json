@@ -64,6 +64,18 @@
     },
     "host": {
       "telemetry": false
+    },
+    "external_accounts": {
+      "google": {
+        "capabilities": [
+          "calendar"
+        ],
+        "replaces_secrets": [
+          "google-oauth-client-id",
+          "google-oauth-client-secret",
+          "google-calendar-refresh-token"
+        ]
+      }
     }
   },
   "capabilities": {

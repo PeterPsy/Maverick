@@ -12,6 +12,7 @@ from core.apps.models import (
     AppContractDescriptor,
     AppDistributionDeclaration,
     AppEntrypoints,
+    AppExternalAccountPermissionDeclaration,
     AppFailureSemantics,
     AppHealthContract,
     AppHostPermissionDeclaration,
@@ -212,9 +213,11 @@ def build_app_permissions(
     provider_model_proxy: bool = False,
     provider_credential_source: AppProviderCredentialSource = "none",
     provider_deliver_secrets_to_app: bool = False,
+    external_accounts: dict[str, AppExternalAccountPermissionDeclaration] | None = None,
 ) -> AppPermissionsDeclaration:
     """Build one operational permissions declaration."""
     return AppPermissionsDeclaration(
+        external_accounts=external_accounts or {},
         secrets=AppSecretPermissionDeclaration(read=secret_read or [], write=secret_write or []),
         network=AppNetworkPermissionDeclaration(outbound=network_outbound or []),
         runtime=AppRuntimePermissionDeclaration(

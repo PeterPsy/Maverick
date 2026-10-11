@@ -9,7 +9,8 @@ import secrets
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from core.app_sdk.connected_accounts import account_urlopen as urlopen
 
 from constants import GOOGLE_PROVIDER, GOOGLE_REFRESH_TOKEN_LOGICAL_NAME, MAX_PROVIDER_ID_LENGTH
 from connection_records import normalize_connection
@@ -51,7 +52,7 @@ def provider_status(
     """Return redaction-safe Google Calendar provider setup status."""
     connections = _active_connections(read_state(data_root).get("connections", []))
     secrets_payload = app_secrets or {}
-    missing = _missing_secret_names(secrets_payload, ["google-oauth-client-id", "google-oauth-client-secret"])
+    missing = [] if secrets_payload.get("platform-google-access") else _missing_secret_names(secrets_payload, ["google-oauth-client-id", "google-oauth-client-secret"])
     errors = _secret_error_names(app_secret_errors)
     configured = not missing and not errors
     return {
@@ -86,6 +87,8 @@ def start_oauth(
 ) -> dict[str, Any]:
     """Start Google Calendar OAuth and persist a short-lived pending state."""
     _require_provider(body)
+    if any(item.get("external_refs", {}).get("managed_by") == "platform" for item in read_state(data_root)["connections"]):
+        raise CalendarOAuthError("platform_account_managed", "Manage Google permissions and accounts from Maverick Connected accounts.")
     client_id = _required_app_secret(
         app_secrets,
         app_secret_errors,
@@ -258,6 +261,8 @@ def disconnect_connection(
     current_time = (now or datetime.now(UTC)).astimezone(UTC)
     state = read_state(data_root)
     connection = _connection_by_id(state, connection_id)
+    if connection.get("external_refs", {}).get("managed_by") == "platform":
+        raise CalendarOAuthError("platform_account_managed", "Disconnect Google or disable Calendar from Maverick Connected accounts.")
     if connection["provider"] != GOOGLE_PROVIDER:
         raise CalendarOAuthError("unsupported_provider", "Calendar disconnect currently supports provider `google` only.")
     if connection["status"] == "connected":

@@ -182,7 +182,10 @@ def _local_upload_target(body: dict, source: Path) -> tuple[str, str, str]:
     return role, str(body.get("folder_relative_path") or "").strip().strip("/"), str(body.get("file_name") or source.name)
 
 
+from platform_account import attach_platform_account
+
 payload = json.loads(sys.stdin.read() or "{}")
+attach_platform_account(payload)
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
 requested_action = str(arguments.get("action") or "operations.manifest")
 body = {

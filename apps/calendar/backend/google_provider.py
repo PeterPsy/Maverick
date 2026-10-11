@@ -33,6 +33,8 @@ def refresh_access_token(
     transport: HttpTransport | None = None,
 ) -> str:
     """Exchange the resource-scoped refresh token for a short-lived access token."""
+    if app_secrets and app_secrets.get("platform-google-access"):
+        return app_secrets["platform-google-access"]
     client_id = _required_secret(
         app_secrets,
         app_secret_errors,

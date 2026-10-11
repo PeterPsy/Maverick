@@ -137,6 +137,18 @@
     },
     "host": {
       "telemetry": false
+    },
+    "external_accounts": {
+      "google": {
+        "capabilities": [
+          "drive"
+        ],
+        "replaces_secrets": [
+          "google-drive-oauth-client-id",
+          "google-drive-oauth-client-secret",
+          "google-drive-refresh-token"
+        ]
+      }
     }
   },
   "capabilities": {

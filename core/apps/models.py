@@ -187,6 +187,14 @@ class AppProviderPermissionDeclaration:
 
 
 @dataclass(frozen=True)
+class AppExternalAccountPermissionDeclaration:
+    """Personal provider capabilities and credentials replaced by broker access."""
+
+    capabilities: list[str]
+    replaces_secrets: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class AppPermissionsDeclaration:
     """Describe platform-governed operational permissions requested by one app."""
 
@@ -195,6 +203,7 @@ class AppPermissionsDeclaration:
     runtime: AppRuntimePermissionDeclaration
     host: AppHostPermissionDeclaration
     providers: AppProviderPermissionDeclaration
+    external_accounts: dict[str, AppExternalAccountPermissionDeclaration] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

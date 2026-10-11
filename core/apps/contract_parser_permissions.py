@@ -13,6 +13,7 @@ from core.apps.contract_validation import (
 from core.apps.errors import AppContractValidationError
 from core.apps.models import (
     AppHostPermissionDeclaration,
+    AppExternalAccountPermissionDeclaration,
     AppNetworkPermissionDeclaration,
     AppPermissionsDeclaration,
     AppProviderPermissionDeclaration,
@@ -25,7 +26,7 @@ PROVIDER_CREDENTIAL_SOURCES = {"none", "core-vault"}
 
 
 def parse_permissions_section(payload: dict[str, object]) -> AppPermissionsDeclaration:
-    _reject_unexpected_fields(payload, {"secrets", "network", "runtime", "host", "providers"}, label="permissions")
+    _reject_unexpected_fields(payload, {"secrets", "network", "runtime", "host", "providers", "external_accounts"}, label="permissions")
     secrets_payload = _expect_mapping(payload.get("secrets", {}), label="permissions.secrets")
     network_payload = _expect_mapping(payload.get("network", {}), label="permissions.network")
     runtime_payload = _expect_mapping(payload.get("runtime", {}), label="permissions.runtime")
@@ -52,9 +53,23 @@ def parse_permissions_section(payload: dict[str, object]) -> AppPermissionsDecla
     if credential_source not in PROVIDER_CREDENTIAL_SOURCES:
         allowed = ", ".join(sorted(PROVIDER_CREDENTIAL_SOURCES))
         raise AppContractValidationError(f"`permissions.providers.credential_source` must be one of {allowed}.")
+    account_payload = _expect_mapping(payload.get("external_accounts", {}), label="permissions.external_accounts")
+    readable_secrets = _expect_permission_name_list(secrets_payload, "read", label="permissions.secrets")
+    accounts = {}
+    for provider, raw in account_payload.items():
+        if not isinstance(provider, str) or not provider or len(provider) > 64:
+            raise AppContractValidationError("Invalid external account provider.")
+        declaration = _expect_mapping(raw, label="permissions.external_accounts." + provider)
+        _reject_unexpected_fields(declaration, {"capabilities", "replaces_secrets"}, label="permissions.external_accounts." + provider)
+        capabilities = _expect_permission_name_list(declaration, "capabilities", label="permissions.external_accounts")
+        replaces = _expect_permission_name_list(declaration, "replaces_secrets", label="permissions.external_accounts")
+        if not set(replaces) <= set(readable_secrets):
+            raise AppContractValidationError("External accounts may replace only declared readable secrets.")
+        accounts[provider] = AppExternalAccountPermissionDeclaration(capabilities, replaces)
     return AppPermissionsDeclaration(
+        external_accounts=accounts,
         secrets=AppSecretPermissionDeclaration(
-            read=_expect_permission_name_list(secrets_payload, "read", label="permissions.secrets"),
+            read=readable_secrets,
             write=_expect_permission_name_list(secrets_payload, "write", label="permissions.secrets"),
         ),
         network=AppNetworkPermissionDeclaration(

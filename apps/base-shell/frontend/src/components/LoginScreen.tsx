@@ -1,5 +1,6 @@
 import { FormEvent, lazy, Suspense, useEffect, useRef, useState } from "react";
-import { login, SessionPayload } from "../api";
+import { login, googleStatus, startGoogle, type GoogleStatus, type GoogleService, SessionPayload } from "../api";
+import { GoogleMark, GoogleServices, googleCallbackMessage } from "./GoogleServices";
 import { BrandMark } from "./BrandMark";
 
 type LoginStep = "email" | "password";
@@ -8,13 +9,31 @@ const LoginPaperBackground = lazy(() =>
   import("./LoginPaperBackground").then((module) => ({ default: module.LoginPaperBackground })),
 );
 
-export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Extract<SessionPayload, { authenticated: true }>) => void }) {
+export function LoginScreen({ onAuthenticated, callbackError = null }: {
+  onAuthenticated: (session: Extract<SessionPayload, { authenticated: true }>) => void; callbackError?: string | null;
+}) {
   const [credential, setCredential] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<LoginStep>("email");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => googleCallbackMessage(callbackError ?? new URL(window.location.href).searchParams.get("google_error")));
+  const [google, setGoogle] = useState<GoogleStatus | null>(null);
+  const [googleServices, setGoogleServices] = useState<GoogleService[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    googleStatus(controller.signal).then(setGoogle).catch(() => {});
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("google_error")) { url.searchParams.delete("google_error"); window.history.replaceState(null, "", url); }
+    return () => controller.abort();
+  }, []);
+
+  async function signInGoogle() {
+    if (isSubmitting) return;
+    setIsSubmitting(true); setError(null);
+    try { await startGoogle("login", googleServices); }
+    catch { setError("Unable to open Google sign-in. Please try again."); setIsSubmitting(false); }
+  }
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const canContinue = credential.trim().length > 0;
   const canSubmit = credential.trim().length > 0 && password.length > 0;
@@ -175,6 +194,14 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
               </div>
             </div>
 
+            {step === "email" && <div className="bs-login__google">
+              <button className="bs-google-button" type="button" disabled={isSubmitting || !google?.configured} onClick={() => void signInGoogle()}>
+                <GoogleMark /><span>{isSubmitting ? "Connecting…" : "Continue with Google"}</span>
+              </button>
+              {google?.configured ? <details><summary>Connect Calendar, Gmail or Drive</summary>
+                <GoogleServices selected={googleServices} onChange={setGoogleServices} disabled={isSubmitting} />
+              </details> : google ? <small>Google sign-in is not configured on this installation.</small> : null}
+            </div>}
             {error ? <p className="bs-form-error" id="maverick-login-error" role="alert">{error}</p> : null}
           </form>
         </div>

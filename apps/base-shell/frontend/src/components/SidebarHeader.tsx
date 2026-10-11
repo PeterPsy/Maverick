@@ -26,6 +26,10 @@ export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorks
         disabled={!activeApp || isLoading} onClick={onOpenAppSettings} type="button">
         <span aria-hidden="true" className="material-symbols-rounded">settings</span>
       </button>
+      <button className="bs-sidebar__app-settings" aria-label="Connected accounts" title="Connected accounts" type="button"
+        onClick={() => window.dispatchEvent(new Event("maverick.connected-accounts.open"))}>
+        <span aria-hidden="true" className="material-symbols-rounded">account_circle</span>
+      </button>
       {notifications}
     </div>
   );

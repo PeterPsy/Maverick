@@ -1,0 +1,34 @@
+.bs-connected-accounts {
+  width: min(38rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem);
+  padding: 0; border: 1px solid var(--maverick-border-strong); border-radius: 22px;
+  color: var(--maverick-text); background: var(--maverick-dialog-surface); box-shadow: var(--maverick-dialog-shadow);
+}
+.bs-connected-accounts::backdrop { background: var(--maverick-dialog-scrim); }
+.bs-connected-accounts header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem; border-bottom: 1px solid var(--maverick-border); }
+.bs-connected-accounts h2, .bs-connected-accounts h3, .bs-connected-accounts p { margin: 0; }
+.bs-connected-accounts h2 { font-size: 1.35rem; }
+.bs-connected-accounts h3 { font-size: 1rem; margin-bottom: .7rem; }
+.bs-connected-accounts header p, .bs-connected-accounts small { color: var(--maverick-text-muted); font-size: .8rem; }
+.bs-connected-accounts__body { display: grid; gap: 1.25rem; padding: 1.25rem; overflow-y: auto; max-height: calc(100dvh - 9rem); }
+.bs-connected-accounts__account { padding: 1rem; border: 1px solid var(--maverick-border); border-radius: 18px; display: grid; gap: .8rem; }
+.bs-connected-accounts small { display: block; overflow-wrap: anywhere; margin-top: .25rem; }
+.bs-connected-accounts__actions, .bs-connected-accounts__confirmation { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; font-size: .8rem; }
+.bs-connected-accounts__confirmation p { flex-basis: 100%; }
+.bs-connected-accounts button { color: inherit; background: var(--maverick-surface); border: 1px solid var(--maverick-border); border-radius: 18px; padding: .6rem .85rem; cursor: pointer; }
+.bs-connected-accounts button:hover { background: var(--maverick-surface-hover); }
+.bs-connected-accounts button:disabled, .bs-google-button:disabled { opacity: .5; cursor: default; }
+.bs-connected-accounts button:focus-visible, .bs-google-button:focus-visible, .bs-google-services input:focus-visible { outline: 2px solid var(--maverick-focus); outline-offset: 3px; }
+.bs-connected-accounts__app { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: .75rem 0; border-bottom: 1px solid var(--maverick-border); }
+.bs-google-services { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; display: grid; gap: .65rem; text-align: left; }
+.bs-google-services legend { font-weight: 600; margin-bottom: .8rem; }
+.bs-google-services label { display: flex; align-items: center; gap: .65rem; }
+.bs-google-services small { display: block; font-size: .8rem; color: var(--maverick-text-muted); line-height: 1.5; }
+.bs-google-services strong { font-size: .9rem; font-weight: 500; }
+.bs-google-button { display: inline-flex; align-items: center; justify-content: center; gap: .7rem; padding: .75rem 1.2rem; border: 1px solid #747775; border-radius: 20px; background: #fff; color: #1f1f1f; font: inherit; cursor: pointer; }
+.bs-connected-accounts .bs-google-button { background: #fff; color: #1f1f1f; margin-top: .5rem; }
+.bs-login__google { width: min(25rem, 100%); display: grid; gap: .75rem; justify-items: stretch; }
+.bs-login__google details { padding: .65rem; border-radius: 18px; background: var(--maverick-surface); }
+.bs-login__google summary { cursor: pointer; font-size: .85rem; text-align: center; }
+.bs-login__google details[open] summary { margin-bottom: 1rem; }
+.bs-login__google > small { color: var(--maverick-text-muted); text-align: center; }
+@media (max-width: 600px) { .bs-connected-accounts { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); } .bs-connected-accounts__body { padding: 1rem; } }

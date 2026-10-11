@@ -114,12 +114,17 @@ vi.mock("../src/components/AppSettingsDialog", () => ({
     <div data-testid="app-settings-dialog" data-app-id={app.app_id} data-workspace-id={frameScope.workspaceId} />
   ),
 }));
+vi.mock("../src/components/ConnectedAccountsDialog", () => ({
+  ConnectedAccountsDialog: ({ callbackError }: { callbackError: string | null }) => (
+    <div data-testid="connected-accounts" data-callback-error={callbackError} />
+  ),
+}));
 vi.mock("../src/components/FloatingChatHost", () => ({
   FloatingChatHost: () => <div data-testid="floating-chat-host" />,
 }));
 vi.mock("../src/components/LoginScreen", () => ({
-  LoginScreen: ({ onAuthenticated }: { onAuthenticated: () => void }) => (
-    <div data-testid="login-screen">
+  LoginScreen: ({ onAuthenticated, callbackError }: { onAuthenticated: () => void; callbackError?: string | null }) => (
+    <div data-testid="login-screen" data-callback-error={callbackError}>
       <button data-testid="retry-authenticated-bootstrap" onClick={onAuthenticated} type="button" />
     </div>
   ),
@@ -166,6 +171,20 @@ describe("AppShell bootstrap", () => {
       await Promise.resolve();
     });
   }
+
+  it("keeps the Google callback outcome while initial navigation normalises the URL", async () => {
+    window.history.replaceState(null, "", "/?google_connected=1");
+    await renderShell();
+    expect(container.querySelector('[data-testid="connected-accounts"]')).not.toBeNull();
+    expect(window.location.search).not.toContain("google_connected");
+  });
+
+  it("passes a pending registration outcome to login after anonymous bootstrap", async () => {
+    window.history.replaceState(null, "", "/?google_error=google_workspace_pending");
+    api.getSession.mockResolvedValue({ authenticated: false });
+    await renderShell();
+    expect(container.querySelector('[data-testid="login-screen"]')?.getAttribute("data-callback-error")).toBe("google_workspace_pending");
+  });
 
   it("suppresses saved fixed-panel spacing and open requests for an opted-out app, restoring the preference on return", async () => {
     window.history.replaceState(null, "", "/app/mail");

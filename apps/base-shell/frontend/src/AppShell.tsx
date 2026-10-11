@@ -60,6 +60,7 @@ import { usePwaDataCacheBrokerHost } from "./usePwaDataCacheBrokerHost";
 import { useDeviceUseBroker } from "./useDeviceUseBroker";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
+import { ConnectedAccountsDialog } from "./components/ConnectedAccountsDialog";
 import { MobileShellHeader } from "./components/MobileShellHeader";
 import { MobilePinnedAppsPanel } from "./components/MobilePinnedAppsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -74,6 +75,11 @@ const MOBILE_SIDEBAR_TRANSITION_MS = 220;
 const MOBILE_CHAT_TRANSITION_MS = 240;
 
 export function AppShell() {
+  const initialGoogleCallback = useMemo(() => {
+    const params = new URL(window.location.href).searchParams;
+    return params.has("google_connected") || params.has("google_error") ? { error: params.get("google_error") } : null;
+  }, []);
+  const pendingGoogleCallback = useRef(initialGoogleCallback);
   const initialSession = useMemo(() => readShellSession(), []);
   const initialRoute = useMemo(() => currentShellAppRoute(), []);
   const isInitialChatLaunch = useMemo(() => isInitialChatLaunchRoute(initialRoute), [initialRoute]);
@@ -87,6 +93,9 @@ export function AppShell() {
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [settings, setSettings] = useState<ProviderSetupSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
+  const [accountsScope, setAccountsScope] = useState<string | null>(null);
+  const [accountRevision, setAccountRevision] = useState(0);
+  const [accountCallbackError, setAccountCallbackError] = useState<string | null>(null);
   const [appSettingsScope, setAppSettingsScope] = useState<{ appId: string; sessionGeneration: string } | null>(null);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
@@ -150,7 +159,20 @@ export function AppShell() {
           workspaceId: authenticatedFrameWorkspaceId,
         })
       : null
-  ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId]);
+  ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId, accountRevision]);
+  useEffect(() => {
+    if (!authenticatedFrameScopeIdentity) { setAccountsScope(null); return; }
+    const open = () => setAccountsScope(authenticatedFrameScopeIdentity);
+    window.addEventListener("maverick.connected-accounts.open", open);
+    const url = new URL(window.location.href);
+    if (pendingGoogleCallback.current) {
+      setAccountCallbackError(pendingGoogleCallback.current.error); open();
+      pendingGoogleCallback.current = null;
+      url.searchParams.delete("google_connected"); url.searchParams.delete("google_error");
+      window.history.replaceState(null, "", url);
+    }
+    return () => window.removeEventListener("maverick.connected-accounts.open", open);
+  }, [authenticatedFrameScopeIdentity]);
   const mountedAppIds = useMountedAppIds(frameScope);
   useEffect(() => { setAppSettingsScope(null); }, [activeAppId, frameScope?.sessionGeneration]);
   useDeviceUseBroker(frameScope);
@@ -219,7 +241,7 @@ export function AppShell() {
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
-  const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
+  const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + 1 + (hasSettingsShortcut ? 1 : 0);
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount + (sidebarEnabled ? 0 : 2), isMobileLayout);
   const shellTheme = useMemo(() => createShellThemeState(themeMode, systemColorScheme), [systemColorScheme, themeMode]);
   const shellStyle = useMemo(() => {
@@ -939,7 +961,8 @@ export function AppShell() {
   }
 
   if (!authenticatedSession || !frameScope) {
-    return <LoginScreen onAuthenticated={() => {
+    return <LoginScreen callbackError={pendingGoogleCallback.current?.error ?? null} onAuthenticated={() => {
+      pendingGoogleCallback.current = null;
       void loadShellState();
     }} />;
   }
@@ -1037,6 +1060,10 @@ export function AppShell() {
         user={authenticatedSession.user}
         workspaces={workspaces}
       />
+      {accountsScope === authenticatedFrameScopeIdentity && accountsScope && <ConnectedAccountsDialog
+        key={accountsScope} callbackError={accountCallbackError}
+        onClose={() => { setAccountsScope(null); setAccountCallbackError(null); }}
+        onChanged={() => setAccountRevision(revision => revision + 1)} />}
       {activeApp && appSettingsScope?.appId === activeApp.app_id && appSettingsScope.sessionGeneration === frameScope.sessionGeneration && <AppSettingsDialog
         key={`${frameScope.sessionGeneration}:${activeApp.app_id}`}
         app={activeApp}

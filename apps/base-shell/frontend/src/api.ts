@@ -641,6 +641,45 @@ export function logout(): Promise<SessionPayload> {
   return requestJson<SessionPayload>("/api/auth/logout", { method: "POST" });
 }
 
+export type GoogleService = "calendar" | "gmail" | "drive";
+export type GoogleStatus = { configured: boolean; registration_enabled: boolean; services: { id: GoogleService; label: string }[] };
+export type ConnectedAccount = { account_id: string; provider: string; email: string; display_name: string; status: string; services: GoogleService[] };
+export type ConnectedAccountsPayload = {
+  items: ConnectedAccount[];
+  selection: { account_id: string; disabled_apps: string[] } | null;
+  apps: { app_id: string; name: string; services: GoogleService[] }[];
+  google: GoogleStatus;
+};
+
+export function googleStatus(signal?: AbortSignal): Promise<GoogleStatus> {
+  return requestJson("/api/auth/google/status", { signal });
+}
+
+export async function startGoogle(mode: "login" | "connect", services: GoogleService[]): Promise<void> {
+  const result = await requestJson<{ authorization_url: string }>("/api/auth/google/start", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, services }),
+  });
+  const target = new URL(result.authorization_url);
+  if (target.origin !== "https://accounts.google.com" || target.pathname !== "/o/oauth2/v2/auth") throw new Error("Invalid Google sign-in URL.");
+  window.location.assign(target.href);
+}
+
+export function connectedAccounts(signal?: AbortSignal): Promise<ConnectedAccountsPayload> {
+  return requestJson("/api/connected-accounts", { signal });
+}
+
+export function selectConnectedAccount(account_id: string): Promise<{ status: string }> {
+  return requestJson("/api/connected-accounts/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account_id }) });
+}
+
+export function setConnectedAppAccess(app_id: string, enabled: boolean): Promise<{ status: string }> {
+  return requestJson("/api/connected-accounts/app-access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ app_id, enabled }) });
+}
+
+export function disconnectConnectedAccount(account_id: string): Promise<{ status: string; revoked_at_google: boolean }> {
+  return requestJson(`/api/connected-accounts/${encodeURIComponent(account_id)}`, { method: "DELETE" });
+}
+
 export function listWorkspaces(signal?: AbortSignal, retryKey?: string): Promise<WorkspacesPayload> {
   return retryKey
     ? requestJsonWithRetry<WorkspacesPayload>(retryKey, "/api/workspaces", signal)

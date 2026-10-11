@@ -577,3 +577,18 @@ prioritizes display values. Oversized records are skipped whole without hiding
 later targets of the same role. Truncated detailed metadata keeps its incomplete
 marker and does not recommend repeating the same detailed request. This change
 addresses the Settings menu omission without increasing the observation budget.
+
+Core commit `d7b2b9d0` passed all 123 focused runtime/provider/API tests. Native
+commits `30d3088` and `590cf97` passed 43 Python build/install tests, 279 Swift
+tests and 17 signed physical-host cases (zero failures) in managed workflow
+`38146675380`. The workflow requested exact Calculator pixel/OCR acceptance,
+then verified MaverickMac 0.3.4 (66) installed and running at the existing path.
+It did not request off-desktop acceptance.
+
+After the backend restart, the process changed from 2015733 to 2041044 and
+the health endpoint returned HTTP 200. Fresh native inventory remained
+unavailable after the app/backend restarts. Live Settings menu clicks and a
+physical task using the new representation pairs therefore remain unverified;
+the synthetic mode-change regressions and managed native acceptance are not
+substitutes for those checks. No saved model selection or latency benchmark
+was changed by this correction.

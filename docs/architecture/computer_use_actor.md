@@ -143,8 +143,14 @@ claims require a measured matched task; model choice alone is not a speedup resu
 ## Structured progress and matched evaluation (2026-10-11)
 
 `computer_interact` accepts optional `steps` (at most 32) and `completion_check`.
+Runtime progress exposes `completion_verified` and `observation_text_complete`.
+If a compact read omits the final predicate, the operator must read the same
+window with `details=true` before finishing. A truncated read neither proves
+failure nor authorizes replay of an already verified step.
 Each step names an engine/target, click/type/replace action, exact control selector
-and observable expected effect. Text must match `prepared_text`. Runtime-owned
+and observable expected effect. Native steps may pin `window_id` from the current
+inventory; input and effect verification must then use that exact window, including
+verification reads. Text must match `prepared_text`. Runtime-owned
 `ui_action` resolves a unique actionable control in a fresh, image-bearing receipt;
 it never guesses coordinates or reuses old element ids. Planned tasks cannot
 bypass it with raw native input. Pending effects admit only same-target reads;
@@ -153,6 +159,19 @@ Expected text must equal a visible control label, value, `label: value`, or
 standalone receipt line; substring matches do not verify an effect. An already-visible
 predicate requires a later read, rather than treating dispatch as proof. Native
 recovery and original parent authority remain enforced.
+
+Pixel-only `px1_` observations can carry local Vision text recognized from the same
+immutable source capture, with confidence and normalized top-left rectangles.
+These are `image_text` labels, never AX elements or writable text focus. A planned
+pixel click requires exact label selection and a normalized `region` for both the
+target and expected effect. Core resolves one eligible label inside that region
+and passes its center through the existing capture-bound `click_point` route.
+Confidence below 0.85, invalid geometry, missing/duplicate labels and text input
+fail before dispatch. Region-free predicates cannot verify pixel effects: a
+Calculator button must not satisfy a result-display check. Native OCR failure
+preserves the screenshot with explicit unavailable text metadata. No OCR model
+or image transfer to a cloud service is introduced. AX-backed plans and raw
+visual navigation keep their existing contracts.
 
 Rejected semantic validation has not sent input: the model gets up to three
 actionable corrections to acquire its own observation. Planned tasks renew the

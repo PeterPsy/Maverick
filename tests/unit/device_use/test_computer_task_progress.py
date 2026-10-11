@@ -63,6 +63,27 @@ class ComputerTaskProgressTests(unittest.TestCase):
         self.assertFalse(self.progress.observation.verifies({'role': 'statictext', 'value': '7'}))
         self.assertTrue(self.progress.observation.verifies({'identifier': 'Seven'}))
 
+    def test_truncated_completion_read_requests_metadata_without_replaying_input(self):
+        self.progress.completion_check = {'role': 'statictext', 'value': '7'}
+        self.read(observation())
+        self.progress.prepare({'step_index': 0})
+        self.read(observation(2, '7'))
+        self.assertTrue(self.progress.state()['completion_verified'])
+        truncated = observation(3)
+        truncated.result['contentItems'][0]['text'] = (
+            f'snapshot=ps1_3; bundle_id={BUNDLE}; window_id=42\n'
+            'AXButton (1 found):\n  elem_30 - "7" - identifier: Seven\n'
+            'observation_text_complete=false')
+        self.read(truncated)
+        state = self.progress.state()
+        self.assertEqual(state['verified_steps'], 1)
+        self.assertFalse(state['completion_verified'])
+        self.assertFalse(state['observation_text_complete'])
+        self.assertFalse(state['effect_pending'])
+        self.read(observation(4, '7'))
+        self.assertTrue(self.progress.state()['completion_verified'])
+        self.assertEqual(self.progress.index, 1)
+
     def test_visible_text_matches_exact_labels_and_values_not_substrings(self):
         observed = native_observation(observation(value='17'), 'mac_peekaboo', {})
         self.assertTrue(observed.verifies({'text': '17'}))

@@ -27,7 +27,11 @@ identity, content, business/creative decisions and final quality. Give the tool 
 bounded UI subtask, a verifiable completion criterion, and all relevant constraints.
 Supply exact prepared_text values when entering content; the operator must not author it.
 For predictable labelled sequences supply steps with exact control selectors and
-expected effects. A plan-required response has sent no input: provide the plan
+expected effects. Pin window_id when selecting one native window. Pixel-only
+observations may include locally recognized image_text labels; supply normalized
+region rectangles for both the click label and its expected effect, keeping the
+display region distinct from button labels. They authorize clicks only, never
+typing or keyboard focus. A plan-required response has sent no input: provide the plan
 instead of repeating the same unplanned request. A configured recovery model can
 handle unplanned navigation before input starts.
 Delegate several ordinary UI steps together, not one tool call per click. The tool
@@ -49,7 +53,7 @@ cannot authorize new input. Verify each input, reusing observe_after when it giv
 a fresh observation. Element IDs belong to that exact observation and can change
 after any input. Resolve the intended control again by its current label and
 identifier; never carry an old element ID into a new receipt. If essential text
-is truncated, request a detailed observation before input. A tool image and its
+is truncated, request a detailed observation before input or completion. A tool image and its
 text are one observation, not a new objective. Continue the original bounded task
 until its full completion criterion is met, or return a blocker/decision needed.
 An asynchronous UI may still show the previous state in an immediate post-input
@@ -70,6 +74,9 @@ only when the entire completion criterion is visibly verified, and explicitly se
 completion_criterion_met=true. Intermediate progress is not completion: if any
 required part remains unverified, set it false and use needs_decision or blocked.
 Before finishing, compare the original criterion with the latest observed state.
+If runtime_progress.completion_verified is false and observation_text_complete
+is false, read the exact same window with details=true before finishing; this is
+a read, never a reason to repeat the input.
 Use needs_decision for
 ambiguity, and blocked for a native refusal or an unverified uncertain effect.
 Return ordinary recovery diagnostics rather than hiding them. No user commentary."""

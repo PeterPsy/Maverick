@@ -1,13 +1,18 @@
 """Runtime-owned steps and effect checks for bounded UI tasks."""
 
-from core.device_use.computer_observation import native_observation
+from core.device_use.computer_observation import native_observation, normalized_region
 from core.device_use.errors import DeviceUseUnavailableError
 
 
 SELECTOR_SCHEMA = {
     'type': 'object', 'additionalProperties': False, 'minProperties': 1,
-    'properties': {key: {'type': 'string', 'minLength': 1, 'maxLength': 200}
+    'properties': {**{key: {'type': 'string', 'minLength': 1, 'maxLength': 200}
                    for key in ('label', 'identifier', 'role', 'value')},
+        'region': {'type': 'object', 'additionalProperties': False,
+            'description': 'Normalized rectangle in the captured image, origin top left. Restricts locally recognized image text; never guesses a click point.',
+            'required': ['x', 'y', 'width', 'height'], 'properties': {
+                **{key: {'type': 'number', 'minimum': 0, 'exclusiveMaximum': 1} for key in ('x', 'y')},
+                **{key: {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 1} for key in ('width', 'height')}}}},
 }
 EXPECTATION_SCHEMA = {**SELECTOR_SCHEMA,
     'description': 'Expected visible effect. Prefer exact label/identifier/role/value selectors. text matches an exact visible control label, value, label: value, or standalone line, never a substring.', 'properties': {
@@ -21,6 +26,8 @@ STEP_SCHEMA = {
         'action': {'type': 'string', 'enum': ['click', 'type', 'replace']},
         'control': SELECTOR_SCHEMA, 'expect': EXPECTATION_SCHEMA,
         'text': {'type': 'string', 'maxLength': 4000},
+        'window_id': {'type': 'integer', 'minimum': 1, 'maximum': 4294967295,
+                      'description': 'Exact native window from the current app inventory; mac_peekaboo only.'},
     },
 }
 SEMANTIC_TOOL = {
@@ -34,13 +41,14 @@ SEMANTIC_TOOL = {
 
 
 def validate_selector(value, *, expected=False):
-    keys = {'label', 'identifier', 'role', 'value'} | ({'text'} if expected else set())
+    keys = {'label', 'identifier', 'role', 'value', 'region'} | ({'text'} if expected else set())
     if (not isinstance(value, dict) or not value or set(value) - keys
         or any(not isinstance(item, str) or not item or len(item) > (500 if key == 'text' else 200)
-               for key, item in value.items()) or ('text' in value and len(value) != 1)
+               for key, item in value.items() if key != 'region') or ('text' in value and len(value) != 1)
+        or (set(value) == {'region'})
         or (not expected and not (set(value) & {'label', 'identifier'}))):
         raise ValueError('computer_actor_selector_invalid')
-    return dict(value)
+    return {**value, **({'region': normalized_region(value['region'])} if 'region' in value else {})}
 
 
 def validate_step(value, prepared_text):
@@ -52,6 +60,9 @@ def validate_step(value, prepared_text):
         or (value['action'] != 'click' and (value.get('text') not in prepared_text
              or value['tool'] != 'mac_peekaboo'))
         or (value['action'] == 'click' and 'text' in value)):
+        raise ValueError('computer_actor_step_invalid')
+    if 'window_id' in value and (value['tool'] != 'mac_peekaboo'
+        or type(value['window_id']) is not int or not 1 <= value['window_id'] <= 4294967295):
         raise ValueError('computer_actor_step_invalid')
     return {**value, 'control': validate_selector(value['control']),
             'expect': validate_selector(value['expect'], expected=True)}
@@ -86,13 +97,22 @@ class ComputerTaskProgress:
         observed = self.observation
         if not observed or not observed.fresh or (observed.tool, observed.target) != (step['tool'], step['target']):
             raise DeviceUseUnavailableError('computer_actor_fresh_observation_required')
+        if 'window_id' in step and observed.window_id != step['window_id']:
+            raise DeviceUseUnavailableError('computer_actor_exact_window_required')
+        if observed.pixels_only and step['action'] != 'click':
+            raise DeviceUseUnavailableError('computer_actor_pixel_text_click_only')
+        if observed.pixels_only and ('region' not in step['control'] or 'region' not in step['expect']):
+            raise DeviceUseUnavailableError('computer_actor_pixel_region_required')
         try:
             control = observed.resolve(step['control'])
         except ValueError as error:
             raise DeviceUseUnavailableError(str(error)) from error
         if step['tool'] == 'mac_peekaboo':
-            native = {'action': step['action'], 'bundle_id': step['target'], 'snapshot': observed.receipt,
-                      'element': control.element, 'observe_after': True}
+            native = {'bundle_id': step['target'], 'snapshot': observed.receipt, 'observe_after': True}
+            if observed.pixels_only:
+                native.update(action='click_point', point_x=control.x, point_y=control.y)
+            else:
+                native.update(action=step['action'], element=control.element)
         else:
             if step['action'] != 'click' or control.x is None or control.y is None:
                 raise DeviceUseUnavailableError('computer_actor_step_invalid')
@@ -110,6 +130,10 @@ class ComputerTaskProgress:
         if self.pending is not None:
             target = arguments.get('bundle_id') if tool == 'mac_peekaboo' else arguments.get('tab_id')
             return (tool == self.pending['tool'] and target == self.pending['target']
+                    and ('window_id' not in self.pending or
+                         (arguments.get('action') == 'list_windows' or
+                          (arguments.get('action') == 'observe' and
+                           arguments.get('window_id') == self.pending['window_id'])))
                     and arguments.get('action') in {'observe', 'observe_app', 'list_windows'})
         if self.steps and arguments.get('action') not in {'observe', 'observe_app', 'list_windows', 'list_tabs'}:
             return False
@@ -124,10 +148,12 @@ class ComputerTaskProgress:
             texts = '\n'.join(item.get('text', '') for item in result.result.get('contentItems', []) if isinstance(item, dict))
             # A failed verification read being pre-dispatch does not undo the
             # previously dispatched input whose effect is still unknown.
-            if (arguments.get('action') in {'click', 'type', 'replace'}
+            if (arguments.get('action') in {'click', 'click_point', 'type', 'replace'}
                 and 'nessuna azione inviata' in texts.lower() and 'Full resta attivo' in texts):
                 self.pending = None
-        if self.pending is not None and observed and (observed.tool, observed.target) == (self.pending['tool'], self.pending['target']):
+        if (self.pending is not None and observed and
+            (observed.tool, observed.target) == (self.pending['tool'], self.pending['target']) and
+            ('window_id' not in self.pending or observed.window_id == self.pending['window_id'])):
             settling = 'asynchronous_update_pending=true' in observed.text
             same_immediate_effect = self.effect_was_present and arguments.get('action') not in {'observe', 'observe_app'}
             if observed.verifies(self.pending['expect']) and not settling and not same_immediate_effect:
@@ -142,13 +168,19 @@ class ComputerTaskProgress:
     def complete(self):
         if self.pending is not None or self.index < len(self.steps):
             return False
+        if (self.steps and 'window_id' in self.steps[-1] and
+            (self.observation is None or self.observation.window_id != self.steps[-1]['window_id'])):
+            return False
         return not self.completion_check or bool(self.observation and self.observation.verifies(self.completion_check))
 
     def state(self):
         state = {'verified_steps': self.index, 'total_steps': len(self.steps),
                  'effect_pending': self.pending is not None,
                  'next_input_allowed': self.pending is None,
-                 'last_tool': self.last_tool, 'last_target': self.last_target}
+                 'last_tool': self.last_tool, 'last_target': self.last_target,
+                 'completion_verified': self.complete(),
+                 'observation_text_complete': bool(self.observation and
+                     'observation_text_complete=false' not in self.observation.text)}
         if self.steps and self.index < len(self.steps):
             state['current_step'] = self.steps[self.index]
         if self.pending:

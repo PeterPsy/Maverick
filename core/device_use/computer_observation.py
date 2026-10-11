@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 import json
+import math
 import re
 
 
@@ -14,6 +15,17 @@ def role_name(value):
     return str(value).removeprefix('AX').replace('_', '').lower()
 
 
+def normalized_region(value):
+    if (not isinstance(value, dict) or set(value) != {'x', 'y', 'width', 'height'}
+        or any(type(number) not in {int, float} or not math.isfinite(number) for number in value.values())
+        or not (0 <= value['x'] < 1 and 0 <= value['y'] < 1
+                and 0 < value['width'] <= 1 and 0 < value['height'] <= 1
+                and value['x'] + value['width'] <= 1.000001
+                and value['y'] + value['height'] <= 1.000001)):
+        raise ValueError('computer_actor_region_invalid')
+    return dict(value)
+
+
 @dataclass
 class NativeControl:
     element: str
@@ -24,11 +36,20 @@ class NativeControl:
     actionable: bool = False
     x: float | None = None
     y: float | None = None
+    bounds: dict | None = None
 
     def matches(self, selector):
+        if 'region' in selector:
+            if self.bounds is None:
+                return False
+            region, bounds = selector['region'], self.bounds
+            if not (region['x'] <= bounds['x'] and region['y'] <= bounds['y']
+                    and bounds['x'] + bounds['width'] <= region['x'] + region['width']
+                    and bounds['y'] + bounds['height'] <= region['y'] + region['height']):
+                return False
         return all((role_name(self.role) == role_name(value) if key == 'role' else
                     normalized(getattr(self, key, None)) == normalized(value))
-                   for key, value in selector.items())
+                   for key, value in selector.items() if key != 'region')
 
 
 @dataclass
@@ -40,6 +61,7 @@ class NativeObservation:
     text: str = ''
     window_id: int | None = None
     fresh: bool = True
+    pixels_only: bool = False
 
     def resolve(self, selector):
         matches = [control for control in self.controls if control.actionable and control.matches(selector)]
@@ -48,6 +70,8 @@ class NativeObservation:
         return matches[0]
 
     def verifies(self, expectation):
+        if self.pixels_only and 'region' not in expectation:
+            return False
         if set(expectation) == {'text'}:
             visible = {normalized(line) for line in self.text.splitlines()}
             for control in self.controls:
@@ -78,11 +102,37 @@ def native_observation(result, tool, arguments):
             return None
     if tool != 'mac_peekaboo':
         return None
-    receipt = re.search(r'\bsnapshot=(ps1_[\w-]+)', text)
+    receipt = re.search(r'\bsnapshot=((?:ps1|px1)_[\w-]+)', text)
     bundle = re.search(r'\bbundle_id=([\w.-]+)', text)
     if not receipt or not bundle:
         return None
     window = re.search(r'\bwindow_id=(\d+)', text)
+    if receipt[1].startswith('px1_'):
+        if not window or 'observation_mode=pixels_only' not in text:
+            return None
+        controls = []
+        for line in text.splitlines():
+            if ('pixel_text_source=same_capture' not in text
+                or 'pixel_text_recognition_succeeded=true' not in text):
+                break
+            if not line.startswith('pixel_text='):
+                continue
+            try:
+                item = json.loads(line.removeprefix('pixel_text='))
+                label, confidence = item['label'], item['confidence']
+                bounds = normalized_region(item['bounds'])
+                if (not isinstance(label, str) or not label or len(label) > 200
+                    or type(confidence) not in {int, float} or not math.isfinite(confidence)
+                    or not 0.85 <= confidence <= 1 or len(controls) >= 600):
+                    continue
+                controls.append(NativeControl(str(len(controls)), label, 'image_text', value=label,
+                    actionable=True, x=bounds['x'] + bounds['width'] / 2,
+                    y=bounds['y'] + bounds['height'] / 2, bounds=bounds))
+            except (ValueError, KeyError, TypeError):
+                continue
+        # These are locally recognized labels, never AX controls or text focus.
+        return NativeObservation(tool, bundle[1], receipt[1], controls, text,
+                                 int(window[1]), pixels_only=True)
     controls, role = [], ''
     for line in text.splitlines():
         heading = re.match(r'\s*(AX\w+)\s*\(', line)

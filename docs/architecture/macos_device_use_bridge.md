@@ -56,6 +56,36 @@ comparing two global focus samples. The post-install native bridge returned
 `device_use_session_not_connected`; physical Calculator acceptance awaits the
 chat's reconnection and is not inferred from the fixture.
 
+### Desktop-independent capture and local image text (0.3.3–0.3.4)
+
+Build 64 inventories windows across Spaces and captures the exact selected
+ScreenCaptureKit window without filtering it to the active desktop. Exact
+process identity, normal layer, geometry and route freshness still apply;
+foreground activation is not required. Its signed acceptance verified a real
+Calculator on another desktop without changing focus or sending pointer input.
+macOS may nevertheless omit that application's AX windows on an inactive Space.
+
+Build 65 adds local Vision text from the immutable source capture, before JPEG
+compression. `pixel_text` records contain literal labels, confidence and
+normalized top-left rectangles. Only confidence at least 0.85 and valid geometry
+are projected, with a maximum of 80 records and explicit recognition and
+completeness status. Recognition failure leaves the valid screenshot intact.
+These records are image text, never AX controls or writable focus. The structured
+operator selects a unique exact label inside a caller-supplied region and verifies
+the effect in its separate region before progressing. It uses the existing
+capture-bound click route; no guessed points, global input or cloud OCR is added.
+
+Compact AX text preserves whole lines and prioritizes result/display and editable
+values before control groups. Redundant descriptions and help may be omitted
+when the original exceeds the budget. Missing selectors or predicates require a
+detailed same-window read, never replay of the previous input.
+
+Signed Calculator acceptance has distinct opt-in modes: `verify_cross_desktop`
+requires an already off-desktop window, while `verify_pixel_text` checks the
+current window and records its actual desktop state. Both assert unchanged
+visibility, focus and absence of software pointer input. Passing the second mode
+does not certify cross-desktop behavior. Neither test switches Spaces.
+
 ## Full file and terminal authority
 
 Full activation itself authorizes Mac file and shell operations with the local

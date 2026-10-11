@@ -1,140 +1,3 @@
-.graph-stage {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  overscroll-behavior: contain;
-  background: var(--maverick-bg);
-}
-
-.memory-graph-engine { position: absolute; inset: 0; }
-.graph-navigation {
-  position: absolute;
-  top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 1rem);
-  right: 1rem;
-  z-index: 3;
-  display: grid;
-  gap: .5rem;
-  max-width: min(280px, calc(100% - 2rem));
-}
-.graph-navigation details, .graph-edge-panel {
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
-  background: rgba(12, 12, 14, .88);
-  padding: .7rem;
-  font-size: .78rem;
-}
-.graph-node-list { display: grid; gap: .3rem; max-height: 28dvh; overflow: auto; margin-top: .5rem; }
-.graph-navigation button, .node-panel-tabs button, .node-panel > button, .node-panel section > button, .graph-edge-panel button, .memory-context-banner button {
-  padding: .5rem .7rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  color: var(--maverick-text);
-  font-size: .76rem;
-  overflow-wrap: anywhere;
-}
-.node-panel-tabs { display: flex; gap: .3rem; flex-wrap: wrap; }
-.node-panel-tabs [aria-current], .graph-node-list [aria-current] { background: var(--maverick-accent-soft); border-color: var(--maverick-accent); }
-.graph-navigation :focus-visible, .graph-edge-panel :focus-visible { outline: 2px solid var(--maverick-accent); outline-offset: 2px; }
-.graph-navigation summary { cursor: pointer; }
-.graph-edge-panel { position: absolute; right: 1rem; bottom: 1rem; z-index: 5; display: grid; gap: .5rem; max-width: min(320px, calc(100% - 2rem)); }
-.memory-context-banner { position: absolute; z-index: 6; left: 1rem; top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + .5rem); display: flex; gap: .5rem; align-items: center; font-size: .76rem; max-width: calc(100% - 2rem); }
-
-.graph-stage canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.graph-stage canvas:active {
-  cursor: grabbing;
-}
-
-.graph-stage--empty canvas,
-.graph-stage--empty canvas:active {
-  cursor: default;
-}
-
-.graph-stage__sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.memory-map-skeleton {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.memory-map-skeleton__links {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0.72;
-}
-
-.memory-map-skeleton__link {
-  stroke: rgba(150, 150, 150, 0.18);
-  stroke-dasharray: 7 8;
-  stroke-linecap: round;
-  stroke-width: 0.42;
-  vector-effect: non-scaling-stroke;
-}
-
-.memory-map-skeleton__node {
-  position: absolute;
-  left: var(--memory-skeleton-x);
-  top: var(--memory-skeleton-y);
-  width: var(--memory-skeleton-size);
-  height: var(--memory-skeleton-size);
-  overflow: hidden;
-  border: 1px solid rgba(168, 168, 168, 0.2);
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 36% 30%, rgba(255, 255, 255, 0.13), transparent 0 16%, transparent 42%),
-    linear-gradient(135deg, rgba(86, 86, 86, 0.62), rgba(38, 38, 38, 0.82));
-  box-shadow:
-    0 0 0 7px rgba(140, 140, 140, 0.035),
-    0 0 28px rgba(150, 150, 150, 0.08),
-    inset 0 0 18px rgba(255, 255, 255, 0.055);
-  transform: translate(-50%, -50%);
-}
-
-.memory-map-skeleton__node::before {
-  position: absolute;
-  inset: -42%;
-  background: linear-gradient(105deg, transparent 34%, rgba(255, 255, 255, 0.05) 44%, rgba(255, 255, 255, 0.34) 50%, rgba(255, 255, 255, 0.05) 56%, transparent 66%);
-  mix-blend-mode: screen;
-  transform: translateX(-120%) rotate(16deg);
-  animation: memory-map-node-shimmer 1.65s ease-in-out infinite;
-  content: "";
-}
-
-.memory-map-skeleton__node::after {
-  position: absolute;
-  inset: 35%;
-  border-radius: inherit;
-  background: rgba(170, 170, 170, 0.34);
-  box-shadow: 0 0 14px rgba(180, 180, 180, 0.16);
-  content: "";
-}
-
-.memory-map-skeleton[data-loading="false"] .memory-map-skeleton__node::before {
-  animation-duration: 3.2s;
-}
-
 .node-panel {
   position: absolute;
   top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 4.75rem);
@@ -148,7 +11,7 @@
   overflow: auto;
   border: 1px solid var(--maverick-border-strong);
   border-radius: var(--maverick-card-radius);
-  background: rgba(12, 12, 14, 0.74);
+  background: rgba(12, 12, 14, 0.86);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
@@ -334,14 +197,11 @@ code {
     bottom: 0.72rem;
     left: 0.72rem;
     width: auto;
-    max-height: min(72dvh, 34rem);
+    max-height: min(55dvh, 30rem);
   }
-}
+  .metrics span { padding: .55rem .45rem; }
+  .metrics strong { font-size: .82rem; }
 
-@keyframes memory-map-node-shimmer {
-  100% {
-    transform: translateX(120%) rotate(16deg);
-  }
 }
 
 .memory-management form, .memory-management label {

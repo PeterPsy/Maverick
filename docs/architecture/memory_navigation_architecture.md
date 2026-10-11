@@ -134,12 +134,19 @@ continues before React renders cannot replace a freshly loaded context.
 Content, Connections, Sources and History load on demand. Correction is enabled
 only after the complete current body has loaded.
 
-Cytoscape is the only graph engine, dynamically imported in the graph frame.
-App-native controls and vector icons remain owned by Memory. Bezier edges separate
-parallel relationships, arrows expose direction, and edge selection exposes the
-reason. Initial CoSE layout includes labels; incremental placement locks existing
-nodes. Selection brings the node into view at a readable minimum zoom. A native
-keyboard list supports navigation independent of canvas hit testing.
+React Force Graph 2D is the only graph engine, loaded on demand in the graph frame.
+Its Canvas renderer and D3 physics own layout, gestures and camera animation;
+Memory owns node styling, native controls and vector icons. Curved parallel edges
+retain relationship identities and direction; edge selection exposes the reason.
+Mutable simulation objects are separate from retrieval cards, and incremental
+updates retain existing positions. A gentle ambient force keeps settled nodes
+moving within a small orbit while motion is enabled. Animation pauses while the
+document or graph is hidden. Reduced-motion preferences disable ambient movement,
+particles and camera transitions by default; a motion control also lets users
+freeze layout or explicitly enable motion for this view.
+Selection brings the node into the visible area beside/above its inspector. A
+native keyboard list supports navigation independent of canvas hit testing.
+Mobile starts at a readable neighborhood; Fit graph provides the full overview.
 
 Context responses return `view.node_ids` and `view.snapshot_id`. Shell navigation
 parameters `context_node_ids` (JSON string) and `context_snapshot_id` reopen those

@@ -1,2 +1,0 @@
-# Preserve whitespace inside Cytoscape's generated GLSL template literals.
-frontend/dist/assets/cytoscape.esm-*.js -whitespace

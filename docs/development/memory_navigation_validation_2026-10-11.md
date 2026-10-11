@@ -13,7 +13,7 @@
 - Lightweight maps, batch cards and selective content/evidence/sources/history;
   original passage SHA verification remains mandatory.
 - Shared FTS/scope/validity/identity rules and documented, tested MCP outputs.
-- One lazy Cytoscape engine, parallel directed edges, native keyboard navigation,
+- One lazy React Force Graph 2D engine, parallel directed edges, native keyboard navigation,
   selected neighborhoods, paged connections, back navigation and lazy panel tabs.
   Conversation reference views do not overwrite workspace view state.
 
@@ -200,19 +200,44 @@ Graph references now update synchronously before publishing React state. Three
 fresh hosted navigations preserved all four referenced nodes plus the inserted
 fifth node, and restored the seventeen-node workspace view on every attempt.
 
-Cytoscape 3.34.3 contributes one dynamically imported chunk of 443.04 kB raw /
-141.98 kB gzip. Main app code is about 40 kB raw / 13 kB gzip, besides the shared
-React/API bundle. The old app-owned physics/drawing/gesture engine was removed;
-there is no second renderer or continuous simulation. Labels participate in the
-initial CoSE layout and selected nodes have a minimum readable zoom. Mobile's
-overview remains spatial; the keyboard list and focused panel provide full titles.
+### Fluid map follow-up
 
-Renderer choices follow the [official Cytoscape documentation](https://js.cytoscape.org/).
-App-local Git attributes preserve whitespace in the generated library's GLSL
-template literals, allowing source whitespace checks without rewriting vendor code.
-This validates the small integration and its real build cost; larger graph/device
-profiling and a controlled usability comparison with the former canvas remain
-future evaluation work.
+The static Cytoscape layout has been replaced with React Force Graph 2D 1.29.2.
+It remains the only renderer and is imported on demand. Canvas/D3 own physics,
+gestures and animated camera moves; Memory owns the native controls, vector icons,
+colored halos, labels and a bounded ambient force. Settled nodes drift within four
+graph units of their anchors. Flow particles run only on focused connections.
+Simulation objects are separate from retrieval cards; surviving objects keep
+coordinates across incremental updates. Parallel and reverse edges receive stable
+distinct curves; self loops remain separate. Hidden documents and offscreen graphs
+pause animation. Reduced-motion preferences are honored by default; explicitly
+resuming motion enables it for that view. Mobile opens a readable neighborhood,
+with the full overview available through Fit graph and an inspector capped at
+55dvh. Cytoscape and its vendor-specific Git whitespace rule were removed.
+
+The renderer/scene chunk measures 189.37 kB raw / 63.35 kB gzip, compared with
+443.04 kB raw / 141.98 kB gzip for the previous Cytoscape chunk (about 55% less
+compressed transfer). This compares actual production chunks, not total app size
+or runtime latency. The main app remains about 40 kB raw / 13 kB gzip, besides the
+shared React/API bundle. Only the 2D package is imported; no Three.js renderer is
+bundled. Production dependency audit reports zero vulnerabilities.
+
+Verification: 29 frontend tests pass, including multigraph identity, retrieval
+immutability, retained positions, bounded drift, animation visibility, motion
+controls, preference changes and explicit motion override. TypeScript, official
+Memory frontend build, SDK validation and unused-import checks pass. Hosted
+Browser sessions at 1440×1000 and 390×844 exercised motion, fit/zoom controls,
+keyboard-accessible list selection, focused neighborhoods, incoming connections,
+back navigation and selective Sources/History. Screenshots show the native shell
+offset, readable selection and scrollable inspector. No Memory data was changed.
+The captured console windows contain no errors, and the bounded network windows
+contain no HTTP failures. Browser Lab/shell sandbox, service-worker and frame-origin
+warnings remain outside this renderer change.
+
+The integration follows the [official React Force Graph API](https://github.com/vasturiano/react-force-graph)
+and [Canvas engine documentation](https://github.com/vasturiano/force-graph).
+Frame-rate profiling on physical devices and graphs beyond the forty-node UI
+budget remains unmeasured; build weight does not establish runtime frame rate.
 
 ## Operational limits
 

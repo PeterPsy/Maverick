@@ -1,5 +1,5 @@
 {
-  "build_id": "bc4495d63afdcedf569255a72e0d8422ca9c0b9f03ecbc7728613454891c1f29",
+  "build_id": "5d8e8e2e6a833f21bbf388b59889bc14a7c1e590e10ce3c339d295b1856b736e",
   "entrypoints": [
     "index.html",
     "widgets/memory-sidebar/index.html",
@@ -8,39 +8,44 @@
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/activeMemorySelection-B62az_AM.js",
-      "sha256": "f687c65ea4818e2a2e56146d9b3ed8ce7ce435293e4a0bbdb9b3d4dfa1f3e350",
-      "size_bytes": 5975
+      "path": "assets/ForceGraphScene-GRYh1VpR.js",
+      "sha256": "244dd0c02af76dc5f5cb715255574ae1b5dcd57b3788e268fd57760508dba18f",
+      "size_bytes": 189366
     },
     {
-      "path": "assets/app-AcG4jFz1.js",
-      "sha256": "6d9d8682d37a86ce77cc2a72e1a8b1a01fde90a8cbe3e0ed8a8d94b158781d79",
+      "path": "assets/activeMemorySelection-Bt5A3WKG.js",
+      "sha256": "d5f5afdf024d1a4871b1dc6346d707d92b96452e9d4b8f0b27081b2e3a89bddc",
+      "size_bytes": 5970
+    },
+    {
+      "path": "assets/app-0FQDr3wc.css",
+      "sha256": "75f0d87bf971f5b1bfd18efc76c637d3a2cfb22dc17225235cde511f0d2825cc",
+      "size_bytes": 15787
+    },
+    {
+      "path": "assets/app-Cr9HCnKx.js",
+      "sha256": "d210c34c50d2aa01b139dceebd05bebf8f26ae6ea5094b01120917af7b3fadfe",
       "size_bytes": 6693
     },
     {
-      "path": "assets/app-C3yVqBG2.js",
-      "sha256": "e8df6fa593f58191d2c08159d7646eaf701a5a387c31a45d6ea20e8bce0fe84e",
-      "size_bytes": 2003
+      "path": "assets/app-DhyPYlDd.js",
+      "sha256": "0c61416ebbddaf13e7e5508d0988df6a2f36fe7e66faf75b201a7493882075b4",
+      "size_bytes": 40645
     },
     {
-      "path": "assets/app-C6CO_Kuc.css",
-      "sha256": "fc87ba7b6735b62b11de3b6d3162fd26d9d5398705e937b52e34119549bfe0dd",
-      "size_bytes": 12918
+      "path": "assets/app-MVFrRt4b.js",
+      "sha256": "6b00783b5a275b23ee355510c74342d8de832c72f80249a2bf8ca7290486eb9c",
+      "size_bytes": 1944
     },
     {
-      "path": "assets/app-Doov9uTn.js",
-      "sha256": "fc0ef00a49942a84a54548cd92fc376146116f7621a33b6b2fca1d169461341f",
-      "size_bytes": 40479
+      "path": "assets/memoryApi-uVrwRiDj.js",
+      "sha256": "0137b646058782a1a1f682338519df75a547ca76198bb96e6963c404cbb4efcc",
+      "size_bytes": 197305
     },
     {
-      "path": "assets/cytoscape.esm-DaoV5pLw.js",
-      "sha256": "46b39f6b30464939c4314a5663a81f331e0e02115afea094c42c1bbbe8bb926d",
-      "size_bytes": 443042
-    },
-    {
-      "path": "assets/memoryApi-CPPqLyfU.js",
-      "sha256": "32765207436fc19566c9eb1fa96675eb8583bb22aa040ef5fa20d1963477ce97",
-      "size_bytes": 197168
+      "path": "assets/plus-ED71En4G.js",
+      "sha256": "b9e585dc43ea5fd193563fff319e3389990d879a83b8452ce7f323949e32cfaa",
+      "size_bytes": 158
     },
     {
       "path": "assets/sidebar-widget-0wdim7J0.css",
@@ -49,18 +54,18 @@
     },
     {
       "path": "index.html",
-      "sha256": "fb6966eac483893fddbd9922d69b46592ae935b16dd8eed212b09a580072ad4f",
-      "size_bytes": 636
+      "sha256": "bb15a28fe49b0e5276561b938fdcdfa0041ac559de24a52fa4a5914eb16055fe",
+      "size_bytes": 723
     },
     {
       "path": "widgets/memory-sidebar/index.html",
-      "sha256": "7705a673e216d7882cd8b58f7b7deeb27349ac639b854138f653ae7b2bc9f65c",
+      "sha256": "c08750cd8f56a764e25635092247112d94f8680229fd31c42b0123298f45be6b",
       "size_bytes": 670
     },
     {
       "path": "widgets/memory-sidebar-footer/index.html",
-      "sha256": "b9496afbea0c5b57c8d31c968f13e2d1198cc24458d799ca8913eadab4ee03ea",
-      "size_bytes": 580
+      "sha256": "d491dd03f801812ffc64f38638da2e8daea68e1d49df5e352596deee83334b4a",
+      "size_bytes": 667
     }
   ],
   "schema": "maverick.frontend-assets.v2"

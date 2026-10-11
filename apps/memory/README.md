@@ -121,12 +121,18 @@ navigation. Content, Connections, Sources and History load independently.
 Correction requires the complete fact body, preventing a partial excerpt from
 overwriting a longer fact. A keyboard-navigable list accompanies the canvas.
 
-Cytoscape is the single graph engine, loaded on demand. Native Maverick controls
-and existing app-owned vector icons remain outside/inside the graph as
-appropriate. Bezier edges distinguish parallel links; arrows and edge selection
-expose direction, type and reason. The initial layout includes labels; incremental
-layout locks established positions while placing new nodes. No perpetual force
-simulation runs. See [navigation validation](../../docs/development/memory_navigation_validation_2026-10-11.md)
+React Force Graph 2D is the single graph engine, loaded on demand. Its Canvas/D3
+layout gives the map fluid movement, node dragging and animated pan/zoom; settled
+nodes drift within small orbits. App-owned vector icons, subtle colored halos,
+focus highlighting and directional particles make neighborhoods readable. Curved
+parallel links retain their identities; arrows and selection expose direction,
+type and reason. Incremental updates preserve simulation objects and positions
+without mutating retrieval cards. Native fit/zoom/motion controls and the memory
+list remain usable when layout is frozen. Animation stops when the document or
+graph is hidden. Reduced-motion preferences disable movement and camera
+transitions by default; explicitly resuming motion overrides that preference for
+this view. The mobile inspector leaves the upper map visible. See
+[navigation validation](../../docs/development/memory_navigation_validation_2026-10-11.md)
 for measured query/byte costs, renderer build size and verification.
 
 Context reads return identifiable reference sets (`view.node_ids`,

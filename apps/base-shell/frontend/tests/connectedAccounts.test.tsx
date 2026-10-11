@@ -33,7 +33,7 @@ describe("Google login and connected accounts", () => {
     api.setConnectedAppAccess.mockResolvedValue({ status: "updated" });
     api.disconnectConnectedAccount.mockResolvedValue({ status: "disconnected", revoked_at_google: true });
   });
-  afterEach(() => { act(() => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+  afterEach(() => { act(() => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
   const button = (label: string) => [...container.querySelectorAll("button")].find(item => item.textContent === label)!;
 
   it("keeps Google services optional and submits precisely the chosen services", async () => {
@@ -115,6 +115,48 @@ describe("Google login and connected accounts", () => {
     expect(button("Connecting…").disabled).toBe(true);
     const event = new Event("pageshow"); Object.defineProperty(event, "persisted", { value: true });
     await act(async () => window.dispatchEvent(event));
+    expect(button("Update permissions or add an account").disabled).toBe(false);
+  });
+
+  it("releases Google and logout controls when an offline server switch cancels consent", async () => {
+    const postMessage = vi.fn().mockImplementation(async ({ action }: { action: string }) => {
+      if (action === "switch") throw new Error("Server unavailable");
+      return { profiles: [
+        { id: "current", name: "Current", origin: "https://current.example", current: true },
+        { id: "offline", name: "Offline", origin: "https://offline.example", current: false },
+      ] };
+    });
+    vi.stubGlobal("webkit", { messageHandlers: { maverickServers: { postMessage } } });
+    api.startGoogle.mockImplementation((_mode, _services, signal: AbortSignal) => new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    }));
+    await act(async () => root.render(<ConnectedAccountsDialog initialSection="google" onClose={vi.fn()} onChanged={changed} onLogout={vi.fn()} />));
+    await act(async () => button("Update permissions or add an account").click());
+    await act(async () => button("dnsServers").click());
+    await act(async () => button("Switch server").click());
+    expect(container.textContent).toContain("Server unavailable");
+    await act(async () => button("linkConnected accounts").click());
+    expect(container.querySelector<HTMLButtonElement>(".bs-google-button")!.disabled).toBe(false);
+    expect(container.textContent).not.toContain("Continue in your browser");
+    await act(async () => button("logoutLog out").click());
+    expect(button("Log out of this server").disabled).toBe(false);
+    expect(api.startGoogle.mock.calls[0][2].aborted).toBe(true);
+  });
+
+  it("ignores a cancelled flow completing after another connection has started", async () => {
+    let completeFirst!: (result: string) => void;
+    let completeSecond!: (result: string) => void;
+    api.startGoogle.mockImplementationOnce(() => new Promise(resolve => { completeFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { completeSecond = resolve; }));
+    await act(async () => root.render(<ConnectedAccountsDialog initialSection="google" onClose={vi.fn()} onChanged={changed} />));
+    await act(async () => button("Update permissions or add an account").click());
+    await act(async () => button("Cancel connection").click());
+    await act(async () => button("Update permissions or add an account").click());
+    await act(async () => completeFirst("completed"));
+    expect(changed).not.toHaveBeenCalled();
+    expect(button("Connecting…").disabled).toBe(true);
+    await act(async () => completeSecond("completed"));
+    expect(changed).toHaveBeenCalledOnce();
     expect(button("Update permissions or add an account").disabled).toBe(false);
   });
 });

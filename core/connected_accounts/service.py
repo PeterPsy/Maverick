@@ -138,11 +138,10 @@ def complete_claimed_flow(state, *, flow, browser, code, context=None, now=None,
                                secret_ref, "connected", existing.created_at if existing else timestamp, timestamp,
                                google_picture_url(claims.get("picture")))
     account = state.account_store.claim_account(account)
-    # Adding a secondary service account must not replace the signed-in identity.
+    # Service accounts never supply the Maverick identity photo, including its first photo.
     avatar = google_picture_url(claims.get("picture"))
-    current_user = state.identity_store.get_user(user.user_id)
-    if avatar and (flow.mode == "login" or not current_user.avatar_url):
-        user = state.identity_store.update_user_avatar(user.user_id, avatar, now=timestamp, only_if_empty=flow.mode == "connect")
+    if avatar and flow.mode == "login":
+        user = state.identity_store.update_user_avatar(user.user_id, avatar, now=timestamp)
     selection = resolve_active_workspace_for_user(state.workspace_store, user_id=user.user_id, now=timestamp)
     if selection:
         select_account(state, user_id=user.user_id, workspace_id=selection.workspace_id, account_id=account.account_id)

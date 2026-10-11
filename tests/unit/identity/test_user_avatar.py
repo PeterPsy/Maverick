@@ -23,7 +23,8 @@ class UserAvatarTests(unittest.TestCase):
             identity_verifier=lambda *args, **kwargs: {"sub": subject, "email": subject + "@example.com", "picture": photo})[0]
 
     def test_secondary_connection_does_not_replace_identity_even_with_stale_context(self):
-        first = self.connect()
+        self.connect()
+        first = self.connect(mode="login")
         self.assertEqual(first.avatar_url, PHOTO)
         self.connect(photo=SECONDARY, subject="secondary")
         self.assertEqual(self.identity.get_user(self.user.user_id).avatar_url, PHOTO)
@@ -31,8 +32,15 @@ class UserAvatarTests(unittest.TestCase):
         self.assertEqual(logged_in.avatar_url, SECONDARY)
         self.assertEqual(logged_in.user_id, self.user.user_id)
 
+    def test_first_service_account_does_not_supply_a_missing_identity_photo(self):
+        user = self.connect(photo=SECONDARY, subject="secondary")
+        self.assertIsNone(user.avatar_url)
+        self.assertIsNone(self.identity.get_user(self.user.user_id).avatar_url)
+        self.assertEqual(self.state.account_store.find_subject("google", "secondary").picture_url, SECONDARY)
+
     def test_untrusted_picture_is_not_exposed_as_identity_avatar(self):
-        user = self.connect(photo="https://evil.example/avatar")
+        self.connect()
+        user = self.connect(photo="https://evil.example/avatar", mode="login")
         self.assertIsNone(public_user_payload(user)["avatar_url"])
 
     def test_targeted_avatar_update_preserves_concurrent_roles_and_cannot_recreate_users(self):
@@ -40,8 +48,6 @@ class UserAvatarTests(unittest.TestCase):
         saved = self.identity.update_user_avatar(updated.user_id, PHOTO, now=self.now)
         self.assertEqual(saved.platform_role, "admin")
         self.assertEqual(saved.display_name, "Current name")
-        self.identity.update_user_avatar(updated.user_id, SECONDARY, now=self.now, only_if_empty=True)
-        self.assertEqual(self.identity.get_user(updated.user_id).avatar_url, PHOTO)
         self.identity.delete_user(updated.user_id)
         with self.assertRaises(UserNotFoundError):
             self.identity.update_user_avatar(updated.user_id, PHOTO, now=self.now)
@@ -50,4 +56,5 @@ class UserAvatarTests(unittest.TestCase):
     def test_legacy_user_records_need_no_migration(self):
         self.identity.collections.users.update_one({"user_id": self.user.user_id}, {"$unset": {"avatar_url": ""}})
         self.assertIsNone(self.identity.get_user(self.user.user_id).avatar_url)
-        self.assertEqual(self.connect().avatar_url, PHOTO)
+        self.assertIsNone(self.connect().avatar_url)
+        self.assertEqual(self.connect(mode="login").avatar_url, PHOTO)

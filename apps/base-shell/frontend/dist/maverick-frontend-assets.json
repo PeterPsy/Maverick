@@ -1,13 +1,13 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "3de04c1ec57042a3520993d1322adf12db38faeef8cd3ea006370b96051e78f4",
+  "build_id": "95afdcc00ac414b02804c77061ae69ae2e6f8d0d02fd50e3462e1d83bb76117e",
   "entrypoints": [
     "index.html"
   ],
   "immutable": [
     {
-      "path": "assets/LoginPaperBackground-BbXGbMY_.js",
-      "sha256": "221b502ce89b0f17a0b0ed7453da73bdcb521fbee816a45a2d616ce19ffba22c",
+      "path": "assets/LoginPaperBackground-hSDOZQhw.js",
+      "sha256": "2e7590d8f2eb46b670a04646f5ab59b859af17f4fd031b8645b8d92cbb2d473a",
       "size_bytes": 25087
     },
     {
@@ -16,9 +16,9 @@
       "size_bytes": 107668
     },
     {
-      "path": "assets/index-jUgaNNWD.js",
-      "sha256": "5aa68c0b0222ce7183ccaf97d4368da35fabd4d20c4e31e8f3ef72f1591a4dd8",
-      "size_bytes": 593512
+      "path": "assets/index-LzDTUYv6.js",
+      "sha256": "abf04a49ebedcecc9fe20555fd68ba111b4710025085f06cfd9c94730593dbf2",
+      "size_bytes": 593597
     }
   ],
   "revalidated": [
@@ -34,7 +34,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "f3de549bb5fa26a21c4ae3ced442136bc7be04ed6851c5ba45dfbe4b6ba7a213",
+      "sha256": "646d780df17354f2d5a2f54720a662af8973ead27a862b7c0a4e4ca4c83ed0d8",
       "size_bytes": 2267
     },
     {
@@ -89,7 +89,7 @@
     },
     {
       "path": "sw.js",
-      "sha256": "4999c275ab05fdbc6f9ca934f708b8ab07e5dac97801abdc1c4e335c16fd685c",
+      "sha256": "7565ce8cd839a4d100a717a60dc719e720343af1946f8da5a6f83d6b0d4cbdfe",
       "size_bytes": 13128
     }
   ],
@@ -98,7 +98,7 @@
     {
       "url": "/",
       "path": "index.html",
-      "sha256": "f3de549bb5fa26a21c4ae3ced442136bc7be04ed6851c5ba45dfbe4b6ba7a213",
+      "sha256": "646d780df17354f2d5a2f54720a662af8973ead27a862b7c0a4e4ca4c83ed0d8",
       "size_bytes": 2267
     },
     {
@@ -114,15 +114,15 @@
       "size_bytes": 107668
     },
     {
-      "url": "/apps/base-shell/assets/index-jUgaNNWD.js",
-      "path": "assets/index-jUgaNNWD.js",
-      "sha256": "5aa68c0b0222ce7183ccaf97d4368da35fabd4d20c4e31e8f3ef72f1591a4dd8",
-      "size_bytes": 593512
+      "url": "/apps/base-shell/assets/index-LzDTUYv6.js",
+      "path": "assets/index-LzDTUYv6.js",
+      "sha256": "abf04a49ebedcecc9fe20555fd68ba111b4710025085f06cfd9c94730593dbf2",
+      "size_bytes": 593597
     },
     {
-      "url": "/apps/base-shell/assets/LoginPaperBackground-BbXGbMY_.js",
-      "path": "assets/LoginPaperBackground-BbXGbMY_.js",
-      "sha256": "221b502ce89b0f17a0b0ed7453da73bdcb521fbee816a45a2d616ce19ffba22c",
+      "url": "/apps/base-shell/assets/LoginPaperBackground-hSDOZQhw.js",
+      "path": "assets/LoginPaperBackground-hSDOZQhw.js",
+      "sha256": "2e7590d8f2eb46b670a04646f5ab59b859af17f4fd031b8645b8d92cbb2d473a",
       "size_bytes": 25087
     },
     {

@@ -59,7 +59,15 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
     return () => { alive.current = false; controller.abort(); googleController.current?.abort(); window.removeEventListener("pageshow", restore); dialog.current?.close(); };
   }, []);
 
-  function close() { googleController.current?.abort(); dialog.current?.close(); onClose(); }
+  function cancelGoogle() {
+    const controller = googleController.current;
+    if (!controller) return;
+    googleController.current = null;
+    controller.abort();
+    setBusy(false); setNotice(null);
+  }
+
+  function close() { cancelGoogle(); dialog.current?.close(); onClose(); }
 
   async function mutate(action: () => Promise<unknown>) {
     if (busy) return;
@@ -79,13 +87,16 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
     const controller = new AbortController(); googleController.current = controller;
     setBusy(true); setError(null); setNotice("Continue in your browser. Maverick will update automatically.");
     try {
-      if (await startGoogle("connect", selectedServices, controller.signal) === "completed" && alive.current) {
+      if (await startGoogle("connect", selectedServices, controller.signal) === "completed"
+          && alive.current && googleController.current === controller && !controller.signal.aborted) {
         onChanged();
         const result = await connectedAccounts(controller.signal);
-        if (alive.current) { setData(result); setNotice("Google connected."); setBusy(false); }
+        if (alive.current && googleController.current === controller && !controller.signal.aborted) {
+          setData(result); setNotice("Google connected."); setBusy(false);
+        }
       }
     } catch (error) {
-      if (alive.current && !controller.signal.aborted) {
+      if (alive.current && googleController.current === controller && !controller.signal.aborted) {
         setBusy(false); setNotice(null);
         setError(error instanceof GoogleAuthError ? googleCallbackMessage(error.code) : "Unable to complete the Google connection. Please try again.");
       }
@@ -109,10 +120,10 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
         <dl className="bs-account-details"><div><dt>Server</dt><dd>{window.location.origin}</dd></div><div><dt>Workspace</dt><dd>{workspaceName || data?.workspace_id || "—"}</dd></div><div><dt>Role</dt><dd>{user?.platform_role || "member"}</dd></div></dl>
         <p className="bs-account-note">This is your signed-in Maverick identity. Connecting another Google account for an app keeps this profile.</p>
       </section>}
-      {section === "servers" && <ServerProfilesPanel beforeSwitch={() => { googleController.current?.abort(); setNotice(null); }} />}
+      {section === "servers" && <ServerProfilesPanel beforeSwitch={() => { cancelGoogle(); setNotice(null); }} />}
       {section === "logout" && <section className="bs-account-section"><h3>Log out of this server</h3><p>End your Maverick session on {window.location.host}. Google connections stay linked and your sessions on other servers stay available.</p>
         <div className="bs-connected-accounts__actions"><button type="button" disabled={busy && !googleController.current} onClick={() => {
-          googleController.current?.abort(); setBusy(true); setError(null);
+          cancelGoogle(); setBusy(true); setError(null);
           void onLogout?.().catch(() => { if (alive.current) { setBusy(false); setError("Unable to confirm logout. Please try again."); } });
         }}>Log out of this server</button><button type="button" onClick={() => navigate("profile")}>Cancel</button></div></section>}
       {(section === "google" || section === "access") && <><div><h3>{section === "google" ? "Connected accounts" : "App access"}</h3><p>{section === "google"
@@ -170,7 +181,7 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
             <GoogleMark /><span>{busy ? "Connecting…" : data.items.length ? "Update permissions or add an account" : "Connect Google"}</span>
           </button>
           {busy && googleController.current && <button type="button" onClick={() => {
-            googleController.current?.abort(); setBusy(false); setNotice(null); setError("Google connection cancelled. You can try again.");
+            cancelGoogle(); setError("Google connection cancelled. You can try again.");
           }}>Cancel connection</button>}
           {!data.google.configured && <p>Google sign-in is not configured on this installation. Your administrator must configure the Google connection.</p>}
         </section>}

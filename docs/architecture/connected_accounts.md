@@ -104,7 +104,10 @@ never replace that browser's Maverick login. The original webview polls
 Only that webview can consume the result and receive a Maverick login cookie.
 Neither raw session IDs nor provider tokens are passed through URLs or JavaScript.
 Cancellation, provider errors and expiry release the shell's pending controls;
-closing the panel stops polling and cancels pending server authority. Browser
+an unsuccessful server switch also releases an interrupted Google flow without
+leaving connection or logout controls disabled. Retired flow completions cannot
+overwrite a later connection or logout operation.
+Closing the panel stops polling and cancels pending server authority. Browser
 back navigation restores usable controls. Older native builds without the bridge
 show an explicit app-update message rather than starting a blocked navigation.
 
@@ -203,10 +206,9 @@ sidebar from closing underneath it.
 
 Profile displays the authenticated Maverick identity, current server and
 workspace. User records have a backward-compatible optional `avatar_url` from a
-verified Google identity; initials remain the fallback. A first connection may
-supply an absent avatar. Connecting a secondary Google service account cannot
-replace it, even with stale request context or concurrent profile writes. A new
-Google login may update the identity photo. Targeted, non-upserting avatar writes
+verified Google login identity; initials remain the fallback. Connecting a Google
+service account never initializes or replaces the personal avatar. A new Google
+login may update the identity photo. Targeted, non-upserting avatar writes
 preserve existing roles and other identity fields. Google photo validation is
 shared with connected-account display metadata.
 
@@ -225,6 +227,8 @@ profile retains the old default WebKit store; further profiles get independent
 persistent stores. Changing server checks `/api/session` without sending any
 stored cookie, then retires device commands, cancels pending Google consent and
 recreates native state and the WebView. Failure retains the current server.
+iOS also rejects switching while Senses captures or queued sends are pending,
+before retiring native state, and keeps that work on the current server.
 Login/offline selectors are available independently of authentication. Browser
 and PWA use site-local bookmarks and navigate to another installation, whose
 cookies and data remain managed by its origin. Removing a browser bookmark does

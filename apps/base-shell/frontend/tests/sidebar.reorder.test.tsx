@@ -95,6 +95,24 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])("keeps connected accounts only in the sidebar header (mobile: %s)", async (isMobileLayout) => {
+    await renderSidebar({ isMobileLayout });
+
+    const accounts = container.querySelectorAll<HTMLButtonElement>('button[aria-label="Connected accounts"]');
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].closest(".bs-sidebar__header")).not.toBeNull();
+    expect(accounts[0].closest(".bs-sidebar__rail")).toBeNull();
+
+    const openAccounts = vi.fn();
+    window.addEventListener("maverick.connected-accounts.open", openAccounts);
+    try {
+      await act(async () => accounts[0].click());
+      expect(openAccounts).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener("maverick.connected-accounts.open", openAccounts);
+    }
+  });
+
   it("marks mounted apps including the selected app and static shortcuts, and removes stale dots", async () => {
     const railApps = [...apps, app("settings", "Settings")];
     await renderSidebar({ apps: railApps, mountedAppIds: ["chat", "agents", "app-store", "settings"] });

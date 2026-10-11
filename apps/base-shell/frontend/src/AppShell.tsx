@@ -241,7 +241,7 @@ export function AppShell() {
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
-  const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + 1 + (hasSettingsShortcut ? 1 : 0);
+  const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount + (sidebarEnabled ? 0 : 2), isMobileLayout);
   const shellTheme = useMemo(() => createShellThemeState(themeMode, systemColorScheme), [systemColorScheme, themeMode]);
   const shellStyle = useMemo(() => {

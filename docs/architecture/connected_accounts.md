@@ -33,6 +33,8 @@ Each user explicitly enables a set of personal Google accounts per workspace,
 with one default account within that set. Workspace account sets are independent;
 linking an account enables it only in the workspace used for the OAuth flow.
 The Connected accounts panel separates workspace checkboxes from Make default.
+Its shortcut lives in the sidebar header, including the workspace controls menu
+when sidebar details are disabled. The app rail does not duplicate this shortcut.
 Removing an account from a workspace does not disconnect it in other workspaces.
 Existing single-account selections upgrade to a one-item set, preserving the
 original consent boundary. An empty set retains the private app store.

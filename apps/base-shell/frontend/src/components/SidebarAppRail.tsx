@@ -123,16 +123,6 @@ export function SidebarAppRail({
           );
         })}
       </div>
-      <div className="bs-sidebar__rail-static" role="list" aria-label="Personal settings">
-        <div className="bs-sidebar__rail-item" role="listitem">
-          <button aria-label="Connected accounts" title="Connected accounts" type="button"
-            className="bs-sidebar__rail-button"
-            onClick={() => window.dispatchEvent(new Event("maverick.connected-accounts.open"))}>
-            <span className="bs-app-logo is-glyph bs-app-logo--rail"><span aria-hidden="true" className="material-symbols-rounded">account_circle</span></span>
-            <span className="bs-sidebar__rail-tooltip" role="tooltip">Connected accounts</span>
-          </button>
-        </div>
-      </div>
       {settingsApp ? (
         <div className="bs-sidebar__rail-static" role="list" aria-label="Static app shortcuts">
           <div className="bs-sidebar__rail-item" role="listitem">

@@ -19,6 +19,8 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
+from fact_updates import FACT_OPERATIONS, reconcile_ingested_fact
+from node_revisions import save_revision
 from ingest_jobs import complete_ready_job, enqueue_compile_job_in_db
 from lint import mark_wiki_stale
 from nodes import get_node_with_details, inspect_node
@@ -84,7 +86,6 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
             if ref_row is not None
             else []
         )
-        mark_wiki_stale(db, target_node_id, timestamp=timestamp, reason="storage_source_ingested", data_root=data_root)
         if old_node_id and old_node_id != target_node_id:
             mark_wiki_stale(db, old_node_id, timestamp=timestamp, reason="storage_source_moved", data_root=data_root)
         record_event(
@@ -113,7 +114,13 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
             or materialized_source_version_changed
             or (old_node_id and old_node_id != target_node_id)
         )
-        if work_changed:
+        fact_changed = reconcile_ingested_fact(db, {"title": request["title"],
+                "body_markdown": str(request["metadata"].get(INGEST_PREVIEW_TEXT_KEY) or request["body_text"]),
+                "confidence": normalize_float(request["confidence"], default=.5, minimum=0, maximum=1, field_name="confidence"),
+                "metadata": request["metadata"], **{key: request[key] for key in
+                    ("operation", "fact_body", "fact_summary", "fact_metadata", "expected_updated_at")}}, target_node_id, timestamp=timestamp)
+        if work_changed or fact_changed:
+            mark_wiki_stale(db, target_node_id, timestamp=timestamp, reason="storage_source_ingested", data_root=data_root)
             compile_recovery_job = enqueue_compile_job_in_db(
                 db,
                 node_id=target_node_id,
@@ -172,7 +179,7 @@ def latest_source_version_id_for_ref(db: sqlite3.Connection, external_ref_id: st
         """
         SELECT sv.id
         FROM sources s
-        JOIN source_versions sv ON sv.source_id = s.id
+        JOIN source_versions sv ON sv.id = s.current_version_id
         WHERE s.external_ref_id = ?
         ORDER BY sv.observed_at DESC, sv.created_at DESC
         LIMIT 1
@@ -183,6 +190,9 @@ def latest_source_version_id_for_ref(db: sqlite3.Connection, external_ref_id: st
 
 
 def normalized_ingest_request(body: dict[str, Any]) -> dict[str, Any]:
+    operation = str(body.get("operation") or "")
+    if operation and operation not in FACT_OPERATIONS:
+        raise MemoryValidationError("operation must be attach_evidence, update_fact, or replace_fact.")
     source = body.get("memory_source")
     if not isinstance(source, dict):
         raise MemoryValidationError("memory_source is required.")
@@ -232,7 +242,12 @@ def normalized_ingest_request(body: dict[str, Any]) -> dict[str, Any]:
         "body_text": str(body.get("body") or body.get("body_text") or body.get("preview_text") or "").strip(),
         "type": str(body.get("type") or body.get("node_type") or "file_ref").strip(),
         "importance": body.get("importance", 0.5),
-        "confidence": body.get("confidence", 1.0),
+        "confidence": body.get("confidence", 0.5),
+        "operation": operation,
+        "fact_body": body.get("fact_body", ""),
+        "fact_summary": body.get("fact_summary", ""),
+        "fact_metadata": body.get("fact_metadata") if isinstance(body.get("fact_metadata"), dict) else {},
+        "expected_updated_at": body.get("expected_updated_at"),
         "compile_after_ingest": bool(body.get("compile_after_ingest")),
         "ref": ref,
     }
@@ -341,6 +356,7 @@ def ensure_target_node(db: sqlite3.Connection, request: dict[str, Any]) -> tuple
     node_id = new_id("node")
     metadata = {
         "created_from": "storage_source_ingest",
+        "content_mode": "source_generated",
         "owning_app_id": "storage",
         "entity_type": "file",
         "entity_id": request["storage_file_id"],
@@ -358,13 +374,14 @@ def ensure_target_node(db: sqlite3.Connection, request: dict[str, Any]) -> tuple
             request["summary"] or f"Storage file indexed from {request['metadata'].get('provider', 'storage')}.",
             request["body_text"],
             normalize_float(request["importance"], default=0.5, minimum=0, maximum=1, field_name="importance"),
-            normalize_float(request["confidence"], default=1.0, minimum=0, maximum=1, field_name="confidence"),
+            normalize_float(request["confidence"], default=0.5, minimum=0, maximum=1, field_name="confidence"),
             timestamp,
             timestamp,
             json_text(metadata),
         ),
     )
     refresh_fts(db, node_id)
+    save_revision(db, node_id, "created")
     record_event(db, event_type="node_created", node_id=node_id, payload={"title": request["title"], "source": "storage_source_ingest"})
     return node_id, True
 
@@ -450,6 +467,8 @@ def upsert_storage_ref(
             ref,
         )
         return row_payload(db.execute("SELECT * FROM external_refs WHERE id = ?", (ref["id"],)).fetchone()) or {}, True
+    if all(existing_ref[key] == ref[key] for key in ref if key not in {"created_at", "updated_at"}):
+        return row_payload(existing_ref) or {}, False
     db.execute(
         """
         UPDATE external_refs

@@ -114,7 +114,11 @@
       "memory_reference_manifest",
       "memory_reference_search",
       "memory_reference_resolve",
-      "memory_reference_summarize"
+      "memory_reference_summarize",
+      "memory_merge_nodes",
+      "memory_exclude_node",
+      "memory_remove_source",
+      "memory_maintenance"
     ],
     "cli_commands": [
       "memory"
@@ -233,7 +237,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "3",
+    "data_schema_version": "4",
     "primary_paths": [
       "data/memory/memory.sqlite",
       "data/memory/artifacts",

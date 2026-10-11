@@ -56,6 +56,10 @@ class MemoryAppTestCase(unittest.TestCase):
         repo_root = Path(temp_dir.name) / "maverick"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
+        # Mounted lifecycle entrypoints import the official app SDK in their
+        # temporary installation, rather than inheriting this process's sys.path.
+        shutil.copytree(REPO_ROOT / "core", repo_root / "core", dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("__pycache__"))
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         for app_id in ("base-shell", "chat", "memory"):
@@ -154,7 +158,7 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("memory_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["memory"])
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite+files")
-        self.assertEqual(parsed.contract.storage.data_schema_version, "3")
+        self.assertEqual(parsed.contract.storage.data_schema_version, "4")
         self.assertIn("data/memory/content", parsed.contract.storage.primary_paths)
         required_interfaces = {requirement.alias: requirement for requirement in parsed.contract.requires}
         self.assertEqual(required_interfaces["storage-file-catalog"].interface, "file.catalog")
@@ -319,7 +323,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue((data_root / "artifacts" / "extracted").is_dir())
             self.assertTrue((data_root / "content").is_dir())
             health = run_json_entrypoint(MEMORY_ROOT / "hooks" / "health_check.py", payload=payload, cwd=MEMORY_ROOT)
-            self.assertEqual(health["schema_version"], "3")
+            self.assertEqual(health["schema_version"], "4")
 
     def test_schema_v2_database_migrates_to_v3_source_chunk_foundation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -396,8 +400,8 @@ class MemoryAppTestCase(unittest.TestCase):
                 migrated_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
                 migrated_chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
 
-            self.assertEqual(migrated["schema_version"], "3")
-            self.assertEqual(schema_version, "3")
+            self.assertEqual(migrated["schema_version"], "4")
+            self.assertEqual(schema_version, "4")
             self.assertIn("source_document_id", source_version_columns)
             self.assertIn("body_path", source_version_columns)
             self.assertIn("body_sha256", source_version_columns)
@@ -529,7 +533,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     for row in db.execute("SELECT * FROM source_versions ORDER BY created_at")
                 ]
 
-            self.assertEqual(migrated["schema_version"], "3")
+            self.assertEqual(migrated["schema_version"], "4")
             self.assertEqual(status, 200)
             self.assertEqual(document_count, 1)
             self.assertEqual(document["adapter_id"], "remote_storage_file")
@@ -645,6 +649,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 )
                 db.commit()
 
+            service.handle_action(data_root, {"action": "maintenance", "verify_index": True})
             query_status, query = service.handle_action(data_root, {"action": "source_query", "query": "Sofia"})
 
             with database.connect(data_root) as db:
@@ -1346,7 +1351,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 },
             )
             source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Lee"})
-            stale_source_query_status, stale_source_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana"})
+            stale_source_query_status, stale_source_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana", "include_history": True})
 
             with database.connect(data_root) as db:
                 document_count = db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"]
@@ -1701,7 +1706,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     },
                 )
                 fresh_status, fresh_query = service.handle_action(data_root, {"action": "source_query", "query": "Marta"})
-                stale_status, stale_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana"})
+                stale_status, stale_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana", "include_history": True})
             finally:
                 storage_file_sources._storage_file_surface = original_surface
 
@@ -2440,7 +2445,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     data_root,
                     {
                         "action": "ingest_storage_source",
-                        "title": "Drive renewal plan duplicate",
+                        "title": "Drive renewal plan",
                         "memory_source": self.drive_memory_source(),
                         "preview_text": "Drive renewal plan says the renewal owner is Dana.",
                     },

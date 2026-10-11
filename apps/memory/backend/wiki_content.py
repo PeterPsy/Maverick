@@ -35,11 +35,12 @@ def compiled_markdown(node: sqlite3.Row, refs: list[sqlite3.Row], relationships:
 
 
 def claim_texts(node: sqlite3.Row) -> list[str]:
-    text = " ".join(str(part or "").strip() for part in (node["summary"], node["body_text"]) if str(part or "").strip())
-    candidates = [item.strip() for item in SENTENCE_PATTERN.split(text) if item.strip()]
+    summary, body = str(node["summary"] or "").strip(), str(node["body_text"] or "").strip()
+    parts = [body] if summary and summary in body else list(dict.fromkeys(part for part in (summary, body) if part))
+    candidates = [item.strip() for part in parts for item in SENTENCE_PATTERN.split(part) if item.strip()]
     if not candidates and node["title"]:
         candidates = [str(node["title"]).strip()]
-    return [candidate[:500] for candidate in candidates[:8]]
+    return list(dict.fromkeys(candidates))
 
 
 def compile_input_hash(

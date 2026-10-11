@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 import sqlite3
 
 from content_store import read_body
 from errors import MemoryValidationError
 
 
-TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+")
+from search_candidates import query_expression
 
 
 def source_chunk_fts_query(query: str) -> str:
-    tokens = TOKEN_PATTERN.findall(query)
-    if not tokens:
-        return ""
-    return " OR ".join(f"{token}*" for token in tokens[:12])
+    return query_expression(query)
 
 
 def upsert_source_chunk_fts(db: sqlite3.Connection, *, chunk_id: str, body_text: str) -> None:

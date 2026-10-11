@@ -1,6 +1,6 @@
 # Memory Architecture
 
-Date: 2026-06-19
+Updated: 2026-10-11
 
 ## Purpose
 
@@ -43,13 +43,14 @@ Only relative content paths may be persisted in Memory data. The app must reject
 The internal wiki model is app-owned and should include:
 
 - `source_documents`: logical source identities from inline markdown, Storage files, remote Storage references, app entities, URLs, or future adapters
-- `sources`: stable references to Storage files, generated artifacts, chat/app entities, URLs, or other workspace-owned material
+- `sources`: explicit `current_version_id` observation pointers and stable references to Storage files, generated artifacts, chat/app entities, URLs, or other workspace-owned material
 - `source_versions`: observed source versions with hash kind, extraction status, content-store body path/hash when text is available, observed source metadata, and extracted-reference pointers; `extracted_text` is retained only as a legacy migration fallback
 - `source_chunks`: verified source body slices with chunk hash, range, locator, and content-store path
 - `node_source_links`: explicit node-to-source relationships
 - `wiki_pages`: compiled markdown for a node or topic
 - `claims`: atomic statements derived from node content and sources
-- `citations`: claim-to-source evidence links
+- `citations`: claim-to-source evidence links with `supports`, `contradicts`, `related`, or legacy `unverified` relation
+- `node_revisions`: immutable fact and metadata snapshots, including replacement and management operations
 - `compile_runs`: compilation provenance and input hashes
 - `lint_findings`: current quality findings such as missing citation, contradiction, stale page, orphan node, or empty content
 
@@ -61,7 +62,11 @@ The canonical source-version hash kinds are `canonical_body`, `file_bytes`, `rem
 
 Chunk-level citations are the target evidence form. A fully verifiable citation should carry at least `claim_id`, `source_version_id`, `source_chunk_id`, locator or character range, and a quote or quote hash. Character ranges must point at the stored source chunk body; whitespace-normalized quote matches may map back to original chunk offsets, but unmatched quotes must not receive fabricated ranges. Compile runs should record the source version ids and source chunk ids considered, plus the cited subset that actually supported claims. If Memory cannot bind a claim to a credible chunk, range, locator, or quote, it must leave the claim uncited instead of implying support from an attached source alone.
 
-The deterministic compiler may bind citations with exact quote matching or conservative lexical matching over adjacent source sentences, so paraphrased node claims and multi-sentence evidence can still cite verified chunks. This matcher must remain fail-closed: partial overlap is not enough unless it clears explicit coverage and precision thresholds against the claim terms.
+The deterministic compiler confirms equivalent ordered assertions, ignoring harmless articles and recognizing one explicit passive ownership form. Negation, values, dates, units, directed participants and uncertainty must remain compatible. Lexical overlap only discovers evidence candidates. Supporting and opposing passages are separate; ambiguous paraphrases remain unverified. Relevant passages are separate `related_evidence`, with review findings when a curated claim lacks support. Conflicts require equivalence after removing only the differing negation or numeric values. Both relations retain the original passage and verified chunk. This conservative matcher is not general semantic entailment.
+
+All sentences participate in claim extraction without the old eight-sentence/500-character cutoff. A compilation loads candidate chunks once, reuses them for all claims and reuses a completed run when the source-aware input hash is unchanged. Source-generated nodes refresh from the current primary source; curated notes retain their text and expose evidence conflicts.
+
+Schema v4 migration adds current observation pointers, evidence relations, node identities, revision history and compiled claim FTS. Old unverified citations invalidate their pages/claims and enqueue deduplicated recompilation. A current pointer is backfilled from the logical source hash before chronological fallback. Read paths only check schema version and shape; full content verification/FTS repair is explicit maintenance, and index writes are incremental. Returned content still receives SHA verification.
 
 ## Source Ingestion Model
 
@@ -72,7 +77,9 @@ Memory ingestion is app-owned and separate from compile:
 3. create a source version from canonical body text, observed file bytes, remote preview text, or a reference snapshot
 4. write available canonical bodies and chunks to the content store
 5. create source chunks with stable hashes and locators
-6. enqueue or explicitly run compile and lint work
+6. update the explicit current observation pointer even when reusing an old deduplicated version
+7. attach evidence, update a fact, or replace a fact using an explicit operation and optional reviewed-revision guard
+8. enqueue or explicitly run compile and lint only when content, observation, links or facts changed
 
 The first implemented generic adapters stay narrow:
 
@@ -93,23 +100,33 @@ Memory exposes agent-facing surfaces through the app contract:
 
 - `memory_context` returns bounded `agent_compact` `memory_node` context packs for provider context. The envelope exposes bounded query snippet/count metadata instead of unbounded query text. Items preserve node identity, title, type, summary, bounded `body_text` snippets, `body_text_char_count`, relevance, match sources, compact provenance, compact Storage references, compact compiled wiki summaries/citations/freshness, and expand instructions. It must not duplicate full `body_text` under nested node envelopes or return full compiled `body_markdown`; callers needing full detail should expand by node or source chunk id.
 - `memory_inspect_node` returns node details plus compiled page, claims, citations, sources, and lint findings
-- `memory_search` searches graph nodes plus compiled page and claim text and returns the richer normalized `memory_node` retrieval envelope for search workflows. Agents should prefer `memory_context` for default prompt context and use `memory_inspect_node` or `memory_fetch_chunks` to expand specific results.
+- `memory_search` ranks graph nodes, compiled pages, claims and current source chunks together before the final limit, with optional project/person scope, weighted FTS5 and term coverage. Scores express ordering, not probabilities. All direct matches precede related expansion, whose edges require weight and confidence >= 0.5. It returns the richer normalized `memory_node` retrieval envelope for search workflows. Agents should prefer `memory_context` for default prompt context and use `memory_inspect_node` or `memory_fetch_chunks` to expand specific results.
 - `memory_compile` compiles one node into the internal wiki layer and emits a redaction-safe `memory_compile_completed` event with compile/run counts, not source text
 - `memory_lint` refreshes quality findings and emits a redaction-safe `memory_lint_refreshed` event with node and severity counts
 - `memory_ingest_source` ingests generic app-owned sources. The implemented adapters are `inline_markdown` for generated Markdown evidence, `storage_file` for workspace Storage files under `storage/uploaded/` or `storage/generated/`, `remote_storage_file` for Storage-owned Drive indexing payloads, and `app_entity` snapshots through official app reference surfaces; Storage-backed adapters ask Storage for file metadata, previewability, bounded preview text, and only then bounded UTF-8 text bytes as fallback before writing Memory-owned verified source bodies and chunks, or a `reference_snapshot` when extraction is unavailable
 - `memory_wiki_query` searches compiled wiki pages and claims directly
 - `memory_source_query` searches verified source chunks through Memory's app-owned source chunk FTS and returns normalized source-chunk results
 - `memory_fetch_chunks` hydrates up to 20 source chunks from the content store with SHA verification; chunk retrieval surfaces should expose normalized chunk identity, freshness, locator, and citations when available
-- `memory_inspect_source` inspects one source document with normalized freshness, versions, chunks, linked nodes, citations, and recent ingest jobs linked through indexed job provenance fields
-- `memory_jobs` manages Memory's app-owned ingest job queue with dedupe, claim leases, expired-lease recovery, retry backoff, cancellation, inspection, `run_next` execution, and bounded `run_until_idle` queue draining for the first app-owned job types. The first phase stays independent of the core scheduler: agents and operators explicitly drain ready work when they need queued ingest, compile, or staleness jobs reflected immediately. `run_next` updates the job's indexed node/source provenance from the execution result before completing the lease, so source-ingest jobs remain auditable when they create a new observed source version. Storage staleness uses an explicit `requires_storage_reindex` job marker so Memory can report the required Storage `drive_index` step without attempting to re-ingest stale Drive content before Storage provides a fresh `memory_source`.
+- `memory_inspect_source` inspects one source document with source-wide freshness, bounded paginated versions and chunks, linked nodes, citations, and recent ingest jobs linked through indexed job provenance fields
+- `memory_jobs` manages Memory's app-owned ingest job queue with dedupe, claim leases, expired-lease recovery, retry backoff, cancellation, inspection, `run_next` execution, and bounded `run_until_idle` queue draining for the first app-owned job types. The queue stays independent of the core scheduler. Visible Memory UI ticks run at most three compile/lint jobs and stop between jobs after two seconds; a single job may exceed that budget. Agents explicitly drain work when immediate consistency is needed. An expired final lease becomes a terminal failed job. `run_next` updates the job's indexed node/source provenance from the execution result before completing the lease, so source-ingest jobs remain auditable when they create a new observed source version. Storage staleness uses an explicit `requires_storage_reindex` job marker so Memory can report the required Storage `drive_index` step without attempting to re-ingest stale Drive content before Storage provides a fresh `memory_source`.
 
 Future ingestion and execution surfaces should expand source primitives without changing core ownership:
 
 - richer Storage preview/extraction paths where Storage remains the gateway
 - richer chunk indexing, including later optional embeddings as app-owned indices
 
-The first compiler may be deterministic and use existing node text, references, source links, and relationships. LLM-assisted compilation can be added later, but it must preserve citations, input provenance, lint results, and source version identity. Source chunk retrieval should expose freshness relative to the latest observed source version so older-version chunks remain auditable without being presented as current evidence.
+The first compiler may be deterministic and use existing node text, references, source links, and relationships. LLM-assisted compilation can be added later, but it must preserve citations, input provenance, lint results, and source version identity. Source chunk retrieval uses the explicit current observation, including a return to older deduplicated content. Normal retrieval excludes historical versions and knowledge with no active linked node; `include_history` and `include_excluded` are explicit audit options.
 
 ## UI Rule
 
 Do not add a separate Wiki tab or app. The graph stays primary. Full compiled wiki content appears in the node inspector; agent-facing context payloads expose compact compiled summaries, citations, freshness, and expansion pointers.
+
+## Fact Lifecycle and Compact Reads
+
+Compilation freshness, source currency and assertion verification are independent states. Read surfaces calculate these states without persistent updates; explicit lint/ingestion/maintenance persist them. An up-to-date compilation can still expose a conflict or an unverified assertion. Stale compiled text and claims are omitted from compact context.
+
+Compact context selects bounded body snippets directly in SQL and batches selected-node claims, citations, refs and lint. It preserves knowledge type, confidence basis, user confirmation, person/project, validity, replaced revision and conversation evidence. Node inspection expands bodies, original passages, source versions, recent revisions and all active relationships independent of the visible graph subset.
+
+Stable content identities deduplicate repeated active `remember` calls within knowledge scope. Confidence zero is preserved, new unspecified inputs default to 0.5, and provenance does not imply certainty. Merge proposals require a chosen target: merge retains its curated fact and transfers links/edges/evidence. Exclusion is reversible; node deletion/source removal retain audit data while suppressing normal retrieval. These operations do not remove external originals.
+
+Chat Learning sends approved fact text separately from conversation evidence, explicitly updates or replaces the selected fact, and checks the returned persisted body and revision before marking the item saved. Reviewed match timestamps guard intervening edits when available.

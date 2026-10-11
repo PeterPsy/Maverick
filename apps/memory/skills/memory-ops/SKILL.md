@@ -37,6 +37,18 @@ maverick app memory mcp call memory_inspect_source --json --source-document-id <
 
 `memory_fetch_chunks` hydrates at most 20 chunks and verifies the content-store SHA before returning body text.
 
+Ordinary source search returns current evidence linked to active knowledge. Use
+`include_history=true` for superseded source versions and `include_excluded=true`
+only when inspecting retained audit material. Source inspection returns bounded
+version/chunk pages; follow `pagination.next_version_offset` and
+`pagination.next_chunk_offset` with the same limits.
+
+Check `compilation_state`, `source_state` and `verification` separately. A fresh
+compilation does not establish that a fact is verified. Supporting citations and
+contradictions are separate; relevant sources and uncertain paraphrases must not
+be described as confirming proof. Search relevance is a ranking score. Use
+`project_id` or `person_id` when knowledge must be restricted to that scope.
+
 When Memory returns queued ingest or compile work, inspect the app-owned job queue through Memory rather than editing SQLite:
 
 ```bash
@@ -75,6 +87,11 @@ maverick app memory cli run memory --action remember --title "<short title>" --b
 
 Prefer updating or linking existing nodes over creating duplicates.
 
+Repeated identical `remember` calls reuse the active content identity within
+person/project/type/knowledge/validity scope. New unspecified confidence defaults
+to 0.5 and zero remains zero; specify provenance and confidence basis rather than
+treating the number as certainty.
+
 For generated notes, imports, or other agent-owned Markdown evidence that is not a Storage or app-entity source, ingest it as an `inline_markdown` source so Memory stores a verifiable source version and chunk:
 
 ```bash
@@ -82,6 +99,19 @@ maverick app memory mcp call memory_ingest_source --json --adapter-id inline_mar
 ```
 
 Use a stable `source_key` when the same generated source may be updated later. Re-ingesting identical content should not create duplicate source versions; changed content creates a new version and marks compiled Memory evidence stale.
+
+Choose the ingest operation explicitly when changing existing knowledge:
+
+- `attach_evidence` adds a source and retains curated fact text.
+- `update_fact` updates the current assertion.
+- `replace_fact` updates the assertion and records the replaced revision.
+
+Pass `fact_body`, `fact_summary` and `fact_metadata` when the approved fact differs
+from the original evidence. For an existing node, inspect first and pass
+`expected_updated_at`; verify the returned body and revision after saving.
+Generated document nodes follow their current source; curated notes retain their
+text and show conflicts until explicitly reconciled. Preserve knowledge type,
+person/project, validity, user confirmation and conversation provenance.
 
 For local workspace Storage files, ingest through `storage_file` instead of reading Memory's database or content store directly:
 
@@ -149,6 +179,18 @@ maverick app memory cli run memory --action context --query "<target title or cl
 ```
 
 Deletion is a Memory soft delete: the node is marked `deleted`, active edges are removed, and the item is removed from Memory full-text retrieval. It does not delete the original file, email, CRM record, Drive document, or other external source referenced by the node.
+
+`exclude_node` offers reversible exclusion from ordinary retrieval.
+`remove_source` excludes a Memory source while retaining its audit content and
+external original. `merge_nodes` requires an explicitly chosen target, preserves
+its fact text and transfers evidence and relationships. Inspect duplicate
+suggestions and revisions before merging; use source and target revision guards.
+The node inspector exposes these management actions, evidence passages, source
+history and complete active relationships.
+
+The visible UI performs bounded compile/lint maintenance; closed/hidden Memory
+does not have a background worker. Full index integrity checking is an explicit
+`memory_maintenance` request with `verify_index=true`, never a per-search scan.
 
 If multiple plausible nodes match, ask the user to choose before deleting. If the user asks to delete the original linked source as well, switch to the owning app's official surface, such as Storage for files, and confirm destructive external deletion when needed.
 

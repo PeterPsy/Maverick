@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from chunking import chunk_source_body
 from content_store import write_body
+from node_identity import identity_key
 from job_provenance import resolve_job_provenance
 from source_chunk_index import rebuild_source_chunk_fts, upsert_source_chunk_fts
 
@@ -46,8 +47,45 @@ def apply_additive_migrations(db: sqlite3.Connection, *, data_root: Path) -> Non
         ON ingest_jobs(source_document_id, source_version_id, node_id, updated_at)
         """
     )
+    add_column_if_missing(db, "sources", "current_version_id", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "citations", "evidence_relation", "TEXT NOT NULL DEFAULT 'unverified'")
+    add_column_if_missing(db, "nodes", "identity_key", "TEXT NOT NULL DEFAULT ''")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_identity ON nodes(identity_key) WHERE status = 'active' AND identity_key != ''")
+    db.execute("""CREATE TABLE IF NOT EXISTS node_revisions(
+      id TEXT PRIMARY KEY, node_id TEXT NOT NULL REFERENCES nodes(id),
+      revision TEXT NOT NULL, reason TEXT NOT NULL, snapshot_json TEXT NOT NULL,
+      created_at TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_node_revisions_node ON node_revisions(node_id, created_at)")
+    used_keys = {row["identity_key"] for row in db.execute("SELECT identity_key FROM nodes WHERE status = 'active' AND identity_key != ''")}
+    for row in db.execute("SELECT * FROM nodes WHERE status = 'active' AND identity_key = '' ORDER BY created_at, id"):
+        key = identity_key(row_payload(row) or {})
+        if key not in used_keys:
+            db.execute("UPDATE nodes SET identity_key = ? WHERE id = ?", (key, row["id"]))
+            used_keys.add(key)
     backfill_ingest_job_provenance(db)
     backfill_source_version_foundation(db, data_root=data_root)
+    db.execute("""UPDATE sources SET current_version_id = COALESCE(
+      (SELECT sv.id FROM source_versions sv WHERE sv.source_id = sources.id
+       AND sv.version_hash = sources.content_hash ORDER BY sv.observed_at DESC, sv.id DESC LIMIT 1),
+      (SELECT sv.id FROM source_versions sv WHERE sv.source_id = sources.id ORDER BY sv.observed_at DESC, sv.id DESC LIMIT 1), '')
+      WHERE current_version_id = ''""")
+    db.execute("UPDATE wiki_pages SET freshness = 'stale' WHERE id IN (SELECT wiki_page_id FROM claims JOIN citations ON claims.id = citations.claim_id WHERE evidence_relation = 'unverified')")
+    db.execute("UPDATE claims SET stale = 1 WHERE id IN (SELECT claim_id FROM citations WHERE evidence_relation = 'unverified')")
+    for row in db.execute("SELECT wp.node_id FROM wiki_pages wp JOIN nodes n ON n.id = wp.node_id WHERE wp.freshness = 'stale' AND n.status = 'active'"):
+        dedupe = "compile_node:migration:4:" + row["node_id"]
+        if db.execute("SELECT 1 FROM ingest_jobs WHERE dedupe_key = ?", (dedupe,)).fetchone():
+            continue
+        timestamp = now_timestamp()
+        db.execute("""INSERT INTO ingest_jobs(id, job_type, dedupe_key, status, available_at, payload_json, node_id, created_at, updated_at)
+            VALUES (?, 'compile_node', ?, 'ready', ?, ?, ?, ?, ?)""",
+            (new_id("job"), dedupe, timestamp, json_text({"node_id": row["node_id"], "reason": "support_semantics_migrated"}), row["node_id"], timestamp, timestamp))
+
+    compiled_columns = {row["name"] for row in db.execute("PRAGMA table_info(compiled_fts)")}
+    if compiled_columns and "claim_text" not in compiled_columns:
+        db.execute("DROP TABLE compiled_fts")
+    db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS compiled_fts USING fts5(node_id UNINDEXED, title, summary, body_text, claim_text)")
+    db.execute("DELETE FROM compiled_fts")
+    db.execute("INSERT INTO compiled_fts(node_id, title, summary, body_text, claim_text) SELECT wp.node_id, wp.title, wp.summary, wp.body_markdown, COALESCE((SELECT group_concat(claim_text, char(10)) FROM claims WHERE wiki_page_id = wp.id AND status = 'active'), '') FROM wiki_pages wp WHERE wp.status = 'active'")
     rebuild_source_chunk_fts(db, data_root=data_root)
 
 

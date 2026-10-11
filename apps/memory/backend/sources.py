@@ -10,6 +10,7 @@ from typing import Any
 from chunking import chunk_source_body
 from content_store import canonical_body, read_body, write_body
 from database import connect, json_text, new_id, row_payload
+from source_current import observe_version
 from source_chunk_index import delete_source_chunk_fts_for_version, upsert_source_chunk_fts
 from storage_sources import (
     INGEST_PREVIEW_METADATA_KEYS,
@@ -122,6 +123,7 @@ def ensure_source_version(
     ).fetchone()
     if existing is not None:
         ensure_source_chunks(db, data_root=data_root, version=row_payload(existing) or {}, snapshot=snapshot, timestamp=timestamp)
+        observe_version(db, source["id"], existing["id"])
         return row_payload(existing) or {}
     snapshot_metadata = snapshot.get("metadata", {})
     preview_truncated = bool(snapshot_metadata.get("preview_truncated"))
@@ -186,6 +188,7 @@ def ensure_source_version(
         version,
     )
     ensure_source_chunks(db, data_root=data_root, version=version, snapshot=snapshot, timestamp=timestamp)
+    observe_version(db, source["id"], version["id"])
     return version
 
 

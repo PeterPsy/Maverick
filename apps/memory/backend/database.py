@@ -14,8 +14,7 @@ from uuid import uuid4
 from errors import MemoryValidationError
 from memory_schema import SCHEMA_STATEMENTS
 from models import EDGE_KINDS, NODE_TYPES, SCHEMA_VERSION
-from schema_migrations import apply_additive_migrations, source_version_foundation_needs_backfill
-from source_chunk_index import source_chunk_fts_needs_rebuild
+from schema_migrations import apply_additive_migrations
 
 
 SQLITE_BUSY_TIMEOUT_MS = 10000
@@ -131,6 +130,8 @@ def schema_is_current(data_root: Path) -> bool:
 def schema_has_current_shape(db: sqlite3.Connection, *, data_root: Path) -> bool:
     required_tables = {
         "source_documents",
+        "compiled_fts",
+        "node_revisions",
         "source_versions",
         "source_chunks",
         "source_chunk_fts",
@@ -151,6 +152,9 @@ def schema_has_current_shape(db: sqlite3.Connection, *, data_root: Path) -> bool
         return False
 
     required_columns = {
+        "compiled_fts": {"claim_text"},
+        "sources": {"current_version_id"},
+        "nodes": {"identity_key"},
         "source_documents": {
             "id",
             "source_key",
@@ -212,6 +216,7 @@ def schema_has_current_shape(db: sqlite3.Connection, *, data_root: Path) -> bool
             "char_start",
             "char_end",
             "quote_sha256",
+            "evidence_relation",
             "quote",
             "created_at",
             "metadata_json",
@@ -258,10 +263,6 @@ def schema_has_current_shape(db: sqlite3.Connection, *, data_root: Path) -> bool
         indexes = {row["name"] for row in db.execute(f"PRAGMA index_list({table_name})")}
         if not required.issubset(indexes):
             return False
-    if source_version_foundation_needs_backfill(db):
-        return False
-    if source_chunk_fts_needs_rebuild(db, data_root=data_root):
-        return False
     return True
 
 def health_payload(data_root: Path) -> dict[str, Any]:

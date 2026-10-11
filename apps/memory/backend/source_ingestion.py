@@ -23,6 +23,9 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
+from fact_updates import FACT_OPERATIONS, reconcile_ingested_fact
+from source_current import observe_version
+from node_revisions import save_revision
 from ingest_jobs import complete_ready_job, enqueue_compile_job_in_db
 from lint import mark_wiki_stale
 from nodes import get_node_with_details, inspect_node
@@ -62,8 +65,27 @@ def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             source_document=source_document,
             timestamp=timestamp,
         )
+        link_created = db.execute("SELECT 1 FROM node_source_links WHERE node_id = ? AND source_id = ?", (target_node_id, source["id"])).fetchone() is None
         ensure_node_source_link(db, node_id=target_node_id, source_id=source["id"], external_ref_id="", timestamp=timestamp)
-        mark_wiki_stale(db, target_node_id, timestamp=timestamp, reason="source_ingested", data_root=data_root)
+        current_changed = observe_version(db, source["id"], source_version["id"])
+        fact_changed = reconcile_ingested_fact(db, request, target_node_id, timestamp=timestamp)
+        work_changed = version_created or node_created or link_created or current_changed or fact_changed
+        if work_changed:
+            linked = list(db.execute("SELECT node_id FROM node_source_links WHERE source_id = ?", (source["id"],)))
+            for link in linked:
+                active = db.execute("SELECT status, metadata_json FROM nodes WHERE id = ?", (link["node_id"],)).fetchone()
+                if active is None or active["status"] != "active":
+                    continue
+                if link["node_id"] != target_node_id and (current_changed or version_created):
+                    origin = json.loads(active["metadata_json"] or "{}")
+                    if origin.get("source_document_id") == source_document["id"] and origin.get("content_mode") != "curated":
+                        reconcile_ingested_fact(db, {**request, "operation": "", "expected_updated_at": None,
+                            "fact_body": "", "fact_summary": "", "fact_metadata": {}}, link["node_id"], timestamp=timestamp)
+                mark_wiki_stale(db, link["node_id"], timestamp=timestamp, reason="source_ingested", data_root=data_root)
+                job = enqueue_compile_job_in_db(db, node_id=link["node_id"], source_document_id=source_document["id"],
+                    source_version_id=source_version["id"], source_version_hash=source_version["version_hash"], reason="source_ingested")
+                if link["node_id"] == target_node_id:
+                    compile_recovery_job = job
         record_event(
             db,
             event_type="source_ingested",
@@ -76,16 +98,6 @@ def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
                 "compile_after_ingest": request["compile_after_ingest"],
             },
         )
-        work_changed = document_created or source_created or version_created or node_created
-        if work_changed:
-            compile_recovery_job = enqueue_compile_job_in_db(
-                db,
-                node_id=target_node_id,
-                source_document_id=source_document["id"],
-                source_version_id=source_version["id"],
-                source_version_hash=source_version.get("version_hash") or request["version_hash"],
-                reason="source_ingested",
-            )
         node = get_node_with_details(db, target_node_id, data_root=data_root)
 
     compiled = None
@@ -95,6 +107,7 @@ def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             complete_ready_job(data_root, str(compile_recovery_job.get("id") or ""), reason="inline_compile_succeeded")
         node = inspect_node(data_root, target_node_id)
 
+    source["current_version_id"] = source_version["id"]
     return {
         "status": "ingested" if document_created or source_created or version_created or node_created else "updated",
         "adapter_id": request["adapter_id"],
@@ -117,12 +130,21 @@ def normalized_ingest_request(data_root: Path, body: dict[str, Any]) -> dict[str
     if adapter_id not in SUPPORTED_ADAPTERS:
         raise MemoryValidationError("memory_ingest_source supports adapter_id=inline_markdown, storage_file, remote_storage_file, or app_entity.")
     if adapter_id == "storage_file":
-        return normalized_storage_file_request(data_root, body, source)
-    if adapter_id == "app_entity":
-        return normalized_app_entity_request(data_root, body, source)
-    if adapter_id == "remote_storage_file":
+        request = normalized_storage_file_request(data_root, body, source)
+    elif adapter_id == "app_entity":
+        request = normalized_app_entity_request(data_root, body, source)
+    elif adapter_id == "remote_storage_file":
         raise MemoryValidationError("remote_storage_file ingest requires source_kind=remote_storage_file.")
-    return normalized_inline_markdown_request(body, source, adapter_id=adapter_id)
+    else:
+        request = normalized_inline_markdown_request(body, source, adapter_id=adapter_id)
+    operation = str(body.get("operation") or "")
+    if operation and operation not in FACT_OPERATIONS:
+        raise MemoryValidationError("operation must be attach_evidence, update_fact, or replace_fact.")
+    request.update(operation=operation, fact_body=body.get("fact_body", ""), fact_summary=body.get("fact_summary", ""),
+        fact_metadata=body.get("fact_metadata") if isinstance(body.get("fact_metadata"), dict) else {},
+        expected_updated_at=body.get("expected_updated_at"))
+    request["confidence"] = normalize_float(request["confidence"], default=.5, minimum=0, maximum=1, field_name="confidence")
+    return request
 
 
 def is_remote_storage_ingest(body: dict[str, Any]) -> bool:
@@ -179,7 +201,7 @@ def normalized_inline_markdown_request(body: dict[str, Any], source: dict[str, A
         "node_id": str(body.get("node_id") or "").strip(),
         "node_type": str(body.get("type") or body.get("node_type") or "note").strip(),
         "importance": body.get("importance", 0.5),
-        "confidence": body.get("confidence", 1.0),
+        "confidence": body.get("confidence", 0.5),
         "compile_after_ingest": bool(body.get("compile_after_ingest")),
         "metadata": dict(metadata),
     }
@@ -230,7 +252,7 @@ def normalized_storage_file_request(data_root: Path, body: dict[str, Any], sourc
         "node_id": str(body.get("node_id") or "").strip(),
         "node_type": str(body.get("type") or body.get("node_type") or "file_ref").strip(),
         "importance": body.get("importance", 0.5),
-        "confidence": body.get("confidence", 1.0),
+        "confidence": body.get("confidence", 0.5),
         "compile_after_ingest": bool(body.get("compile_after_ingest")),
         "metadata": {
             "workspace_relative_path": resolved_workspace_relative_path,
@@ -299,7 +321,7 @@ def normalized_app_entity_request(data_root: Path, body: dict[str, Any], source:
         "node_id": str(body.get("node_id") or "").strip(),
         "node_type": str(body.get("type") or body.get("node_type") or "app_entity_ref").strip(),
         "importance": body.get("importance", 0.5),
-        "confidence": body.get("confidence", 1.0),
+        "confidence": body.get("confidence", 0.5),
         "compile_after_ingest": bool(body.get("compile_after_ingest")),
         "metadata": {
             **dict(metadata),
@@ -561,8 +583,8 @@ def ensure_target_node(
 ) -> tuple[str, bool]:
     node_id = request["node_id"]
     if node_id:
-        row = db.execute("SELECT id FROM nodes WHERE id = ? AND status = 'active'", (node_id,)).fetchone()
-        if row is None:
+        row = db.execute("SELECT id, status FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        if row is None or row["status"] != "active":
             raise MemoryValidationError("node not found.")
         return node_id, False
     existing = db.execute(
@@ -581,9 +603,11 @@ def ensure_target_node(
     if existing is not None:
         return str(existing["id"]), False
     node_id = f"node_{sha256(source_document['source_key'].encode('utf-8')).hexdigest()[:16]}"
-    row = db.execute("SELECT id FROM nodes WHERE id = ? AND status = 'active'", (node_id,)).fetchone()
-    if row is not None:
+    row = db.execute("SELECT id, status FROM nodes WHERE id = ?", (node_id,)).fetchone()
+    if row is not None and row["status"] == "active":
         return node_id, False
+    if row is not None:
+        node_id = new_id("node")
     db.execute(
         """
         INSERT INTO nodes(id, type, title, summary, body_text, importance, confidence, created_at, updated_at, metadata_json)
@@ -593,16 +617,17 @@ def ensure_target_node(
             node_id,
             normalize_node_type(request["node_type"]),
             request["title"],
-            request["summary"] or "Inline Memory source.",
-            request["body_markdown"],
+            str(request.get("fact_summary") or request.get("fact_body") or request["body_markdown"])[:320],
+            request.get("fact_body") or request["body_markdown"],
             normalize_float(request["importance"], default=0.5, minimum=0, maximum=1, field_name="importance"),
-            normalize_float(request["confidence"], default=1.0, minimum=0, maximum=1, field_name="confidence"),
+            normalize_float(request["confidence"], default=0.5, minimum=0, maximum=1, field_name="confidence"),
             timestamp,
             timestamp,
             json_text({"created_from": "source_ingest", "source_document_id": source_document["id"], "adapter_id": request["adapter_id"]}),
         ),
     )
     refresh_fts(db, node_id)
+    save_revision(db, node_id, "created")
     record_event(db, event_type="node_created", node_id=node_id, payload={"title": request["title"], "source": "source_ingest"})
     return node_id, True
 

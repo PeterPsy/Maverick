@@ -48,7 +48,11 @@
           "references.search": "read",
           "references.resolve": "read",
           "references.summarize": "read",
-          "health.check": "read"
+          "health.check": "read",
+          "merge_nodes": "mutating",
+          "exclude_node": "mutating",
+          "remove_source": "destructive",
+          "maintenance": "mutating"
         }
       },
       "description": "Search, retrieve, update, link, inspect, compile, and lint workspace Memory nodes. The default context action returns bounded agent-compact results with query snippet/count metadata, reusable Storage references, and expansion hints; inspect/fetch actions return full detail when needed.",
@@ -101,7 +105,11 @@
               "references.search",
               "references.resolve",
               "references.summarize",
-              "health.check"
+              "health.check",
+              "merge_nodes",
+              "exclude_node",
+              "remove_source",
+              "maintenance"
             ],
             "default": "context"
           },
@@ -302,7 +310,10 @@
               "fail",
               "cancel",
               "run_next",
-              "run_until_idle"
+              "run_until_idle",
+              "attach_evidence",
+              "update_fact",
+              "replace_fact"
             ]
           },
           "job_type": {
@@ -376,6 +387,76 @@
             "items": {
               "type": "object"
             }
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "project_id": {
+                "type": "string"
+              },
+              "person_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "modified_at": {
+            "type": "string"
+          },
+          "fact_body": {
+            "type": "string",
+            "description": "Fact content distinct from the evidence body."
+          },
+          "fact_summary": {
+            "type": "string"
+          },
+          "fact_metadata": {
+            "type": "object"
+          },
+          "expected_updated_at": {
+            "type": "string"
+          },
+          "include_history": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_excluded": {
+            "type": "boolean",
+            "default": false
+          },
+          "version_limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "chunk_limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "version_offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "chunk_offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "target_updated_at": {
+            "type": "string"
+          },
+          "excluded": {
+            "type": "boolean",
+            "default": true
+          },
+          "verify_index": {
+            "type": "boolean",
+            "default": false
           }
         },
         "additionalProperties": false,

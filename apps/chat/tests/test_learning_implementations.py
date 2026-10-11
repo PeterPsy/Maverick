@@ -214,7 +214,7 @@ class ImplementationTests(unittest.TestCase):
         save = result['dependency_backend_requests'][0]
         self.assertEqual(save['provider_app_id'], 'memory')
         self.call('learning.memory_saved', surface='dependency_backend_request_callback', **save['callback']['payload'],
-                  dependency_backend_status='completed', dependency_backend_result={'status_code':200,'dependency_provider_app_id':'memory','json':{'node':{'id':'saved-node','updated_at':'revision'}}})
+                  dependency_backend_status='completed', dependency_backend_result={'status_code':200,'dependency_provider_app_id':'memory','json':{'node':{'id':'saved-node','updated_at':'revision','body_text':save['body']['fact_body']}}})
         self.assertEqual(self.ticket()['status'], 'running')  # The first chat is still finishing.
         self.assertNotIn('runtime_session_requests', self.tick())
         self.terminal()

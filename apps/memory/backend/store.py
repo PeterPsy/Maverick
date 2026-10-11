@@ -8,7 +8,8 @@ from nodes import create_node, inspect_node, update_node, soft_delete_node
 from references import add_external_ref
 from retrieval import audit_events, context_payload, graph_payload, search_nodes
 from source_ingestion import ingest_source
-from source_retrieval import fetch_chunks, inspect_source, source_query
+from source_retrieval import fetch_chunks, source_query
+from source_inspection import inspect_source
 from lint import lint_memory
 from view_state import clear_custom_view_payload, load_view_state, set_custom_view_payload, set_view_filter_payload
 from wiki import compile_node

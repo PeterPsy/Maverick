@@ -68,11 +68,6 @@ function openNodeInShell(nodeId: string, appId: string) {
   }
 }
 
-function nodeMatchesSearch(node: GraphNode, query: string) {
-  if (!query) return true;
-  return `${node.title} ${node.summary} ${node.body_text} ${node.type} ${node.id}`.toLowerCase().includes(query);
-}
-
 function graphRequest(viewFilter: ViewFilter, query: string) {
   const body: Record<string, unknown> = { action: "graph", query, limit: 160 };
   if (viewFilter.mode === "custom") {
@@ -103,10 +98,7 @@ function MemorySidebarWidget() {
 
   useShellSidebarCloseSwipe(isShellMobileLayout);
 
-  const filteredNodes = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return nodes.filter((node) => nodeMatchesSearch(node, needle));
-  }, [nodes, query]);
+  const filteredNodes = nodes;
 
   useEffect(() => {
     queryRef.current = query;

@@ -307,7 +307,7 @@ def _desired_findings(
             """
             SELECT id
             FROM citations
-            WHERE claim_id = ?
+            WHERE claim_id = ? AND evidence_relation = 'supports'
               AND source_version_id IS NOT NULL
               AND source_chunk_id IS NOT NULL
               AND (
@@ -321,6 +321,9 @@ def _desired_findings(
             (claim["id"],),
         ).fetchone()
         if citation is None:
+            if db.execute("SELECT 1 FROM citations WHERE claim_id = ? AND evidence_relation = 'related' LIMIT 1", (claim["id"],)).fetchone():
+                findings.append(_finding(f"source_review_needed:{claim['id']}", "warning",
+                    "A relevant source does not verify this claim; review and reconcile the fact.", claim_id=claim["id"]))
             findings.append(
                 _finding(
                     f"missing_citation:{claim['id']}",
@@ -329,6 +332,9 @@ def _desired_findings(
                     claim_id=claim["id"],
                 )
             )
+    for claim in claims:
+        if db.execute("SELECT 1 FROM citations WHERE claim_id = ? AND evidence_relation = 'contradicts' LIMIT 1", (claim["id"],)).fetchone():
+            findings.append(_finding(f"source_conflict:{claim['id']}", "error", "Current source evidence contradicts this claim; reconcile the fact.", claim_id=claim["id"]))
     contradiction_rows = db.execute(
         """
         SELECT e.id, e.reason, other.title
@@ -383,3 +389,26 @@ def _finding(
 
 def lint_findings_for_node(db: sqlite3.Connection, node_id: str) -> list[dict[str, Any]]:
     return active_lint_findings(db, node_ids=[node_id], limit=200)
+
+
+def computed_page_freshness(db: sqlite3.Connection, page: sqlite3.Row | dict, *, data_root: Path | None) -> str:
+    """Observe changed inputs without mutating persisted compilation state."""
+    return "stale" if _compiled_inputs_changed(db, page=page, data_root=data_root) else str(page["freshness"] or "unknown")
+
+
+def source_state_for_page(db: sqlite3.Connection, page: sqlite3.Row | dict, *, data_root: Path | None) -> str:
+    """Source currency is independent of a node edit or compilation timestamp."""
+    versions = list(db.execute("""SELECT s.id, s.current_version_id, s.status FROM sources s
+        JOIN node_source_links nl ON nl.source_id = s.id WHERE nl.node_id = ?""", (page["node_id"],)))
+    if not versions:
+        return "unknown"
+    run = db.execute("SELECT metadata_json FROM compile_runs WHERE id = (SELECT compile_run_id FROM wiki_pages WHERE id = ?)", (page["id"],)).fetchone()
+    considered = set(_page_metadata(run).get("source_version_ids", [])) if run else set()
+    if any(row["status"] != "active" or row["current_version_id"] not in considered for row in versions):
+        return "stale"
+    refs = db.execute("""SELECT er.*, s.content_hash FROM external_refs er JOIN sources s ON s.external_ref_id = er.id
+        WHERE er.node_id = ? AND s.status = 'active'""", (page["node_id"],))
+    for ref in refs:
+        if storage_ref_staleness(ref) or (data_root is not None and source_snapshot(ref, data_root)["hash"] != ref["content_hash"]):
+            return "stale"
+    return "current"

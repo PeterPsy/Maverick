@@ -41,6 +41,8 @@ from store import (
     update_node,
     wiki_query,
 )
+from knowledge_management import merge_nodes, remove_source, set_retrieval_exclusion
+from maintenance import maintain_memory
 from storage_ingestion import ingest_storage_source
 from storage_staleness import apply_storage_staleness
 
@@ -64,6 +66,10 @@ REFERENCE_MANIFEST = {
 DATA_CHANGED_RESOURCES = {
     "clear_custom_view",
     "remember",
+    "merge_nodes",
+    "exclude_node",
+    "remove_source",
+    "maintenance",
     "create_node",
     "set_custom_view",
     "set_view_filter",
@@ -92,9 +98,13 @@ DATA_CHANGED_RESOURCES = {
 }
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 WIKI_ACTIONS = {"compile", "lint"}
-GRAPH_AND_WIKI_ACTIONS = {"ingest_source", "ingest_storage_source", "jobs_run", "jobs_run_loop"}
+GRAPH_AND_WIKI_ACTIONS = {"ingest_source", "ingest_storage_source", "jobs_run", "jobs_run_loop", "maintenance", "merge_nodes", "remove_source"}
 MCP_TOOL_ACTIONS = {
     "memory_context": "context",
+    "memory_merge_nodes": "merge_nodes",
+    "memory_exclude_node": "exclude_node",
+    "memory_remove_source": "remove_source",
+    "memory_maintenance": "maintenance",
     "memory_search": "search",
     "memory_remember": "remember",
     "memory_update_node": "update_node",
@@ -178,8 +188,24 @@ def sqlite_integrity_detail(error: sqlite3.IntegrityError) -> str:
     return "database constraint failed."
 
 
+def retrieval_scope(body: dict[str, Any]) -> dict[str, str]:
+    nested = body.get("scope") if isinstance(body.get("scope"), dict) else {}
+    return {key: str(value) for key in ("project_id", "person_id")
+            if (value := nested.get(key, body.get(key)))}
+
+
 def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memory") -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "context").strip()
+    if action == "maintenance":
+        result = maintain_memory(data_root, body)
+        result["_event_action"] = "maintenance" if result["jobs_run"] or result["repaired"] else "health.check"
+        return 200, result
+    if action == "merge_nodes":
+        return 200, merge_nodes(data_root, body)
+    if action == "exclude_node":
+        return 200, set_retrieval_exclusion(data_root, body)
+    if action == "remove_source":
+        return 200, remove_source(data_root, body)
     if action in {"remember", "create_node"}:
         return 200, {"node": create_node(data_root, body)}
     if action == "update_node":
@@ -209,7 +235,7 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
     if action == "search":
         query = str(body.get("query") or "").strip()
         limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
-        return 200, {"results": search_nodes(data_root, query, limit=limit)}
+        return 200, {"results": search_nodes(data_root, query, limit=limit, scope=retrieval_scope(body))}
     if action == "compile":
         return 200, compile_node(data_root, body)
     if action == "lint":
@@ -221,7 +247,7 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
     if action == "source_query":
         query = str(body.get("query") or "").strip()
         limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
-        return 200, source_query(data_root, query, limit=limit)
+        return 200, source_query(data_root, query, limit=limit, include_history=bool(body.get("include_history")), include_excluded=bool(body.get("include_excluded")))
     if action == "fetch_chunks":
         return 200, fetch_chunks(
             data_root,
@@ -282,12 +308,14 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
             query,
             limit=normalize_limit(body.get("limit"), default=8, minimum=1, maximum=50),
             record_access_event=bool(body.get("record_access_event")),
+            scope=retrieval_scope(body),
         )
     if action == "graph":
         return 200, graph_payload(
             data_root,
             query=str(body.get("query") or "").strip(),
             node_ids=body.get("node_ids"),
+            scope=retrieval_scope(body),
             limit=normalize_limit(body.get("limit"), default=200, minimum=1, maximum=500),
         )
     if action == "audit":

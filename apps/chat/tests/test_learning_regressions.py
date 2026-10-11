@@ -258,13 +258,59 @@ class LearningRegressionTests(LearningTestCase):
             'body': {'action': 'learning.memory_agent', 'item_id': item['id'], 'command': 'commit'}})['dependency_backend_requests'][0]
         memory_callback(self.root, {**request['callback']['payload'], 'action': 'learning.memory_saved',
             'dependency_backend_status': 'completed', 'dependency_backend_result': {'status_code': 200,
-            'dependency_provider_app_id': 'memory', 'json': {'node': {'id': 'saved-node', 'updated_at': 'revision'}}}})
+            'dependency_provider_app_id': 'memory', 'json': {'node': {'id': 'saved-node', 'updated_at': 'revision', 'body_text': item['body']}}}})
         self.cleanup('source')
         saved = self.call()['items'][0]
         self.assertEqual(saved['status'], 'saved')
         self.assertEqual(saved['evidence'], item['evidence'])
         undo = self.call('learning.review', item_id=item['id'], command='undo')['dependency_backend_requests'][0]
         self.assertEqual(undo['body']['expected_updated_at'], 'revision')
+
+    def test_memory_save_replaces_existing_fact_and_verifies_persisted_revision(self):
+        from core.shared.entrypoints import run_json_entrypoint
+        from learning_memory import save_request
+        app = Path(__file__).resolve().parents[2] / "memory"
+        memory_root = Path(self.root) / "memory-fixture"
+        def memory(body):
+            return run_json_entrypoint(app / "backend" / "app_backend.py", payload={"data_root": str(memory_root), "body": body}, cwd=app)
+        previous = memory({"action": "remember", "title": "Residence", "body": "Marco vive a Roma."})["json"]["node"]
+        item = self.publish_memory()
+        with connection(self.root, write=True) as db:
+            row = db.execute("SELECT * FROM learning_items WHERE id = ?", (item["id"],)).fetchone()
+            details = json.loads(row["details"])
+            details["memory_matches"] = [{"id": previous["id"], "updated_at": previous["updated_at"]}]
+            db.execute("UPDATE learning_items SET details=? WHERE id=?", (json.dumps(details), item["id"]))
+            row = db.execute("SELECT * FROM learning_items WHERE id = ?", (item["id"],)).fetchone()
+            request = save_request(db, row, target_node_id=previous["id"])
+        self.assertEqual(request["body"]["operation"], "replace_fact")
+        self.assertEqual(request["body"]["expected_updated_at"], previous["updated_at"])
+        saved = memory(request["body"])
+        self.assertEqual(saved["status_code"], 200, saved)
+        revision = saved["json"]["node"]["updated_at"]
+        memory_callback(self.root, {**request["callback"]["payload"], "action": "learning.memory_saved",
+            "dependency_backend_status": "completed", "dependency_backend_result": {**saved, "dependency_provider_app_id": "memory"}})
+        current = self.call()["items"][0]
+        self.assertEqual(current["status"], "saved")
+        self.assertTrue(current["details"]["saved_fact_verified"])
+        self.assertEqual(current["details"]["node_updated_at"], revision)
+        persisted = memory({"action": "inspect", "node_id": previous["id"]})["json"]["node"]
+        self.assertEqual(persisted["body_text"], item["body"])
+        self.assertNotEqual(persisted["updated_at"], previous["updated_at"])
+        self.assertEqual(persisted["metadata"]["knowledge_type"], "person")
+        context = memory({"action": "context", "query": "Milano"})["json"]["items"][0]
+        self.assertEqual(context["knowledge"]["knowledge_type"], "person")
+        self.assertEqual(context["conversation_provenance"][0]["session_id"], "source")
+
+    def test_memory_callback_rejects_unchanged_old_fact(self):
+        item = self.publish_memory()
+        request = handle_learning({"data_root": self.root, "surface": "mcp", "runtime_session_id": "memory-work",
+            "body": {"action": "learning.memory_agent", "item_id": item["id"], "command": "commit"}})["dependency_backend_requests"][0]
+        memory_callback(self.root, {**request["callback"]["payload"], "action": "learning.memory_saved",
+            "dependency_backend_status": "completed", "dependency_backend_result": {"status_code": 200,
+            "dependency_provider_app_id": "memory", "json": {"node": {"id": "node-old", "updated_at": "revision", "body_text": "Marco vive a Roma."}}}})
+        current = self.call()["items"][0]
+        self.assertEqual(current["status"], "pending")
+        self.assertIn("did not persist", current["details"]["save_error"])
 
 
 if __name__ == '__main__':

@@ -19,10 +19,17 @@ def save_request(db, item, *, target_node_id="", actor="system"):
     token = new_id("memory_operation")
     details = json.loads(item["details"])
     evidence = json.loads(item["evidence"])
+    reviewed_revision = next((match.get("updated_at") for match in details.get("memory_matches", [])
+                              if match.get("id") == target_node_id and match.get("updated_at")), None)
+    confirmation = details.get("confirmation") or ("explicit_user_fact" if actor == "system" else "user_approved")
+    sessions = list(dict.fromkeys(x["session_id"] for x in evidence))
+    marks = ",".join("?" for _ in sessions)
+    projects = {row[0] for row in db.execute(f"SELECT DISTINCT project_id FROM learning_conversations WHERE session_id IN ({marks})", sessions)} if sessions else set()
+    project_id = next(iter(projects)) if len(projects) == 1 else ""
     source = "\n\n".join(f"Chat /app/chat/threads/{x['session_id']} · turn {x['turn_id']} · {x['role']}\n\n{x['quote']}" for x in evidence)
     if details.get("source_refs"):
         source += "\n\nCited references\n\n" + "\n".join(details["source_refs"])
-    details.update(target_node_id=target_node_id, node_created=not bool(target_node_id))
+    details.update(target_node_id=target_node_id, node_created=not bool(target_node_id), confirmation=confirmation)
     db.execute("UPDATE learning_items SET status='saving',operation_id=?,details=?,updated_at=? WHERE id=?",
                (token, json.dumps(details), now(), item["id"]))
     audit(db, "memory.save_requested", item["id"], actor)
@@ -30,12 +37,16 @@ def save_request(db, item, *, target_node_id="", actor="system"):
         "action": "ingest_source", "adapter_id": "inline_markdown",
         "source_key": "conversation-learning:" + item["id"], "title": item["title"],
         "summary": item["body"], "node_id": target_node_id, "node_type": "fact",
+        "operation": "replace_fact" if target_node_id else "update_fact", "fact_body": item["body"], "fact_summary": item["body"],
+        **({"expected_updated_at": reviewed_revision} if reviewed_revision else {}),
+        "fact_metadata": {"knowledge_type": details.get("memory_type", ""), "confirmation": confirmation,
+            "project_id": project_id, "candidate_id": item["id"], "chat_evidence": evidence},
         "confidence": details.get("confidence", 0.5), "compile_after_ingest": True,
         "body_markdown": source, "source": {"adapter_id": "inline_markdown",
             "source_key": "conversation-learning:" + item["id"], "body_markdown": source,
             "metadata": {"candidate_id": item["id"], "chat_evidence": evidence,
                 "source_refs": details.get("source_refs", []), "knowledge_type": details.get("memory_type", ""),
-                "confirmation": details.get("confirmation", ""), "reviewed_at": item["updated_at"]}},
+                "confirmation": confirmation, "reviewed_at": item["updated_at"]}},
     }, operation_id=token, provider_id=item["provider_id"])
 
 
@@ -53,7 +64,7 @@ def memory_callback(data_root, body):
                 return {"ignored": True}
             matches = result.get("results", []) if ok else []
             details = json.loads(item["details"])
-            details["memory_matches"] = [{"id": x.get("id", x.get("node_id", "")), "title": x.get("title", "")}
+            details["memory_matches"] = [{"id": x.get("id", x.get("node_id", "")), "title": x.get("title", ""), "updated_at": x.get("updated_at", x.get("node", {}).get("updated_at", ""))}
                                           for x in matches if isinstance(x, dict)][:5]
             details["memory_check_error"] = "" if ok else "Memory provider unavailable; review before saving"
             provider = raw.get("dependency_provider_app_id") or item["provider_id"]
@@ -83,7 +94,13 @@ def memory_callback(data_root, body):
         node = result.get("node", {})
         if not isinstance(node, dict) or not node.get("id") or not node.get("updated_at"):
             raise ValueError("Memory provider returned no saved node revision")
-        details.update(node_updated_at=node.get("updated_at", ""), save_error="")
+        if normalize(node.get("body_text", "")) != normalize(item["body"]) or (details.get("target_node_id") and node["id"] != details["target_node_id"]):
+            details["save_error"] = "Memory did not persist the approved fact; inspect the saved node before retrying"
+            db.execute("UPDATE learning_items SET status='pending',details=?,updated_at=? WHERE id=?", (json.dumps(details), now(), item["id"]))
+            audit(db, "memory.revision_verification_failed", item["id"])
+            return {}
+        details.update(node_updated_at=node.get("updated_at", ""), save_error="", saved_fact_verified=True)
+        details["node_created"] = bool(result.get("node_created", details.get("node_created")))
         provider = raw.get("dependency_provider_app_id", "")
         db.execute("UPDATE learning_items SET status='saved',node_id=?,provider_id=?,details=?,updated_at=? WHERE id=?",
                    (node.get("id", ""), provider, json.dumps(details), now(), item["id"]))

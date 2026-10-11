@@ -1,3 +1,5 @@
+import { MemoryEvidence } from "./MemoryEvidence";
+import { MemoryManagement } from "./MemoryManagement";
 import { X } from "lucide-react";
 import { confidenceLabel, formatDate, labelForType } from "../format";
 import type { GraphNode, NodeDetails, RelationshipRow } from "../types";
@@ -27,7 +29,7 @@ export function FloatingNodePanel({ node, relationships, onClose, onSelect }: Fl
 
       <div className="metrics">
         <span><strong>{confidenceLabel(node.confidence)}</strong><small>confidence</small></span>
-        <span><strong>{Math.round(Number(node.importance || 0.5) * 100)}%</strong><small>importance</small></span>
+        <span><strong>{Math.round(Number(node.importance ?? 0.5) * 100)}%</strong><small>importance</small></span>
         <span><strong>{details.status || "active"}</strong><small>status</small></span>
       </div>
 
@@ -44,22 +46,19 @@ export function FloatingNodePanel({ node, relationships, onClose, onSelect }: Fl
           <h3>Compiled wiki</h3>
           <div className="compiled-card">
             <div className="compiled-card__meta">
-              <span>{details.compiled_page.freshness || "fresh"}</span>
+              <span>Compilation: {details.compiled_page.compilation_state || details.compiled_page.freshness || "unknown"}</span>
+              <span>Source: {details.compiled_page.source_state || "unknown"}</span>
+              <span>Evidence: {details.compiled_page.verification || "unverified"}</span>
               <span>{formatDate(details.compiled_page.compiled_at)}</span>
             </div>
             {details.compiled_page.summary ? <p className="summary">{details.compiled_page.summary}</p> : null}
-            <div className="claim-list">
-              {(details.claims || []).slice(0, 5).map((claim) => (
-                <div className="claim-card" key={claim.id}>
-                  <strong>{claim.claim_text}</strong>
-                  <span>{confidenceLabel(claim.confidence)} confidence</span>
-                  {(claim.citations || []).length ? <small>{claim.citations?.length} citation{claim.citations?.length === 1 ? "" : "s"}</small> : null}
-                </div>
-              ))}
-            </div>
+
           </div>
         </section>
       ) : null}
+
+      <MemoryEvidence key={`evidence:${node.id}:${node.updated_at}`} node={details} />
+      {details.updated_at && <MemoryManagement key={`manage:${node.id}:${node.updated_at}`} node={details} onSelect={onSelect} onClose={onClose} />}
 
       {(details.lint_findings || []).length ? (
         <section>
@@ -74,6 +73,14 @@ export function FloatingNodePanel({ node, relationships, onClose, onSelect }: Fl
           </div>
         </section>
       ) : null}
+
+      <section>
+        <h3>Revision history</h3>
+        {(details.revisions || []).map((revision) => <details className="reference-card" key={revision.id}>
+          <summary>{formatDate(revision.revision)} · {revision.reason.replace(/_/g, " ")}</summary>
+          <strong>{revision.snapshot.title}</strong><p className="body-copy">{revision.snapshot.body_text}</p>
+        </details>)}
+      </section>
 
       <section>
         <h3>Timeline</h3>
@@ -109,7 +116,7 @@ export function FloatingNodePanel({ node, relationships, onClose, onSelect }: Fl
               {edge.reason && <small>{edge.reason}</small>}
             </button>
           ))}
-          {!relationships.length && <p className="muted">No direct relationships in the current graph.</p>}
+          {!relationships.length && <p className="muted">No direct relationships.</p>}
         </div>
       </section>
     </article>

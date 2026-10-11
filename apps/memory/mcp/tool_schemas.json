@@ -8,7 +8,10 @@
         "properties": {
           "query": {"type": "string"},
           "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 8},
-          "record_access_event": {"type": "boolean", "default": false}
+          "record_access_event": {"type": "boolean", "default": false},
+          "scope": {"type": "object", "properties": {"project_id": {"type": "string"}, "person_id": {"type": "string"}}, "additionalProperties": false},
+          "project_id": {"type": "string"},
+          "person_id": {"type": "string"}
         },
         "additionalProperties": false
       },
@@ -21,7 +24,10 @@
         "type": "object",
         "properties": {
           "query": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+          "scope": {"type": "object", "properties": {"project_id": {"type": "string"}, "person_id": {"type": "string"}}, "additionalProperties": false},
+          "project_id": {"type": "string"},
+          "person_id": {"type": "string"}
         },
         "additionalProperties": false
       },
@@ -62,7 +68,10 @@
           "body": {"type": "string"},
           "body_text": {"type": "string"},
           "importance": {"type": "number", "minimum": 0, "maximum": 1},
-          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "metadata": {"type": "object"},
+          "type": {"type": "string"},
+          "expected_updated_at": {"type": "string"}
         },
         "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
         "additionalProperties": false
@@ -78,7 +87,8 @@
           "node_id": {"type": "string"},
           "id": {"type": "string"},
           "reason": {"type": "string"},
-          "actor_id": {"type": "string"}
+          "actor_id": {"type": "string"},
+          "expected_updated_at": {"type": "string"}
         },
         "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
         "additionalProperties": false
@@ -227,7 +237,12 @@
               "metadata": {"type": "object"}
             },
             "additionalProperties": false
-          }
+          },
+          "operation": {"type": "string", "enum": ["attach_evidence", "update_fact", "replace_fact"], "description": "Default: refresh generated document facts; attach evidence to curated notes. replace_fact saves the previous fact revision."},
+          "fact_body": {"type": "string", "description": "Fact content distinct from the evidence body."},
+          "fact_summary": {"type": "string"},
+          "fact_metadata": {"type": "object"},
+          "expected_updated_at": {"type": "string"}
         },
         "oneOf": [
           {
@@ -299,6 +314,11 @@
           "preview_text": {"type": "string", "maxLength": 20000},
           "preview_truncated": {"type": "boolean", "default": false},
           "compile_after_ingest": {"type": "boolean", "default": false},
+          "operation": {"type": "string", "enum": ["attach_evidence", "update_fact", "replace_fact"]},
+          "fact_body": {"type": "string"},
+          "fact_summary": {"type": "string"},
+          "fact_metadata": {"type": "object"},
+          "expected_updated_at": {"type": "string"},
           "memory_source": {
             "type": "object",
             "properties": {
@@ -471,7 +491,9 @@
         "type": "object",
         "properties": {
           "query": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+          "include_history": {"type": "boolean", "default": false},
+          "include_excluded": {"type": "boolean", "default": false}
         },
         "additionalProperties": false
       },
@@ -507,7 +529,11 @@
           "source_id": {"type": "string"},
           "file_id": {"type": "string"},
           "entity_id": {"type": "string"},
-          "id": {"type": "string"}
+          "id": {"type": "string"},
+          "version_limit": {"type": "integer", "minimum": 1, "maximum": 50},
+          "chunk_limit": {"type": "integer", "minimum": 1, "maximum": 100},
+          "version_offset": {"type": "integer", "minimum": 0, "maximum": 1000000},
+          "chunk_offset": {"type": "integer", "minimum": 0, "maximum": 1000000}
         },
         "anyOf": [
           {"required": ["source_document_id"]},
@@ -671,6 +697,100 @@
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}
+    },
+    "memory_merge_nodes": {
+      "effect_class": "mutating",
+      "description": "Merge a node into an explicit target, keeping target content and transferring evidence and relationships.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "target_node_id": {
+            "type": "string"
+          },
+          "expected_updated_at": {
+            "type": "string"
+          },
+          "target_updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "target_node_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "memory_exclude_node": {
+      "effect_class": "mutating",
+      "description": "Reversibly exclude or include a node in ordinary retrieval.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "excluded": {
+            "type": "boolean",
+            "default": true
+          },
+          "expected_updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "memory_remove_source": {
+      "effect_class": "destructive",
+      "description": "Soft-remove a source from ordinary retrieval, retaining immutable content for explicit audit.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "node_id": {"type": "string"},
+          "expected_updated_at": {"type": "string"}
+        },
+        "required": [
+          "source_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "memory_maintenance": {
+      "effect_class": "mutating",
+      "description": "Run up to three compile/lint jobs within a foreground tick; optionally verify and repair the full source index.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "verify_index": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
     }
   }
 }

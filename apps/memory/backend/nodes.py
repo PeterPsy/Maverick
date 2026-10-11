@@ -20,6 +20,8 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
+from node_identity import identity_key
+from node_revisions import revisions_for_node, save_revision
 from lint import mark_wiki_stale
 from wiki_queries import compiled_payload_for_node
 
@@ -45,24 +47,30 @@ def create_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         ),
         "confidence": normalize_float(
             body.get("confidence"),
-            default=1.0,
+            default=0.5,
             minimum=0,
             maximum=1,
             field_name="confidence",
         ),
         "created_at": timestamp,
         "updated_at": timestamp,
-        "metadata_json": json_text(body.get("metadata")),
+        "metadata_json": json_text({"confidence_basis": "unspecified", **(body.get("metadata") if isinstance(body.get("metadata"), dict) else {})}),
     }
+    node["identity_key"] = identity_key({**node, "metadata": body.get("metadata")})
     with transaction(data_root, immediate=True) as db:
+        if not body.get("node_id") and not body.get("id"):
+            existing = db.execute("SELECT id FROM nodes WHERE identity_key = ? AND status = 'active'", (node["identity_key"],)).fetchone()
+            if existing is not None:
+                return get_node_with_details(db, existing["id"], data_root=data_root)
         db.execute(
             """
-            INSERT INTO nodes(id, type, title, summary, body_text, importance, confidence, created_at, updated_at, metadata_json)
-            VALUES (:id, :type, :title, :summary, :body_text, :importance, :confidence, :created_at, :updated_at, :metadata_json)
+            INSERT INTO nodes(id, type, title, summary, body_text, importance, confidence, created_at, updated_at, metadata_json, identity_key)
+            VALUES (:id, :type, :title, :summary, :body_text, :importance, :confidence, :created_at, :updated_at, :metadata_json, :identity_key)
             """,
             node,
         )
         refresh_fts(db, node["id"])
+        save_revision(db, node["id"], "created")
         record_event(db, event_type="node_created", node_id=node["id"], payload={"title": node["title"]})
         return get_node_with_details(db, node["id"], data_root=data_root)
 
@@ -77,6 +85,12 @@ def update_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         existing = db.execute("SELECT * FROM nodes WHERE id = ? AND status = 'active'", (node_id,)).fetchone()
         if existing is None:
             raise MemoryValidationError("node not found.")
+        if body.get("expected_updated_at") is not None and body["expected_updated_at"] != existing["updated_at"]:
+            raise MemoryValidationError("node changed since the reviewed revision; inspect Memory before updating it.")
+        save_revision(db, node_id, "before_update")
+        metadata = (row_payload(existing) or {}).get("metadata", {})
+        metadata.update(body.get("metadata") if isinstance(body.get("metadata"), dict) else {})
+        metadata["content_mode"] = "curated"
         values = {
             "id": node_id,
             "title": str(body.get("title", existing["title"])).strip() or existing["title"],
@@ -97,16 +111,22 @@ def update_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
                 field_name="confidence",
             ),
             "updated_at": timestamp,
+            "type": normalize_node_type(body.get("type", existing["type"])),
+            "metadata_json": json_text(metadata),
         }
+        candidate_key = identity_key({**values, "metadata": metadata})
+        duplicate = db.execute("SELECT id FROM nodes WHERE identity_key = ? AND status = 'active' AND id != ?", (candidate_key, node_id)).fetchone()
+        values["identity_key"] = "" if duplicate else candidate_key
         db.execute(
             """
-            UPDATE nodes SET title = :title, summary = :summary, body_text = :body_text,
+            UPDATE nodes SET type = :type, metadata_json = :metadata_json, identity_key = :identity_key, title = :title, summary = :summary, body_text = :body_text,
               importance = :importance, confidence = :confidence, updated_at = :updated_at
             WHERE id = :id
             """,
             values,
         )
         refresh_fts(db, node_id)
+        save_revision(db, node_id, "updated")
         mark_wiki_stale(db, node_id, timestamp=timestamp, reason="node_updated", data_root=data_root)
         record_event(db, event_type="node_updated", node_id=node_id, payload={"title": values["title"]})
         return get_node_with_details(db, node_id, data_root=data_root)
@@ -156,17 +176,19 @@ def get_node_with_details(db: sqlite3.Connection, node_id: str, *, data_root: Pa
     outgoing = [
         row_payload(row)
         for row in db.execute(
-            "SELECT * FROM edges WHERE source_node_id = ? AND status = 'active' ORDER BY weight DESC",
+            "SELECT e.*, n.title AS other_title, n.type AS other_type FROM edges e JOIN nodes n ON n.id = e.target_node_id WHERE e.source_node_id = ? AND e.status = 'active' AND n.status != 'deleted' ORDER BY e.weight DESC",
             (node_id,),
         )
     ]
     incoming = [
         row_payload(row)
         for row in db.execute(
-            "SELECT * FROM edges WHERE target_node_id = ? AND status = 'active' ORDER BY weight DESC",
+            "SELECT e.*, n.title AS other_title, n.type AS other_type FROM edges e JOIN nodes n ON n.id = e.source_node_id WHERE e.target_node_id = ? AND e.status = 'active' AND n.status != 'deleted' ORDER BY e.weight DESC",
             (node_id,),
         )
     ]
+    node["duplicate_candidates"] = [dict(row) for row in db.execute("SELECT id, title, summary, updated_at FROM nodes WHERE id != ? AND status = 'active' AND (lower(title) = lower(?) OR (body_text != '' AND body_text = ?)) ORDER BY updated_at DESC LIMIT 5", (node_id, node["title"], node["body_text"]))]
+    node["revisions"] = revisions_for_node(db, node_id)
     node["external_refs"] = [item for item in refs if item is not None]
     node["outgoing_edges"] = [item for item in outgoing if item is not None]
     node["incoming_edges"] = [item for item in incoming if item is not None]

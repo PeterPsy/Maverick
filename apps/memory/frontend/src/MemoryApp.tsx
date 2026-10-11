@@ -48,7 +48,7 @@ export function MemoryApp() {
   const selectedIdRef = useRef<string | null>(null);
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const selectedNode = selectedId ? nodeById.get(selectedId) || null : null;
+  const selectedNode = selectedId ? nodeById.get(selectedId) || selectedDetails || null : null;
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -69,7 +69,7 @@ export function MemoryApp() {
           y: previous?.y ?? center.y + Math.sin(angle) * radius,
           vx: previous?.vx ?? 0,
           vy: previous?.vy ?? 0,
-          radius: 13 + Math.min(13, Number(node.importance || 0.5) * 15),
+          radius: 13 + Math.min(13, Number(node.importance ?? 0.5) * 15),
         };
       });
     });
@@ -176,13 +176,29 @@ export function MemoryApp() {
     refreshMemory();
   }, [refreshMemory]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let running = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible" || running) return;
+      running = true;
+      try { await callMemory({ action: "maintenance" }, { signal: controller.signal }); }
+      catch (problem) { if (!isCancelledRequest(problem)) setError(problem instanceof Error ? problem.message : "Unable to maintain memory."); }
+      finally { running = false; }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 30_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, []);
+
   const scheduleEventRefresh = useCallback(() => {
     if (eventRefreshTimerRef.current !== null) window.clearTimeout(eventRefreshTimerRef.current);
     eventRefreshTimerRef.current = window.setTimeout(() => {
       eventRefreshTimerRef.current = null;
       refreshMemory();
+      if (selectedIdRef.current) void selectNode(selectedIdRef.current);
     }, 250);
-  }, [refreshMemory]);
+  }, [refreshMemory, selectNode]);
 
   useEffect(() => {
     return () => {
@@ -222,13 +238,14 @@ export function MemoryApp() {
 
   const relationships = useMemo(() => {
     if (!selectedId) return [];
-    return edges
-      .filter((edge) => edge.source === selectedId || edge.target === selectedId)
-      .map((edge) => {
-        const otherId = edge.source === selectedId ? edge.target : edge.source;
-        return { ...edge, otherId, other: nodeById.get(otherId), direction: edge.source === selectedId ? "Outgoing" : "Incoming" };
-      });
-  }, [edges, nodeById, selectedId]);
+    const direct = selectedDetails ? [...(selectedDetails.outgoing_edges || []), ...(selectedDetails.incoming_edges || [])].map((edge) => ({
+      id: edge.id, source: edge.source_node_id, target: edge.target_node_id, kind: edge.kind, weight: edge.weight, confidence: edge.confidence, reason: edge.reason, other_title: edge.other_title, other_type: edge.other_type,
+    })) : edges.filter((edge) => edge.source === selectedId || edge.target === selectedId);
+    return direct.map((edge) => {
+      const otherId = edge.source === selectedId ? edge.target : edge.source;
+      return { ...edge, otherId, other: nodeById.get(otherId) || ("other_title" in edge ? { id: otherId, title: String(edge.other_title || otherId), type: String(edge.other_type || "note") } : undefined), direction: edge.source === selectedId ? "Outgoing" : "Incoming" };
+    });
+  }, [edges, nodeById, selectedId, selectedDetails]);
 
   async function remember() {
     setCreatingNode(true);

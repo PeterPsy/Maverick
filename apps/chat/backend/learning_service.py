@@ -203,7 +203,7 @@ def review(db, body, actor):
         return implementations.queue_item(db, item, actor)
     elif command == "undo" and item["kind"] == "memory" and item["status"] == "saved":
         if not details.get("node_created"):
-            raise ValueError("This save attached evidence to an existing node; manage its sources in Memory")
+            raise ValueError("This save updated an existing fact; review its revision history in Memory")
         token = "undo:" + item["id"]
         db.execute("UPDATE learning_items SET status='undoing',operation_id=?,updated_at=? WHERE id=?", (token, now(), item["id"]))
         return {"dependency_backend_requests": [dependency_request(item["id"], "learning.memory_undone", {

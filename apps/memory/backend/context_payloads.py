@@ -156,8 +156,8 @@ def agent_compact_memory_item(item: dict[str, Any], *, options: dict[str, int]) 
         "status": item.get("status") or node.get("status") or "active",
         "importance": item.get("importance") if item.get("importance") is not None else node.get("importance"),
         "confidence": item.get("confidence") if item.get("confidence") is not None else node.get("confidence"),
-        "body_text_char_count": len(body_text),
-        "body_text_truncated": bool(body_text and body_snippet != normalize_spaces(body_text)),
+        "body_text_char_count": item.get("body_text_char_count", len(body_text)),
+        "body_text_truncated": bool(body_text and (body_snippet != normalize_spaces(body_text) or item.get("body_text_char_count", len(body_text)) > len(body_text))),
         "match_sources": string_list(item.get("match_sources")),
         "source_chunk_matches": compact_source_chunk_matches(
             item.get("source_chunk_matches"),
@@ -174,6 +174,9 @@ def agent_compact_memory_item(item: dict[str, Any], *, options: dict[str, int]) 
         "storage_references": compact_storage_references(item.get("storage_references"), limit=options["ref_limit"]),
         "compiled": compact_context_compiled_payload(item.get("compiled"), options=options),
     }
+    metadata = item.get("metadata") or node.get("metadata") or {}
+    compact["knowledge"] = compact_dict({key: metadata.get(key) for key in ("knowledge_type", "confidence_basis", "confirmation", "person_id", "project_id", "valid_from", "valid_until", "replaces_revision", "candidate_id")})
+    compact["conversation_provenance"] = [{key: evidence.get(key) for key in ("session_id", "turn_id", "role")} for evidence in metadata.get("chat_evidence", [])[:3] if isinstance(evidence, dict)]
     if body_snippet:
         compact["body_text"] = body_snippet
     relevance = item.get("relevance")
@@ -192,8 +195,11 @@ def compact_context_compiled_payload(value: Any, *, options: dict[str, int]) -> 
     compact: dict[str, Any] = {
         "wiki_page_id": value.get("wiki_page_id") or "",
         "summary": bounded_text(value.get("summary"), options["compiled_summary_chars"]),
-        "body_markdown_char_count": len(body_markdown),
-        "body_markdown_available": bool(body_markdown),
+        "body_markdown_char_count": value.get("body_markdown_char_count", len(body_markdown)),
+        "body_markdown_available": bool(body_markdown or value.get("body_markdown_char_count")),
+        "verification": value.get("verification", "unverified"),
+        "compilation_state": value.get("compilation_state", "unknown"),
+        "source_state": value.get("source_state", "unknown"),
         "freshness": value.get("freshness") or "unknown",
         "compiled_at": value.get("compiled_at") or "",
         "claims": compact_claims(
@@ -207,6 +213,7 @@ def compact_context_compiled_payload(value: Any, *, options: dict[str, int]) -> 
             value.get("citations"),
             limit=options["citation_limit"],
             quote_chars=options["quote_chars"],
+            include_storage=False,
         ),
         "storage_references": compact_storage_references(value.get("storage_references"), limit=options["ref_limit"]),
         "lint_findings": compact_lint_findings(value.get("lint_findings"), limit=options["lint_limit"]),
@@ -229,10 +236,12 @@ def compact_claims(value: Any, *, limit: int, claim_chars: int, citation_limit: 
                     "claim_text": bounded_text(claim.get("claim_text") or claim.get("summary"), claim_chars),
                     "status": claim.get("status"),
                     "confidence": claim.get("confidence"),
+                    "verification": claim.get("verification", "unverified"),
                     "citations": compact_citations(
                         claim.get("citations"),
                         limit=citation_limit,
                         quote_chars=quote_chars,
+                        include_storage=False,
                     ),
                 }
             )
@@ -240,7 +249,7 @@ def compact_claims(value: Any, *, limit: int, claim_chars: int, citation_limit: 
     return compacted
 
 
-def compact_citations(value: Any, *, limit: int, quote_chars: int) -> list[dict[str, Any]]:
+def compact_citations(value: Any, *, limit: int, quote_chars: int, include_storage: bool = True) -> list[dict[str, Any]]:
     citations = value if isinstance(value, list) else []
     compacted: list[dict[str, Any]] = []
     for citation in citations[:limit]:
@@ -262,7 +271,8 @@ def compact_citations(value: Any, *, limit: int, quote_chars: int) -> list[dict[
                     "quote": bounded_text(citation.get("quote"), quote_chars),
                     "quote_sha256": citation.get("quote_sha256"),
                     "source_version": citation.get("source_version"),
-                    "storage_reference": compact_storage_reference(citation.get("storage_reference")),
+                    "evidence_relation": citation.get("evidence_relation", "unverified"),
+                    "storage_reference": compact_storage_reference(citation.get("storage_reference")) if include_storage else {},
                 }
             )
         )
@@ -291,6 +301,7 @@ def compact_source_chunk_matches(
                     "source_version_id": match.get("source_version_id"),
                     "chunk_id": match.get("chunk_id"),
                     "title": bounded_text(match.get("title"), 180),
+                    "summary": bounded_text(match.get("summary"), 360),
                     "freshness": match.get("freshness"),
                     "hash": match.get("hash"),
                     "locator": compact_locator(match.get("locator"), node_id=""),
@@ -303,7 +314,7 @@ def compact_source_chunk_matches(
                             "extraction_status": source.get("extraction_status"),
                         }
                     ),
-                    "citations": compact_citations(match.get("citations"), limit=citation_limit, quote_chars=quote_chars),
+                    "citations": compact_citations(match.get("citations"), limit=citation_limit, quote_chars=quote_chars, include_storage=False),
                 }
             )
         )

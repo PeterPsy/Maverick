@@ -195,6 +195,12 @@ def claim_job(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     locked_until = (datetime.now(tz=UTC) + timedelta(seconds=lease_seconds)).isoformat()
     lease_token = f"lease_{uuid4().hex}"
     with transaction(data_root, immediate=True) as db:
+        expired = list(db.execute("""SELECT id FROM ingest_jobs WHERE status = 'running'
+            AND locked_until <= ? AND attempt_count >= max_attempts""", (timestamp,)))
+        for job in expired:
+            db.execute("""UPDATE ingest_jobs SET status = 'failed', locked_until = NULL, lease_token = '',
+                last_error = 'Lease expired after final attempt', updated_at = ? WHERE id = ?""", (timestamp, job["id"]))
+            record_event(db, event_type="ingest_job_failed", payload={"job_id": job["id"], "reason": "lease_exhausted"})
         row = next_ready_job(db, job_types=job_types, timestamp=timestamp)
         if row is None:
             return {"job": None}

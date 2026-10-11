@@ -6,8 +6,10 @@ from dataclasses import dataclass
 import math
 import re
 
+from evidence_support import support_relation
 
-TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9'-]*", re.IGNORECASE)
+
+TOKEN_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)*", re.UNICODE)
 SENTENCE_PATTERN = re.compile(r"\S.*?(?:[.!?](?=\s|$)|(?=\n{2,})|$)", re.DOTALL)
 
 STOPWORDS = {
@@ -76,8 +78,10 @@ def exact_quote(claim: str, sentences: list[SentenceSpan]) -> str:
         if not candidate:
             continue
         normalized_candidate = candidate.lower()
+        if support_relation(claim, candidate) != "supports":
+            continue
         if normalized_claim in normalized_candidate:
-            return candidate[:500]
+            return candidate
         if normalized_candidate in normalized_claim:
             candidate_terms = meaningful_terms(candidate)
             shared = claim_terms & candidate_terms
@@ -87,7 +91,7 @@ def exact_quote(claim: str, sentences: list[SentenceSpan]) -> str:
                 len(shared) / len(claim_terms),
                 len(shared) / len(candidate_terms) if candidate_terms else 0,
             ):
-                return candidate[:500]
+                return candidate
     return ""
 
 
@@ -101,14 +105,14 @@ def lexical_quote(claim: str, sentences: list[SentenceSpan]) -> EvidenceMatch | 
             window = sentences[index : index + window_size]
             quote = source_window_quote(window)
             candidate_terms = meaningful_terms(quote)
-            if not candidate_terms:
+            if not candidate_terms or support_relation(claim, quote) != "supports":
                 continue
             shared = claim_terms & candidate_terms
             score = len(shared) / len(claim_terms)
             precision = len(shared) / len(candidate_terms)
             if not passes_evidence_threshold(len(claim_terms), len(shared), score, precision):
                 continue
-            match = EvidenceMatch(quote=quote[:500], score=score, shared_terms=len(shared))
+            match = EvidenceMatch(quote=quote, score=score, shared_terms=len(shared))
             if best is None or (match.score, match.shared_terms, -len(match.quote)) > (
                 best.score,
                 best.shared_terms,
@@ -167,3 +171,25 @@ def passes_evidence_threshold(claim_term_count: int, shared_count: int, score: f
         return shared_count >= min(4, claim_term_count) and score >= 0.8 and precision >= 0.55
     minimum_shared = max(4, math.ceil(claim_term_count * 0.67))
     return shared_count >= minimum_shared and score >= 0.67 and precision >= 0.45
+
+
+def contradiction_quote(claim_text: str, extracted_text: str) -> str:
+    """Return an original conflicting passage, never a supporting citation."""
+    for sentence in sentence_spans(extracted_text):
+        if support_relation(claim_text, sentence.text) == "contradicts":
+            return sentence.text
+    return ""
+
+
+def related_quote(claim_text: str, extracted_text: str) -> str:
+    """Discover a relevant original passage without certifying its meaning."""
+    claim_terms = meaningful_terms(claim_text)
+    best = (0.0, "")
+    for sentence in sentence_spans(extracted_text):
+        if support_relation(claim_text, sentence.text) != "related":
+            continue
+        shared = claim_terms & meaningful_terms(sentence.text)
+        coverage = len(shared) / max(1, len(claim_terms))
+        if len(shared) >= 2 and coverage >= .5 and coverage > best[0]:
+            best = (coverage, sentence.text)
+    return best[1]

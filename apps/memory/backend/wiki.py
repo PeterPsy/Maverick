@@ -7,13 +7,13 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from citation_matching import citation_quote
-from content_store import read_body
 from database import ensure_schema, json_text, new_id, now_timestamp, record_event, row_payload, transaction
 from errors import MemoryValidationError
+from fact_updates import reconcile_ingested_fact
 from lint import refresh_node_lint
-from sources import prepare_source_snapshots, sync_sources
-from wiki_content import claim_texts, compile_input_hash, compiled_markdown
+from sources import prepare_source_snapshots, sync_sources, source_version_body
+from wiki_content import compile_input_hash, compiled_markdown
+from wiki_citations import replace_claims
 from wiki_queries import compiled_payload_for_node
 
 
@@ -37,6 +37,17 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             prepared_snapshots=prepared_snapshots,
         )
         sources = merged_source_candidates(db, node_id=node_id, synced_sources=sources)
+        origin = (row_payload(node) or {}).get("metadata", {})
+        if origin.get("content_mode") == "source_generated" or (origin.get("created_from") == "source_ingest" and origin.get("content_mode") != "curated"):
+            primary = next((source for source in sources if source.get("source_document_id") == origin.get("source_document_id")), sources[0] if len(sources) == 1 else None)
+            if primary and primary.get("source_version_id"):
+                version = row_payload(db.execute("SELECT * FROM source_versions WHERE id = ?", (primary["source_version_id"],)).fetchone()) or {}
+                if version.get("extraction_status") in {"available", "truncated"}:
+                    text = source_version_body(data_root, version)
+                    if text and origin.get("candidate_id") is None:
+                        reconcile_ingested_fact(db, {"title": primary.get("title") or node["title"], "body_markdown": text,
+                            "confidence": node["confidence"], "metadata": version.get("metadata", {})}, node_id, timestamp=timestamp)
+                        node = _active_node(db, node_id)
         input_hash = compile_source_aware_input_hash(
             node,
             refs,
@@ -44,6 +55,12 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             sources=sources,
             data_root=data_root,
         )
+        cached = db.execute("""SELECT cr.* FROM compile_runs cr JOIN wiki_pages wp ON wp.compile_run_id = cr.id
+          WHERE wp.node_id = ? AND wp.status = 'active' AND wp.freshness = 'fresh'
+            AND cr.status = 'completed' AND cr.input_hash = ?""", (node_id, input_hash)).fetchone()
+        if cached is not None:
+            return {"compile_run": row_payload(cached), "reused": True,
+                    **compiled_payload_for_node(db, node_id, data_root=data_root)}
         provenance = compile_source_provenance(db, sources)
         run = _create_compile_run(
             db,
@@ -60,7 +77,9 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             compile_run_id=run["id"],
             timestamp=timestamp,
         )
-        _replace_claims(db, data_root=data_root, page_id=page["id"], node=node, sources=sources, timestamp=timestamp)
+        replace_claims(db, data_root=data_root, page_id=page["id"], node=node, sources=sources, timestamp=timestamp)
+        db.execute("DELETE FROM compiled_fts WHERE node_id = ?", (node_id,))
+        db.execute("INSERT INTO compiled_fts(node_id, title, summary, body_text, claim_text) SELECT wp.node_id, wp.title, wp.summary, wp.body_markdown, COALESCE((SELECT group_concat(claim_text, char(10)) FROM claims WHERE wiki_page_id = wp.id AND status = 'active'), '') FROM wiki_pages wp WHERE wp.node_id = ?", (node_id,))
         _complete_compile_run(db, run_id=run["id"], page_id=page["id"], timestamp=timestamp, provenance=provenance)
         lint_findings = refresh_node_lint(db, node_id, data_root=data_root)
         compile_run = row_payload(db.execute("SELECT * FROM compile_runs WHERE id = ?", (run["id"],)).fetchone()) or {}
@@ -145,7 +164,7 @@ def _complete_compile_run(
             """
             SELECT source_version_id, source_chunk_id
             FROM citations
-            WHERE claim_id IN (SELECT id FROM claims WHERE wiki_page_id = ?)
+            WHERE claim_id IN (SELECT id FROM claims WHERE wiki_page_id = ?) AND evidence_relation = 'supports'
             """,
             (page_id,),
         )
@@ -246,102 +265,6 @@ def _upsert_wiki_page(
     return row_payload(db.execute("SELECT * FROM wiki_pages WHERE node_id = ?", (node["id"],)).fetchone()) or page
 
 
-def _replace_claims(
-    db: sqlite3.Connection,
-    *,
-    data_root: Path,
-    page_id: str,
-    node: sqlite3.Row,
-    sources: list[dict[str, Any]],
-    timestamp: str,
-) -> None:
-    old_claim_ids = [row["id"] for row in db.execute("SELECT id FROM claims WHERE wiki_page_id = ?", (page_id,))]
-    if old_claim_ids:
-        placeholders = ",".join("?" for _item in old_claim_ids)
-        db.execute(f"DELETE FROM citations WHERE claim_id IN ({placeholders})", tuple(old_claim_ids))
-        db.execute(f"DELETE FROM lint_findings WHERE claim_id IN ({placeholders})", tuple(old_claim_ids))
-    db.execute("DELETE FROM claims WHERE wiki_page_id = ?", (page_id,))
-    for claim_text in claim_texts(node):
-        claim = {
-            "id": new_id("claim"),
-            "wiki_page_id": page_id,
-            "node_id": node["id"],
-            "claim_text": claim_text,
-            "confidence": float(node["confidence"] or 0.8),
-            "created_at": timestamp,
-            "updated_at": timestamp,
-            "metadata_json": json_text({"source": "node_content"}),
-        }
-        db.execute(
-            """
-            INSERT INTO claims(id, wiki_page_id, node_id, claim_text, confidence, created_at, updated_at, metadata_json)
-            VALUES (:id, :wiki_page_id, :node_id, :claim_text, :confidence, :created_at, :updated_at, :metadata_json)
-            """,
-            claim,
-        )
-        for source, version, chunk, chunk_body in citation_sources(db, sources, data_root=data_root):
-            quote = citation_quote(claim_text, chunk_body)
-            if not quote:
-                continue
-            char_start, char_end = quote_range(chunk_body, quote)
-            metadata = dict(source.get("metadata") or {})
-            version_metadata = dict(version.get("metadata") or {})
-            metadata["source_version"] = version_metadata.get("source_version") or metadata.get("source_version") or version["version_hash"]
-            db.execute(
-                """
-                INSERT INTO citations(
-                  id, claim_id, source_id, source_version_id, source_chunk_id, external_ref_id,
-                  locator, locator_kind, char_start, char_end, quote_sha256, quote, created_at, metadata_json
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    new_id("cite"),
-                    claim["id"],
-                    source["id"],
-                    version["id"],
-                    chunk["id"],
-                    source.get("external_ref_id"),
-                    citation_locator(source, version, chunk),
-                    chunk.get("locator_kind") or "preview_text",
-                    char_start,
-                    char_end,
-                    sha256(quote.encode("utf-8")).hexdigest(),
-                    quote,
-                    timestamp,
-                    json_text(metadata),
-                ),
-            )
-
-
-def citation_sources(
-    db: sqlite3.Connection,
-    sources: list[dict[str, Any]],
-    *,
-    data_root: Path,
-) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]]:
-    claim_sources: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]] = []
-    for source in sources:
-        version_id = str(source.get("source_version_id") or "")
-        if not version_id:
-            continue
-        version_row = db.execute("SELECT * FROM source_versions WHERE id = ?", (version_id,)).fetchone()
-        version = row_payload(version_row) or {}
-        chunk_rows = db.execute(
-            "SELECT * FROM source_chunks WHERE source_version_id = ? ORDER BY chunk_index",
-            (version_id,),
-        )
-        for chunk_row in chunk_rows:
-            chunk = row_payload(chunk_row) or {}
-            if not chunk:
-                continue
-            chunk_body = read_body(data_root, relative_path=str(chunk.get("body_path") or ""), expected_sha256=str(chunk.get("body_sha256") or ""))
-            if not chunk_body.strip():
-                continue
-            claim_sources.append((source, version, chunk, chunk_body))
-    return claim_sources
-
-
 def merged_source_candidates(
     db: sqlite3.Connection,
     *,
@@ -367,23 +290,16 @@ def merged_source_candidates(
             version = latest_source_version(db, source["id"])
             if version:
                 existing["source_version_id"] = version["id"]
+                existing["source_document_id"] = version.get("source_document_id") or ""
         sources_by_id[source["id"]] = existing
     return list(sources_by_id.values())
 
 
 def latest_source_version(db: sqlite3.Connection, source_id: str) -> dict[str, Any] | None:
-    return row_payload(
-        db.execute(
-            """
-            SELECT *
-            FROM source_versions
-            WHERE source_id = ?
-            ORDER BY observed_at DESC, created_at DESC
-            LIMIT 1
-            """,
-            (source_id,),
-        ).fetchone()
-    )
+    return row_payload(db.execute(
+        "SELECT sv.* FROM source_versions sv JOIN sources s ON s.current_version_id = sv.id WHERE s.id = ?",
+        (source_id,),
+    ).fetchone())
 
 
 def compile_source_provenance(db: sqlite3.Connection, sources: list[dict[str, Any]]) -> dict[str, Any]:
@@ -450,57 +366,4 @@ def compile_source_aware_input_hash(
         )
         for source in sorted(sources, key=lambda item: str(item.get("id") or ""))
     ]
-    return sha256("\n".join([base_hash, *source_parts]).encode("utf-8")).hexdigest()
-
-
-def citation_locator(source: dict[str, Any], version: dict[str, Any], chunk: dict[str, Any] | None = None) -> str:
-    metadata = dict(source.get("metadata") or {})
-    return str(
-        (chunk or {}).get("locator")
-        or metadata.get("display_path")
-        or version.get("extracted_ref")
-        or source.get("workspace_relative_path")
-        or source.get("entity_id")
-        or source.get("uri")
-        or ""
-    )
-
-
-def quote_range(body: str, quote: str) -> tuple[int, int]:
-    if not quote:
-        return (0, 0)
-    start = body.find(quote)
-    if start != -1:
-        return (start, start + len(quote))
-    collapsed_quote = " ".join(quote.split()).strip()
-    if not collapsed_quote:
-        return (0, 0)
-    collapsed_body, original_offsets = collapsed_text_with_offsets(body)
-    collapsed_start = collapsed_body.find(collapsed_quote)
-    if collapsed_start == -1:
-        return (0, 0)
-    collapsed_end = collapsed_start + len(collapsed_quote) - 1
-    return (original_offsets[collapsed_start], original_offsets[collapsed_end] + 1)
-
-
-def collapsed_text_with_offsets(body: str) -> tuple[str, list[int]]:
-    characters: list[str] = []
-    offsets: list[int] = []
-    in_whitespace = False
-    for index, character in enumerate(body):
-        if character.isspace():
-            if not in_whitespace:
-                characters.append(" ")
-                offsets.append(index)
-                in_whitespace = True
-            continue
-        characters.append(character)
-        offsets.append(index)
-        in_whitespace = False
-    if characters and characters[0] == " ":
-        characters.pop(0)
-        offsets.pop(0)
-    if characters and characters[-1] == " ":
-        characters.pop()
-        offsets.pop()
-    return ("".join(characters), offsets)
+    return sha256("\n".join(["support-v4", base_hash, *source_parts]).encode("utf-8")).hexdigest()

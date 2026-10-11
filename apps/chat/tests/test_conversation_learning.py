@@ -269,7 +269,7 @@ class ConversationLearningTests(unittest.TestCase):
         self.assertEqual(self.data()['items'][0]['implementation']['status'], 'running')
         saved = memory_callback(self.root, {**save['callback']['payload'], 'action':'learning.memory_saved',
             'dependency_backend_status':'completed', 'dependency_backend_result':{'status_code':200,
-            'dependency_provider_app_id':'memory-original', 'json':{'node':{'id':'node-1','updated_at':'rev-1'}}}})
+            'dependency_provider_app_id':'memory-original', 'json':{'node':{'id':'node-1','updated_at':'rev-1','body_text':item['body']}}}})
         self.assertEqual(saved, {})
         undo = self.admin('learning.review', item_id=item['id'], command='undo')['dependency_backend_requests'][0]
         self.assertEqual(undo['body']['expected_updated_at'], 'rev-1')

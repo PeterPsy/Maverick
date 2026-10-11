@@ -11,12 +11,14 @@ from content_store import read_body
 from database import connect, ensure_schema, normalize_limit, row_payload
 from errors import MemoryValidationError
 from source_chunk_index import source_chunk_fts_query
+from source_current import current_version_id
+from search_candidates import query_terms
 from storage_reference_payloads import storage_reference_for_citation
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
 
-def source_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any]:
+def source_query(data_root: Path, query: str, *, limit: int = 10, include_history: bool = False, include_excluded: bool = False) -> dict[str, Any]:
     ensure_schema(data_root)
     normalized_limit = normalize_limit(limit, default=10, minimum=1, maximum=50)
     search = source_chunk_fts_query(query)
@@ -50,12 +52,14 @@ def source_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, A
                 JOIN source_versions sv ON sv.id = sc.source_version_id
                 JOIN sources s ON s.id = sv.source_id
                 LEFT JOIN source_documents sd ON sd.id = sv.source_document_id
-                WHERE sc.body_path != ''
+                WHERE sc.body_path != '' AND (? OR s.status = 'active')
+                  AND (? OR s.current_version_id = sv.id)
+                  AND (? OR EXISTS (SELECT 1 FROM node_source_links nl JOIN nodes n ON n.id = nl.node_id WHERE nl.source_id = s.id AND n.status = 'active'))
                   AND source_chunk_fts MATCH ?
                 ORDER BY rank, sv.observed_at DESC, sc.chunk_index
                 LIMIT ?
                 """,
-                (search, normalized_limit * 8),
+                (include_excluded, include_history, include_excluded, search, normalized_limit * 8),
             )
         )
         results = []
@@ -155,111 +159,6 @@ def fetch_chunks(data_root: Path, chunk_ids: object, *, limit: int = 20) -> dict
     return {"chunks": chunks}
 
 
-def inspect_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    ensure_schema(data_root)
-    with connect(data_root) as db:
-        document = _resolve_source_document(db, body)
-        if document is None:
-            raise MemoryValidationError("source not found.")
-        raw_versions = [
-            row_payload(row) or {}
-            for row in db.execute(
-                """
-                SELECT sv.*
-                FROM source_versions sv
-                WHERE sv.source_document_id = ?
-                ORDER BY sv.observed_at DESC
-                """,
-                (document["id"],),
-            )
-        ]
-        version_ids = [version["id"] for version in raw_versions]
-        latest_version_id = version_ids[0] if version_ids else ""
-        raw_chunks = _chunks_for_versions(db, version_ids)
-        versions = [_normalized_source_version(version, latest_version_id=latest_version_id) for version in raw_versions]
-        chunks = [_normalized_source_chunk(db, chunk) for chunk in raw_chunks]
-        linked_nodes = [
-            row_payload(row) or {}
-            for row in db.execute(
-                """
-                SELECT DISTINCT n.id, n.title, n.type, n.summary, n.updated_at
-                FROM node_source_links nsl
-                JOIN sources s ON s.id = nsl.source_id
-                JOIN source_versions sv ON sv.source_id = s.id
-                JOIN nodes n ON n.id = nsl.node_id
-                WHERE sv.source_document_id = ? AND n.status = 'active'
-                ORDER BY n.updated_at DESC
-                """,
-                (document["id"],),
-            )
-        ]
-        jobs = _jobs_for_source_document(db, document_id=str(document["id"]), version_ids=version_ids)
-        freshness = _source_freshness_summary(document, versions, chunks)
-    return {
-        "source_document": _normalized_source_document(document, freshness=freshness),
-        "freshness": freshness,
-        "versions": versions,
-        "chunks": chunks,
-        "linked_nodes": linked_nodes,
-        "ingest_jobs": jobs,
-    }
-
-
-def _resolve_source_document(db: sqlite3.Connection, body: dict[str, Any]) -> dict[str, Any] | None:
-    for field in ("source_document_id", "id"):
-        value = str(body.get(field) or "").strip()
-        if value:
-            row = db.execute("SELECT * FROM source_documents WHERE id = ?", (value,)).fetchone()
-            if row is not None:
-                return row_payload(row)
-    source_key = str(body.get("source_key") or "").strip()
-    if source_key:
-        row = db.execute("SELECT * FROM source_documents WHERE source_key = ?", (source_key,)).fetchone()
-        if row is not None:
-            return row_payload(row)
-    source_id = str(body.get("source_id") or "").strip()
-    if source_id:
-        row = db.execute(
-            """
-            SELECT sd.*
-            FROM source_documents sd
-            JOIN source_versions sv ON sv.source_document_id = sd.id
-            WHERE sv.source_id = ?
-            ORDER BY sv.observed_at DESC
-            LIMIT 1
-            """,
-            (source_id,),
-        ).fetchone()
-        if row is not None:
-            return row_payload(row)
-    for field in ("file_id", "entity_id"):
-        value = str(body.get(field) or "").strip()
-        if value:
-            row = db.execute(f"SELECT * FROM source_documents WHERE {field} = ? ORDER BY updated_at DESC LIMIT 1", (value,)).fetchone()
-            if row is not None:
-                return row_payload(row)
-    return None
-
-
-def _chunks_for_versions(db: sqlite3.Connection, version_ids: list[str]) -> list[dict[str, Any]]:
-    if not version_ids:
-        return []
-    placeholders = ",".join("?" for _item in version_ids)
-    return [
-        row_payload(row) or {}
-        for row in db.execute(
-            f"""
-            SELECT sc.*, sv.source_id, sv.source_document_id
-            FROM source_chunks sc
-            JOIN source_versions sv ON sv.id = sc.source_version_id
-            WHERE source_version_id IN ({placeholders})
-            ORDER BY source_version_id, chunk_index
-            """,
-            tuple(version_ids),
-        )
-    ]
-
-
 def _read_chunk_body(data_root: Path, chunk: dict[str, Any]) -> str:
     return read_body(
         data_root,
@@ -270,7 +169,7 @@ def _read_chunk_body(data_root: Path, chunk: dict[str, Any]) -> str:
 
 def citations_for_chunk(db: sqlite3.Connection, chunk_id: str) -> list[dict[str, Any]]:
     citations = []
-    for row in db.execute("SELECT * FROM citations WHERE source_chunk_id = ? ORDER BY created_at", (chunk_id,)):
+    for row in db.execute("SELECT ct.* FROM citations ct JOIN claims cl ON cl.id = ct.claim_id JOIN nodes n ON n.id = cl.node_id WHERE source_chunk_id = ? AND ct.evidence_relation = 'supports' AND n.status = 'active' AND cl.stale = 0 ORDER BY ct.created_at", (chunk_id,)):
         citation = row_payload(row) or {}
         metadata = citation.get("metadata") if isinstance(citation.get("metadata"), dict) else {}
         citation["source_version"] = str(metadata.get("source_version") or "")
@@ -284,22 +183,10 @@ def citations_for_chunk(db: sqlite3.Connection, chunk_id: str) -> list[dict[str,
 def chunk_freshness(db: sqlite3.Connection, chunk: dict[str, Any]) -> str:
     if chunk_marked_stale(chunk):
         return "stale"
-    latest = db.execute(
-        """
-        SELECT id
-        FROM source_versions
-        WHERE COALESCE(NULLIF(source_document_id, ''), source_id) = COALESCE(NULLIF(?, ''), ?)
-        ORDER BY observed_at DESC, created_at DESC
-        LIMIT 1
-        """,
-        (
-            str(chunk.get("source_document_id") or ""),
-            str(chunk.get("source_id") or ""),
-        ),
-    ).fetchone()
-    if latest is None:
+    current = current_version_id(db, str(chunk.get("source_id") or ""))
+    if not current:
         return "unknown"
-    return "fresh" if str(latest["id"] or "") == str(chunk.get("source_version_id") or "") else "stale"
+    return "fresh" if current == str(chunk.get("source_version_id") or "") else "stale"
 
 
 def chunk_matches_query(payload: dict[str, Any], chunk_body: str, query: str) -> bool:
@@ -317,7 +204,7 @@ def chunk_matches_query(payload: dict[str, Any], chunk_body: str, query: str) ->
     haystack = " ".join(value for value in haystacks if value).casefold()
     if normalized in haystack:
         return True
-    tokens = [token.casefold() for token in TOKEN_PATTERN.findall(query)[:12]]
+    tokens = query_terms(query)
     return bool(tokens) and all(token in haystack for token in tokens)
 
 
@@ -356,168 +243,6 @@ def _source_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "hash_kind": payload.get("hash_kind") or "",
         "extraction_status": payload.get("extraction_status") or "",
     }
-
-
-def _normalized_source_document(document: dict[str, Any], *, freshness: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "kind": "source_document",
-        "id": document.get("id") or "",
-        "source_document_id": document.get("id") or "",
-        "source_key": document.get("source_key") or "",
-        "adapter_id": document.get("adapter_id") or "",
-        "source_kind": document.get("source_kind") or "",
-        "owning_app_id": document.get("owning_app_id") or "",
-        "entity_type": document.get("entity_type") or "",
-        "entity_id": document.get("entity_id") or "",
-        "file_id": document.get("file_id") or "",
-        "workspace_relative_path": document.get("workspace_relative_path") or "",
-        "uri": document.get("uri") or "",
-        "title": document.get("title") or document.get("source_key") or "",
-        "status": document.get("status") or "active",
-        "freshness": freshness,
-        "created_at": document.get("created_at") or "",
-        "updated_at": document.get("updated_at") or "",
-        "metadata": document.get("metadata") if isinstance(document.get("metadata"), dict) else {},
-    }
-
-
-def _normalized_source_version(version: dict[str, Any], *, latest_version_id: str) -> dict[str, Any]:
-    freshness = "stale" if chunk_marked_stale(version) else "fresh" if str(version.get("id") or "") == latest_version_id else "stale"
-    return {
-        "kind": "source_version",
-        "id": version.get("id") or "",
-        "source_version_id": version.get("id") or "",
-        "source_id": version.get("source_id") or "",
-        "source_document_id": version.get("source_document_id") or "",
-        "version_hash": version.get("version_hash") or "",
-        "hash_kind": version.get("hash_kind") or "",
-        "extraction_status": version.get("extraction_status") or "",
-        "freshness": freshness,
-        "is_latest": str(version.get("id") or "") == latest_version_id,
-        "body": {
-            "path": version.get("body_path") or "",
-            "sha256": version.get("body_sha256") or "",
-            "bytes": version.get("body_bytes") or 0,
-        },
-        "extracted_ref": version.get("extracted_ref") or "",
-        "content_type": version.get("content_type") or "",
-        "source_modified_at": version.get("source_modified_at") or "",
-        "observed_at": version.get("observed_at") or "",
-        "created_at": version.get("created_at") or "",
-        "metadata": version.get("metadata") if isinstance(version.get("metadata"), dict) else {},
-    }
-
-
-def _normalized_source_chunk(db: sqlite3.Connection, chunk: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "kind": "source_chunk",
-        "id": chunk.get("id") or "",
-        "chunk_id": chunk.get("id") or "",
-        "source_version_id": chunk.get("source_version_id") or "",
-        "chunk_index": chunk.get("chunk_index") or 0,
-        "freshness": chunk_freshness(db, chunk),
-        "hash": chunk.get("body_sha256") or "",
-        "body": {
-            "path": chunk.get("body_path") or "",
-            "sha256": chunk.get("body_sha256") or "",
-        },
-        "locator": {
-            "kind": chunk.get("locator_kind") or "",
-            "value": chunk.get("locator") or "",
-            "char_start": chunk.get("char_start"),
-            "char_end": chunk.get("char_end"),
-        },
-        "citations": citations_for_chunk(db, str(chunk.get("id") or "")),
-        "created_at": chunk.get("created_at") or "",
-        "metadata": chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {},
-    }
-
-
-def _jobs_for_source_document(db: sqlite3.Connection, *, document_id: str, version_ids: list[str]) -> list[dict[str, Any]]:
-    where = ["source_document_id = ?"]
-    values: list[Any] = [document_id]
-    if version_ids:
-        placeholders = ",".join("?" for _item in version_ids)
-        where.append(f"source_version_id IN ({placeholders})")
-        values.extend(version_ids)
-    rows = db.execute(
-        f"""
-        SELECT *
-        FROM ingest_jobs
-        WHERE {" OR ".join(where)}
-        ORDER BY updated_at DESC
-        LIMIT 20
-        """,
-        tuple(values),
-    )
-    return [_normalized_ingest_job(row_payload(row) or {}) for row in rows]
-
-
-def _normalized_ingest_job(job: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "kind": "ingest_job",
-        "id": job.get("id") or "",
-        "job_id": job.get("id") or "",
-        "job_type": job.get("job_type") or "",
-        "dedupe_key": job.get("dedupe_key") or "",
-        "status": job.get("status") or "",
-        "attempt_count": job.get("attempt_count") or 0,
-        "max_attempts": job.get("max_attempts") or 0,
-        "available_at": job.get("available_at") or "",
-        "locked_until": job.get("locked_until") or "",
-        "last_error": job.get("last_error") or "",
-        "node_id": job.get("node_id") or "",
-        "source_document_id": job.get("source_document_id") or "",
-        "source_version_id": job.get("source_version_id") or "",
-        "payload": job.get("payload") if isinstance(job.get("payload"), dict) else {},
-        "created_at": job.get("created_at") or "",
-        "updated_at": job.get("updated_at") or "",
-    }
-
-
-def _source_freshness_summary(
-    document: dict[str, Any],
-    versions: list[dict[str, Any]],
-    chunks: list[dict[str, Any]],
-) -> dict[str, Any]:
-    stale_reasons = sorted(
-        {
-            reason
-            for payload in [document, *versions, *chunks]
-            for reason in [_stale_reason(payload)]
-            if reason
-        }
-    )
-    stale_version_count = sum(1 for version in versions if version.get("freshness") == "stale")
-    stale_chunk_count = sum(1 for chunk in chunks if chunk.get("freshness") == "stale")
-    latest_source_version_id = versions[0]["id"] if versions else ""
-    current_version_stale = bool(versions and versions[0].get("freshness") == "stale" and _metadata_marks_stale(versions[0]))
-    current_chunk_stale = any(
-        chunk.get("source_version_id") == latest_source_version_id and chunk.get("freshness") == "stale"
-        for chunk in chunks
-    )
-    state = "stale" if _metadata_marks_stale(document) or current_version_stale or current_chunk_stale else "fresh"
-    return {
-        "state": state,
-        "latest_source_version_id": latest_source_version_id,
-        "version_count": len(versions),
-        "chunk_count": len(chunks),
-        "stale_version_count": stale_version_count,
-        "stale_chunk_count": stale_chunk_count,
-        "reasons": stale_reasons,
-    }
-
-
-def _metadata_marks_stale(payload: dict[str, Any]) -> bool:
-    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-    staleness = metadata.get("staleness") if isinstance(metadata.get("staleness"), dict) else {}
-    return bool(metadata.get("stale") or staleness.get("state") == "stale")
-
-
-def _stale_reason(payload: dict[str, Any]) -> str:
-    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-    staleness = metadata.get("staleness") if isinstance(metadata.get("staleness"), dict) else {}
-    return str(metadata.get("stale_reason") or staleness.get("reason") or "").strip()
 
 
 def _normalized_chunk_ids(chunk_ids: object) -> list[str]:

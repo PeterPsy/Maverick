@@ -29,6 +29,8 @@ export type GraphNode = {
 };
 
 export type GraphEdge = {
+  other_title?: string;
+  other_type?: string;
   id?: string;
   source: string;
   target: string;
@@ -51,6 +53,8 @@ export type ExternalRef = {
 };
 
 export type DetailedEdge = {
+  other_title?: string;
+  other_type?: string;
   id: string;
   source_node_id: string;
   target_node_id: string;
@@ -65,6 +69,9 @@ export type MemoryCitation = {
   claim_id: string;
   source_id?: string;
   source_version_id?: string;
+  source_chunk_id?: string;
+  evidence_relation?: string;
+  storage_reference?: { deep_link?: string };
   external_ref_id?: string;
   locator?: string;
   quote?: string;
@@ -79,6 +86,9 @@ export type MemoryClaim = {
   confidence?: number;
   stale?: number;
   citations?: MemoryCitation[];
+  contradictions?: MemoryCitation[];
+  related_evidence?: MemoryCitation[];
+  verification?: string;
 };
 
 export type CompiledPage = {
@@ -89,6 +99,9 @@ export type CompiledPage = {
   body_markdown?: string;
   freshness?: string;
   compiled_at?: string;
+  verification?: string;
+  compilation_state?: string;
+  source_state?: string;
 };
 
 export type MemorySource = {
@@ -123,6 +136,8 @@ export type NodeDetails = GraphNode & {
   citations?: MemoryCitation[];
   sources?: MemorySource[];
   lint_findings?: LintFinding[];
+  revisions?: Array<{ id: string; revision: string; reason: string; snapshot: { title?: string; body_text?: string } }>;
+  duplicate_candidates?: Array<{ id: string; title: string; updated_at?: string }>;
 };
 
 export type NodeDraft = {

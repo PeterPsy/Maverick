@@ -33,7 +33,14 @@ Chat persists settings, bounded evidence, durable jobs, candidates, proposals,
 review decisions and audit records under `data/chat/learning.sqlite`. Memory
 continues to own graph nodes, immutable sources, citations and compilation.
 Approved facts enter through idempotent source ingestion with stable source
-keys. Ambiguous facts and conflicts require review; automatic mode applies only
+keys. Chat supplies `fact_body` separately from original conversation evidence,
+uses `update_fact` for a new fact and `replace_fact` for an approved existing node,
+and forwards the reviewed match revision when available. Knowledge type, user
+confirmation, conversation/turn provenance and a unique conversation project
+remain in Memory metadata and compact context. The save callback verifies the
+persisted body, selected node and returned revision before marking the item saved;
+a mismatch returns to review with a visible error. Evidence attachment alone is
+not a successful fact replacement. Ambiguous facts and conflicts require review; automatic mode applies only
 to explicit, strongly supported user statements with no existing-memory match.
 Improvement analysis only produces proposals. Accepting a proposal authorizes a normal Chat agent to implement that reviewed ticket.
 

@@ -244,7 +244,9 @@ fast suite has failures outside this change in other app, model-fixture and
 repository-policy checks, so the full suite is not reported as green.
 
 Physical Mac and desktop/mobile Settings acceptance were deferred by the user
-until PC use is reactivated. No native binary/protocol change is required.
+until PC use is reactivated. The runtime changes themselves did not require a
+native protocol change; the later physical acceptance uncovered the native
+cross-desktop capture defect described below.
 The official backend restart was attempted after tests but returned
 `authentication_required`: this runtime CLI credential expired at 09:16:18 UTC.
 A subsequent authenticated official restart attempt reached the backend but
@@ -258,6 +260,48 @@ verification is complete; saved-setting and native UI acceptance remain
 pending PC use reactivation.
 
 Raw temporary measurement SHA-256: `cb5f9f8fd7b25431d1ea1734e49a899109371a5d74fed217e6f83dc3308ec52f`.
+
+## Physical acceptance on 2026-10-11
+
+The user reactivated PC use with Maverick Mac maximized and Calculator open on
+another desktop, then required access to background windows across desktops.
+The saved selection was Luna Low with no recovery model. Initial Calculator
+observations failed before input (`MC-TOOL-30` / `MC-PEEKABOO-27`), so those
+attempts cannot establish model execution reliability or speed. Settings
+navigation also exposed a detailed Accessibility tree depth limit: controls
+inside the embedded Settings view were missing from the operator metadata.
+One theme task was interrupted by user steering; a separate verified task
+restored the original Dark mode. These exploratory tasks are not a matched
+native model benchmark.
+
+The native 0.3.2 (63) inventory incorrectly described Calculator as on-screen.
+Read-only CoreGraphics inspection established that the exact same live window
+was present in the all-window list but absent from the active-desktop list.
+The bridge required the on-screen flag both for pointer-route validation and
+ScreenCaptureKit discovery, preventing an exact observation on another Space.
+A read-only capture using ScreenCaptureKit's desktop-independent-window filter
+returned the real Calculator pixels without activation or a desktop transition.
+
+Native changes are maintained in `giuntiocram/maverick-glasses-ios`, branch
+`maverick-integration`: `c0870a6` adds all-desktop discovery, exact independent
+window capture, truthful active-desktop metadata and deeper detailed AX reads;
+`c29542b` separates raw-buffer and delivered-JPEG OCR acceptance; `d490045`
+updates the signed test reporter for the additional acceptance case. Window
+ownership, process birth, geometry checks and fresh observation receipts remain
+required before input. Pixel-only observations still authorize pointer input
+through an exact captured window, not arbitrary global keyboard input.
+
+The managed runner passed 271 Swift tests. The first signed run found an OCR
+assertion that recognized a small glyph in the raw image but missed it in the
+delivered lossy JPEG. The second signed run completed 17 cases with zero
+failures, then withheld installation because the reporter still expected 16
+cases. Managed run `38133327987` at `d490045` passed all gates and installed and
+launched 0.3.3 (64) at 10:51 UTC. Its signed evidence lists all 17 completed
+cases, including the requested cross-desktop acceptance, with zero failures.
+The update disconnected the chat's native session; the next exact-window
+inventory returned `device_use_session_not_connected`. Physical cross-desktop
+input, foreground switching, general multi-window acceptance and the matched native model
+comparison remain pending; read-only capture alone does not satisfy them.
 
 Implementation verification on 2026-10-08 includes 165 focused passing tests for
 provider routing, private JSON-RPC, native lease/turn authority, steering, MCP,

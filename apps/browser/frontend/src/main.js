@@ -1,5 +1,5 @@
 import "./style.css";
-import {request} from "./api.js";
+import {request, bridge} from "./api.js";
 import {createConnector} from "./connector.js";
 import {createRefreshLoop, isActiveConnection, isPending, overviewDelay} from "./refresh-loop.js";
 import {mountShell} from "./shell-view.js";
@@ -106,7 +106,21 @@ $("#copy").onclick = async () => {
   try { await navigator.clipboard.writeText(connectorUrl.href); $("#status").textContent = "Connector address copied."; }
   catch { $("#url").focus(); $("#url").select(); $("#status").textContent = "Select and copy the connector address."; }
 };
+let connectionState = "stopped", checking, checkAgain = false;
+function checkSelectedTab(retry = false) {
+  if (["connecting", "connected"].includes(connectionState)) return;
+  if (checking) { checkAgain ||= retry; return checking; }
+  $("#connect").disabled = true;
+  checking = bridge("status", undefined, 2500).then(shared => {
+    $("#connect").disabled = false;
+    $("#error").hidden = true;
+    $("#status").textContent = `Selected tab: ${shared.title || shared.url}. Ready to connect.`;
+  }).catch(error => { $("#status").textContent = error.message; })
+    .finally(() => { checking = null; if (checkAgain) { checkAgain = false; void checkSelectedTab(); } });
+  return checking;
+}
 const connector = createConnector((text, state) => {
+  if (state) connectionState = state;
   $("#status").textContent = text;
   if (state === "connected" || state === "stopped") {
     $("#stop").hidden = state !== "connected";
@@ -119,16 +133,23 @@ $("#connect").onclick = () => run($("#connect"), {run: async () => {
   await connector.start(); $("#connect").hidden = true; $("#stop").hidden = false; await loop.refresh();
 }});
 $("#stop").onclick = () => run($("#stop"), {run: async () => { await connector.stop(); await loop.refresh(); }});
+function openConnectorSetup(retry = false) {
+  connectorMode = true; $("#setup").open = true; $("#connector-actions").hidden = false;
+  $("#setup summary strong").textContent = "Connect your selected tab";
+  void checkSelectedTab(retry);
+}
 window.addEventListener("message", event => {
+  if (event.source === window && event.origin === location.origin && event.data?.type === "maverick.browser.ready") {
+    openConnectorSetup(true); return;
+  }
   if (event.source !== window.parent || event.origin !== platformOrigin) return;
   const message = event.data;
   if (message?.type === "maverick.app.navigate" && message.app_id === "browser" && ["1", true].includes(message.params?.connector)) {
-    connectorMode = true; $("#setup").open = true; $("#connector-actions").hidden = false;
-    $("#setup summary strong").textContent = "Connect your selected tab";
-    $("#status").textContent = "Ready to connect the tab selected in the extension.";
+    openConnectorSetup();
   }
   if (message?.type === "maverick.app.data-changed" && message.owner_app_id === "browser" && ["companion", "state"].includes(message.resource)) void loop.refresh();
 });
+if (connectorMode) void checkSelectedTab();
 window.addEventListener("pagehide", event => { if (event.persisted) loop.pause(); else loop.stop(); });
 window.addEventListener("pageshow", event => { if (event.persisted) void loop.refresh(); });
 void loop.refresh();

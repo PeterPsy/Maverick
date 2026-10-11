@@ -94,7 +94,10 @@ export function createConnector(report) {
         }
         lease=result;stopped=false;failures=0;void tick();
         return lease.connection;
-      })().finally(()=>{starting=null;});
+      })().catch(error=>{
+        if(attempt===generation)report(error.message,"stopped");
+        throw error;
+      }).finally(()=>{starting=null;});
       return starting;
     },stop:revoke,
   };

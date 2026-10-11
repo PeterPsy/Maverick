@@ -8,18 +8,27 @@ proxy, hosted-browser or remote transcription service is used.
 
 ## Connect a platform tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.4.2,
 then load its folder with Chrome's “Load unpacked” developer-mode action. Copy
-the connector address displayed by Browser. Use Chrome 120 or later. Open a supported platform page in Chrome, log in directly if needed, and use the extension popup to share
-that tab. Paste the connector address there. In the dedicated Browser window
-opened by the extension, press “Connect” and keep the window open during work.
-Sign in to Maverick in that Chrome window if prompted, and select the workspace
-you want to connect. The stable `/app/browser?connector=1` shell address creates
+the connector address displayed by Browser. Use Chrome 120 or later. Open a
+supported platform page in Chrome, log in directly if needed, and click the
+extension toolbar icon on that tab. Its popup shows the selected page;
+Chrome internal pages, Maverick and
+unsupported routes cannot be shared. Paste the connector address and choose
+“Share this tab”. In the dedicated Browser window opened by the extension,
+sign in to Maverick if prompted and select the workspace you want to connect.
+When the selected tab appears, press “Connect” and keep that window open during
+work. The stable `/app/browser?connector=1` shell address creates
 a fresh authenticated isolated Browser frame in Chrome; it works even when the
 original Maverick app uses another browser profile or the desktop application.
 The hashed Companion ZIP is a public, immutable build asset under
 `/apps/browser/assets/` and requires no Maverick cookie. Private iframe URLs
 are never copied as connector addresses.
+Installing the extension or opening the connector address manually does not
+share a tab. Connect is enabled only after this exact window receives the
+selected platform tab from Companion. If setup fails, the status explains how
+to retry instead of remaining on “Connecting…”. After an extension update,
+replace the extracted files and reload it in `chrome://extensions`.
 
 Sharing is explicit and limited to one tab. Passwords, cookies, browser history,
 forms, social writes and caller JavaScript are outside the tool surface. The

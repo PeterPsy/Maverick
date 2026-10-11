@@ -13,7 +13,7 @@
     "prebroker:local": "node ../../scripts/check-node-runtime.mjs",
     "broker:local": "node broker/playwright-server-local.mjs",
     "build": "node companion/build.mjs && vite build",
-    "test:companion": "node tests/companion.e2e.mjs",
+    "test:companion": "node tests/popup.e2e.mjs && node tests/companion.e2e.mjs",
     "test:ui": "node tests/ui.e2e.mjs && node tests/platform-ui.e2e.mjs"
   },
   "dependencies": {

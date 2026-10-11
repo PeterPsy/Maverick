@@ -11,12 +11,15 @@ import sys
 from tempfile import TemporaryDirectory
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[3]
 APP = ROOT / "apps/browser"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(APP / "backend"))
 from service import handle_action
+from core.api.app_frame_browser import _inject_message_relay
+from core.api.app_frame_launch import content_security_policy
 
 TEMPORARY = TemporaryDirectory()
 WORKSPACE = Path(TEMPORARY.name)
@@ -134,7 +137,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 ticket = uuid4().hex; TICKETS.add(ticket)
                 bootstrap = f'<form method="post" action="{frame_origin}/__test/bootstrap"><input type="hidden" name="ticket" value="{ticket}"></form><script>document.querySelector("form").submit()</script>'
-                body = f'<iframe id="browser" title="Browser" srcdoc="{html.escape(bootstrap, quote=True)}" style="border:0;width:100%;height:100vh"></iframe><script>document.querySelector("iframe").addEventListener("load",()=>document.querySelector("iframe").contentWindow.postMessage({{type:"maverick.app.navigate",app_id:"browser",params:{{connector:"1"}}}},"{frame_origin}"));</script>'
+                body = f'<iframe id="browser" title="Browser" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" srcdoc="{html.escape(bootstrap, quote=True)}" style="border:0;width:100%;height:100vh"></iframe><script>document.querySelector("iframe").addEventListener("load",()=>document.querySelector("iframe").contentWindow.postMessage({{type:"maverick.app.navigate",app_id:"browser",params:{{connector:"1"}}}},"{frame_origin}"));</script>'
             content = f'<!doctype html><html><head><title>Maverick fixture</title></head><body style="margin:0">{body}</body></html>'.encode()
             self.send_response(200); self.send_header("Content-Type", "text/html"); self.send_header("Content-Length", str(len(content)))
             self.end_headers(); self.wfile.write(content); return
@@ -166,9 +169,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404); return
         content = path.read_bytes()
         if path.suffix == ".html":
-            content = content.decode().replace('<head>', f'<head><script>window.__MAVERICK_PLATFORM_ORIGIN__={json.dumps(origin)};window.__MAVERICK_APP_FRAME_CONTEXT__={{app_id:"browser"}}</script>').replace('"/apps/browser/assets/', f'"{origin}/apps/browser/assets/').encode()
+            # Use the platform's actual immutable app identity and message relay.
+            content = _inject_message_relay(content, SimpleNamespace(platform_origin=origin,
+                parent_origin=origin, mount_app_id="browser", app_id="browser", workspace_id="fixture", widget_id=None))
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", frame_origin)
+        if isolated and path.suffix == ".html":
+            self.send_header("Content-Security-Policy", content_security_policy(origin))
         self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "application/octet-stream")
         self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
 

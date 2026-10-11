@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "ef02a8f7e3435d156849a5d10bc2ee4f7a07bab9fce0dd0341e3a779aeb948c6",
+  "build_id": "52d1a3c0177043af6bfc8634546b0747afedf022f88c136616a5d5539d33257d",
   "entrypoints": [
     "companion/offscreen.html",
     "companion/popup.html",
@@ -13,14 +13,14 @@
       "size_bytes": 8614
     },
     {
-      "path": "assets/index-Bl4SUHf_.js",
-      "sha256": "c9a5fa0bf4abd18286320435ff94c1ae2d63e7806440c316c79f9e0ff62b6ffe",
-      "size_bytes": 27145
+      "path": "assets/index-D9cFEIA5.js",
+      "sha256": "ebaf8533815b061a27ae4bb4a1ddaa2b3dd89c88e9b18aa80b55321ddc8fb43b",
+      "size_bytes": 28493
     },
     {
-      "path": "assets/maverick-browser-companion-CnI7M5mi.zip",
-      "sha256": "75fc70bcffbde1688b71cc7ae8fd370276d0174ff45a98c163b37509137ff909",
-      "size_bytes": 21243
+      "path": "assets/maverick-browser-companion-BEfcZVZY.zip",
+      "sha256": "03256d7268c20adafb5461bfc55b8dcc91d758cf5ba798769b139f7a927f2ef8",
+      "size_bytes": 22461
     }
   ],
   "revalidated": [
@@ -31,8 +31,8 @@
     },
     {
       "path": "companion/content.js",
-      "sha256": "5d455da272a0a77e7964b01353598074e7d9b7c5d4576bfb4cf29f8cd3ae86f6",
-      "size_bytes": 1168
+      "sha256": "9275b2d5d04d365d1e079193e3029908b31caf9952f4f5753a3a73f9d0ac9235",
+      "size_bytes": 1240
     },
     {
       "path": "companion/dom-actions.mjs",
@@ -41,7 +41,7 @@
     },
     {
       "path": "companion/manifest.json",
-      "sha256": "a76e07771bba57edad985dc934a304f58b6e73062ace059f235339866aa41a35",
+      "sha256": "4979e94f5357aedc5730225b967814e51c4f9258ace3813d833d4801dc2bc32a",
       "size_bytes": 554
     },
     {
@@ -66,18 +66,18 @@
     },
     {
       "path": "companion/popup.css",
-      "sha256": "0e8daf1bb59fe9607ffd6395a31d1f7cd45c1542a5b0b0f1a6ff00f53f1cd3bd",
-      "size_bytes": 566
+      "sha256": "85b56c8375332c3c02e13e14d738b1f5215e0572515975b89816888410f7af45",
+      "size_bytes": 813
     },
     {
       "path": "companion/popup.html",
-      "sha256": "9c5d10997c987e526d53ee5b622d77b5fd9872399542255c2cca3aa8925cb19e",
-      "size_bytes": 858
+      "sha256": "86900f4eb4eb0b67e91238248d4fbffa79c4f0d2cab321b2e70a5649d514c0b0",
+      "size_bytes": 957
     },
     {
       "path": "companion/popup.mjs",
-      "sha256": "a378bc22c582dfeb22d250486eb7ce32290b1c0b96f42cabf19c3f3351393acf",
-      "size_bytes": 1492
+      "sha256": "28d3e67f73b5c39b9133cb9acffa39b32aab7dffaffddb3528bcceff35dddf97",
+      "size_bytes": 2255
     },
     {
       "path": "companion/reader.js",
@@ -88,6 +88,11 @@
       "path": "companion/scope.mjs",
       "sha256": "462f1dd499b550c5e6c81785b7dadc528a393008edf26f84a8b3e338aca0ef16",
       "size_bytes": 7327
+    },
+    {
+      "path": "companion/setup.mjs",
+      "sha256": "ace00874a4dafc9542b7f48d474aeb11744ed4e24a80ee7af077cd7197c33ed1",
+      "size_bytes": 1425
     },
     {
       "path": "companion/shell-bridge.js",
@@ -111,7 +116,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "8fcb29c8d24d1f170abe958b99f500c3c00baaa14774e4bf1c6b1cda6ad08d79",
+      "sha256": "d4d341c413ede7c29103a2513128eb424729ee9c3c6668766384d39660b6160f",
       "size_bytes": 901
     }
   ]

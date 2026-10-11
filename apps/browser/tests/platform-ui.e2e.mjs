@@ -64,6 +64,20 @@ try {
   await send({type: "maverick.app.navigate", app_id: "browser", params: {connector: "1"}});
   await frame.waitForFunction(() => !document.querySelector("#connector-actions").hidden);
   assert.equal(await frame.locator("#setup").getAttribute("open"), "");
+  assert.equal(await frame.locator("#connect").isDisabled(), true, "Manually opening a connector URL must not claim a shared tab");
+  await page.clock.runFor(2600);
+  await frame.waitForFunction(() => document.querySelector("#status").textContent.includes("No shared tab is attached"));
+  // A late extension attachment retries the check even if the initial probe failed.
+  await frame.evaluate(() => {
+    window.addEventListener("message",event=>{
+      if(event.source === window && event.data?.type === "maverick.browser.request" && event.data.action === "status")
+        window.postMessage({type:"maverick.browser.response",id:event.data.id,result:{status:"shared",title:"Selected fixture profile",url:"https://www.instagram.com/fixture/"}},location.origin);
+    });
+    window.postMessage({type:"maverick.browser.ready"},location.origin);
+  });
+  await page.clock.runFor(1);
+  await frame.waitForFunction(() => !document.querySelector("#connect").disabled);
+  assert.match(await frame.locator("#status").textContent(), /Selected fixture profile/u);
   await send({type: "maverick.shell.theme-changed", theme: {effective: "dark", color_scheme: "dark", mode: "dark"}});
   await frame.waitForFunction(() => document.documentElement.dataset.maverickTheme === "dark");
   await frame.evaluate(() => window.postMessage({type: "maverick.shell.theme-changed", theme: {effective: "light"}}, location.origin));

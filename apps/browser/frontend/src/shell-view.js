@@ -25,14 +25,14 @@ export function mountShell(connectorMode) {
         <div class="setup-body">
           <p>Share one tab from Instagram, X, Reddit, Facebook, LinkedIn or YouTube. Use Connectors to research profiles, posts and video.</p>
           <ol class="setup-steps">
-            <li><strong>Install Companion</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. Reload it after an update.</p></li>
-            <li><strong>Share a tab</strong><p>Open a supported platform in Chrome, sign in there and choose Share in the extension. Paste this connector address.</p></li>
-            <li><strong>Connect to Maverick</strong><p>Sign in to Maverick in the Chrome window opened by the extension, if asked. Press Connect selected tab and keep that window open while your tab is shared.</p></li>
+            <li><strong>Install Companion 0.4.2</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. After an update, replace the extracted files and reload the extension.</p></li>
+            <li><strong>Share the platform page</strong><p>Open a profile, post or video in Chrome and sign in there. On that same tab, click the Browser Companion toolbar icon, paste this connector address and choose Share this tab. Maverick and Chrome settings cannot be shared.</p></li>
+            <li><strong>Use the window it opens</strong><p>Sign in to Maverick there if asked. When your selected tab appears below, press Connect selected tab. Keep that window open; opening this address manually does not share a tab.</p></li>
           </ol>
           <label for="url">Connector address</label>
           <div class="copy"><input id="url" readonly spellcheck="false"><button id="copy" class="secondary">Copy address</button></div>
-          <div id="connector-actions" class="actions" ${connectorMode ? "" : "hidden"}><button id="connect">Connect selected tab</button><button id="stop" class="secondary" hidden>Stop sharing</button></div>
-          <p id="status" class="status" role="status">${connectorMode ? "Ready to connect the tab selected in the extension." : "Only the tab you choose is shared."}</p>
+          <div id="connector-actions" class="actions" ${connectorMode ? "" : "hidden"}><button id="connect" disabled>Connect selected tab</button><button id="stop" class="secondary" hidden>Stop sharing</button></div>
+          <p id="status" class="status" role="status">${connectorMode ? "Checking for the tab shared with this window…" : "Installing Companion is the first step. Share a platform tab from its toolbar icon to connect."}</p>
         </div>
       </details>
       <section class="panel"><div class="section-title"><div><h2>Shared tabs</h2><p>Manage access to the tabs you have shared.</p></div><span class="badge">Read only</span></div>

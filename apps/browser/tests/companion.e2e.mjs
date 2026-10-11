@@ -11,6 +11,7 @@ import {createInterface} from "node:readline";
 import {request} from "node:http";
 import {observe} from "../companion/dom-actions.mjs";
 import {analyzeVideo} from "../companion/workflows.mjs";
+import {openActionPopup} from "./extension-popup.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const temporary=mkdtempSync(path.join(tmpdir(),"browser-companion-e2e-"));
@@ -70,32 +71,13 @@ try {
   const worker=context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
   const extensionId=worker.url().split("/")[2];
   const browser=await context.browser().newBrowserCDPSession();
-  const targets=(await browser.send("Target.getTargets",{filter:[{type:"tab"},{exclude:true}]})).targetInfos;
-  const target=targets.find(t=>t.url.includes("instagram.com"));
-  await browser.send("Extensions.triggerAction",{id:extensionId,targetId:target.targetId});
-  // Chrome's action popup is a DevTools target outside Playwright's page list.
-  const popup=await wait(async()=> (await browser.send("Target.getTargets",{filter:[{}]})).targetInfos.find(t=>t.type === "page" && t.url.endsWith("/popup.html")));
-  const {sessionId}=await browser.send("Target.attachToTarget",{targetId:popup.targetId,flatten:false});
-  let requestId=0;
-  const popupEvaluate=async expression=>{
-    const id=++requestId;
-    return new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{browser.off("Target.receivedMessageFromTarget",received);reject(new Error("popup_evaluation_timeout"));},10000);
-      function received(event) {
-        if(event.sessionId !== sessionId)return;const response=JSON.parse(event.message);if(response.id !== id)return;
-        clearTimeout(timer);browser.off("Target.receivedMessageFromTarget",received);
-        if(response.error || response.result?.exceptionDetails)reject(new Error(JSON.stringify(response)));else resolve(response.result?.result?.value);
-      }
-      browser.on("Target.receivedMessageFromTarget",received);
-      browser.send("Target.sendMessageToTarget",{sessionId,message:JSON.stringify({id,method:"Runtime.evaluate",params:{expression,returnByValue:true,awaitPromise:true,userGesture:true}})}).catch(reject);
-    });
-  };
-  await wait(()=>popupEvaluate("typeof document.querySelector('#share')?.onclick === 'function'"));
+  const popup=await openActionPopup(browser,extensionId,instagram.url());
+  const popupEvaluate=popup.evaluate;
   await popupEvaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
   await wait(async()=>{
     const page=context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));if(page)return page;
     const status=await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"");
-    if(status && !status.startsWith("Tab shared"))throw new Error(`share_failed: ${status}`);
+    if(status && !["Tab shared", "Opening your Browser"].some(prefix=>status.startsWith(prefix)))throw new Error(`share_failed: ${status}`);
     return context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));
   }).catch(async error=>{
     console.error(JSON.stringify({phase:"sharing",popup_status:await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"closed"),worker_state:await worker.evaluate(async()=>({contexts:await chrome.runtime.getContexts({}),binding:await chrome.storage.session.get("binding")}))}));
@@ -110,7 +92,7 @@ try {
   assert.equal(await connector.locator("#url").inputValue(),connectorAddress);
   assert.equal(await connector.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),"light");
   const consoleErrors=[];connectorWindow.on("pageerror",e=>consoleErrors.push(e.message));
-  await browser.send("Target.detachFromTarget",{sessionId});
+  await popup.detach();
   await connectorWindow.bringToFront();
   await connector.locator("#connect").click();
   const connection=await wait(async()=> (await api({action:"companion.overview"})).connections.find(c=>c.status === "connected"));

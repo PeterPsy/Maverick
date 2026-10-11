@@ -31,12 +31,23 @@ window.addEventListener("message",event=>{
   const entry=pending.get(event.data.id);if(!entry)return;
   pending.delete(event.data.id);clearTimeout(entry.timer);
   const result=event.data.result;
-  if(result?.error)entry.reject(new Error(result.error));else entry.resolve(result);
+  if(result?.error) {
+    const guidance = ["connector_scope_required", "sharing_revoked"].includes(result.error)
+      ? "Open the platform tab in Chrome, click Browser Companion and choose Share this tab. Connect only in the Browser window opened by the extension."
+      : result.detail || result.error;
+    entry.reject(Object.assign(new Error(guidance),{code:result.error}));
+  } else entry.resolve(result);
 });
 export function bridge(action,command,timeout=5000) {
   const id=crypto.randomUUID();
   return new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>{pending.delete(id);reject(new Error("Browser Companion is unavailable or the command timed out."));},timeout);
+    const timer=setTimeout(()=>{
+      pending.delete(id);
+      const message=action === "status"
+        ? "No shared tab is attached to this window. Open a platform page in Chrome, click Browser Companion, choose Share this tab, then connect in the window it opens."
+        : "The Chrome command timed out. Keep the shared tab and its Browser connection window open, then retry.";
+      reject(Object.assign(new Error(message),{code:action === "status" ? "companion_unavailable" : "companion_command_timeout"}));
+    },timeout);
     pending.set(id,{resolve,reject,timer});window.postMessage({type:"maverick.browser.request",id,action,command},location.origin);
   });
 }

@@ -18,3 +18,16 @@ test("backend requests preserve authorization errors and abort hung or obsolete 
   const cancelled = assert.rejects(request({action: "companion.overview"}, {signal: controller.signal}), {name: "AbortError"});
   controller.abort(); await cancelled;
 });
+
+test("Companion status and operation timeouts preserve distinct actionable failures", async t => {
+  const previous={window:globalThis.window,location:globalThis.location};
+  globalThis.window={addEventListener(){},postMessage(){}};
+  globalThis.location={origin:"https://browser-fixture.test"};
+  t.after(()=>{for(const [key,value] of Object.entries(previous)) {if(value===undefined)delete globalThis[key];else globalThis[key]=value;}});
+  const {bridge}=await import("../frontend/src/api.js");
+  t.mock.timers.enable({apis:["setTimeout"]});
+  const status=assert.rejects(bridge("status",undefined,100),error=>error.code === "companion_unavailable" && /Share this tab/u.test(error.message));
+  t.mock.timers.tick(100);await status;
+  const operation=assert.rejects(bridge("execute",{},100),error=>error.code === "companion_command_timeout" && /Keep the shared tab/u.test(error.message));
+  t.mock.timers.tick(100);await operation;
+});

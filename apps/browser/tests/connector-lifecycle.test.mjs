@@ -4,7 +4,7 @@ import {setImmediate as nextTurn} from "node:timers/promises";
 
 test("connector starts once, throttles renewal, fences stop and preserves sharing across cancellation races", async t => {
   const origin = "https://browser-fixture.test", listeners = [], calls = [], states = [];
-  let delayed = false, release, serial = 0, connector, nextCommand, executing, cancelled = false;
+  let delayed = false, release, serial = 0, connector, nextCommand, executing, cancelled = false, statusFailure = true;
   const previous = {window: globalThis.window, location: globalThis.location};
   globalThis.location = {origin};
   const dispatch = data => listeners.forEach(listener => listener({source: window, origin, data}));
@@ -14,7 +14,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
       if (message.action === "execute") {executing = message; return;}
       if (message.action === "cancel") cancelled = true;
       queueMicrotask(() => dispatch({type: "maverick.browser.response", id: message.id,
-        result: message.action === "status" ? {url: "https://www.instagram.com/fixture/", active_operation: executing?.command.operation_id} : {}}));
+        result: message.action === "status" ? (statusFailure ? {error:"connector_scope_required"} : {url: "https://www.instagram.com/fixture/", active_operation: executing?.command.operation_id}) : {}}));
     },
   };
   t.mock.method(globalThis, "fetch", async (url, options) => {
@@ -44,6 +44,10 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   };
   const {createConnector} = await import("../frontend/src/connector.js");
   connector = createConnector((_text, state) => states.push(state));
+  await assert.rejects(connector.start(), /Share this tab/u);
+  assert.equal(states.at(-1), "stopped", "A failed start must leave Connecting and permit retry");
+  assert.equal(calls.filter(call => call.action === "companion.connect").length, 0);
+  statusFailure = false;
   const first = connector.start(); assert.equal(connector.start(), first); await first;
   await until(() => calls.filter(call => call.url.startsWith("/.well-known")).length === 1);
   await nextTurn(); dispatch({type: "maverick.browser.wake"});

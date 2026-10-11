@@ -1,4 +1,4 @@
-// Injected only into the exact connector tab selected through the extension popup.
+// Injected only into the exact Browser document selected through the extension popup.
 if (!globalThis.maverickBrowserBridgeInstalled) {
   globalThis.maverickBrowserBridgeInstalled = true;
   chrome.runtime.onMessage.addListener((message,sender)=>{
@@ -16,3 +16,4 @@ if (!globalThis.maverickBrowserBridgeInstalled) {
     }
   });
 }
+window.postMessage({type:"maverick.browser.ready"},location.origin);

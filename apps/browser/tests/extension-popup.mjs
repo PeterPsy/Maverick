@@ -1,0 +1,30 @@
+// Chrome action popups are DevTools targets outside Playwright's page list.
+export async function openActionPopup(browser, extensionId, tabUrl) {
+  const wait = async predicate => {
+    for (let i=0;i<100;i++) { const result=await predicate();if(result)return result;await new Promise(resolve=>setTimeout(resolve,100)); }
+    throw new Error("extension_popup_timeout");
+  };
+  const targets=(await browser.send("Target.getTargets",{filter:[{type:"tab"},{exclude:true}]})).targetInfos;
+  const tab=targets.find(target=>target.url === tabUrl);
+  if(!tab)throw new Error("extension_action_tab_missing");
+  await browser.send("Extensions.triggerAction",{id:extensionId,targetId:tab.targetId});
+  const popup=await wait(async()=> (await browser.send("Target.getTargets",{filter:[{}]})).targetInfos.find(target=>target.type === "page" && target.url.endsWith("/popup.html")));
+  const {sessionId}=await browser.send("Target.attachToTarget",{targetId:popup.targetId,flatten:false});
+  let serial=0;
+  const evaluate=expression=>new Promise((resolve,reject)=>{
+    const id=++serial;
+    const timer=setTimeout(()=>{browser.off("Target.receivedMessageFromTarget",receive);reject(new Error("popup_evaluation_timeout"));},10000);
+    function receive(event) {
+      if(event.sessionId !== sessionId)return;
+      const result=JSON.parse(event.message);if(result.id !== id)return;
+      clearTimeout(timer);browser.off("Target.receivedMessageFromTarget",receive);
+      if(result.error || result.result?.exceptionDetails)reject(new Error(JSON.stringify(result)));else resolve(result.result?.result?.value);
+    }
+    browser.on("Target.receivedMessageFromTarget",receive);
+    browser.send("Target.sendMessageToTarget",{sessionId,message:JSON.stringify({id,method:"Runtime.evaluate",params:{expression,returnByValue:true,awaitPromise:true,userGesture:true}})}).catch(reject);
+  });
+  await wait(()=>evaluate("typeof document.querySelector('#share')?.onclick === 'function'"));
+  return {evaluate,
+    async detach(){await browser.send("Target.detachFromTarget",{sessionId});},
+    async close(){await browser.send("Target.closeTarget",{targetId:popup.targetId});}};
+}

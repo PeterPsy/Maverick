@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Maverick Browser Companion",
   "description": "Share one platform tab for bounded, read-only observation through Maverick Connectors.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "minimum_chrome_version": "120",
   "permissions": ["activeTab", "scripting", "storage", "tabCapture", "offscreen", "alarms"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://*.localhost/*"],

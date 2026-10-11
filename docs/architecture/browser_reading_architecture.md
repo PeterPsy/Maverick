@@ -34,7 +34,7 @@ Browser Lab with public-page reading, health and individual session closure.
 The existing shell/App Store `language` glyph owns Browser's native icon
 presentation; no Browser-specific platform rendering branch or raster override
 is added. The app header uses an inline vector and the favicon an app-owned SVG.
-Companion 0.4.1 packages its reproducible ZIP as a Vite-imported, hashed public
+Companion 0.4.2 packages its reproducible ZIP as a Vite-imported, hashed public
 asset under `/apps/browser/assets/`, with immutable manifest/cache metadata.
 Download uses the platform origin and requires no login or app-frame cookie.
 The copied connector address uses the stable platform shell route, never an
@@ -49,6 +49,16 @@ id. A shell observer retries after sign-in and iframe replacement, with the
 30-second alarm as a wake-up fallback. Other tabs, app frames, shell documents
 and replaced connector documents cannot issue commands. Installations whose
 app-frame domain differs from the platform host retain it in `frame_domain`.
+The extension popup binds the active tab when opened and shows its title and
+URL before sharing. Missing `activeTab` access (including restricted Chrome
+pages), unsupported domains/routes, invalid connector URLs and denied
+permissions produce setup instructions rather than raw error codes. Share is
+disabled on unsupported pages and during setup. Installing Companion alone or
+opening `/app/browser?connector=1` manually does not select a platform tab.
+The selected Browser document announces bridge readiness; the frontend probes
+its worker status and enables Connect only after that response. Late attachment
+retries an in-flight or timed-out probe. Start failures leave “Connecting…” and
+permit retry, without creating a backend lease for an unattached window.
 
 Overview polling opens one SQLite transaction, sweeps leases once and selects
 operation metadata without media/input payloads. Pending counts cover all the
@@ -82,14 +92,19 @@ it does not request another app's protected media routes. Collections expose
 items, per-page progress, stop reasons and coverage independently of raw JSON.
 
 Management verification includes 74 Python tests (including the built document
-and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 41 Node
+and public ZIP through Core's real ASGI app-frame bootstrap/authorization), 43 Node
 tests, an offline
 Chromium UI fixture (row focus, errors, cancellation, filters, result escaping,
 public-page form, 320/390px layout, image/video/collection rendering and blob
 cleanup), a cross-origin shell fixture with platform-served bundles, a protected
 document and public hashed ZIP, light first paint while the bundle is held pending,
-initial/live themes and hidden-frame polling, and the real
-Chromium/MV3 Companion fixture with Connectors and scope revocation. The latter
+initial/live themes, unattached-window guidance, late bridge readiness and
+hidden-frame polling. A production-manifest Chrome popup fixture uses only
+`activeTab` to identify the selected platform, with no pre-granted host access,
+and covers Chrome/Maverick page rejection and invalid connector guidance.
+The real Chromium/MV3 Companion fixture uses Core's actual immutable identity
+and message relay plus the native iframe sandbox/CSP, with Connectors and scope
+revocation. This fixture
 starts with no Maverick cookies, downloads the archive before login and compares
 it with the built package. The user then signs in through the shell, bootstraps
 an isolated-origin Strict cookie and attaches Companion to the exact Browser
@@ -105,6 +120,11 @@ on `maverick.loopino.ai` returned 200 with ZIP MIME type and immutable cache
 headers; its bytes matched the generated package. Authenticated inspection of
 `/app/browser?connector=1` verified the stable copied address, setup instructions
 and visible Connect controls in the mounted isolated Browser frame.
+The 0.4.2 refinement was also inspected on the mounted shell: a manually opened
+connector showed the current installation guide, kept Connect disabled and
+explained how to share the platform tab. Its anonymous ZIP returned 200 and
+matched the generated package. The complete fixture passed text/scroll, image,
+video, audio, Storage evidence, cancellation recovery and Connectors workflows.
 The Companion fixture does not establish access to a real authenticated profile.
 
 ## Ownership, transport and queues

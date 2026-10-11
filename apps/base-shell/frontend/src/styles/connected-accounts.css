@@ -7,6 +7,7 @@
 .bs-connected-accounts header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem; border-bottom: 1px solid var(--maverick-border); }
 .bs-connected-accounts h2, .bs-connected-accounts h3, .bs-connected-accounts p { margin: 0; }
 .bs-connected-accounts h2 { font-size: 1.35rem; }
+.bs-connected-accounts h2:focus { outline: none; }
 .bs-connected-accounts h3 { font-size: 1rem; margin-bottom: .7rem; }
 .bs-connected-accounts header p, .bs-connected-accounts small { color: var(--maverick-text-muted); font-size: .8rem; }
 .bs-connected-accounts__body { display: grid; gap: 1.25rem; padding: 1.25rem; overflow-y: auto; max-height: calc(100dvh - 9rem); }
@@ -17,6 +18,13 @@
 .bs-connected-accounts__confirmation p { flex-basis: 100%; }
 .bs-connected-accounts button { color: inherit; background: var(--maverick-surface); border: 1px solid var(--maverick-border); border-radius: 18px; padding: .6rem .85rem; cursor: pointer; }
 .bs-connected-accounts button:hover { background: var(--maverick-surface-hover); }
+.bs-connected-accounts button.bs-connected-accounts__close {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px;
+  width: 44px; height: 44px; padding: 0; border: 0; background: transparent; box-shadow: none;
+  color: var(--maverick-text-muted);
+}
+.bs-connected-accounts button.bs-connected-accounts__close:hover,
+.bs-connected-accounts button.bs-connected-accounts__close:focus-visible { background: transparent; color: var(--maverick-text); }
 .bs-connected-accounts button:disabled, .bs-google-button:disabled { opacity: .5; cursor: default; }
 .bs-connected-accounts button:focus-visible, .bs-google-button:focus-visible, .bs-google-services input:focus-visible { outline: 2px solid var(--maverick-focus); outline-offset: 3px; }
 .bs-connected-accounts__app { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: .75rem 0; border-bottom: 1px solid var(--maverick-border); }

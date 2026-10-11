@@ -8,6 +8,7 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
   onClose: () => void; onChanged: () => void; callbackError?: string | null;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
   const alive = useRef(true);
   const googleController = useRef<AbortController | null>(null);
   const [data, setData] = useState<ConnectedAccountsPayload | null>(null);
@@ -20,6 +21,7 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
   useEffect(() => {
     alive.current = true;
     dialog.current?.showModal();
+    title.current?.focus({ preventScroll: true });
     const controller = new AbortController();
     connectedAccounts(controller.signal).then(result => {
       if (alive.current) { setData(result); setServices(result.items.find(item => item.account_id === result.selection?.account_id)?.services ?? []); }
@@ -69,8 +71,8 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
 
   return <dialog ref={dialog} className="bs-connected-accounts" aria-labelledby="bs-accounts-title"
     onCancel={event => { event.preventDefault(); close(); }}>
-    <header><div><p>Personal settings</p><h2 id="bs-accounts-title">Connected accounts</h2></div>
-      <button type="button" aria-label="Close connected accounts" onClick={close} autoFocus><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
+    <header><div><p>Personal settings</p><h2 ref={title} id="bs-accounts-title" tabIndex={-1}>Connected accounts</h2></div>
+      <button type="button" className="bs-connected-accounts__close" aria-label="Close connected accounts" onClick={close}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
     <div className="bs-connected-accounts__body">
       <p>Choose which personal Google accounts apps can use in this workspace. Each workspace has its own selection.</p>
       {error && <p role="alert">{error}</p>}

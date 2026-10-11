@@ -1,3 +1,7 @@
+@media (pointer: coarse) {
+  .bs-sidebar__header { --bs-sidebar-header-control-size: 2.75rem; }
+}
+
 @media (max-width: 979px) {
   :root {
     --maverick-sidebar-rail-width: 3.7rem;

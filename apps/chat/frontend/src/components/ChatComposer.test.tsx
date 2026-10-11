@@ -280,6 +280,23 @@ describe("agent selector loading", () => {
 });
 
 describe("composer utilities", () => {
+  it("offers archives in the file picker and forwards selected files", async () => {
+    const onAddAttachments = vi.fn();
+    const { element } = await renderComposer({ onAddAttachments });
+    const input = element.querySelector('input[type="file"]') as HTMLInputElement;
+    const acceptedTypes = input.accept.split(",");
+    for (const extension of [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".zst"]) {
+      expect(acceptedTypes).toContain(extension);
+    }
+    const file = new File(["archive"], "archive.rar", { type: "application/octet-stream" });
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+
+    await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+
+    expect(onAddAttachments).toHaveBeenCalledWith([file]);
+    expect(input.value).toBe("");
+  });
+
   it("renders Device Use only after native availability and exposes its state", async () => {
     const onSelectDeviceUseMode = vi.fn();
     const unavailable = await renderComposer({ onSelectDeviceUseMode });

@@ -1005,6 +1005,46 @@ describe("App thread navigation", () => {
     });
   });
 
+  it.each([
+    ["project.zip", "application/zip"],
+    ["project.rar", "application/octet-stream"],
+    ["project.tar.gz", ""],
+  ])("uploads and submits %s as a Storage-backed attachment", async (filename, contentType) => {
+    vi.mocked(uploadWorkspaceFile).mockResolvedValue(uploadedWorkspaceFile(filename));
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: `request-archive-${filename}`,
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await addAttachment(element, filename, contentType);
+    await typeComposerMessage(element, "inspect this archive");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(uploadWorkspaceFile).toHaveBeenCalledWith(expect.objectContaining({
+        filename,
+        content_type: contentType || "application/octet-stream",
+        content_base64: expect.any(String),
+      }));
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(expect.objectContaining({
+        attachments: [expect.objectContaining({
+          name: filename,
+          fileId: `file-${filename}`,
+          relativePath: `storage/uploads/${filename}`,
+          isImage: false,
+          isAudio: false,
+          warning: null,
+        })],
+      }));
+    });
+    expect(uploadWorkspaceFile).toHaveBeenCalledTimes(1);
+  });
+
   it("uploads an image immediately after selection and reuses it on submit", async () => {
     const upload = deferred<Awaited<ReturnType<typeof uploadWorkspaceFile>>>();
     vi.mocked(uploadWorkspaceFile).mockReturnValue(upload.promise);

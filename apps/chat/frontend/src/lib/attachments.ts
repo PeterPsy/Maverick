@@ -1,3 +1,5 @@
+import { hasAcceptedFileIdentity } from "./attachmentFileTypes";
+
 export type ComposerAttachment = {
   id: string;
   file: File;
@@ -17,15 +19,6 @@ export type ComposerAttachmentOptions = {
 const MAX_ATTACHMENT_COUNT = 8;
 const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
 const HOSTED_ATTACHMENT_WARNING = "Selected hosted model does not support this attachment type";
-const ACCEPTED_MIME_PREFIXES = ["audio/", "image/", "text/"];
-const ACCEPTED_MIME_TYPES = new Set([
-  "application/json",
-  "application/pdf",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-]);
-const ACCEPTED_EXTENSIONS = new Set([".aac", ".csv", ".flac", ".json", ".m4a", ".md", ".mp3", ".oga", ".ogg", ".opus", ".pdf", ".txt", ".wav", ".weba", ".xls", ".xlsx", ".doc", ".docx"]);
 const EXTENSION_CONTENT_TYPES = new Map([
   [".aac", "audio/aac"],
   [".flac", "audio/flac"],
@@ -88,14 +81,6 @@ function attachmentWarning({
     return HOSTED_ATTACHMENT_WARNING;
   }
   return null;
-}
-
-function hasAcceptedFileIdentity(fileName: string, contentType: string): boolean {
-  const mimeType = contentType.toLowerCase();
-  const normalizedFileName = fileName.toLowerCase();
-  const hasAcceptedMimeType = Boolean(mimeType) && (ACCEPTED_MIME_TYPES.has(mimeType) || ACCEPTED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix)));
-  const hasAcceptedExtension = Array.from(ACCEPTED_EXTENSIONS).some((extension) => normalizedFileName.endsWith(extension));
-  return hasAcceptedMimeType || hasAcceptedExtension;
 }
 
 function attachmentMatchesInputModalities(contentType: string, inputModalities: string[]): boolean {

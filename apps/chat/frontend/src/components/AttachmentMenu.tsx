@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { canAddMoreAttachments, ComposerAttachment } from "../lib/attachments";
+import { COMPOSER_ATTACHMENT_ACCEPT } from "../lib/attachmentFileTypes";
 
 export function AttachmentMenu({
   attachments,
@@ -26,7 +27,7 @@ export function AttachmentMenu({
     <>
       <input
         ref={fileAttachmentInputRef}
-        accept="image/*,text/*,application/json,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.csv,.json,.md,.pdf,.txt,.xls,.xlsx,.doc,.docx"
+        accept={COMPOSER_ATTACHMENT_ACCEPT}
         className="chatapp-sr-only"
         multiple
         onChange={(event) => {

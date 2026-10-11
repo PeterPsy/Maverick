@@ -69,3 +69,34 @@ Public Google deployments must configure consent and verification for their
 requested scopes; Gmail restricted scopes can require a security assessment.
 External Google project administration is an operator prerequisite, not an
 automatic side effect of deploying source code.
+
+## Deployment verification
+
+The system service reads installation environment configuration at startup.
+Changes to the non-secret OAuth references or callback require a backend restart.
+An existing Web application client may be reused by referencing its matching
+client ID and secret aliases; do not rename aliases that existing apps use. For
+example, installations already using the Gmail client for all three apps can set:
+
+```text
+MAVERICK_GOOGLE_CLIENT_ID_REF=platform:secret-alias/gmail-oauth-client-id
+MAVERICK_GOOGLE_CLIENT_SECRET_REF=platform:secret-alias/gmail-oauth-client-secret
+MAVERICK_GOOGLE_REDIRECT_URI=https://<platform-host>/api/auth/google/callback
+```
+
+Register that exact callback on the selected Google Cloud client. A public status
+of `configured: true` verifies local configuration and active credential metadata;
+it does not verify Google Cloud callback registration or a user's consent.
+
+Run `python3 scripts/google_accounts_smoke.py --origin https://<platform-host>`
+against the restarted backend. This checks deployed routes, anonymous access,
+origin enforcement, exact requested scopes, PKCE, protected flow cookies,
+cancellation and replay protection. It cancels its own short-lived flows without
+granting Google consent and never prints credentials or authorization URLs.
+
+For the final end-to-end check, an existing password user opens Connected accounts,
+approves the chosen Google services, and returns to the shell. The selected account
+must appear in Calendar, Mail and Storage for the approved services without app
+OAuth prompts. A later Google login must resolve to that same Maverick user.
+Disconnecting or disabling an app should be checked with a dedicated test account
+to avoid disrupting existing personal connections.

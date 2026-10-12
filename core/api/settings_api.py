@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+from time import perf_counter
+from urllib.parse import parse_qs
 
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
@@ -11,6 +13,8 @@ from core.api.provider_api import (
     provider_projection_context,
     workspace_agentic_admin_status,
     workspace_provider_status,
+    workspace_hosted_text_status,
+    workspace_speech_stt_status,
 )
 from core.api.runtime_cleanup import RuntimeCleanupError, cleanup_runtime_session
 from core.api.session_api import RequestSession, public_user_payload, require_session
@@ -39,45 +43,70 @@ GOVERNANCE_PATCH_FIELDS = {
 }
 
 
-def platform_settings_payload(state: PlatformState, context: RequestSession) -> dict[str, object]:
-    """Return shell-visible platform settings without secrets."""
-    projection_context = provider_projection_context(
-        state,
-        reconcile_model_catalog=True,
-    )
-    provider_status = workspace_provider_status(
-        state,
-        workspace_id=context.workspace_id,
-        projection_context=projection_context,
-    )
+SETTINGS_SECTIONS = {"all", "context", "models", "voice", "computer-use"}
+
+
+def platform_settings_payload(
+    state: PlatformState, context: RequestSession, *, section: str = "all",
+    timings: dict[str, float] | None = None,
+) -> dict[str, object]:
+    """Project only the requested platform resource; never enumerate sessions."""
+    if section not in SETTINGS_SECTIONS:
+        raise ValueError("settings_section_invalid")
+
+    def measured(name, read):
+        started = perf_counter()
+        try:
+            return read()
+        finally:
+            if timings is not None:
+                timings[name] = (perf_counter() - started) * 1000
+
     cleanup_scope = _runtime_cleanup_scope(state, context)
     payload = {
         "user": public_user_payload(context.user),
-        "workspace": workspace_payload(state, context.workspace_id),
-        "provider": provider_status,
-        "computer_use": computer_actor_settings(state, context),
-        "runtime": {
-            "sessions": [],
-            "cleanup_allowed": cleanup_scope != "none",
-            "cleanup_scope": cleanup_scope,
+        "workspace": measured("workspace", lambda: workspace_payload(state, context.workspace_id)),
+        "provider": {
+            "workspace_id": context.workspace_id, "active_provider": None,
+            "selection": None, "model_settings": None,
         },
-        "recovery": recovery_status(state.recovery_store, workspace_id=context.workspace_id),
+        "runtime": {
+            "sessions": [], "cleanup_allowed": cleanup_scope != "none", "cleanup_scope": cleanup_scope,
+        },
+        "recovery": {},
     }
-    try:
-        require_provider_selection_authority(
-            state.workspace_store,
-            user=context.user,
-            workspace_id=context.workspace_id,
-        )
-    except AuthorizationError:
-        pass
-    else:
-        payload["agentic_admin"] = workspace_agentic_admin_status(
-            state,
-            workspace_id=context.workspace_id,
-            compact=True,
-            projection_context=projection_context,
-        )
+    if section in {"all", "models", "voice"}:
+        projection_context = measured("catalog", lambda: provider_projection_context(
+            state, reconcile_model_catalog=section in {"all", "models"},
+        ))
+        if section == "voice":
+            payload["provider"].update({
+                "hosted_text": measured("hosted", lambda: workspace_hosted_text_status(
+                    state, workspace_id=context.workspace_id, projection_context=projection_context,
+                )),
+                "speech_stt": measured("speech", lambda: workspace_speech_stt_status(
+                    state, workspace_id=context.workspace_id, projection_context=projection_context,
+                )),
+            })
+        else:
+            payload["provider"] = measured("providers", lambda: workspace_provider_status(
+                state, workspace_id=context.workspace_id, projection_context=projection_context,
+            ))
+        if section in {"all", "models"}:
+            try:
+                require_provider_selection_authority(
+                    state.workspace_store, user=context.user, workspace_id=context.workspace_id,
+                )
+            except AuthorizationError:
+                pass
+            else:
+                payload["agentic_admin"] = measured("models", lambda: workspace_agentic_admin_status(
+                    state, workspace_id=context.workspace_id, compact=True, projection_context=projection_context,
+                ))
+    if section in {"all", "computer-use"}:
+        payload["computer_use"] = measured("computer", lambda: computer_actor_settings(state, context))
+    if section == "all":
+        payload["recovery"] = measured("recovery", lambda: recovery_status(state.recovery_store, workspace_id=context.workspace_id))
     return payload
 
 
@@ -330,11 +359,13 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
         return handle_computer_actor_settings(state, context, environ, start_response)
 
     if path == "/api/settings/platform" and method == "GET":
-        return json_response(
-            start_response,
-            platform_settings_payload(state, context),
-            compact=True,
-        )
+        section = parse_qs(environ.get("QUERY_STRING", "")).get("section", ["all"])[0]
+        if section not in SETTINGS_SECTIONS:
+            return json_response(start_response, {"error": "settings_section_invalid"}, status="400 Bad Request")
+        timings: dict[str, float] = {}
+        payload = platform_settings_payload(state, context, section=section, timings=timings)
+        timing_header = ", ".join(f"{name};dur={duration:.2f}" for name, duration in timings.items())
+        return json_response(start_response, payload, compact=True, headers=[("Server-Timing", timing_header)])
     if path == "/api/settings/provider-setup" and method == "GET":
         return json_response(start_response, provider_setup_settings_payload(state, context))
     if path == "/api/settings/runtime-sessions" and method == "GET":

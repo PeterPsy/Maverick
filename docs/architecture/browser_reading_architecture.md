@@ -309,8 +309,9 @@ existing governed dev inspection, plus browser_hover/select_option/set_checked f
 shared Chrome. Browser UI and Companion advertise their current access mode rather
 than treating older read-only connections as interactive. The bundled agent guide
 describes discovery, refs, polling and consequential actions. Updating an existing
-workspace copy requires the Skills app; the 2026-10-12 update was blocked by
-`authentication_required`, so the workspace copy has not yet received this guide.
+workspace copy requires the Skills app. The initial 2026-10-12 update was blocked
+by `authentication_required`; after authentication recovered, the update and
+readback succeeded with enablement and Maverick origin preserved.
 
 ## Legacy read-only scope and platform collection
 

@@ -31,13 +31,10 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
     });
   });
   document.querySelectorAll<HTMLInputElement>('[data-agentic-model-toggle]').forEach((toggle) => {
-    const toggleLabel = toggle.closest<HTMLElement>('.settings-bouncy-toggle');
     bindControl(toggle, 'click', (event) => event.stopPropagation());
     bindControl(toggle.closest('label'), 'click', (event) => event.stopPropagation());
     bindControl(toggle, 'change', () => {
       const enable = toggle.checked;
-      const statusLabel = toggleLabel?.querySelector<HTMLElement>('.settings-bouncy-toggle__label');
-      if (statusLabel) statusLabel.textContent = enable ? 'On' : 'Off';
       actions.onSaveAgenticBinding(
         toggle.dataset.agenticDefinitionId || '',
         { enabled: enable }

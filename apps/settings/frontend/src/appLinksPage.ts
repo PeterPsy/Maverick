@@ -106,6 +106,7 @@ function dependencyHtml(
               const candidateApp = appById(appRegistry, candidate.app_id);
               return `<label class="settings-app-link-candidate ${checked ? 'is-selected' : ''}">
                 <input
+                  data-settings-controlled
                   ${checked ? 'checked' : ''}
                   ${isSaving ? 'disabled' : ''}
                   data-dependency-choice="${escapeAttr(choiceKey(consumerAppId, dependency.alias, candidate.app_id))}"

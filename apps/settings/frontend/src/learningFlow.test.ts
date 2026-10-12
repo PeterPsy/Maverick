@@ -4,6 +4,8 @@ import { createLearningController, type LearningData } from './learningControlle
 import { learningPageHtml } from './learningPage';
 import { settingsPageIdFromParams } from './pages';
 import { ticketCommandForMove } from './learningTickets';
+import { clearSettingsDomCache, patchSettingsDom, rememberSettingsDrafts } from './settingsDom';
+import { beginSettingsBindings } from './controlBindings';
 
 const api = vi.hoisted(() => ({ request: vi.fn(), dependencies: vi.fn(), select: vi.fn() }));
 const events = vi.hoisted(() => ({ subscribe: vi.fn(), stop: vi.fn() }));
@@ -18,6 +20,7 @@ const fixture = (): LearningData => ({
 
 describe('Conversation learning Settings', () => {
   beforeEach(() => {
+    clearSettingsDomCache();
     vi.resetAllMocks();
     api.dependencies.mockResolvedValue({ workspace_id: 'default', consumer_app_id: 'chat', dependencies: [] });
     api.request.mockResolvedValue(fixture());
@@ -26,8 +29,11 @@ describe('Conversation learning Settings', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
   function mount(workspaceId = () => 'default') {
+    document.body.innerHTML = '<div id="app"></div>';
+    const root = document.getElementById('app')!;
+    rememberSettingsDrafts(root);
     let controller: ReturnType<typeof createLearningController>;
-    const render = () => { document.body.innerHTML = learningPageHtml(controller.viewState()); controller.bind(); };
+    const render = () => { patchSettingsDom(root, learningPageHtml(controller.viewState())); beginSettingsBindings(); controller.bind(); };
     controller = createLearningController({ render, workspaceId });
     return { controller, render };
   }
@@ -121,6 +127,10 @@ describe('Conversation learning Settings', () => {
     document.querySelector<HTMLButtonElement>('#learning-discard')!.click();
     expect(document.querySelector<HTMLInputElement>('[name=idle_seconds]')!.value).toBe('120');
     expect(controller.viewState().dirty).toBe(false);
+    document.querySelector<HTMLFormElement>('#learning-settings')!.dispatchEvent(new Event('submit', { cancelable: true }));
+    await vi.waitFor(() => expect(controller.viewState().saving).toBe(false));
+    const mutation = api.request.mock.calls.find(([, options]) => JSON.parse(options.body).action === 'learning.configure');
+    expect(JSON.parse(mutation![1].body).settings.idle_seconds).toBe(120);
   });
 
   it('pause is independent of unsaved settings and selected chats survive rerenders', async () => {
@@ -137,6 +147,23 @@ describe('Conversation learning Settings', () => {
     expect(document.querySelector<HTMLSelectElement>('#learning-session')!.value).toBe('chat-1');
     const mutation = api.request.mock.calls.find(([, options]) => JSON.parse(options.body).action === 'learning.configure');
     expect(JSON.parse(mutation![1].body).settings).toEqual({ paused: true });
+  });
+
+  it('discards candidate edits in the retained production DOM before a later review', async () => {
+    const data = fixture();
+    data.items.push({ id: 'candidate', kind: 'memory', title: 'Original', body: 'Saved fact', status: 'pending', occurrences: 1,
+      node_id: '', provider_id: '', details: {}, evidence: [] });
+    api.request.mockResolvedValue(data);
+    const { controller } = mount(); await controller.load();
+    const field = document.querySelector<HTMLInputElement>('[data-learning-title]')!;
+    field.value = 'Discard me'; field.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('#learning-discard')!.click();
+    expect(document.querySelector<HTMLInputElement>('[data-learning-title]')!.value).toBe('Original');
+    expect(controller.viewState().dirty).toBe(false);
+    document.querySelector<HTMLButtonElement>('[data-learning-command=edit]')!.click();
+    await vi.waitFor(() => expect(controller.viewState().saving).toBe(false));
+    const mutation = api.request.mock.calls.find(([, options]) => JSON.parse(options.body).action === 'learning.review');
+    expect(JSON.parse(mutation![1].body).title).toBe('Original');
   });
 
   it('rejects a pre-save read that arrives after the updated settings', async () => {

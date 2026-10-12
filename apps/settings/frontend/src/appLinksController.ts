@@ -41,15 +41,25 @@ export function createAppLinksController({
   let loadErrors: AppLinkLoadError[] = [];
   let loadedWorkspaceId = '';
   let isLoading = false;
-  let generation = 0;
-  let savingKeys = new Set<string>();
+  let workspaceGeneration = 0;
+  let readGeneration = 0;
+  let workspaceId = '';
+  const pendingSelections = new Map<string, { providerAppIds: string[] }>();
 
   function viewState(): AppLinksViewState {
-    return { appRegistry, dependencies, error, isLoading, loadErrors, savingKeys };
+    return {
+      appRegistry, error, isLoading, loadErrors, savingKeys: new Set(pendingSelections.keys()),
+      dependencies: dependencies.map(item => ({ ...item, dependencies: item.dependencies.map(dependency => {
+        const pending = pendingSelections.get(dependencyKey(item.consumer_app_id, dependency.alias));
+        return pending ? { ...dependency, selected_provider_app_ids: pending.providerAppIds } : dependency;
+      }) }))
+    };
   }
 
   function reset() {
-    generation += 1; isLoading = false;
+    workspaceGeneration += 1; readGeneration += 1; isLoading = false;
+    workspaceId = '';
+    pendingSelections.clear();
     appRegistry = [];
     dependencies = [];
     error = '';
@@ -61,14 +71,16 @@ export function createAppLinksController({
     loadedWorkspaceId = '';
   }
 
-  async function ensureLoaded(workspaceId: string, workspaceApps: WorkspaceApp[], force = false) {
-    if (!workspaceId || isLoading) {
+  async function ensureLoaded(nextWorkspaceId: string, workspaceApps: WorkspaceApp[], force = false) {
+    if (!nextWorkspaceId) return;
+    if (workspaceId !== nextWorkspaceId) { reset(); workspaceId = nextWorkspaceId; }
+    if (isLoading) {
       return;
     }
     if (!force && loadedWorkspaceId === workspaceId) {
       return;
     }
-    const request = ++generation;
+    const request = ++readGeneration;
     isLoading = true;
     error = '';
     loadErrors = [];
@@ -78,39 +90,47 @@ export function createAppLinksController({
         loadAppRegistry(),
         loadDependenciesForWorkspace(workspaceId, workspaceApps)
       ]);
-      if (request !== generation) return;
+      if (request !== readGeneration) return;
       appRegistry = registryPayload;
       dependencies = dependenciesPayload.dependencies;
       loadErrors = dependenciesPayload.errors;
       loadedWorkspaceId = workspaceId;
     } catch (loadError) {
-      if (request !== generation) return;
+      if (request !== readGeneration) return;
       loadedWorkspaceId = '';
       error = loadError instanceof Error ? loadError.message : 'Unable to load app links.';
     } finally {
-      if (request !== generation) return;
-      isLoading = false;
-      render();
+      if (request === readGeneration) { isLoading = false; render(); }
     }
   }
 
   async function saveDependencySelection(consumerAppId: string, alias: string, providerAppIds: string[]) {
-    const request = generation;
+    const request = workspaceGeneration;
     const key = dependencyKey(consumerAppId, alias);
-    savingKeys = new Set([...savingKeys, key]);
+    if (pendingSelections.has(key)) return;
+    const operation = { providerAppIds: [...providerAppIds] };
+    pendingSelections.set(key, operation);
     render();
     try {
       const payload = await saveAppDependencySelection(consumerAppId, alias, providerAppIds);
-      if (request !== generation) return;
-      dependencies = dependencies.map((item) => (item.consumer_app_id === consumerAppId ? payload : item));
-      publishChanged(consumerAppId, payload);
+      if (request !== workspaceGeneration || payload.workspace_id !== workspaceId) return;
+      // A read started before this acknowledgement must not replace the saved choice.
+      readGeneration += 1;
+      isLoading = false;
+      const previous = dependencies.find(item => item.consumer_app_id === consumerAppId);
+      const acknowledged = { ...payload, dependencies: payload.dependencies.map(dependency =>
+        dependency.alias === alias ? dependency : previous?.dependencies.find(item => item.alias === dependency.alias) || dependency) };
+      dependencies = [...dependencies.filter(item => item.consumer_app_id !== consumerAppId), acknowledged]
+        .sort((left, right) => left.consumer_app_id.localeCompare(right.consumer_app_id));
+      publishChanged(consumerAppId, acknowledged);
       setNotice({ tone: 'success', message: 'App link updated.' });
+    } catch (saveError) {
+      if (request === workspaceGeneration) throw saveError;
     } finally {
-      if (request !== generation) return;
-      const nextSavingKeys = new Set(savingKeys);
-      nextSavingKeys.delete(key);
-      savingKeys = nextSavingKeys;
-      render();
+      if (pendingSelections.get(key) === operation) {
+        pendingSelections.delete(key);
+        render();
+      }
     }
   }
 
@@ -118,9 +138,9 @@ export function createAppLinksController({
     const enabledApps = apps.filter((app) => app.workspace_id === workspaceId && app.status === 'enabled');
     const results: DependencyLoadResult[] = new Array(enabledApps.length);
     let cursor = 0;
-    const request = generation;
+    const request = readGeneration;
     await Promise.all(Array.from({ length: Math.min(4, enabledApps.length) }, async () => {
-      while (cursor < enabledApps.length && request === generation) {
+      while (cursor < enabledApps.length && request === readGeneration) {
         const index = cursor++;
         const app = enabledApps[index];
         try { results[index] = { app, payload: await getAppDependencies(app.app_id) }; }

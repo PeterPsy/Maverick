@@ -3,6 +3,7 @@ import './styles/learning.css';
 import './styles/learning-tickets.css';
 import './styles/speech-settings.css';
 import './styles/navigation.css';
+import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
 import { createSpeechSynthesisController } from './speechSynthesisSettings';
 import { createComputerUseController } from './computerUseSettings';
 import { requestPersistenceStatusQuiet } from './persistenceStatus';
@@ -16,7 +17,7 @@ import { usagePageHtml } from './usagePage';
 import { createLearningController } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { bindSettingsHostEvents, settingsHostVisible } from './settingsHostEvents';
-import { createAdminUser, deleteAdminUser, installWorkspaceApp as installWorkspaceAppBinding, resetAdminUserPassword, setWorkspaceAppEnabled, uninstallWorkspaceApp as uninstallWorkspaceAppBinding, updateAdminUser, updateAdminUserMemberships } from './adminActions';
+import { createAdminUser, deleteAdminUser, installWorkspaceApp as installWorkspaceAppBinding, resetAdminUserPassword, uninstallWorkspaceApp as uninstallWorkspaceAppBinding, updateAdminUser, updateAdminUserMemberships } from './adminActions';
 import { clearRuntimeSessions, logout, requestJson } from './adminApi';
 import type { AppDependenciesPayload, PlatformSettings, PersistenceStatus, RuntimeCleanupPayload, User, Workspace, WorkspaceApp } from './adminApi';
 import { mergeRuntimeSessionInventory } from './settingsRuntimeInventory';
@@ -26,11 +27,13 @@ import {
   DEFAULT_SETTINGS_PAGE_ID,
   settingsPageById,
   settingsPageIdFromParams,
+  settingsPageDomKey,
   type SettingsPage,
   type SettingsPageId
 } from './pages';
 import { settingsAppSkeletonHtml } from './appSkeleton';
 import { createAppLinksController } from './appLinksController';
+import { createWorkspaceAppController } from './workspaceAppController';
 import { activeSettingsPageHtml } from './activePage';
 import { bindSettingsEvents } from './bindEvents';
 import { escapeHtml } from './html';
@@ -51,6 +54,7 @@ let workspaces: Workspace[] = [];
 let workspaceApps: WorkspaceApp[] = [];
 let persistence: PersistenceStatus | null = null;
 let platformSettings: PlatformSettings | null = null;
+let settingsWorkspaceId = readMaverickAppFrameContext()?.workspaceId || '';
 let settingsPanelState = createSettingsPanelState();
 const initialNavigationParams = Object.fromEntries(new URLSearchParams(window.location.search).entries());
 let selectedPageId: SettingsPageId = settingsPageIdFromParams(initialNavigationParams) || DEFAULT_SETTINGS_PAGE_ID;
@@ -99,6 +103,15 @@ const providerUsageController = createProviderUsageController({
   getSettings: () => platformSettings,
   render: () => render(),
   state: settingsPanelState
+});
+const workspaceAppController = createWorkspaceAppController({
+  render,
+  updated: (app, enabled) => {
+    workspaceApps = workspaceApps.map(item => item.workspace_id === app.workspace_id && item.app_id === app.app_id
+      ? { ...item, status: enabled ? 'enabled' : 'disabled' } : item);
+    appLinksController.invalidate();
+    void resources.ensure('apps', true);
+  }
 });
 const agenticBindingController = createAgenticBindingController({
   getSettings: () => platformSettings, render, state: settingsPanelState,
@@ -208,15 +221,19 @@ const resources = createSettingsResources({
       else sessionInventory = raw as import('./adminApi').RuntimeSessionInventoryPayload;
     } else {
       const next = raw as PlatformSettings;
-      const previousWorkspaceId = platformSettings?.workspace.workspace_id;
+      const previousWorkspaceId = settingsWorkspaceId;
       if (previousWorkspaceId && previousWorkspaceId !== next.workspace.workspace_id) {
+        usageVisualizations?.unmountUsageVisualizations();
         resources.reset(); clearSettingsDomCache(); platformSettings = null; users = []; workspaces = []; workspaceApps = []; persistence = null;
         sessionInventory = null; iconRegistry = []; iconWorkspaceId = ''; settingsPanelState.savedDrafts = null;
         appLinksController.reset(); learningController.reset(); providerUsageController.reset(); speechSynthesisController.reset();
+        agenticBindingController.reset(); workspaceAppController.reset();
+        notice = null;
         Object.assign(sessionsView, createSessionsView());
         queueMicrotask(() => { render(); void ensurePageLoaded(); });
       }
       if (iconRegistry.length && !iconWorkspaceId) iconWorkspaceId = next.workspace.workspace_id;
+      settingsWorkspaceId = next.workspace.workspace_id;
       const providersLoaded = resource === 'models' || resource === 'voice';
       platformSettings = mergeSettingsSnapshot(platformSettings, next, resource);
       if (sessionInventory) platformSettings = mergeRuntimeSessionInventory(platformSettings, sessionInventory);
@@ -326,9 +343,7 @@ async function installWorkspaceApp(app: WorkspaceApp) {
 }
 
 async function setWorkspaceAppStatus(app: WorkspaceApp, enabled: boolean) {
-  await setWorkspaceAppEnabled(app, enabled);
-  appLinksController.invalidate();
-  await resources.ensure('apps', true);
+  await workspaceAppController.setEnabled(app, enabled);
 }
 
 async function uninstallWorkspaceApp(app: WorkspaceApp) {
@@ -446,9 +461,9 @@ function render() {
       sessionsHtml: () => platformSettings ? sessionsPageHtml(platformSettings, settingsPanelState, sessionsView) : '',
       usageHtml: () => usagePageHtml(settingsPanelState),
       learningHtml: () => learningPageHtml(learningController.viewState(), platformSettings?.provider.available_providers?.find(p => p.provider_id === 'codex')?.model_options || []),
-      selectedUser: user, users, workspaceApps: workspaceApps.map(app => ({ ...app, logo: app.workspace_id === iconWorkspaceId ? iconRegistry.find(item => item.app_id === app.app_id)?.logo || null : null })), workspaces,
+      selectedUser: user, users, workspaceApps: workspaceAppController.apps(workspaceApps).map(app => ({ ...app, logo: app.workspace_id === iconWorkspaceId ? iconRegistry.find(item => item.app_id === app.app_id)?.logo || null : null })), savingAppKeys: workspaceAppController.savingKeys(), workspaces,
     });
-  patchSettingsDom(root, `<main class="settings-shell"><section class="settings-main"><div class="settings-content" data-render-key="page:${page.id}:${['users', 'workspace-access'].includes(page.id) ? selectedUserId : ''}">
+  patchSettingsDom(root, `<main class="settings-shell"><section class="settings-main"><div class="settings-content" data-render-key="${escapeHtml(settingsPageDomKey(settingsWorkspaceId, page.id, user?.user_id))}">
     <header class="detail-header"><div class="detail-title-block"><h2>${escapeHtml(page.title)}</h2><span class="detail-title-separator" aria-hidden="true"></span><p>${escapeHtml(page.summary)}</p></div>
     ${platformSettings ? `<div class="settings-context"><span>${escapeHtml(platformSettings.workspace.name)}</span><span>${escapeHtml(platformSettings.user.display_name || platformSettings.user.username)}</span><button type="button" id="settings-logout" class="settings-secondary">Logout</button></div>` : ''}</header>
     ${noticeHtml(notice)}${staleErrors.map(resource => `<p role="alert">${escapeHtml(resources.state(resource).error)} <button type="button" data-retry-resource="${resource}">Retry</button></p>`).join('')}${content}

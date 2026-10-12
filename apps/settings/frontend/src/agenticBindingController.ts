@@ -15,8 +15,18 @@ type AgenticBindingControllerContext = {
 };
 
 export function createAgenticBindingController(context: AgenticBindingControllerContext) {
+  let generation = 0;
   return {
+    reset: () => {
+      generation++;
+      context.state.pendingAgenticEnabled = {};
+      context.state.savingAgenticBindings.clear();
+      context.state.activatingNativeProviders.clear();
+      context.state.agenticBindingErrors = {};
+      context.state.nativeProviderErrors = {};
+    },
     activateProvider: async (providerId: string) => {
+      const request = generation;
       const workspaceId = context.getSettings()?.workspace.workspace_id;
       if (context.state.activatingNativeProviders.has(providerId)) return;
       context.state.activatingNativeProviders.add(providerId);
@@ -25,23 +35,25 @@ export function createAgenticBindingController(context: AgenticBindingController
       try {
         await activateNativeProvider(providerId);
         const settings = await getPlatformSettings('models');
-        if (context.getSettings()?.workspace.workspace_id !== workspaceId || settings.workspace.workspace_id !== workspaceId) return;
+        if (request !== generation || context.getSettings()?.workspace.workspace_id !== workspaceId || settings.workspace.workspace_id !== workspaceId) return;
         syncSettingsPanelDraft(context.state, settings);
         context.setSettings(settings, 'Connection enabled. Selected models are available in Chat.');
       } catch (error) {
+        if (request !== generation) return;
         context.state.nativeProviderErrors[providerId] = error instanceof Error
           ? error.message : 'Unable to enable connection.';
       } finally {
-        context.state.activatingNativeProviders.delete(providerId);
-        context.render();
+        if (request === generation) { context.state.activatingNativeProviders.delete(providerId); context.render(); }
       }
     },
     save: async (
       definitionId: string,
       options: { enabled?: boolean } = {}
     ) => {
+      const request = generation;
       const workspaceId = context.getSettings()?.workspace.workspace_id;
       const key = definitionId;
+      if (context.state.savingAgenticBindings.has(key)) return;
       const item = context.getSettings()?.agentic_admin?.items.find(
         (candidate) => candidate.definition_id === definitionId
       );
@@ -82,6 +94,7 @@ export function createAgenticBindingController(context: AgenticBindingController
         return;
       }
       context.state.savingAgenticBindings.add(key);
+      if (options.enabled !== undefined) context.state.pendingAgenticEnabled[key] = requestedEnabled;
       context.state.agenticBindingErrors[key] = '';
       context.render();
       try {
@@ -104,17 +117,21 @@ export function createAgenticBindingController(context: AgenticBindingController
           }
         });
         const settings = await getPlatformSettings('models');
-        if (context.getSettings()?.workspace.workspace_id !== workspaceId || settings.workspace.workspace_id !== workspaceId) return;
+        if (request !== generation || context.getSettings()?.workspace.workspace_id !== workspaceId || settings.workspace.workspace_id !== workspaceId) return;
         syncSettingsPanelDraft(context.state, settings);
         clearSettingsDrafts(form);
         context.setSettings(settings, `${item.display_name} binding updated for new sessions.`);
       } catch (error) {
+        if (request !== generation) return;
         context.state.agenticBindingErrors[key] = error instanceof Error
           ? error.message
           : 'Unable to save agentic binding.';
       } finally {
-        context.state.savingAgenticBindings.delete(key);
-        context.render();
+        if (request === generation) {
+          delete context.state.pendingAgenticEnabled[key];
+          context.state.savingAgenticBindings.delete(key);
+          context.render();
+        }
       }
     }
   };

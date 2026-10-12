@@ -302,12 +302,12 @@ input::placeholder {
 }
 
 select {
-  color-scheme: dark;
+  color-scheme: inherit;
 }
 
 option,
 optgroup {
-  background: #171717;
+  background: var(--maverick-bg-strong);
   color: var(--maverick-text);
 }
 

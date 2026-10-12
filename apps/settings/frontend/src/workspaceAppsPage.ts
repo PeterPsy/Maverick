@@ -5,9 +5,11 @@ import { bouncyToggleHtml } from './bouncyToggle';
 export function workspaceAppsPageHtml({
   workspaceApps,
   workspaces,
+  savingKeys = new Set<string>(),
 }: {
   workspaceApps: WorkspaceApp[];
   workspaces: Workspace[];
+  savingKeys?: Set<string>;
 }) {
   return `<details class="settings-card"><summary>Create a workspace</summary><form id="create-workspace" class="settings-grid">
     <label>Name<input name="name" required /></label><label>Description<input name="description" /></label><button type="submit">Create workspace</button>
@@ -19,11 +21,11 @@ export function workspaceAppsPageHtml({
         </div>
       </div>
       <p class="settings-card-copy">Installed means the app has a workspace binding. Only enabled apps are visible to users and served by the core.</p>
-      <div class="settings-app-workspaces">${workspaceAppRowsHtml(workspaces, workspaceApps)}</div>
+      <div class="settings-app-workspaces">${workspaceAppRowsHtml(workspaces, workspaceApps, savingKeys)}</div>
     </section>`;
 }
 
-function workspaceAppRowsHtml(workspaces: Workspace[], workspaceApps: WorkspaceApp[]) {
+function workspaceAppRowsHtml(workspaces: Workspace[], workspaceApps: WorkspaceApp[], savingKeys: Set<string>) {
   return workspaces
     .map((workspace) => {
       const rows = workspaceApps.filter((app) => app.workspace_id === workspace.workspace_id);
@@ -39,18 +41,19 @@ function workspaceAppRowsHtml(workspaces: Workspace[], workspaceApps: WorkspaceA
           </span>
         </summary>
         <div class="settings-apps">
-          ${rows.map(workspaceAppRowHtml).join('')}
+          ${rows.map(app => workspaceAppRowHtml(app, savingKeys)).join('')}
         </div>
       </details>`;
     })
     .join('');
 }
 
-function workspaceAppRowHtml(app: WorkspaceApp) {
+function workspaceAppRowHtml(app: WorkspaceApp, savingKeys: Set<string>) {
   const enabled = app.status === 'enabled';
   const installed = app.installed;
   const statusLabel = installed ? app.status : 'not installed';
   const appKey = `${app.workspace_id}:${app.app_id}`;
+  const saving = savingKeys.has(appKey);
   return `<div class="settings-app-row" data-app-row="${escapeAttr(appKey)}">
     ${app.logo?.kind === 'image' ? `<img class="settings-app-icon" src="${escapeAttr(app.logo.value)}" alt="" />` : `<span class="settings-app-icon material-symbols-rounded" aria-hidden="true">${escapeHtml(app.logo?.kind === 'glyph' ? app.logo.value : 'apps')}</span>`}
     <span class="settings-app-copy">
@@ -59,8 +62,8 @@ function workspaceAppRowHtml(app: WorkspaceApp) {
     </span>
     ${
       installed
-        ? `${bouncyToggleHtml(`<input type="checkbox" role="switch" aria-label="Enable ${escapeAttr(app.name)} in ${escapeAttr(app.workspace_name)}" data-app-toggle="${escapeAttr(appKey)}" ${enabled ? 'checked' : ''} />`, 'Enabled', 'settings-switch')}
-        <button type="button" class="settings-secondary" data-app-uninstall="${escapeAttr(appKey)}">
+        ? `${bouncyToggleHtml(`<input type="checkbox" role="switch" data-settings-controlled aria-label="Enable ${escapeAttr(app.name)} in ${escapeAttr(app.workspace_name)}" data-app-toggle="${escapeAttr(appKey)}" ${enabled ? 'checked' : ''} ${saving ? 'disabled' : ''} />`, 'Enabled', 'settings-switch')}
+        <button type="button" class="settings-secondary" data-app-uninstall="${escapeAttr(appKey)}" ${saving ? 'disabled' : ''}>
           <span class="material-symbols-rounded" aria-hidden="true">link_off</span>
           Uninstall
         </button>`

@@ -1,4 +1,5 @@
 import { bindControl } from './controlBindings';
+import { clearSettingsDrafts } from './settingsDom';
 import { getAppDependencies, requestJson, saveAppDependencySelection, type AppDependenciesPayload } from './adminApi';
 import { connectAppEventSocket } from '@maverick/pwa-cache';
 import { bindLearningTickets } from './learningTicketBindings';
@@ -139,9 +140,17 @@ export function createLearningController(context: { render: () => void; workspac
       await call(body);
       if (revision !== generation) return;
       const action = body as { action?: string; item_id?: string; command?: string; settings?: Record<string, unknown> };
-      if (action.action === 'learning.configure' && action.settings && 'enabled' in action.settings) drafts.clear();
+      if (action.action === 'learning.configure' && action.settings && 'enabled' in action.settings) {
+        drafts.clear();
+        clearSettingsDrafts('#learning-settings');
+      }
       state.notice = action.action === 'learning.configure' ? 'Settings saved' : ['accept', 'approve', 'start', 'retry'].includes(action.command || '') ? 'Ticket queued. Its work chat appears when the agent starts.' : action.command === 'implemented' ? 'Implementation confirmed.' : action.command === 'stop' ? 'Stop requested. This chat keeps its slot until the turn ends.' : 'Action completed';
-      if (action.item_id) for (const key of itemDrafts.keys()) if (key.endsWith(':' + action.item_id)) itemDrafts.delete(key);
+      if (action.item_id) {
+        const itemId = action.item_id;
+        for (const key of itemDrafts.keys()) if (key.endsWith(':' + itemId)) itemDrafts.delete(key);
+        clearSettingsDrafts(['data-learning-title', 'data-learning-body', 'data-learning-target']
+          .map(attribute => `[${attribute}="${CSS.escape(itemId)}"]`).join(', '));
+      }
       state.dirty = drafts.size > 0 || itemDrafts.size > 0;
       await load(true);
     } catch (error) {
@@ -197,7 +206,11 @@ export function createLearningController(context: { render: () => void; workspac
     }
     bindControl(form, 'submit', (event) => { event.preventDefault(); void save(form!); });
     bindControl(document.querySelector('#learning-refresh'), 'click', () => { void load(true); });
-    bindControl(document.querySelector('#learning-discard'), 'click', () => { state.dirty = false; drafts.clear(); itemDrafts.clear(); state.notice = ''; render(); });
+    bindControl(document.querySelector('#learning-discard'), 'click', () => {
+      state.dirty = false; drafts.clear(); itemDrafts.clear(); state.notice = '';
+      clearSettingsDrafts('#learning-settings, .learning-results');
+      render();
+    });
     bindControl(document.querySelector('#learning-pause'), 'click', () => { void mutate({ action: 'learning.configure', settings: { paused: !state.data!.settings.paused } }); });
     bindControl(document.querySelector<HTMLSelectElement>('#learning-session'), 'change', (event) => { state.selectedSession = (event.target as HTMLSelectElement).value; render(); });
     document.querySelectorAll<HTMLDetailsElement>('[data-learning-disclosure]').forEach((element) => {

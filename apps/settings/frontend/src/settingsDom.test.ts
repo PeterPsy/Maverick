@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, it, vi } from 'vitest';
-import { clearSettingsDomCache, patchSettingsDom, rememberSettingsDrafts } from './settingsDom';
+import { clearSettingsDomCache, clearSettingsDrafts, patchSettingsDom, rememberSettingsDrafts } from './settingsDom';
 import { beginSettingsBindings, bindControl } from './controlBindings';
+import { usersPageHtml } from './userPages';
+import type { User } from './adminApi';
+import { settingsPageDomKey } from './pages';
+import { escapeAttr } from './html';
 
 let root: HTMLElement;
 beforeEach(() => { clearSettingsDomCache(); document.body.innerHTML = '<div id="app"></div>'; root = document.getElementById('app')!; rememberSettingsDrafts(root); });
@@ -39,6 +43,50 @@ it('replaces event handlers when controls are retained', () => {
   for (let i = 0; i < 3; i++) { beginSettingsBindings(); bindControl(root.querySelector('button'), 'click', handler); }
   root.querySelector('button')!.click();
   expect(handler).toHaveBeenCalledOnce();
+});
+
+it('keeps the user picker aligned with the active account after A → B → A', () => {
+  const users: User[] = ['a', 'b'].map(user_id => ({ user_id, username: user_id, display_name: user_id, email: `${user_id}@example.test`, memberships: [], platform_role: 'member', account_type: 'standard', is_active: true }));
+  const render = (id: string) => patchSettingsDom(root, `<div data-render-key="${escapeAttr(settingsPageDomKey('default', 'users', id))}">${usersPageHtml({ users, selectedUser: users.find(user => user.user_id === id) })}</div>`);
+  const select = (id: string) => {
+    const picker = root.querySelector<HTMLSelectElement>('#selected-user')!;
+    picker.value = id; picker.dispatchEvent(new Event('change', { bubbles: true })); render(id);
+  };
+  render('a'); select('b'); select('a');
+  expect(root.querySelector<HTMLSelectElement>('#selected-user')!.value).toBe('a');
+  expect(root.querySelector<HTMLInputElement>('#edit-user [name=email]')!.value).toBe('a@example.test');
+});
+
+it('scopes cached page drafts by workspace identity', () => {
+  const html = (workspace: string) => `<div data-render-key="${escapeAttr(settingsPageDomKey(workspace, 'voice'))}"><input value="saved" /></div>`;
+  patchSettingsDom(root, html('first'));
+  const field = root.querySelector('input')!;
+  field.value = 'draft'; field.dispatchEvent(new Event('input', { bubbles: true }));
+  patchSettingsDom(root, html('second'));
+  expect(root.querySelector<HTMLInputElement>('input')!.value).toBe('saved');
+  expect(root.querySelector('input')).not.toBe(field);
+});
+
+it('invalidates a mounted draft when the workspace resets', () => {
+  const html = (value: number) => `<div data-render-key="page:settings"><input id="limit" value="${value}" /></div>`;
+  patchSettingsDom(root, html(120));
+  const field = root.querySelector<HTMLInputElement>('#limit')!;
+  field.value = '123'; field.dispatchEvent(new Event('input', { bubbles: true }));
+  clearSettingsDomCache(); patchSettingsDom(root, html(5));
+  expect(root.querySelector<HTMLInputElement>('#limit')!.value).toBe('5');
+  expect(root.querySelector('#limit')).not.toBe(field);
+});
+
+it('clears the owning draft after an acknowledgement while its page is detached', () => {
+  const html = (value: string) => `<div data-render-key="page:learning"><form id="learning-settings"><input value="${value}" /></form></div>`;
+  patchSettingsDom(root, html('120'));
+  const field = root.querySelector('input')!;
+  field.value = '300'; field.dispatchEvent(new Event('input', { bubbles: true }));
+  patchSettingsDom(root, '<div data-render-key="page:users"></div>');
+  clearSettingsDrafts('#learning-settings');
+  patchSettingsDom(root, html('250'));
+  expect(root.querySelector('input')).toBe(field);
+  expect(field.value).toBe('250');
 });
 
 it('keeps a model draft when a provider refresh reorders groups', () => {

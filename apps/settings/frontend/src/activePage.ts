@@ -21,6 +21,7 @@ export function activeSettingsPageHtml(context: {
   selectedUser: User | undefined;
   users: User[];
   workspaceApps: WorkspaceApp[];
+  savingAppKeys: Set<string>;
   workspaces: Workspace[];
 }): string {
   const { page, selectedUser } = context;
@@ -31,7 +32,7 @@ export function activeSettingsPageHtml(context: {
     return workspaceAccessPageHtml({ selectedUser, users: context.users, workspaces: context.workspaces });
   }
   if (page.id === 'workspace-apps') {
-    return workspaceAppsPageHtml({ workspaceApps: context.workspaceApps, workspaces: context.workspaces });
+    return workspaceAppsPageHtml({ workspaceApps: context.workspaceApps, workspaces: context.workspaces, savingKeys: context.savingAppKeys });
   }
   if (page.id === 'app-links') {
     const state = context.appLinksController.viewState();

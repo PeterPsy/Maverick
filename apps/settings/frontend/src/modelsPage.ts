@@ -219,7 +219,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
     : String(policy.max_estimated_cost_microusd / 1_000_000);
   const credentials = item.credential_bindings;
   const selectedCredential = binding?.credential_binding_id || credentials[0]?.binding_id || '';
-  const enabled = Boolean(binding?.enabled);
+  const enabled = state.pendingAgenticEnabled[key] ?? Boolean(binding?.enabled);
   const available = item.selectable === true || (!enabled && item.enable_eligible === true);
   const unavailableReason = item.enable_blocked_reason
     || item.blocked_reason
@@ -238,7 +238,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
         ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(unavailableReason))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
-          <input type="checkbox" role="switch" data-agentic-model-toggle aria-label="Enable ${escapeAttr(agenticModelLabel(item))}"
+          <input type="checkbox" role="switch" data-agentic-model-toggle data-settings-controlled aria-label="Enable ${escapeAttr(agenticModelLabel(item))}"
             data-agentic-definition-id="${escapeAttr(item.definition_id)}"
             ${enabled ? 'checked' : ''} ${isSaving || (item.enable_eligible !== true && !enabled) ? 'disabled' : ''}>
           <span class="settings-bouncy-toggle__label">${enabled ? 'On' : 'Off'}</span>

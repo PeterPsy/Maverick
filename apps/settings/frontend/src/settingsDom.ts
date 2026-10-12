@@ -1,11 +1,15 @@
-const dirtyControls = new WeakSet<Element>();
+let dirtyControls = new WeakSet<Element>();
 const pageDrafts = new Map<string, Element>();
 
-export function clearSettingsDomCache() { pageDrafts.clear(); }
+export function clearSettingsDomCache(root = document.getElementById('app')) {
+  pageDrafts.clear();
+  dirtyControls = new WeakSet<Element>();
+  root?.replaceChildren();
+}
 
 export function rememberSettingsDrafts(root: HTMLElement) {
   const remember = (event: Event) => {
-    if (event.target instanceof Element) {
+    if (event.target instanceof Element && !event.target.hasAttribute('data-settings-controlled')) {
       dirtyControls.add(event.target);
       const status = event.target.closest('form, #workspace-assignments')?.querySelector('[data-action-status]');
       if (status) status.textContent = 'Unsaved changes';
@@ -16,7 +20,13 @@ export function rememberSettingsDrafts(root: HTMLElement) {
 }
 
 export function clearSettingsDrafts(selector: string | Element) {
-  (typeof selector === 'string' ? Array.from(document.querySelectorAll(selector)) : [selector]).forEach((root) => {
+  const roots = typeof selector === 'string' ? [
+    ...document.querySelectorAll(selector),
+    ...Array.from(pageDrafts.values()).flatMap(page => [
+      ...(page.matches(selector) ? [page] : []), ...page.querySelectorAll(selector)
+    ])
+  ] : [selector];
+  roots.forEach((root) => {
     dirtyControls.delete(root);
     root.querySelectorAll('[data-action-status]').forEach(status => { status.textContent = ''; status.setAttribute('role', 'status'); });
     root.querySelectorAll('input, select, textarea').forEach((control) => dirtyControls.delete(control));
@@ -86,7 +96,7 @@ function patchNode(current: Node, next: Node) {
     if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
     return;
   }
-  const dirty = dirtyControls.has(current);
+  const dirty = dirtyControls.has(current) && !next.hasAttribute('data-settings-controlled');
   const open = current instanceof HTMLDetailsElement ? current.open : undefined;
   const draftValue = dirty && 'value' in current ? String(current.value) : undefined;
   const checked = dirty && current instanceof HTMLInputElement ? current.checked : undefined;

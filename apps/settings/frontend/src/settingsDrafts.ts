@@ -34,6 +34,7 @@ export type SettingsPanelState = {
   isLoadingProviderUsage: boolean;
   isLoadingUsageHistory: boolean;
   savingAgenticBindings: Set<string>;
+  pendingAgenticEnabled: Record<string, boolean>;
   providerUsageError: string;
   providerUsageItems: ProviderSubscriptionUsage[];
   usageHistory: UsageTimeSeriesPayload | null;
@@ -64,6 +65,7 @@ export function createSettingsPanelState(): SettingsPanelState {
     isLoadingProviderUsage: false,
     isLoadingUsageHistory: false,
     savingAgenticBindings: new Set(),
+    pendingAgenticEnabled: {},
     providerUsageError: '',
     providerUsageItems: [],
     usageHistory: null,

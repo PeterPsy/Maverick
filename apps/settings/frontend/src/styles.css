@@ -71,7 +71,6 @@ button,
 input,
 select {
   border: 0;
-  color: inherit;
   font: inherit;
 }
 

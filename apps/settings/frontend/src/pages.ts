@@ -12,6 +12,10 @@ export type SettingsPageId =
   | 'cache'
   | 'persistence';
 
+export function settingsPageDomKey(workspaceId: string, page: SettingsPageId, userId = '') {
+  return `page:${JSON.stringify([workspaceId, page, ['users', 'workspace-access'].includes(page) ? userId : ''])}`;
+}
+
 export type SettingsPage = {
   id: SettingsPageId;
   title: string;

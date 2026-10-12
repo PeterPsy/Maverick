@@ -137,7 +137,7 @@ function userPickerHtml(users: User[], user: User | undefined) {
     </div>
     <label class="settings-platform-field">
       <span>Selected user</span>
-      <select id="selected-user">
+      <select id="selected-user" data-settings-controlled>
         ${users
           .map((item) => `<option value="${escapeAttr(item.user_id)}" ${item.user_id === user?.user_id ? 'selected' : ''}>${escapeHtml(item.display_name || item.username)} (${escapeHtml(item.username)})</option>`)
           .join('')}

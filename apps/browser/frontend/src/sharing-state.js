@@ -21,7 +21,7 @@ export function stopReason(error) {
 }
 
 export function connectionDetail(connection) {
-  const mode = connection.sharing_mode === "agent_tab" ? `Agent tab · ${connection.allowed_platforms.join(", ")}` : connection.platform || "Chrome";
+  const mode = connection.sharing_mode === "agent_tab" ? "Agent tab" : connection.platform || "Chrome";
   if (connection.status === "revoked") return `${mode} · ${Object.hasOwn(stopReasons, connection.stop_reason) ? stopReasons[connection.stop_reason] : "Sharing stopped; reconnect from Companion"}`;
   if (connection.status === "offline") return `${mode} · Bridge offline; reopen Browser and reconnect from Companion`;
   return `${mode} · ${connection.url || (connection.sharing_mode === "agent_tab" ? "Ready for agent navigation" : "Waiting for Chrome to share a page")}`;

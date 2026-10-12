@@ -72,7 +72,7 @@ try {
   const instagram=await context.newPage();await instagram.goto("https://www.instagram.com/fixture_user/");await instagram.bringToFront();
   const worker=context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
   const extensionId=worker.url().split("/")[2];
-  if(realConsent)await instagram.goto(`chrome-extension://${extensionId}/agent-tab.html`);
+  await instagram.goto(`chrome-extension://${extensionId}/agent-tab.html`);
   const browser=await context.browser().newBrowserCDPSession();
   const popup=await openActionPopup(browser,extensionId,instagram.url());
   const popupEvaluate=popup.evaluate;
@@ -100,7 +100,7 @@ try {
   await connectorWindow.getByRole("button",{name:"Sign in as fixture user"}).click();
   await wait(()=>connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
   const connector=connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`));
-  await connector.waitForSelector("#stop:visible");
+  await connector.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
   await wait(async()=> (await worker.evaluate(()=>chrome.storage.session.get("binding"))).binding?.connectorDocumentId);
   assert.equal(await connector.locator("#url").inputValue(),connectorAddress);
   assert.equal(await connector.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),"light");
@@ -114,7 +114,7 @@ try {
     const result=await wait(async()=>{const result=await api({action:"operation.get",operation_id:queued.operation_id});return ["completed","failed","cancelled","expired"].includes(result.status) ? result : null;},60000);
     assert.equal(result.status,"completed",JSON.stringify(result));return {...result.result,operation_id:queued.operation_id};
   };
-  if(realConsent)await run('navigate',{url:'https://www.instagram.com/fixture_user/'});
+  await run('navigate',{url:'https://www.instagram.com/fixture_user/'});
   if(!connectorsOnly) {
   const content=await run("content.read");assert(content.text.includes("Bio visibile"));assert(!content.text.includes("must-not-be-read"));assert(!content.text.includes("hidden-secret"));assert.equal(content.videos[0].duration_seconds,5);
   const scrolling=await run("scroll",{pixels:600});assert.equal(scrolling.target,"rendered_container");assert(scrolling.moved);
@@ -226,9 +226,9 @@ try {
   await reused;
   const agentWindow=connectorWindow;
   assert.equal(context.pages().filter(page=>page.url().startsWith(`${origin}/app/browser`)).length,1,'Sharing a new agent tab must reuse the existing Browser bridge.');
-  const agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
-  await agentFrame.waitForSelector('#stop:visible');
-  const agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.sharing_mode === 'agent_tab'));
+  let agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
+  await agentFrame.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
+  let agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.sharing_mode === 'agent_tab'));
   assert.equal(agentConnection.url,"");assert.deepEqual(agentConnection.allowed_platforms,Object.keys(platforms));
   // Native rail navigation can remove connector=1 and hide the retained Browser
   // frame. The authorized shell tab/document remains the bridge in both cases.
@@ -252,6 +252,31 @@ try {
   writeFileSync(path.join(tmpdir(),'maverick-agent-x-screenshot.jpg'),Buffer.from(agentShot.base64,'base64'));
   await run('navigate',{url:'https://www.instagram.com/'},agentConnection);
   assert((await run('content.read',{},agentConnection)).text.includes('Bio visibile'));
+  // Opening from another ordinary Chrome tab focuses the existing agent source.
+  // Chrome's fallback popup-type bridge has no extension toolbar.
+  await instagram.bringToFront();
+  const returning=await openActionPopup(browser,extensionId,instagram.url());
+  const pageCount=context.pages().length;
+  const previousBinding=(await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding;
+  await returning.evaluate("document.querySelector('#open-agent').click();true");
+  await wait(()=>worker.evaluate(tabId=>chrome.tabs.get(tabId).then(tab=>tab.active),previousBinding.tabId));
+  assert.equal(context.pages().length,pageCount);
+  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding.sharingId,previousBinding.sharingId);
+  // Reconnect from the already navigated agent tab retains its Instagram page.
+  await agent.bringToFront();
+  const reconnecting=await openActionPopup(browser,extensionId,agent.url());
+  assert.equal(await reconnecting.evaluate("document.querySelector('#share-label').textContent"),'Reconnect agent tab');
+  const reloaded=agentWindow.waitForEvent('framenavigated',{predicate:frame=>frame === agentWindow.mainFrame()});
+  await reconnecting.evaluate("document.querySelector('#share').click();true");
+  await reloaded;
+  agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
+  await agentFrame.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
+  const previousSessionId=agentConnection.session_id;
+  agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.session_id !== previousSessionId));
+  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding.tabId,previousBinding.tabId);
+  assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
+  assert.equal(context.pages().length,pageCount);
+  console.log(JSON.stringify({phase:'agent-tab-reused-and-reconnected',source_preserved:true,no_duplicate_tabs:true}));
   if(!connectorsOnly) {
     const a=await run('video.frame',{time_seconds:0.5},agentConnection),b=await run('video.frame',{time_seconds:3},agentConnection);
     assert.notEqual(a.base64,b.base64,'Agent-tab capture must reflect the presented seek, not a stale captured frame.');

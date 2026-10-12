@@ -28,8 +28,9 @@ test("denial and invalid setup never start sharing and permit a later explicit r
   let permitted = false, started = 0;
   globalThis.chrome = {permissions:{async request() {return permitted;}}};
   const start = createShareSetup(async () => {started++; return {status:"shared"};});
-  const message = {url:"https://maverick.test/app/browser",tabId:12,platform:"instagram"};
-  await assert.rejects(start({...message, platform:"constructor"}), /shared_platform_scope_required/u);
+  const message = {url:"https://maverick.test/app/browser",tabId:12,agentTab:true};
+  await assert.rejects(start({...message, agentTab:false, platform:"instagram"}), /agent_tab_required/u);
+  await assert.rejects(start({...message, agentTab:"true"}), /agent_tab_required/u);
   await assert.rejects(start(message), /permission_denied/u);
   assert.equal(started, 0);
   permitted = true;

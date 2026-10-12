@@ -26,7 +26,7 @@ test("Companion status and operation timeouts preserve distinct actionable failu
   t.after(()=>{for(const [key,value] of Object.entries(previous)) {if(value===undefined)delete globalThis[key];else globalThis[key]=value;}});
   const {bridge}=await import("../frontend/src/api.js");
   t.mock.timers.enable({apis:["setTimeout"]});
-  const status=assert.rejects(bridge("status",undefined,100),error=>error.code === "companion_unavailable" && /Share this tab/u.test(error.message));
+  const status=assert.rejects(bridge("status",undefined,100),error=>error.code === "companion_unavailable" && /Open agent tab/u.test(error.message));
   t.mock.timers.tick(100);await status;
   const operation=assert.rejects(bridge("execute",{},100),error=>error.code === "companion_command_timeout" && /Keep the shared tab/u.test(error.message));
   t.mock.timers.tick(100);await operation;

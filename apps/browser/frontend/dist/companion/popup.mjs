@@ -1,9 +1,12 @@
-import {connectorUrl, platformForUrl} from "./scope.mjs";
-import {shareableTab, setupError, defaultConnectorUrl} from "./setup.mjs";
+import {connectorUrl} from "./scope.mjs";
+import {selectedAgentTab, setupError, defaultConnectorUrl} from "./setup.mjs";
 const status = document.querySelector("#status");
 const input = document.querySelector("#connector");
 const share = document.querySelector("#share");
+const openAgent = document.querySelector("#open-agent");
 let selected;
+document.querySelector("#version").textContent = chrome.runtime.getManifest().version;
+const report = (text, state = "info") => { status.textContent = text; status.dataset.state = state; };
 input.value = (await chrome.storage.local.get("connectorUrl")).connectorUrl || defaultConnectorUrl;
 const showDestination = () => {
   try {document.querySelector("#destination").textContent = `Connects to ${connectorUrl(input.value).host}`;}
@@ -11,33 +14,43 @@ const showDestination = () => {
 };
 showDestination(); input.oninput = showDestination;
 try {
-  const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-  document.querySelector("#tab-title").textContent = tab?.title || "Selected Chrome tab";
-  document.querySelector("#tab-url").textContent = tab?.url || "Chrome does not allow this page to be shared.";
-  selected = shareableTab(tab, chrome.runtime.getURL("agent-tab.html")); share.disabled = false;
-  if (selected.allowed_platforms) {
-    share.textContent = "Connect agent tab";
-    document.querySelector("#tab-url").textContent = "Starts empty · navigation across six supported platforms";
+  const {binding} = await chrome.storage.session.get("binding");
+  document.querySelector("#stop").hidden = !binding;
+  if (binding?.allowedPlatforms?.length) {
+    document.querySelector("#tab-title").textContent = "Your agent tab is open";
+    document.querySelector("#tab-url").textContent = "Return to the tab your agent uses to view it or reconnect.";
   }
-} catch (error) { status.textContent = setupError(error); }
+  const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+  selected = selectedAgentTab(tab, chrome.runtime.getURL("agent-tab.html"), binding);
+  document.querySelector("#tab-title").textContent = selected.reconnect ? selected.title : "Your agent’s browser";
+  document.querySelector("#tab-url").textContent = selected.url || "Starts empty. Maverick chooses pages when you ask.";
+  document.querySelector("#share-label").textContent = selected.reconnect ? "Reconnect agent tab" : "Connect agent tab";
+  share.hidden = false; share.disabled = false;
+  openAgent.hidden = true;
+} catch (error) {
+  if (!["agent_tab_required", "active_tab_unavailable"].includes(error.message)) report(setupError(error), "error");
+}
 share.onclick = async () => {
   if (!selected || share.disabled) return;
   share.disabled = true;
+  share.setAttribute("aria-busy", "true");
   try {
     const url = connectorUrl(input.value);
-    status.textContent = "Allow Chrome access if asked. Connecting to Maverick…";
+    report("Allow Chrome access if asked. Connecting to Maverick…");
     // Send before any await. The worker retains the transaction if this popup closes.
-    const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: selected.id, url: url.href, agentTab: Boolean(selected.allowed_platforms), platform: platformForUrl(selected.url), reuseConnector: document.querySelector("#reuse").checked});
+    const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: selected.id, url: url.href, agentTab: true, reuseConnector: document.querySelector("#reuse").checked});
     if (result?.error) throw new Error(result.detail || result.error);
-    status.textContent = "Connecting in Maverick. Sign in there if asked; the shared tab connects automatically. Keep both tabs open.";
-  } catch (error) { status.textContent = setupError(error); }
-  finally { share.disabled = false; }
+    report("Connecting in Maverick. Sign in there if asked; your agent tab connects automatically. Keep both tabs open.");
+    document.querySelector("#stop").hidden = false;
+  } catch (error) { report(setupError(error), "error"); }
+  finally { share.disabled = false; share.removeAttribute("aria-busy"); }
 };
-document.querySelector("#open-agent").onclick = async () => {
+openAgent.onclick = async () => {
   const result = await chrome.runtime.sendMessage({target:"worker", action:"agent.open"});
-  if (result?.error) status.textContent = setupError(new Error(result.error));
+  if (result?.error) report(setupError(new Error(result.error)), "error");
 };
 document.querySelector("#stop").onclick = async () => {
   const result = await chrome.runtime.sendMessage({target: "worker", action: "stop"});
-  status.textContent = result?.error || "Sharing stopped.";
+  report(result?.error || "Agent tab disconnected.", result?.error ? "error" : "info");
+  if (!result?.error) { document.querySelector("#stop").hidden = true; share.hidden = true; openAgent.hidden = false; }
 };

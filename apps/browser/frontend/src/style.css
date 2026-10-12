@@ -34,7 +34,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; }
 #app { height: 100dvh; min-height: 0; overflow: auto; padding-top: var(--maverick-shell-mobile-content-top-offset, 0px); }
-main { max-width: 1200px; margin: auto; padding: 32px 28px 64px; }
+main { max-width: 1000px; margin: auto; padding: 32px 28px 64px; }
 .app-header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
 .app-mark { width: 44px; height: 44px; border-radius: 16px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex-shrink: 0; }
 .app-mark svg { width: 25px; height: 25px; stroke: currentColor; fill: none; stroke-width: 1.7; }
@@ -43,10 +43,6 @@ h1 { font-size: 25px; letter-spacing: -.7px; margin: 0; }
 h2 { font-size: 17px; letter-spacing: -.3px; margin: 0; }
 p { line-height: 1.55; }
 .header-copy p, .section-title p { margin: 5px 0 0; color: var(--muted); }
-.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-.metrics > div { border: 1px solid var(--border); background: var(--surface); border-radius: 22px; padding: 18px 20px; }
-.metrics span, .metrics small { display: block; color: var(--muted); font-size: 12px; }
-.metrics strong { display: block; font-size: 30px; font-weight: 500; margin: 7px 0; }
 .workspace-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 nav { display: flex; gap: 4px; min-width: 0; }
 nav button { background: transparent; border-color: transparent; color: var(--muted); padding: 10px 16px; }
@@ -68,7 +64,8 @@ nav button[aria-current] { background: var(--surface); border-color: var(--borde
 a { color: var(--text); text-underline-offset: 3px; cursor: pointer; }
 code { font-size: 12px; overflow-wrap: anywhere; }
 label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 8px; }
-.copy, .actions, .section-title, .filters { display: flex; gap: 10px; align-items: center; }
+.copy, .connector-actions, .section-title, .filters { display: flex; gap: 10px; align-items: center; }
+.connector-actions { margin: 16px 0 8px; }
 .copy { margin-bottom: 16px; }
 .connection-settings { margin: 16px 0; border-top: 1px solid var(--border); padding-top: 8px; }
 .setup .connection-settings > summary { padding: 10px 0; border-radius: 0; font-size: 13px; color: var(--muted); }
@@ -104,6 +101,11 @@ select { background: var(--dialog); color: var(--text); max-width: 190px; }
 .section-note { color: var(--muted); font-size: 12px; line-height: 1.6; }
 footer { color: var(--muted); font-size: 12px; line-height: 1.6; padding: 4px 2px; }
 footer p { margin: 5px 0 0; }
+.agent-panel { padding: 26px; }
+.agent-panel h2 { font-size: 23px; letter-spacing: -.6px; }
+.agent-capabilities { margin: 18px 0 0; }
+.history { margin-top: 20px; }
+.history > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 dialog { width: min(840px, 94vw); max-height: 85dvh; border: 1px solid var(--border-strong); border-radius: 22px; padding: 24px; background: var(--dialog); color: var(--text); }
 dialog::backdrop { background: rgba(0, 0, 0, .65); }
 dialog .section-title h2 { overflow-wrap: anywhere; }
@@ -118,28 +120,21 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-heig
 @media (max-width: 760px) {
   main { padding: 22px 16px 44px; }
   .app-header { flex-wrap: wrap; margin-bottom: 22px; }
-  .app-header .button { font-size: 12px; }
+  .app-header button { font-size: 12px; }
   .header-copy p { font-size: 12px; }
-  .metrics { gap: 8px; }
-  .metrics > div { padding: 15px 12px; }
-  .metrics strong { font-size: 26px; }
-  .metrics small { line-height: 1.4; }
   .setup-steps { grid-template-columns: 1fr; gap: 16px; }
 }
 @media (max-width: 480px) {
   main { padding: 16px 12px 36px; }
   .app-header { display: grid; grid-template-columns: 44px minmax(0, 1fr); }
-  .app-header .button { grid-column: 2; justify-self: start; }
+  .app-header button { grid-column: 2; justify-self: start; }
   h1 { font-size: 23px; }
-  .metrics small { display: none; }
-  .metrics span { font-size: 11px; }
-  .metrics > div { border-radius: 18px; }
-  .metrics strong { margin-bottom: 0; }
   .workspace-toolbar { flex-wrap: wrap; }
   nav { flex: 1 1 100%; }
   nav button { flex: 1; padding: 10px 11px; font-size: 12px; }
   #refresh { min-height: 36px; font-size: 12px; padding: 8px 12px; margin-left: auto; }
   .panel { padding: 18px; }
+  .agent-panel .section-title { align-items: flex-start; flex-wrap: wrap; }
   .setup { padding: 0; }
   .setup summary { padding: 18px; }
   .setup-body { padding: 0 18px 18px; }

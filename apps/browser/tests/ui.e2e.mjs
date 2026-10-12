@@ -9,7 +9,7 @@ const dist = fileURLToPath(new URL("../frontend/dist/", import.meta.url));
 const origin = "http://browser-fixture.test";
 const now = Date.now() / 1000;
 const overview = {workspace_id: "fixture", connections: [{session_id: "chrome-fixture", title: "Fixture profile",
-  display_name: "Chrome", status: "connected", platform: "instagram", url: "https://www.instagram.com/fixture/", last_seen: now}],
+  display_name: "Chrome", status: "connected", sharing_mode: "agent_tab", allowed_platforms: ["instagram", "youtube"], platform: "instagram", url: "https://www.instagram.com/fixture/", last_seen: now}],
   operations: [{operation_id: "op-fixture", session_id: "chrome-fixture", action: "content.read", status: "running", created_at: now}]};
 let denyDisconnect = true;
 let operationResult;
@@ -42,7 +42,9 @@ try {
   const page = await context.newPage(), errors = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`${origin}/apps/browser/`);
-  await page.waitForFunction(() => document.querySelector("#tab-count")?.textContent === "1");
+  await page.waitForFunction(() => document.querySelector("#agent-state")?.textContent === "Connected");
+  assert.equal(await page.getByRole("button", {name: "Shared tabs", exact: true}).count(), 0);
+  assert.equal(await page.getByRole("button", {name: "Browser Lab", exact: true}).count(), 0);
   assert.equal(await page.locator("#setup").getAttribute("open"), null);
   const button = await page.locator("#connections button").elementHandle();
   await button.focus(); overview.connections[0].last_seen++;
@@ -108,15 +110,9 @@ try {
   assert.equal(await page.locator("#operations .row").count(), 0);
   await page.locator("#search").fill("Fixture profile");
   assert.equal(await page.locator("#operations .row").count(), 1);
-  await page.getByRole("button", {name: "Browser Lab", exact: true}).click();
-  await page.locator("#research-url").fill("https://example.com/");
-  await page.getByRole("button", {name: "Read page", exact: true}).click();
-  await page.waitForSelector("dialog[open]");
-  await page.getByRole("button", {name: "Close", exact: true}).click();
-  assert.equal(await page.locator("#research-status").textContent(), "Page read. The temporary session has closed.");
-  await page.getByRole("button", {name: "Shared tabs", exact: true}).click();
+  await page.getByRole("button", {name: "Agent tab", exact: true}).click();
   denyDisconnect = false; await page.locator("#connections button").click();
-  await page.waitForFunction(() => document.querySelector("#tab-count")?.textContent === "0");
+  await page.waitForFunction(() => document.querySelector("#agent-state")?.textContent === "Not connected");
   assert.equal(await page.locator("#connections button").isVisible(), false);
   await page.locator("#setup > summary").click();
   await page.locator(".connection-settings > summary").click();
@@ -125,7 +121,7 @@ try {
     const mark = await page.locator(".app-mark").boundingBox(), title = await page.locator("h1").boundingBox();
     assert.ok(title.x >= mark.x + mark.width, `Header overlap at ${width}px`);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Page overflow at ${width}px`);
-    for (const selector of ["nav", "#refresh", ".app-header .button", "#url"]) {
+    for (const selector of ["nav", "#refresh", "#show-setup", "#url"]) {
       const box = await page.locator(selector).boundingBox();
       assert.ok(box.x >= 0 && box.x + box.width <= width, `${selector} clipped at ${width}px`);
     }
@@ -135,5 +131,5 @@ try {
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
   assert.deepEqual(errors, []);
   await context.close();
-  process.stdout.write("Browser UI fixtures passed: focus, actions, filters, text/images/video/collections, media cleanup, research, 320/390px layout and theme messages.\n");
+  process.stdout.write("Browser UI fixtures passed: agent-focused navigation/readiness, focus, actions, filters, text/images/video/collections, media cleanup, 320/390px layout and theme messages.\n");
 } finally { await browser.close(); }

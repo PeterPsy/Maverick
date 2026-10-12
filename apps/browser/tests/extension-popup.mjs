@@ -13,20 +13,28 @@ export async function openActionPopup(browser, extensionId, tabUrl) {
   const popup=await wait(async()=> (await browser.send("Target.getTargets",{filter:[{}]})).targetInfos.find(target=>target.type === "page" && target.url.endsWith("/popup.html")));
   const {sessionId}=await browser.send("Target.attachToTarget",{targetId:popup.targetId,flatten:false});
   let serial=0;
-  const evaluate=expression=>new Promise((resolve,reject)=>{
+  const send=(method,params={})=>new Promise((resolve,reject)=>{
     const id=++serial;
     const timer=setTimeout(()=>{browser.off("Target.receivedMessageFromTarget",receive);reject(new Error("popup_evaluation_timeout"));},10000);
     function receive(event) {
       if(event.sessionId !== sessionId)return;
       const result=JSON.parse(event.message);if(result.id !== id)return;
       clearTimeout(timer);browser.off("Target.receivedMessageFromTarget",receive);
-      if(result.error || result.result?.exceptionDetails)reject(new Error(JSON.stringify(result)));else resolve(result.result?.result?.value);
+      if(result.error)reject(new Error(JSON.stringify(result.error)));else resolve(result.result);
     }
     browser.on("Target.receivedMessageFromTarget",receive);
-    browser.send("Target.sendMessageToTarget",{sessionId,message:JSON.stringify({id,method:"Runtime.evaluate",params:{expression,returnByValue:true,awaitPromise:true,userGesture:true}})}).catch(reject);
+    browser.send("Target.sendMessageToTarget",{sessionId,message:JSON.stringify({id,method,params})}).catch(reject);
   });
+  const evaluate=async expression=>{
+    const result=await send("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true,userGesture:true});
+    if(result.exceptionDetails)throw new Error(JSON.stringify(result.exceptionDetails));
+    return result.result?.value;
+  };
   await wait(()=>evaluate("typeof document.querySelector('#share')?.onclick === 'function'"));
-  return {evaluate,
+  return {evaluate,send,
     async detach(){await browser.send("Target.detachFromTarget",{sessionId});},
-    async close(){await browser.send("Target.closeTarget",{targetId:popup.targetId});}};
+    async close(){await browser.send("Target.closeTarget",{targetId:popup.targetId}).catch(error=>{
+      // Chrome destroys the popup when Open agent tab moves focus.
+      if(!error.message.includes("No target with given id"))throw error;
+    });}};
 }

@@ -6,21 +6,16 @@ Platform workflows and saved collections belong to the Connectors app.
 All browser, collection and speech components are open source; no scraping,
 proxy, hosted-browser or remote transcription service is used.
 
-## Connect a platform tab
+## Connect your agent tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.5.3,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.5.4,
 then load its folder with Chrome's “Load unpacked” developer-mode action.
 Use Chrome 120 or later. The official `https://maverick.loopino.ai` address is
 preconfigured; other installations can change Connection settings in Companion.
-Open a supported platform page in Chrome, log in directly if needed, and choose
-**Share this tab** once. Allow Chrome access when asked. The service worker owns
-the permission request and the remaining setup, so closing the popup during the
-native dialog cannot discard the connection. The agent can navigate throughout
-that platform; sharing a profile
-does not restrict navigation to that profile. Platform home pages are supported.
-
-To start empty, choose **Open agent tab** in Companion, even from Chrome's New
-Tab page. On the new dedicated tab, click Companion in Chrome's toolbar again and
+Companion is centered on one dedicated agent tab, without selecting a platform,
+profile or initial URL. Choose **Open agent tab** from any Chrome page. It brings
+the already shared agent tab to the foreground, or reuses an existing empty start
+tab before creating one. On that tab, click Companion in Chrome's toolbar and
 choose **Connect agent tab** once. This explicit
 invocation grants Chrome's tab-capture permission for that tab. The popup asks
 for the six supported platform hosts plus Maverick, not every website. By default
@@ -38,6 +33,22 @@ It can navigate across Instagram, X, Reddit, Facebook, LinkedIn and YouTube, usi
 usual Chrome platform sessions. It can read, scroll, collect content and analyze
 images/video/audio; clicks, form entry, posting and messages have no command.
 Sign in to platforms directly in Chrome. Other tabs are not shared.
+
+On an already shared agent tab, Companion offers **Reconnect agent tab**. It
+retains that tab and its current platform page while replacing the bridge lease.
+Only the exact extension-owned start page or the existing bound agent tab can
+connect; unrelated platform pages cannot become agent tabs. The worker owns the
+native permission dialog and remaining setup, so popup closure cannot discard
+the user's Connect action. Existing single-platform leases remain enforceable
+and can be disconnected from the previous-connections section; the new popup
+does not create them.
+
+The popup and empty start page share app-owned Maverick neutral tokens, native
+globe/control vectors, 22px cards and 18px controls. Light/dark presentation
+follows Chrome's system color-scheme preference through CSS before first paint;
+the extension does not inherit a private shell theme. Connection settings and
+help are collapsed by default. Status updates have an accessible live region;
+errors remain visible. No remote fonts, UI library or new permissions are used.
 
 The dedicated tab starts with an empty public URL. Its immutable approved
 platform list is saved in the user-created connection lease and returned by
@@ -74,9 +85,14 @@ Frame captures may bring the shared platform window to the foreground.
 
 ## Workspace management
 
-Browser's main frontend contains Shared tabs, Activity and Browser Lab. The
-Chrome setup guide opens automatically when no tab is connected and stays
-collapsible. Activity supports search, status filters, cancellation and readable
+Browser's main frontend has Agent tab and Activity. The first screen shows
+readiness, the current page and Disconnect. Old connections are collapsed;
+three metric cards, platform-sharing choices, direct Connectors navigation and
+manual public-page input have been removed from this flow. Browser Lab remains
+available through the existing agent tools and lifecycle surfaces. The Chrome
+setup guide opens when no agent tab is connected and closes after successful
+automatic connection. Settings for alternate installations remain advanced.
+Activity supports search, status filters, cancellation and readable
 results with copyable observed text, source links, captured images, video sample
 times, audio playback and links to saved evidence in Storage. Collections show
 items, scrolling budgets, per-page stop reasons and coverage;
@@ -94,8 +110,8 @@ never stored media/input blobs. Pending counts include work beyond the recent
 30-operation window, and active connections precede stopped ones. The frontend
 preserves row/button identity and coalesces simultaneous refreshes.
 Visible views poll every 3 seconds with pending
-work, 10 seconds with connected tabs and 30 seconds when idle (Lab also uses 30
-seconds). Hidden documents and frames hidden by the shell's
+work, 10 seconds with connected tabs and 30 seconds when idle. Hidden documents
+and frames hidden by the shell's
 `maverick.app.visibility-changed` event pause overview polling, including data
 invalidations; returning refreshes immediately. Failures back off to 60
 seconds. Chrome transport keeps its separate heartbeat so active observations

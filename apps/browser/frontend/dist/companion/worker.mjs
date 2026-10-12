@@ -1,4 +1,4 @@
-import {boundedCommand,connectorUrl,connectorOrigins,platformUrl,platformForUrl,sharedTabUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
+import {boundedCommand,connectorUrl,connectorOrigins,platformUrl,sharedTabUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
 import {platforms} from "./platforms.mjs";
 import {attachConnectorFrame} from "./connector-frame.mjs";
 import {openConnectorWindow} from "./connector-window.mjs";
@@ -121,10 +121,11 @@ async function execute(b,command) {
 }
 async function share(message) {
   const url=connectorUrl(message.url);const tab=await chrome.tabs.get(message.tabId);
-  const agentTab=message.agentTab === true && tab.url === chrome.runtime.getURL("agent-tab.html");
-  if (message.agentTab && !agentTab) throw new Error("active_tab_unavailable");
-  if (!agentTab) platformUrl(tab.url,message.platform);
-  const approved=agentTab ? Object.keys(platforms) : [platformForUrl(tab.url)];
+  const previous=await binding();
+  const reconnect=previous?.tabId === tab.id && previous.allowedPlatforms?.length;
+  const agentTab=message.agentTab === true && (tab.url === chrome.runtime.getURL("agent-tab.html") || reconnect && Boolean(sharedUrl(tab.url,previous)));
+  if (!agentTab) throw new Error("agent_tab_required");
+  const approved=Object.keys(platforms);
   if (!await chrome.permissions.contains({origins:[...connectorOrigins(url),...approved.flatMap(key=>platforms[key].hosts.map(host=>`https://${host}/*`))]})) throw new Error("permission_denied");
   await chrome.storage.local.set({connectorUrl:url.href});
   await stop();
@@ -134,9 +135,9 @@ async function share(message) {
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     await capture("start",{streamId});
     const connector=await openConnectorWindow(url,{sourceTabId:tab.id,reuse:message.reuseConnector !== false});
-    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:agentTab ? null : platformForUrl(tab.url),allowedPlatforms:agentTab ? approved : []}});
+    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:null,allowedPlatforms:approved}});
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
-    await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#5665df"});
+    await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#171717"});
     // A tab may finish loading before onUpdated observes the stored binding.
     const loaded=await chrome.tabs.get(connector.id);
     if(loaded.status === "complete")await chrome.scripting.executeScript({target:{tabId:connector.id,frameIds:[0]},files:["shell-bridge.js"]});
@@ -152,7 +153,14 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return beginShare(message);
     }
     if(message.action === "agent.open" && sender.url === chrome.runtime.getURL("popup.html")) {
-      const tab=await chrome.tabs.create({url:chrome.runtime.getURL("agent-tab.html")});
+      const current=await binding();let tab;
+      if(current?.allowedPlatforms?.length)tab=await scope(current).catch(()=>null);
+      if(!tab) {
+        const candidates=await chrome.tabs.query({url:chrome.runtime.getURL("agent-tab.html")});
+        tab=candidates.sort((a,b)=>(b.lastAccessed || 0)-(a.lastAccessed || 0))[0];
+      }
+      tab=tab ? await chrome.tabs.update(tab.id,{active:true}) : await chrome.tabs.create({url:chrome.runtime.getURL("agent-tab.html")});
+      await chrome.windows.update(tab.windowId,{focused:true});
       return {tabId:tab.id};
     }
     if(message.action === "stop" && sender.url === chrome.runtime.getURL("popup.html"))return stop();

@@ -1,0 +1,41 @@
+/* App-owned copies of Maverick's native neutral tokens; no remote assets. */
+:root {
+  color-scheme: dark;
+  --bg: #070708;
+  --surface: rgba(255, 255, 255, .055);
+  --hover: rgba(255, 255, 255, .105);
+  --border: rgba(255, 255, 255, .08);
+  --border-strong: rgba(255, 255, 255, .14);
+  --text: #ececec;
+  --muted: rgba(236, 236, 236, .66);
+  --accent: #fff;
+  --on-accent: #0a0a0b;
+  --danger: #ffb3bf;
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, .052);
+  font: 13px "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f7f8fb;
+    --surface: rgba(15, 23, 42, .055);
+    --hover: rgba(15, 23, 42, .085);
+    --border: rgba(15, 23, 42, .1);
+    --border-strong: rgba(15, 23, 42, .16);
+    --text: #111827;
+    --muted: rgba(17, 24, 39, .66);
+    --accent: #111827;
+    --on-accent: #fff;
+    --danger: #b32a43;
+    --glass-edge: inset 0 1px 0 rgba(255, 255, 255, .88);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.app-mark { display: grid; place-items: center; flex: none; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--glass-edge); }
+button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

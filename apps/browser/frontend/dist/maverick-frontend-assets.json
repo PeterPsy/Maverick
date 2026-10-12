@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "7aa89c76742092cfebc8700e786f624c60b1f58ceb32ea402920e69fb454a2e4",
+  "build_id": "e17c2cd422a8ad31de78fc3dd2a0c3db860d255f73e581f6ae720d3467cf5d2e",
   "entrypoints": [
     "companion/agent-tab.html",
     "companion/offscreen.html",
@@ -9,31 +9,31 @@
   ],
   "immutable": [
     {
-      "path": "assets/index-CqzRFsAc.js",
-      "sha256": "0c00b6cd45322500d557d12b6eeb78007b70a6b96c923c2c5d328ec6775730e1",
-      "size_bytes": 31143
+      "path": "assets/index-BF-gVSrj.css",
+      "sha256": "325cb93f2bd2af3ac96427c4322ccdd44792dfa0b6b56c0b0cceba4e2d8be51a",
+      "size_bytes": 8542
     },
     {
-      "path": "assets/index-DqhmXFV7.css",
-      "sha256": "3d7ed2829641dc8196b6f1adef53375dea73858bd2c2022e130c206eac515c54",
-      "size_bytes": 8801
+      "path": "assets/index-CA3BEn3V.js",
+      "sha256": "5a7abfb33310c5fc040b3d38b2528ac30ec7723996e457688c24bdaf4d4e4b30",
+      "size_bytes": 28109
     },
     {
-      "path": "assets/maverick-browser-companion-CZeBLJ2I.zip",
-      "sha256": "bffc7120a5f08f96136b30b802118813aa53c06e418da3dd12eb871aeb8ef1fd",
-      "size_bytes": 26827
+      "path": "assets/maverick-browser-companion-Cf3oP52w.zip",
+      "sha256": "a0a84deb89de5a1c7aa2536a1e35dc1ca27c17cb5bb5afd7d77ce0228633fe53",
+      "size_bytes": 29308
     }
   ],
   "revalidated": [
     {
       "path": "companion/agent-tab.css",
-      "sha256": "b4b6012c8bf09e228b1509361357be94f0e52ece1fcda1baac582eb24ec2f2bc",
-      "size_bytes": 460
+      "sha256": "3873a576d5e66787c7174dd1be5e48db82ac8592457b417a3ee850fcb8ba2149",
+      "size_bytes": 900
     },
     {
       "path": "companion/agent-tab.html",
-      "sha256": "140f8a3e7b70f8b474c642c63936d1c1d628180718c4bc2b1091c80c4c5fb73c",
-      "size_bytes": 1403
+      "sha256": "3f5e469d93144bc46a5fe1a324f5905f05fdafd6e75b63d567f54986b7a2d309",
+      "size_bytes": 1379
     },
     {
       "path": "companion/connector-frame.mjs",
@@ -57,8 +57,8 @@
     },
     {
       "path": "companion/manifest.json",
-      "sha256": "13fba4361b5bd18a9301048213141c2ad5be80d23aa024475ada3549aeaccc6b",
-      "size_bytes": 571
+      "sha256": "b04d4715cd4516ea393074fd1255564ae2c557df7994dd2402f527af3da6f45f",
+      "size_bytes": 574
     },
     {
       "path": "companion/offscreen.html",
@@ -82,18 +82,18 @@
     },
     {
       "path": "companion/popup.css",
-      "sha256": "8eabea34580ca49ae43899cf00d3cad7c6d03be872a0e32d954e6adbc3aa66dd",
-      "size_bytes": 1131
+      "sha256": "3d7f258b2a5d9ab8c63c9665cc9069b4132773984a09df1950dedc61708476e4",
+      "size_bytes": 3585
     },
     {
       "path": "companion/popup.html",
-      "sha256": "dc818b6cf45c7390f683fadcfd374939ae58f1eda09ebd678063f895d6c341c4",
-      "size_bytes": 1546
+      "sha256": "12e1e6aa7399d0f16cece08b86d1273111f402e8968070c92e19c4facf63b6fc",
+      "size_bytes": 3152
     },
     {
       "path": "companion/popup.mjs",
-      "sha256": "b125464b1cc7ceea595b3fd6d3fc200d5580606681d7433ed7aca46d5c6ba6d8",
-      "size_bytes": 2675
+      "sha256": "774e79488af06caaae419d6a29a0b42e7634c7213b1dd84abcbd4d4b93f046d2",
+      "size_bytes": 3516
     },
     {
       "path": "companion/reader.js",
@@ -107,13 +107,13 @@
     },
     {
       "path": "companion/setup.mjs",
-      "sha256": "58aff9b08e37541356a26716d20e8ed7b12e608baa77cac339083a9d67ba9922",
-      "size_bytes": 1796
+      "sha256": "c91ce8770e1d24a1d5773c4438544e66a8af0e19fe86e4bceb15387bdec51966",
+      "size_bytes": 2008
     },
     {
       "path": "companion/share-setup.mjs",
-      "sha256": "063ea35aac9ee8cf53dc85d6e175c310813b88f048031263887339a6f2d15642",
-      "size_bytes": 1164
+      "sha256": "c34e0bf3f14ebf3cd5f8d7efabd930e3964a55ef95400fc3a743ff593645c302",
+      "size_bytes": 1039
     },
     {
       "path": "companion/shell-bridge.js",
@@ -121,9 +121,14 @@
       "size_bytes": 785
     },
     {
+      "path": "companion/theme.css",
+      "sha256": "e027dd039ccdcdb43c04fda2e33c0edaca260c3257207cd77f4f447cdc7477ea",
+      "size_bytes": 1620
+    },
+    {
       "path": "companion/worker.mjs",
-      "sha256": "e1b2b0ccc50bf587212108fafe681ae8df260e445ee8c8f1e52ad26085035e59",
-      "size_bytes": 12476
+      "sha256": "074855fd59074f0c79ddfad8bac02ee97d0ed6fdd347cba556fd1a0226a09637",
+      "size_bytes": 12910
     },
     {
       "path": "companion/workflows.mjs",
@@ -137,7 +142,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "b336c65a1144e9c77e0395712672cd8b95f1ab361a73dff3c5cb9b28e3bd7b4b",
+      "sha256": "20a659a51ed11f78e19d481f2d31dc8788847a2c97b7b2bbdc0669a0b9fca7ef",
       "size_bytes": 901
     }
   ]

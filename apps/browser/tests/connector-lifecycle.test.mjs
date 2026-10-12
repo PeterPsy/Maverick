@@ -46,7 +46,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   };
   const {createConnector} = await import("../frontend/src/connector.js");
   connector = createConnector((text, state) => {states.push(state); reports.push(text);});
-  await assert.rejects(connector.start(), /Share this tab/u);
+  await assert.rejects(connector.start(), /Open agent tab/u);
   assert.equal(states.at(-1), "stopped", "A failed start must leave Connecting and permit retry");
   assert.equal(calls.filter(call => call.action === "companion.connect").length, 0);
   statusFailure = false;
@@ -80,6 +80,6 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   dispatch({type: "maverick.browser.wake"});
   await until(() => calls.filter(call => call.action === "companion.disconnect").length === disconnects + 1);
   assert.equal(states.at(-1), "stopped", "A scoped bridge failure must revoke on the first response even when its message contains friendly guidance");
-  assert.match(reports.at(-1), /Sharing stopped:.*Connect in the Browser window/u);
+  assert.match(reports.at(-1), /Sharing stopped:.*Open agent tab/u);
   assert.equal(calls.filter(call => call.action === "companion.disconnect").at(-1).reason, "connector_scope_required");
 });

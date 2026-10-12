@@ -5,14 +5,13 @@ import {createRefreshLoop, isActiveConnection, isPending, overviewDelay} from ".
 import {mountShell} from "./shell-view.js";
 import {createRecords, label, timestamp} from "./records.js";
 import {showResult} from "./result-view.js";
-import {createLab} from "./lab.js";
 import {createPlatformState} from "./platform-state.js";
 import {connectionDetail} from "./sharing-state.js";
 import {createAutoConnect} from "./auto-connect.js";
 import companionArchiveUrl from "../package/maverick-browser-companion.zip?url";
 
 const launchParams = new URLSearchParams(location.search);
-let connectorMode = launchParams.get("connector") === "1";
+const connectorMode = launchParams.get("connector") === "1";
 mountShell(connectorMode);
 const $ = selector => document.querySelector(selector);
 let platformOrigin = location.origin;
@@ -20,7 +19,6 @@ try {
   const supplied = window.__MAVERICK_PLATFORM_ORIGIN__, origin = new URL(supplied);
   if (["http:", "https:"].includes(origin.protocol) && origin.origin === supplied) platformOrigin = origin.origin;
 } catch { /* Standalone connector window. */ }
-$("#connectors-link").href = new URL("/app/platform-connectors", platformOrigin).href;
 // Chrome signs in through the shell and receives its own fresh isolated frame.
 const connectorUrl = new URL("/app/browser?connector=1", platformOrigin);
 const frameDomain = location.hostname.match(/^af-[a-f0-9]{24}\.sidecars\.(.+)$/u)?.[1];
@@ -32,7 +30,7 @@ const platform = createPlatformState(platformOrigin, () => {
   if (platform.visible()) void loop.refresh(); else loop.pause();
 });
 
-let overview = {connections: [], operations: []}, view = "tabs", initialized = false;
+let overview = {connections: [], operations: []}, initialized = false, localSessionId;
 function reportError(error) { $("#error").textContent = error.message; $("#error").hidden = false; }
 async function run(button, action) {
   if (!action || button.disabled) return;
@@ -42,24 +40,35 @@ async function run(button, action) {
   catch (error) { reportError(error); }
   finally { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = button.dataset.label || text; }
 }
-const connections = createRecords($("#connections"), run), operations = createRecords($("#operations"), run);
+const connections = createRecords($("#connections"), run), history = createRecords($("#past-connections"), run), operations = createRecords($("#operations"), run);
 function render() {
-  const active = overview.connections.filter(isActiveConnection);
-  $("#tab-count").textContent = active.length;
-  $("#pending-count").textContent = overview.pending_count ?? overview.operations.filter(isPending).length;
-  $("#activity-count").textContent = overview.operations.length;
+  const active = overview.connections.filter(connection => connection.sharing_mode === "agent_tab" && isActiveConnection(connection));
+  const pending = overview.pending_count ?? overview.operations.filter(isPending).length;
+  const current = active.length ? active : overview.connections.filter(connection => connection.sharing_mode === "agent_tab" && connection.status === "offline").slice(0, 1);
+  const past = overview.connections.filter(connection => !current.includes(connection));
+  const ready = active.some(connection => connection.status === "connected");
+  $("#agent-heading").textContent = ready ? "Your agent is ready" : active.length ? "Connecting your agent tab…" : current.length ? "Reconnect your agent tab" : "Give your agent a browser tab";
+  $("#agent-description").textContent = ready ? "Ask Maverick what to research. Your agent chooses and navigates the pages." : "Open Companion in Chrome and connect your agent tab. Keep it and Maverick open.";
+  $("#agent-state").textContent = ready ? "Connected" : active.length ? "Connecting" : current.length ? "Offline" : "Not connected";
+  $("#agent-state").className = `badge ${ready ? "state-connected" : ""}`;
+  $("#pending-note").hidden = !pending;
+  $("#pending-note").textContent = `${pending} ${pending === 1 ? "action" : "actions"} in progress · Follow progress in Activity`;
   const names = new Map(overview.connections.map(connection => [connection.session_id, connection.title || connection.display_name]));
-  connections(overview.connections.map(connection => ({
+  const connectionRecord = connection => ({
     id: connection.session_id, title: connection.title || connection.display_name,
     status: connection.status,
     detail: connectionDetail(connection),
     action: ["connecting", "connected", "offline"].includes(connection.status) ? {
-      label: "Stop sharing", run: async () => {
-        await request({action: "companion.disconnect", session_id: connection.session_id});
+      label: "Disconnect", run: async () => {
+        if (connection.session_id === localSessionId) await connector.stop();
+        else await request({action: "companion.disconnect", session_id: connection.session_id});
         await loop.refresh();
       },
     } : null,
-  })), "No shared tabs yet", "Connect Chrome above to share your first platform tab.");
+  });
+  connections(current.map(connectionRecord), "Start with an empty agent tab", "There is no profile or link to choose. Your agent navigates when you ask.");
+  history(past.map(connectionRecord), "No previous connections");
+  $("#connection-history").hidden = !past.length;
   const query = $("#search").value.trim().toLowerCase(), filter = $("#filter").value;
   const selected = overview.operations.filter(operation => {
     const matches = filter === "all" || (filter === "active" ? isPending(operation) :
@@ -73,12 +82,11 @@ function render() {
       await request({action: "operation.cancel", operation_id: operation.operation_id}); await loop.refresh();
     }} : {label: "View result", run: async () => showResult(await request({action: "operation.get", operation_id: operation.operation_id}))},
   })), overview.operations.length ? "No matching activity" : "No activity yet",
-  overview.operations.length ? "Try another search or filter." : "Observations from your shared tabs will appear here.");
+  overview.operations.length ? "Try another search or filter." : "Your agent's actions and results will appear here.");
   $("#activity-note").textContent = `Showing ${selected.length} of ${overview.operations.length} recent operations. Results expire after about one hour.`;
-  if (!initialized) { $("#setup").open = connectorMode || !active.length; initialized = true; }
+  if (!initialized) { $("#setup").open = !active.length; initialized = true; }
 }
 
-const lab = createLab(run);
 const loop = createRefreshLoop({
   visible: platform.visible,
   async read(signal) {
@@ -87,15 +95,13 @@ const loop = createRefreshLoop({
     overview = result; render();
     $("#error").hidden = true;
     $("#updated").textContent = `Updated ${new Date().toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit"})} · Auto refresh on`;
-    if (view === "lab") await lab.refresh(signal);
   },
-  delay: () => view === "lab" ? 30000 : overviewDelay(overview),
+  delay: () => overviewDelay(overview),
   onError(error) { reportError(error); $("#updated").textContent = "Update failed · Retrying automatically"; },
   onBusy(busy) { $("#refresh").disabled = busy; $("#refresh").setAttribute("aria-busy", String(busy)); },
 });
 
 for (const button of document.querySelectorAll("[data-view]")) button.onclick = () => {
-  view = button.dataset.view;
   for (const tab of document.querySelectorAll("[data-view]")) {
     if (tab === button) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
     $(`#${tab.dataset.view}-view`).hidden = tab !== button;
@@ -104,6 +110,10 @@ for (const button of document.querySelectorAll("[data-view]")) button.onclick = 
 };
 $("#search").oninput = render; $("#filter").onchange = render;
 $("#refresh").onclick = () => void loop.refresh();
+$("#show-setup").onclick = () => {
+  document.querySelector('[data-view="tabs"]').click();
+  $("#setup").open = true; $("#setup").scrollIntoView({behavior: "instant", block: "start"});
+};
 $("#copy").onclick = async () => {
   try { await navigator.clipboard.writeText(connectorUrl.href); $("#status").textContent = "Connector address copied."; }
   catch { $("#url").focus(); $("#url").select(); $("#status").textContent = "Select and copy the connector address."; }
@@ -116,7 +126,7 @@ function checkSelectedTab(retry = false) {
   checking = bridge("status", undefined, 2500).then(async shared => {
     $("#connect").disabled = false;
     $("#error").hidden = true;
-    $("#status").textContent = `Selected tab: ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}. Ready to connect.`;
+    $("#status").textContent = `Agent tab: ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}. Ready to connect.`;
     await autoConnect(shared);
   }).catch(error => { $("#status").textContent = error.message; })
     .finally(() => { checking = null; if (checkAgain) { checkAgain = false; void checkSelectedTab(); } });
@@ -126,21 +136,19 @@ const connector = createConnector((text, state) => {
   if (state) connectionState = state;
   $("#status").textContent = text;
   if (state === "connected" || state === "stopped") {
-    $("#stop").hidden = state !== "connected";
-    $("#connect").hidden = state === "connected";
+    $("#connector-actions").hidden = state === "connected";
     $("#connect").disabled = false;
   }
   if (state === "stopped") void loop.refresh();
 });
 async function connectSelectedTab() {
-  await connector.start(); $("#connect").hidden = true; $("#stop").hidden = false; await loop.refresh();
+  const connection = await connector.start(); localSessionId = connection.session_id;
+  $("#connector-actions").hidden = true; $("#setup").open = false; await loop.refresh();
 }
 const autoConnect = createAutoConnect(connectSelectedTab);
 $("#connect").onclick = () => run($("#connect"), {run: connectSelectedTab});
-$("#stop").onclick = () => run($("#stop"), {run: async () => { await connector.stop(); await loop.refresh(); }});
 function openConnectorSetup(retry = false) {
-  connectorMode = true; $("#setup").open = true; $("#connector-actions").hidden = false;
-  $("#setup summary strong").textContent = "Connect your selected tab";
+  $("#connector-actions").hidden = connectionState === "connected";
   void checkSelectedTab(retry);
 }
 window.addEventListener("message", event => {

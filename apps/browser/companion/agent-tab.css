@@ -1,1 +1,15 @@
-:root{color-scheme:light dark;font:16px system-ui;background:light-dark(#f5f6fa,#11131a);color:light-dark(#1c2232,#e7eaf3)}body{margin:0;padding:clamp(24px,7vw,100px) 24px}main{max-width:640px;margin:auto}.badge{color:light-dark(#4e5ac6,#b2baff);font-size:14px}h1{font-size:clamp(28px,5vw,40px);letter-spacing:-.03em;margin:20px 0}p,li{line-height:1.7}ol{padding-left:24px;margin:28px 0}li{padding:5px 0}.note{color:light-dark(#5f677d,#a7aec4);font-size:14px}
+body { padding: clamp(24px, 7vw, 90px) 24px; font-size: 15px; }
+main { max-width: 640px; margin: auto; }
+.app-mark { width: 52px; height: 52px; border-radius: 18px; margin-bottom: 24px; }
+.app-mark svg { width: 30px; height: 30px; }
+.eyebrow { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+h1 { font-size: clamp(30px, 5vw, 42px); letter-spacing: -.04em; font-weight: 600; margin: 0 0 14px; }
+p { line-height: 1.7; }
+.intro { color: var(--muted); font-size: 17px; }
+.connect-guide { border: 1px solid var(--border); border-radius: 22px; padding: 24px; margin: 30px 0; background: var(--surface); box-shadow: var(--glass-edge); }
+ol { margin: 0; padding-left: 22px; }
+li { padding-left: 8px; }
+li + li { margin-top: 20px; }
+li::marker { color: var(--muted); }
+li p { color: var(--muted); margin: 6px 0 0; font-size: 14px; }
+.note { color: var(--muted); font-size: 13px; margin-top: 22px; }

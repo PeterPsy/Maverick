@@ -46,7 +46,7 @@ try {
   assert.equal(reads, 0);
   releaseBundle();
   await frame.waitForSelector("#url", {state:"attached"});
-  await frame.waitForFunction(() => document.querySelector("#tab-count").textContent === "0");
+  await frame.waitForFunction(() => document.querySelector("#agent-state").textContent === "Not connected");
   assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
   assert.equal(await frame.locator("#url").inputValue(), `${platform}/app/browser?connector=1`);
   const archiveUrl = await frame.locator("#download").getAttribute("href");
@@ -66,7 +66,7 @@ try {
   assert.equal(await frame.locator("#setup").getAttribute("open"), "");
   assert.equal(await frame.locator("#connect").isDisabled(), true, "Manually opening a connector URL must not claim a shared tab");
   await page.clock.runFor(2600);
-  await frame.waitForFunction(() => document.querySelector("#status").textContent.includes("No shared tab is attached"));
+  await frame.waitForFunction(() => document.querySelector("#status").textContent.includes("No agent tab is attached"));
   // A late extension attachment retries the check even if the initial probe failed.
   await frame.evaluate(() => {
     window.addEventListener("message",event=>{

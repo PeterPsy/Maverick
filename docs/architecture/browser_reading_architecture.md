@@ -1,6 +1,6 @@
 # Browser Reading and Shared Platform Transport
 
-Date: 2026-10-11
+Date: 2026-10-12
 
 ## Implemented architecture
 
@@ -11,8 +11,9 @@ transport and fixed observation adapters. Core remains app-agnostic. No commerci
 required. Browser's isolated Playwright Lab remains available for public research
 and authorized Maverick development inspection.
 
-The user shares a supported platform tab or opens a dedicated agent tab from the
-extension popup. The dedicated tab is an extension-owned empty start page. A
+The extension's user flow centers on a dedicated agent tab. Open agent tab
+focuses the already bound agent tab, or reuses an empty extension-owned start
+page before creating one. A
 second explicit toolbar invocation on that tab grants Chrome tab-capture access;
 it can then connect without choosing an initial platform or profile. It asks for
 the six exact supported platform host groups and Maverick, not all-web access.
@@ -27,11 +28,11 @@ navigation to that profile.
 The official Maverick address is preconfigured in Companion; other installations
 can change Connection settings. The popup sends the selected tab and destination
 to the worker within its button gesture. The worker synchronously requests optional
-permissions for the selected platform or dedicated tab's approved platforms,
+permissions for the dedicated tab's approved platforms,
 Maverick origin and isolated app-frame namespace, then completes setup even if
 Chrome closes the popup during the native consent dialog. Concurrent requests are
 deduplicated; denial never starts sharing. It then opens the stable
-`/app/browser?connector=1` shell route. Companion 0.5.3 defaults to reusing the most
+`/app/browser?connector=1` shell route. Companion defaults to reusing the most
 recent Maverick shell tab at the exact chosen origin in the same Chrome profile,
 with a fresh document for the new binding. It rechecks the candidate before
 navigation, excludes the source tab, private/API routes and other origins. The
@@ -53,13 +54,16 @@ submissions cannot renew expired connections or complete expired operations.
 ## Management frontend
 
 The self-contained workspace frontend disables the shell sidebar through its
-presentation contract. It exposes Shared tabs with collapsible Companion setup,
-Activity with search/status filters, cancellation and readable results, and
-Browser Lab with public-page reading, health and individual session closure.
+presentation contract. It exposes Agent tab with readiness, current page,
+Disconnect and collapsible Companion setup, plus Activity with search/status
+filters, cancellation and readable results. Historical connections are collapsed;
+metric cards and manual platform/profile/public-page selection are omitted.
+The isolated Lab remains available through agent tools and operator lifecycle
+surfaces. Its unused frontend form/session modules have been removed.
 The existing shell/App Store `language` glyph owns Browser's native icon
 presentation; no Browser-specific platform rendering branch or raster override
 is added. The app header uses an inline vector and the favicon an app-owned SVG.
-Companion 0.5.3 packages its reproducible ZIP as a Vite-imported, hashed public
+Companion packages its reproducible ZIP as a Vite-imported, hashed public
 asset under `/apps/browser/assets/`, with immutable manifest/cache metadata.
 Download uses the platform origin and requires no login or app-frame cookie.
 The copied connector address uses the stable platform shell route, never an
@@ -80,12 +84,19 @@ sign-in and iframe replacement, with the 30-second alarm as a wake-up fallback.
 Other tabs, app frames, shell documents
 and replaced connector documents cannot issue commands. Installations whose
 app-frame domain differs from the platform host retain it in `frame_domain`.
-The extension popup binds the active tab when opened and shows its title and
-URL before sharing. Missing `activeTab` access (including restricted Chrome
-pages), unsupported domains/routes, invalid connector URLs and denied
-permissions produce setup instructions rather than raw error codes. Share is
-disabled on unsupported pages and during setup. Installing Companion alone or
-opening `/app/browser?connector=1` manually does not select a platform tab.
+Companion 0.5.4 uses app-owned copies of the native neutral light/dark tokens,
+globe/control vectors, 22px cards and 18px controls in both popup and start page.
+CSS follows Chrome's system color preference before first paint, without remote
+assets or new permissions. The popup presents Open agent tab from ordinary
+Chrome/platform pages and Connect agent tab only on its exact start page.
+Reconnect agent tab is available on the already bound source after navigation;
+the worker rechecks that binding and current route before replacing its lease.
+Other platform tabs cannot become agent tabs. Settings and help are collapsed,
+and errors use a visible accessible status region. The user no longer selects a
+specific platform/profile or copies an address for the official installation.
+Existing single-platform leases keep their original scope; the new popup cannot
+create them. Installing Companion alone or opening
+`/app/browser?connector=1` manually does not select a tab.
 The selected Browser document announces bridge readiness; the frontend probes
 its worker status and enables Connect only after that response. A new user-selected
 sharing generation requesting automatic setup starts the authenticated lease once,
@@ -107,7 +118,7 @@ data invalidations cannot restart reads while hidden. An inline HTML head script
 applies initial shell theme parameters before the first paint, independently of
 bundle loading; `maverick.shell.theme-changed` events update the effective theme.
 Visible views refresh at 3 seconds for pending operations, 10 seconds for active
-Chrome connections and 30 seconds when idle; Lab uses 30 seconds. Chrome transport
+Chrome connections and 30 seconds when idle. Chrome transport
 continues its independent heartbeat while management is hidden, renewing its
 app-frame authentication at most once per minute. Renewal has a five-second
 timeout and runs independently of the command loop; a hung renewal cannot prevent
@@ -405,11 +416,27 @@ spoken phrase. This verifies finite tab audio capture and local processing.
 
 An unauthenticated request to `https://www.instagram.com/martagiunti/` returned a
 login redirect on 2026-10-06; isolated Chromium failed with `net::ERR_EMPTY_RESPONSE`.
-Those observations establish an access gap, without diagnosing its cause. No real
-Instagram feed or Reel has been inspected.
+Those observations established an access gap at that date, without diagnosing
+its cause.
 
-Final authenticated acceptance requires the user to share a logged-in tab, then
-verify profile identity, bounded feed collection, opening collected posts/Reels,
+On 2026-10-12, the user's actual shared agent tab completed tab inspection,
+navigation to `https://www.instagram.com/` and a bounded rendered-content read
+from the signed-in feed. A second read about 40 minutes later also completed,
+after the frontend rebuilds. This confirms the live Chrome transport and feed
+access; it does not establish complete feed coverage or Reel/audio analysis.
+The installed user extension was 0.5.3 during this check. The new 0.5.4 package
+was verified separately in disposable Chromium: native dark/light action popup,
+keyboard focus, restricted/ordinary page launch, empty-tab reuse, automatic
+connection, cross-platform reading/capture, native consent after popup closure,
+return to the already shared tab and reconnect preserving its page with no
+duplicate tabs. Both app UI suites, 52 Node tests, 81 Python tests and focused
+public-source/execution-closure checks passed. Mounted authenticated desktop
+and 390px mobile inspection showed the new Agent tab/Activity UI and the live
+Instagram connection. Anonymous download returned 200 with bytes matching the
+generated 0.5.4 ZIP.
+
+A full profile/media acceptance still requires verifying profile identity,
+bounded feed collection, opening collected posts/Reels,
 actual captions/images/frames/audio, Storage evidence and local transcription.
 The resulting profile analysis must state observed sources, missing information
 and coverage. Fixture success alone cannot complete that acceptance.

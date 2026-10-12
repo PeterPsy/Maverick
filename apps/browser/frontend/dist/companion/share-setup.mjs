@@ -9,9 +9,8 @@ export function createShareSetup(share) {
     if (starting) return starting;
     try {
       const url = connectorUrl(message.url);
-      const agentTab = message.agentTab === true;
-      if (!Number.isInteger(message.tabId) || !agentTab && !Object.hasOwn(platforms, message.platform)) throw new Error("shared_platform_scope_required");
-      const approved = agentTab ? Object.keys(platforms) : [message.platform];
+      if (!Number.isInteger(message.tabId) || message.agentTab !== true) throw new Error("agent_tab_required");
+      const approved = Object.keys(platforms);
       const origins = [...connectorOrigins(url), ...approved.flatMap(key => platforms[key].hosts.map(host => `https://${host}/*`))];
       starting = chrome.permissions.request({origins}).then(granted => {
         if (!granted) throw new Error("permission_denied");

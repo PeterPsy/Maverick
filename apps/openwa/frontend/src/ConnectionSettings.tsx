@@ -34,7 +34,7 @@ export function ConnectionSettings({
     <section className="setup-card">
       <div className="setup-top">
         <span className="brand-icon">
-          <Icon name="chat" size={30} />
+          <Icon name="whatsapp" size={30} />
         </span>
         {onClose && (
           <button

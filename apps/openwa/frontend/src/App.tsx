@@ -143,7 +143,7 @@ export function App() {
       <header className="app-heading">
         <div className="app-identity">
           <span className="brand-icon">
-            <Icon name="chat" size={24} />
+            <Icon name="whatsapp" size={24} />
           </span>
           <div>
             <h1>OpenWA</h1>

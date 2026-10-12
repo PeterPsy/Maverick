@@ -15,7 +15,7 @@ The app supports session creation/start/stop/logout, QR and phone pairing, bound
 ## Integration
 
 - Official SDK lifecycle and native React interface, with Maverick theme and mobile spacing.
-- A native `chat` view: rail and App Store use the same rounded conversation glyph, with their standard theme colours, frames and spacing. An app-owned SVG reference is included.
+- A dedicated WhatsApp silhouette in app-owned SVG and transparent PNG assets. Rail and App Store tint the same compact asset with their native theme colours, frames and spacing.
 - Workspace-owned SQLite configuration and per-user notification receipts.
 - Provider readiness included in the health hook, independently of whether a phone is linked.
 - `whatsapp.workspace` and `notifications.inbox` contracts.

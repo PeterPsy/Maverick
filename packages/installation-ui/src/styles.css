@@ -1,0 +1,52 @@
+.installation-view {
+  --installation-text: var(--maverick-text, #ececec);
+  --installation-muted: var(--maverick-text-muted, #aaa);
+  --installation-border: var(--maverick-border, rgba(255,255,255,.1));
+  --installation-surface: var(--maverick-surface, rgba(255,255,255,.055));
+  color: var(--installation-text); font: 14px/1.5 var(--maverick-font, 'Avenir Next', 'Segoe UI', system-ui, sans-serif);
+  display: grid; gap: 18px; min-width: 0;
+}
+.installation-view * { box-sizing: border-box; }
+.installation-view h2 { font-size: 20px; letter-spacing: -.025em; margin: 0 0 12px; font-weight: 600; overflow-wrap: anywhere; }
+.installation-view p { margin: 8px 0 16px; }
+.installation-card { padding: 24px; border: 1px solid var(--installation-border); border-radius: 22px; background: var(--installation-surface); min-width: 0; }
+.installation-card-heading { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
+.installation-eyebrow { color: var(--installation-muted); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 6px !important; }
+.installation-muted { color: var(--installation-muted); }
+.installation-badge { border: 1px solid var(--installation-border); border-radius: 999px; padding: 4px 10px; color: var(--installation-muted); font-size: 12px; white-space: nowrap; }
+.installation-facts { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 18px; margin: 20px 0; }
+.installation-facts span { display: block; color: var(--installation-muted); font-size: 12px; }
+.installation-facts strong { display: block; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.installation-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.installation-field { display: grid; gap: 7px; margin: 16px 0; font-size: 13px; font-weight: 500; }
+.installation-view input:not([type=checkbox]), .installation-view select { display: block; width: 100%; min-width: 0; height: 44px; padding: 0 14px; border: 1px solid var(--installation-border); border-radius: 18px; background: var(--maverick-bg-strong, #171717); color: inherit; font: inherit; }
+.installation-view input::placeholder { color: var(--installation-muted); opacity: .7; }
+.installation-view select { color-scheme: inherit; }
+.installation-view button { min-height: 40px; padding: 8px 15px; border-radius: 18px; border: 1px solid var(--installation-border); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.installation-view button.installation-primary { background: var(--maverick-accent, #ececec); color: var(--maverick-text-on-accent, #111); border-color: transparent; font-weight: 600; }
+.installation-view button:hover { filter: brightness(.92); }
+.installation-view button:disabled { opacity: .45; cursor: default; }
+.installation-view :is(button,input,select,a,summary):focus-visible { outline: 2px solid var(--installation-text); outline-offset: 3px; }
+.installation-view a { color: inherit; text-underline-offset: 4px; overflow-wrap: anywhere; }
+.installation-view code { font: 12px/1.6 ui-monospace, monospace; overflow-wrap: anywhere; }
+.installation-view details { border-top: 1px solid var(--installation-border); padding: 14px 0; }
+.installation-view summary { cursor: pointer; color: var(--installation-muted); }
+.installation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; }
+.installation-records, .installation-verification ul { list-style: none; padding: 0; margin: 16px 0; }
+.installation-records li, .installation-verification li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--installation-border); }
+.installation-records li span, .installation-verification li span { font-size: 12px; color: var(--installation-muted); }
+.installation-notice, .installation-verification { border: 1px solid var(--installation-border); border-radius: 18px; padding: 16px; margin-top: 16px; }
+.installation-steps { display: grid; grid-template-columns: repeat(4, 1fr); padding: 0; margin: 20px 0; list-style-position: inside; gap: 12px; font-size: 12px; color: var(--installation-muted); }
+.installation-confirm-row { display: flex; align-items: start; gap: 12px; padding: 14px 0; }
+.installation-confirm-row span { display: grid; gap: 6px; min-width: 0; }
+.installation-confirm-row input { margin-top: 5px; accent-color: var(--installation-text); }
+.installation-view [hidden] { display: none !important; }
+.installation-view [data-installation-message]:empty { display: none; }
+.installation-view [data-installation-message] { border-radius: 18px; border: 1px solid var(--installation-border); padding: 12px 16px; overflow-wrap: anywhere; }
+@media (max-width: 620px) {
+  .installation-card { padding: 18px; }
+  .installation-columns, .installation-facts { grid-template-columns: 1fr; gap: 2px; }
+  .installation-facts { gap: 12px; }
+  .installation-steps { grid-template-columns: 1fr 1fr; }
+  .installation-card-heading { flex-wrap: wrap; }
+}

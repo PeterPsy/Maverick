@@ -18,6 +18,7 @@ from core.apps.models import (
     AppHostPermissionDeclaration,
     AppHookTimeouts,
     AppLifecycleDeclaration,
+    AppInstallationDeclaration,
     AppNetworkPermissionDeclaration,
     AppPermissionsDeclaration,
     AppPresentationDeclaration,
@@ -634,6 +635,7 @@ def build_app_contract(
     rollback_support: AppRollbackSupport | None = None,
     widgets: list[WidgetDeclaration] | None = None,
     services: AppServicesDeclaration | None = None,
+    installation: AppInstallationDeclaration | None = None,
 ) -> AppContractDescriptor:
     """Build an executable app contract descriptor."""
     resolved_entrypoints = entrypoints or build_app_entrypoints()
@@ -658,6 +660,7 @@ def build_app_contract(
         rollback_support=rollback_support or build_app_rollback_support(),
         widgets=widgets or [],
         services=services or build_app_services(),
+        installation=installation or AppInstallationDeclaration(),
     )
 
 def build_parsed_app_contract(

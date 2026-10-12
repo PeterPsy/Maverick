@@ -26,7 +26,7 @@ SECRET_REF = "platform:secret-alias/cloudflare-dns-api-token"
 DEFAULT_CREDENTIALS = Path("/etc/letsencrypt/maverick/cloudflare.ini")
 
 
-def resolve_token() -> str:
+def resolve_token(secret_ref: str = SECRET_REF) -> str:
     """Use Core's authorized platform delivery, without bootstrapping the host."""
     collections = build_control_plane_collections(
         ControlStoreSettings.from_environment(repository_root=ROOT)
@@ -38,7 +38,7 @@ def resolve_token() -> str:
             allow_unbound_secret_refs=True, action="installation.tls.dns01",
             target="https://api.cloudflare.com/client/v4/",
         ),
-        secret_ref=SECRET_REF,
+        secret_ref=secret_ref,
     ).value
 
 
@@ -120,6 +120,7 @@ def main(argv=None) -> int:
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
     parser.add_argument("--credentials", type=Path, default=DEFAULT_CREDENTIALS)
     parser.add_argument("--inspect-zone", metavar="ZONE_ID")
+    parser.add_argument("--secret-ref", default=SECRET_REF)
     args = parser.parse_args(argv)
     if os.geteuid() != 0:
         parser.error("Root privileges are required for installation TLS delivery")
@@ -131,8 +132,10 @@ def main(argv=None) -> int:
         if args.inspect_zone:
             result = inspect_zone(args.inspect_zone)
         else:
-            refresh_credentials(args.credentials)
-            result = {"credentials": str(args.credentials), "secret_ref": SECRET_REF}
+            from core.installation.validation import secret_ref
+            reference = secret_ref(args.secret_ref)
+            refresh_credentials(args.credentials, resolver=lambda: resolve_token(reference))
+            result = {"credentials": str(args.credentials), "secret_ref": reference}
         print(json.dumps({"status": "ready", **result}))
         return 0
     except Exception as error:

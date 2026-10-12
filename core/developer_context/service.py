@@ -18,6 +18,11 @@ class DeveloperContextDocument:
 
 DOCUMENTS: tuple[DeveloperContextDocument, ...] = (
     DeveloperContextDocument(
+        doc_id="installation_address", title="Installation Address Management",
+        summary="Admin operations, DNS, TLS, durable jobs and standalone installation setup.",
+        source_path="docs/architecture/installation_address.md",
+    ),
+    DeveloperContextDocument(
         doc_id="agents_working_agreement",
         title="Agents Working Agreement",
         summary="Repository workflow, engineering rules, and coding discipline for Maverick.",

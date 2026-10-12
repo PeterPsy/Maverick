@@ -528,6 +528,21 @@ class AppRequiredInterfaceDeclaration:
 
 
 @dataclass(frozen=True)
+class AppPublicEndpointDeclaration:
+    endpoint_id: str
+    label: str
+    kind: str
+    path: str
+    provider_url: str = ""
+    requires_registration: bool = False
+
+
+@dataclass(frozen=True)
+class AppInstallationDeclaration:
+    public_endpoints: list[AppPublicEndpointDeclaration] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class AppContractDescriptor:
     """Executable app contract metadata used by the core."""
 
@@ -548,6 +563,7 @@ class AppContractDescriptor:
     rollback_support: AppRollbackSupport
     widgets: list[WidgetDeclaration]
     services: AppServicesDeclaration
+    installation: AppInstallationDeclaration = field(default_factory=AppInstallationDeclaration)
 
 
 @dataclass(frozen=True)

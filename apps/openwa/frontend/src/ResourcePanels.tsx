@@ -5,12 +5,14 @@ export function SessionSidebar({
   sessions,
   selected,
   connection,
+  online = true,
   onCreate,
   onSelect,
 }: {
   sessions: Session[];
   selected: string;
   connection: Connection;
+  online?: boolean;
   onCreate: () => void;
   onSelect: (id: string) => void;
 }) {
@@ -21,16 +23,17 @@ export function SessionSidebar({
         <button
           className="icon-button"
           onClick={onCreate}
-          disabled={connection.role === "viewer" || connection.scoped}
+          disabled={!online || connection.role === "viewer" || connection.scoped}
           aria-label="New session"
         >
           <Icon name="plus" />
         </button>
       </div>
-      {sessions.map((s) => (
+      <div className="session-rows">{sessions.map((s) => (
         <button
           key={s.id}
           className={"session-row " + (selected === s.id ? "selected" : "")}
+          aria-pressed={selected === s.id}
           onClick={() => {
             onSelect(s.id);
           }}
@@ -44,12 +47,13 @@ export function SessionSidebar({
       ))}
       {sessions.length === 0 && (
         <p className="empty-hint">
-          Create a session to link your WhatsApp account.
+          {!online ? "Waiting for the gateway connection…" : connection.role === "viewer" || connection.scoped ? "No sessions are available for this connection." : "Create a session to link your WhatsApp account."}
         </p>
       )}
+      </div>
       <div className="sidebar-footer">
         <Icon name="link" size={16} />
-        <span>OpenWA 0.24 · Self hosted</span>
+        <span>WhatsApp linked devices</span>
       </div>
     </aside>
   );
@@ -63,6 +67,8 @@ export function ResourcePanel({
   records,
   search,
   loading,
+  error = "",
+  online = true,
   page,
   more,
   onPage,
@@ -70,6 +76,7 @@ export function ResourcePanel({
   onTab,
   onSearch,
   onChat,
+  onRetry,
 }: {
   session?: Session;
   tab: string;
@@ -78,6 +85,8 @@ export function ResourcePanel({
   records: Row[];
   search: string;
   loading: boolean;
+  error?: string;
+  online?: boolean;
   page: number;
   more: boolean;
   onPage: (page: number) => void;
@@ -85,7 +94,13 @@ export function ResourcePanel({
   onTab: (tab: string) => void;
   onSearch: (search: string) => void;
   onChat: (chat: Chat) => void;
+  onRetry?: () => void;
 }) {
+  const query = search.trim().toLowerCase();
+  const filteredChats = chats.filter((item) => (item.name || item.id).toLowerCase().includes(query));
+  const filteredRecords = records.filter((item) => JSON.stringify(item).toLowerCase().includes(query));
+  const count = tab === "chats" ? filteredChats.length : filteredRecords.length;
+  const readable = !!session && (session.status === "ready" || ["webhooks", "templates"].includes(tab));
   return (
     <section className="chat-list">
       <div className="panel-heading">
@@ -112,6 +127,8 @@ export function ResourcePanel({
           <button
             key={t}
             className={tab === t ? "active" : ""}
+            aria-pressed={tab === t}
+            disabled={!session}
             onClick={() => onTab(t)}
           >
             {t === "chats" ? "Chats" : t[0].toUpperCase() + t.slice(1)}
@@ -121,18 +138,16 @@ export function ResourcePanel({
       <label className="search">
         <Icon name="search" size={17} />
         <input
-          aria-label="Search conversations"
+          aria-label={"Search " + (tab === "chats" ? "conversations" : tab)}
           value={search}
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search…"
+          placeholder={"Search " + tab + " on this page…"}
+          disabled={!readable}
         />
       </label>
-      <div className="chat-rows">
+      <div className="chat-rows" aria-busy={loading}>
         {tab === "chats"
-          ? chats
-              .filter((c) =>
-                (c.name || c.id).toLowerCase().includes(search.toLowerCase()),
-              )
+          ? filteredChats
               .map((c) => (
                 <button
                   key={c.id}
@@ -140,6 +155,7 @@ export function ResourcePanel({
                     "chat-row " + (chat?.id === c.id ? "selected" : "")
                   }
                   onClick={() => onChat(c)}
+                  aria-pressed={chat?.id === c.id}
                 >
                   <span className="avatar">
                     {(c.name || c.id)[0].toUpperCase()}
@@ -153,10 +169,7 @@ export function ResourcePanel({
                   )}
                 </button>
               ))
-          : records
-              .filter((r) =>
-                JSON.stringify(r).toLowerCase().includes(search.toLowerCase()),
-              )
+          : filteredRecords
               .map((r, i) => (
                 <article className="record-row" key={String(r.id || i)}>
                   <strong>
@@ -177,19 +190,21 @@ export function ResourcePanel({
                 </article>
               ))}
         {loading && <p className="empty-hint" role="status">Refreshing {tab}…</p>}
-        {!loading && ((tab === "chats" && !chats.length) ||
-          (tab !== "chats" && !records.length)) && (
+        {error && <div className="resource-error" role="alert"><p>{error}</p>
+          <button onClick={onRetry} disabled={loading}>Retry {tab}</button>
+        </div>}
+        {!loading && !error && count === 0 && (
           <p className="empty-hint">
-            {session?.status === "ready"
+            {!online ? "Reconnect the gateway to refresh " + tab + "." : query && readable ? "No matches on this page. Try another search or page." : readable
               ? "No " + tab + " to show yet."
               : "Link a session to see its " + tab + "."}
           </p>
         )}
       </div>
       {(page > 0 || more) && <div className="pagination">
-        <button disabled={loading || page === 0} onClick={() => onPage(page - 1)}>Previous</button>
+        <button disabled={page === 0} onClick={() => onPage(page - 1)}>Previous</button>
         <span className="small muted">Page {page + 1}</span>
-        <button disabled={loading || !more} onClick={() => onPage(page + 1)}>Next</button>
+        <button disabled={!more} onClick={() => onPage(page + 1)}>Next</button>
       </div>}
     </section>
   );

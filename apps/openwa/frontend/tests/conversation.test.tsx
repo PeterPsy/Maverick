@@ -92,7 +92,7 @@ describe("durable send attempts", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
     expect(container.textContent).toContain("Read failed");
     expect(container.textContent).toContain("Send timed out");
-    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
     expect(container.textContent).not.toContain("Read failed");
     expect(container.textContent).toContain("Send timed out");
   });
@@ -238,4 +238,66 @@ it("renders provider string chat previews and falls back for missing or empty pr
     records={[]} search="" loading={false} page={0} more={false} onPage={() => {}} onManage={() => {}}
     onTab={() => {}} onSearch={() => {}} onChat={() => {}} />));
   expect([...container.querySelectorAll(".chat-description small")].map((node) => node.textContent)).toEqual(["Provider preview", "empty@c.us", "missing@c.us"]);
+});
+
+it("does not overlap slow message polls and drops a cancelled page response", async () => {
+  const firstPage = Array.from({ length: 50 }, (_, index) => ({ id: String(index), body: "Recent message " + index }));
+  request.mockResolvedValueOnce(firstPage);
+  await render();
+  let finish!: (data: unknown) => void;
+  request.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(24000); });
+  expect(request).toHaveBeenCalledTimes(2);
+  const signal = request.mock.calls[1][2]!;
+  request.mockResolvedValueOnce([{ id: "older", body: "Older page" }]);
+  await click("Older messages");
+  expect(signal.aborted).toBe(true);
+  expect(container.textContent).toContain("Older page");
+  expect(container.textContent).not.toContain("Recent message");
+  await act(async () => finish([{ id: "stale", body: "Stale page" }]));
+  expect(container.textContent).not.toContain("Stale page");
+});
+
+it("stops message reads when the session loses readiness", async () => {
+  await render();
+  request.mockClear();
+  await act(async () => root.render(<Conversation {...props} session={{ ...props.session, status: "disconnected" }} />));
+  await act(async () => { await vi.advanceTimersByTimeAsync(24000); });
+  expect(request).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("session is not ready");
+});
+
+it("blocks repeated submit events before React renders the busy state", async () => {
+  let finish!: (data: unknown) => void;
+  request.mockImplementation((action) => action === "messages.send"
+    ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve([]));
+  await render(); await compose("One send");
+  await act(async () => {
+    const form = container.querySelector("form")!;
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(sends()).toHaveLength(1);
+  await act(async () => finish({ id: "sent" }));
+});
+
+it("returns to the newest page after a confirmed send even if the user paged during dispatch", async () => {
+  const pageRows = Array.from({ length: 50 }, (_, index) => ({ id: String(index), body: "Recent message " + index }));
+  let finish!: (data: unknown) => void;
+  request.mockImplementation((action) => action === "messages.send"
+    ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(pageRows));
+  await render(); await compose("Hello"); await submit();
+  await click("Older messages");
+  expect(request.mock.calls.at(-1)![1]?.offset).toBe(50);
+  await act(async () => finish({ id: "sent" }));
+  expect(request.mock.calls.at(-1)![1]?.offset).toBe(0);
+  expect(container.querySelector("textarea")!.value).toBe("");
+});
+
+it("explains a search with no matches and exposes the current resource selection", async () => {
+  await act(async () => root.render(<ResourcePanel session={props.session} tab="chats"
+    chats={[{ id: "123@c.us", name: "Alice" }]} records={[]} search="Bob" loading={false} page={0} more={false}
+    onPage={() => {}} onManage={() => {}} onTab={() => {}} onSearch={() => {}} onChat={() => {}} />));
+  expect(container.textContent).toContain("No matches on this page");
+  expect([...container.querySelectorAll('button[aria-pressed="true"]')].map((button) => button.textContent)).toEqual(["Chats"]);
 });

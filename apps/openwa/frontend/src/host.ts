@@ -13,11 +13,12 @@ export function useMaverickHost(
   useEffect(() => {
     const initial = new URLSearchParams(location.search).get("maverick_theme");
     if (initial === "light" || initial === "dark")
-      document.documentElement.dataset.maverickTheme = initial;
+      applyTheme(initial);
     const stop = connectAppEventSocket<AppEvent>((event) => {
       if (
         event.type === "maverick.app.data-changed" &&
-        event.owner_app_id === "openwa" && maverickAppIsVisible()
+        event.owner_app_id === "openwa" &&
+        ["connection", "sessions"].includes(event.resource || "") && maverickAppIsVisible()
       )
         refresh();
     }, refresh);
@@ -33,14 +34,15 @@ export function useMaverickHost(
         data.type === "maverick.app.navigate" &&
         (!data.app_id || data.app_id === "openwa") &&
         typeof data.params?.session_id === "string" &&
-        data.params.session_id
+        data.params.session_id.length <= 128 &&
+        /^[A-Za-z0-9_-]+$/.test(data.params.session_id)
       )
         onSession(data.params.session_id);
       if (
-        data.type === "maverick.shell.theme-changed" &&
+        ["maverick.shell.theme-changed", "maverick.app.navigate"].includes(data.type) &&
         ["light", "dark"].includes(data.theme?.effective)
       )
-        document.documentElement.dataset.maverickTheme = data.theme.effective;
+        applyTheme(data.theme.effective);
     };
     window.addEventListener("message", listener);
     return () => {
@@ -48,4 +50,10 @@ export function useMaverickHost(
       window.removeEventListener("message", listener);
     };
   }, [refresh, onSession]);
+}
+
+function applyTheme(theme: string) {
+  document.documentElement.dataset.maverickTheme = theme;
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
 }

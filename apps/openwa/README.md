@@ -10,7 +10,11 @@ Retry an unconfirmed send with **Retry same send**. If the provider reports an u
 
 The default workspace has a dedicated local provider at `http://127.0.0.1:2785`. Administrators can configure another public HTTPS OpenWA gateway in the app after binding its key through Vault. API keys go through Core Secrets; app configuration stores only connection metadata. Remote private addresses, redirects and URL credentials are rejected.
 
-The app supports session creation/start/stop/logout, QR and phone pairing, bounded chat/contact/message reads, text sends/replies and read-only webhook/template inspection. Incoming messages refresh while the conversation is visible. Connection and uncertain-send notifications appear in Maverick's central inbox.
+The app supports session creation/start/stop/logout, QR and phone pairing, bounded chat/contact/message reads, text sends/replies and read-only webhook/template inspection. Incoming messages refresh while the conversation is visible and its session is ready. Connection and uncertain-send notifications appear in Maverick's central inbox.
+
+Reads run one at a time per panel, schedule the next poll after completion, and stop when the app is hidden or offline. Repeated failures gradually increase the polling interval up to one minute; **Retry** and returning to the app refresh immediately. Every browser request has a 28-second deadline. Switching sessions, gateways, tabs or pages cancels obsolete reads and clears previous-query rows. A failed refresh of the current page retains its rows and presents a local retry action. Sending keeps its separate confirmation and recovery flow, including across navigation.
+
+The interface uses app-owned Maverick dark/light tokens, neutral primary controls, compact session navigation and a search field labelled as filtering the current page. Session navigation scrolls independently on desktop and horizontally on mobile. QR failures are visible and retryable; outdated QR images disappear on a failed refresh. A provider outage is presented separately from phone linking and disables unavailable session creation. Theme bootstrap runs before first paint, with live shell updates accepted only through the trusted parent relay.
 
 ## Integration
 

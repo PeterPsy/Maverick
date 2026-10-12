@@ -1,110 +1,33 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import {
-  callBackend,
-  operation,
-  items,
-  type Status,
-  type Session,
-  type Chat,
-  type Row,
-} from "./api";
+import { useCallback, useRef, useState, type FormEvent } from "react";
+import { operation, type Session } from "./api";
 import { Icon } from "./Icons";
 import { ConnectionSettings } from "./ConnectionSettings";
 import { SessionPanel } from "./SessionPanel";
-import { Conversation } from "./Conversation";
-import { SessionSidebar, ResourcePanel } from "./ResourcePanels";
+import { Workspace } from "./Workspace";
 import { useMaverickHost } from "./host";
 import { Dialog } from "./Dialog";
-import { maverickAppIsVisible, observeMaverickVisibility } from "@maverick/pwa-cache";
+import { useWorkspace } from "./useWorkspace";
 
 export function App() {
-  const [status, setStatus] = useState<Status>();
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [selected, setSelected] = useState("");
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [chat, setChat] = useState<Chat>();
+  const { status, sessions, selected, setSelected, error: connectionError, loading, refreshing, online, refresh } = useWorkspace();
   const [error, setError] = useState("");
   const [settings, setSettings] = useState(false);
   const [manage, setManage] = useState(false);
   const [create, setCreate] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [search, setSearch] = useState("");
-  const [tab, setTab] = useState("chats");
-  const [records, setRecords] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [resourceLoading, setResourceLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [more, setMore] = useState(false);
+  const creating = useRef(false);
   const [revision, setRevision] = useState(0);
-  const [online, setOnline] = useState<boolean>();
   const session = sessions.find((s) => s.id === selected);
-  const refresh = useCallback(async () => {
-    try {
-      const s = await callBackend<Status>({ action: "status" });
-      setStatus(s);
-      if (s.connection.configured && s.connection.credential_available) {
-        const rows = items<Session>(await operation("sessions.list"));
-        setOnline(true);
-        setSessions(rows);
-        setSelected((previous) =>
-          rows.some((r) => r.id === previous) ? previous : rows[0]?.id || "",
-        );
-      }
-      setError("");
-      setRevision((value) => value + 1);
-    } catch (e) {
-      setOnline(false);
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  useEffect(() => {
-    const stop = observeMaverickVisibility((visible) => { if (visible) refresh(); });
-    const timer = setInterval(() => {
-      if (maverickAppIsVisible()) refresh();
-    }, 10000);
-    return () => { stop(); clearInterval(timer); };
+  const refreshAll = useCallback(() => {
+    void refresh();
+    setRevision((value) => value + 1);
   }, [refresh]);
-  useEffect(() => {
-    let live = true;
-    if (selected && (session?.status === "ready" || ["webhooks", "templates"].includes(tab))) {
-      setResourceLoading(true);
-      operation(tab + ".list", { session_id: selected, limit: 50, offset: page * 50 })
-        .then((data) => {
-          if (live) {
-            const rows = items<Chat & Row>(data);
-            if (tab === "chats") setChats(rows);
-            else setRecords(rows);
-            setMore(rows.length === 50);
-          }
-        })
-        .catch((e) => {
-          if (live) setError((e as Error).message);
-        })
-        .finally(() => { if (live) setResourceLoading(false); });
-    } else {
-      setResourceLoading(false);
-      setChats([]);
-      setRecords([]);
-      setMore(false);
-    }
-    return () => {
-      live = false;
-    };
-  }, [selected, tab, session?.status, page, revision]);
-  useEffect(() => {
-    setChat(undefined);
-    setChats([]);
-    setRecords([]);
-    setSearch("");
-    setPage(0);
-    setMore(false);
-  }, [selected, tab]);
-  useMaverickHost(refresh, setSelected);
+  useMaverickHost(refreshAll, setSelected);
   async function newSession(e: FormEvent) {
     e.preventDefault();
+    if (creating.current || online !== true || !name.trim()) return;
+    creating.current = true;
     setBusy(true);
     setError("");
     try {
@@ -119,6 +42,7 @@ export function App() {
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      creating.current = false;
       setBusy(false);
     }
   }
@@ -126,8 +50,8 @@ export function App() {
     return (
       <main className="setup-page">
         <div className="loading-card">
-          {loading ? "Opening OpenWA…" : error}
-          <button onClick={refresh}>Retry</button>
+          <p role={loading ? "status" : "alert"}>{loading ? "Opening OpenWA…" : connectionError}</p>
+          {!loading && <button onClick={refresh} disabled={refreshing}>Retry</button>}
         </div>
       </main>
     );
@@ -135,11 +59,11 @@ export function App() {
     return (
       <main className="setup-page">
         <ConnectionSettings status={status} onSaved={refresh} />
-        {error && <p className="error-banner">{error}</p>}
+        {connectionError && <p className="error-banner" role="alert">{connectionError}</p>}
       </main>
     );
   return (
-    <main className={"app-shell " + (chat ? "chat-open" : "")}>
+    <main className="app-shell">
       <header className="app-heading">
         <div className="app-identity">
           <span className="brand-icon">
@@ -157,7 +81,8 @@ export function App() {
           </span>
           <button
             className="icon-button"
-            onClick={refresh}
+            onClick={refreshAll}
+            disabled={refreshing}
             aria-label="Refresh"
           >
             <Icon name="refresh" />
@@ -166,6 +91,7 @@ export function App() {
             <button
               className="icon-button"
               onClick={() => setSettings(true)}
+              disabled={busy}
               aria-label="Gateway settings"
             >
               <Icon name="settings" />
@@ -173,6 +99,7 @@ export function App() {
           )}
         </div>
       </header>
+      {connectionError && <div className="error-banner" role="alert">{connectionError}</div>}
       {error && (
         <div className="error-banner" role="alert">
           {error}
@@ -185,64 +112,9 @@ export function App() {
           </button>
         </div>
       )}
-      <div className="workspace">
-        <SessionSidebar
-          sessions={sessions}
-          selected={selected}
-          connection={status.connection}
-          onCreate={() => setCreate(true)}
-          onSelect={(id) => {
-            setSelected(id);
-            setChat(undefined);
-          }}
-        />
-        <ResourcePanel
-          session={session}
-          tab={tab}
-          chats={chats}
-          chat={chat}
-          records={records}
-          search={search}
-          loading={resourceLoading}
-          page={page}
-          more={more}
-          onPage={setPage}
-          onManage={() => setManage(true)}
-          onTab={setTab}
-          onSearch={setSearch}
-          onChat={setChat}
-        />
-        {session && chat ? (
-          <Conversation
-            key={JSON.stringify([status.send_scope, session.id, chat.id])}
-            sendScope={status.send_scope}
-            session={session}
-            chat={chat}
-            canSend={online === true && status.connection.role !== "viewer"}
-            onBack={() => setChat(undefined)}
-          />
-        ) : (
-          <section className="conversation-placeholder">
-            <div className="empty-art">
-              <Icon name="chat" size={60} />
-              <span className="art-orbit one" />
-              <span className="art-orbit two" />
-            </div>
-            <h2>Your conversations, connected</h2>
-            <p>
-              Select a conversation to read and reply.
-              <br />
-              Link a session to get started.
-            </p>
-            {session?.status !== "ready" && session && (
-              <button className="primary" onClick={() => setManage(true)}>
-                <Icon name="link" size={18} />
-                Link WhatsApp
-              </button>
-            )}
-          </section>
-        )}
-      </div>
+      <Workspace key={JSON.stringify([status.send_scope, selected])}
+        status={status} sessions={sessions} selected={selected} online={online === true}
+        revision={revision} onSelect={setSelected} onCreate={() => setCreate(true)} onManage={() => setManage(true)} />
       {settings && (
         <Dialog label="Gateway settings" onClose={() => setSettings(false)}>
           <ConnectionSettings
@@ -256,9 +128,9 @@ export function App() {
         </Dialog>
       )}
       {manage && session && (
-        <SessionPanel
+        <SessionPanel key={JSON.stringify([status.send_scope, session.id])}
           session={session}
-          canManage={status.connection.role !== "viewer"}
+          canManage={online === true && status.connection.role !== "viewer"}
           onRefresh={refresh}
           onClose={() => setManage(false)}
         />
@@ -291,7 +163,7 @@ export function App() {
                 autoFocus
               />
             </label>
-            <button className="primary wide" disabled={busy}>
+            <button className="primary wide" disabled={busy || !name.trim()}>
               {busy ? "Creating…" : "Create and link session"}
             </button>
           </form>

@@ -1,8 +1,8 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useCallback, useRef, type FormEvent } from "react";
 import { operation, type Session, type Row } from "./api";
 import { Icon } from "./Icons";
 import { Dialog } from "./Dialog";
-import { maverickAppIsVisible, observeMaverickVisibility } from "@maverick/pwa-cache";
+import { useVisiblePolling } from "./useVisiblePolling";
 
 export function SessionPanel({
   session,
@@ -20,40 +20,28 @@ export function SessionPanel({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [qrError, setQrError] = useState("");
+  const acting = useRef(false);
+  const linking = canManage && ["qr_ready", "authenticating", "initializing"].includes(session.status);
   useEffect(() => {
-    setQr("");
-    setCode("");
-    let active = true;
-    const load = () =>
-      operation<Row>("session.qr", { session_id: session.id })
-        .then((data) => {
-          const image = data.qrCode || data.qr || data.dataUrl;
-          if (
-            active &&
-            typeof image === "string" &&
-            image.startsWith("data:image/png;base64,")
-          )
-            setQr(image);
-        })
-        .catch(() => {});
-    if (canManage && (
-      session.status === "qr_ready" ||
-      session.status === "authenticating" ||
-      session.status === "initializing"
-    )) {
-      const stop = observeMaverickVisibility((visible) => { if (visible) load(); });
-      const timer = setInterval(() => { if (maverickAppIsVisible()) load(); }, 5000);
-      return () => {
-        active = false;
-        stop();
-        clearInterval(timer);
-      };
+    if (!linking) { setQr(""); setQrError(""); }
+    if (session.status === "ready" || !session.engineLoaded) setCode("");
+  }, [linking, session.status, session.engineLoaded]);
+  const loadQr = useCallback(async (signal: AbortSignal) => {
+    try {
+      const data = await operation<Row>("session.qr", { session_id: session.id }, signal);
+      if (signal.aborted) return;
+      const image = data.qrCode || data.qr || data.dataUrl;
+      setQr(typeof image === "string" && image.startsWith("data:image/png;base64,") ? image : "");
+      setQrError("");
+    } catch (error) {
+      if (!signal.aborted) { setQr(""); setQrError((error as Error).message); return false; }
     }
-    return () => {
-      active = false;
-    };
-  }, [session.id, session.status, canManage]);
+  }, [session.id]);
+  const refreshQr = useVisiblePolling(loadQr, 5000, linking);
   async function act(action: string, extra: Row = {}) {
+    if (acting.current || !canManage) return;
+    acting.current = true;
     setBusy(true);
     setError("");
     try {
@@ -67,6 +55,7 @@ export function SessionPanel({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      acting.current = false;
       setBusy(false);
     }
   }
@@ -98,6 +87,8 @@ export function SessionPanel({
             <p>WhatsApp → Settings → Linked devices → Link a device</p>
           </div>
         )}
+        {linking && !qr && !qrError && <p className="notice" role="status">Waiting for a linking QR code…</p>}
+        {qrError && <div className="error-banner" role="alert">{qrError}<button onClick={refreshQr}>Retry QR</button></div>}
         {canManage && session.engineLoaded && session.status !== "ready" && (
           <form
             className="pair-form"

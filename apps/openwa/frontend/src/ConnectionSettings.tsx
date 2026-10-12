@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { callBackend, type Status } from "./api";
 import { Icon } from "./Icons";
 
@@ -14,8 +14,11 @@ export function ConnectionSettings({
   const [url, setUrl] = useState(status.connection.url);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const saving = useRef(false);
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (saving.current || !status.can_configure || !status.connection.credential_available) return;
+    saving.current = true;
     setError("");
     setBusy(true);
     try {
@@ -27,6 +30,7 @@ export function ConnectionSettings({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }

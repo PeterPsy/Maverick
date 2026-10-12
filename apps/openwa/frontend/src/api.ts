@@ -66,23 +66,49 @@ export function items<T>(raw: unknown): T[] {
 }
 export async function callBackend<T>(
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch("/api/apps/openwa/backend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new BackendError(
-      error.detail || error.error || `Request failed (${response.status}).`,
-      response.status,
-      error.error || "request_failed",
-    );
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(abort, 28000);
+  try {
+    const response = await fetch("/api/apps/openwa/backend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new BackendError(
+        typeof error?.detail === "string" ? error.detail : `Request failed (${response.status}).`,
+        response.status,
+        typeof error?.error === "string" ? error.error : "request_failed",
+      );
+    }
+    try {
+      return await response.json() as T;
+    } catch {
+      throw new BackendError("Maverick returned an invalid response. Try refreshing.", 502, "invalid_response");
+    }
+  } catch (error) {
+    if (controller.signal.aborted && !signal?.aborted) {
+      const send = body.action === "messages.send" || body.action === "messages.reply";
+      throw new BackendError(send
+        ? "The request timed out. The message may already have been sent. Check the conversation before retrying."
+        : "The request timed out. Try again.", 504, "request_timeout");
+    }
+    if (error instanceof TypeError)
+      throw new BackendError("Could not reach Maverick. Check your connection and try again.", 503, "network_error");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
-  return response.json() as Promise<T>;
 }
-export async function operation<T>(action: string, args: Row = {}): Promise<T> {
-  const result = await callBackend<{ data: T }>({ action, ...args });
+export async function operation<T>(action: string, args: Row = {}, signal?: AbortSignal): Promise<T> {
+  const result = await callBackend<{ data: T }>({ action, ...args }, signal);
   return result.data;
 }

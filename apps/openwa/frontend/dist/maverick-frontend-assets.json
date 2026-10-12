@@ -1,26 +1,26 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "5ef57caf4545e0cc3418cfe40374c0f32baa71047cc9548b87352e7607332dbe",
+  "build_id": "42fd903981137a6f75e6dc7efc967d2f1e15e1fa5c06f906f94f050c425133f6",
   "entrypoints": [
     "index.html"
   ],
   "immutable": [
     {
-      "path": "assets/index-C9f66JtI.css",
-      "sha256": "2fc530bd37cf5c94e723e30bc39b9641a5366aab102fa9aa3fd99cddc199bca5",
-      "size_bytes": 12962
+      "path": "assets/index-BER8ytmx.css",
+      "sha256": "5be30492ba1b44216716dbd68e9bc02803ecca48d619de87203d1cd30145472b",
+      "size_bytes": 15347
     },
     {
-      "path": "assets/index-DLVihZef.js",
-      "sha256": "b21e3d41a368783ac21c4aac3754673df9c634b47abb2ba9f8db3d7f8d50b6c4",
-      "size_bytes": 252717
+      "path": "assets/index-BMZCLmj9.js",
+      "sha256": "15ff4b5d427643e3da4d8164cb4dc9feccf0ac2b7c46d84a8eecce5289558a61",
+      "size_bytes": 257572
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "4020de84aa471618db5f9a9bd8177eb9d4dbf6f78a0dcbf162d28a375690cff9",
-      "size_bytes": 415
+      "sha256": "f840aa13d45be48c5266c74298f01a7cc8d106424c58145979a32cfe510d58bb",
+      "size_bytes": 800
     },
     {
       "path": "maverick-icon-compact.png",

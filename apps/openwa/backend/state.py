@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS notifications (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
  session_id TEXT NOT NULL, created_at TEXT NOT NULL, dismissed INTEGER NOT NULL DEFAULT 0
 );
+CREATE INDEX IF NOT EXISTS notifications_inbox ON notifications(user_id, dismissed, created_at DESC);
+CREATE INDEX IF NOT EXISTS notifications_retention ON notifications(user_id, created_at DESC);
 """
 
 @contextmanager
@@ -50,7 +52,7 @@ def notify(data_root: str, user_id: str, identifier: str, title: str, body: str,
     with database(data_root) as db:
         db.execute("INSERT OR IGNORE INTO notifications(id,user_id,title,body,session_id,created_at) VALUES (?,?,?,?,?,?)",
                    (identifier, user_id, title, body[:300], session_id, datetime.now(timezone.utc).isoformat()))
-        db.execute("DELETE FROM notifications WHERE id IN (SELECT id FROM notifications ORDER BY created_at DESC LIMIT -1 OFFSET 1000)")
+        db.execute("DELETE FROM notifications WHERE id IN (SELECT id FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT -1 OFFSET 1000)", (user_id,))
 
 def notifications(data_root: str, user_id: str, offset: int, limit: int) -> dict:
     with database(data_root) as db:

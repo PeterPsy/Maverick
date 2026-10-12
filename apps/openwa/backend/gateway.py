@@ -82,16 +82,16 @@ def _request(origin, method, path, headers, body=None):
         content = response.read(MAX_BODY + 1)
         if len(content) > MAX_BODY:
             raise GatewayError("The gateway response is too large. Narrow your search.", 413)
-        try:
-            data = json.loads(content)
-        except (ValueError, UnicodeError):
-            raise GatewayError("The gateway returned an invalid response.") from None
         if response.status >= 300:
             messages = {401: "OpenWA rejected the API key.", 403: "This API key cannot perform that operation.",
                 404: "The requested OpenWA resource was not found.", 409: "The send outcome is uncertain. Check the conversation before preparing a new send.",
                 429: "OpenWA is rate limiting requests. Try again later.", 501: "Your WhatsApp engine does not support this operation."}
             code = "gateway_error"
             # Upstream messages and arbitrary codes may contain sensitive payloads.
+            try:
+                data = json.loads(content) if response.status == 409 else None
+            except (ValueError, UnicodeError):
+                data = None
             if response.status == 409 and isinstance(data, dict) and data.get("code") in (
                 "IDEMPOTENCY_KEY_IN_PROGRESS", "IDEMPOTENCY_OUTCOME_UNKNOWN"
             ):
@@ -99,7 +99,12 @@ def _request(origin, method, path, headers, body=None):
                 if code == "IDEMPOTENCY_KEY_IN_PROGRESS":
                     messages[409] = "This send is still running. Wait, then retry with the same message."
             raise GatewayError(messages.get(response.status, "OpenWA could not complete this request."), response.status, code)
-        return data
+        if response.status in (204, 205) and not content:
+            return None
+        try:
+            return json.loads(content)
+        except (ValueError, UnicodeError):
+            raise GatewayError("The gateway returned an invalid response.") from None
     except (OSError, http.client.HTTPException):
         message = "The gateway is unreachable or the request timed out."
         if path.endswith(("/messages/send-text", "/messages/reply")):

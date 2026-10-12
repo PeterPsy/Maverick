@@ -112,7 +112,10 @@ export function Sidebar({
   const [hasMountedDetailWidgets, setHasMountedDetailWidgets] = useState(isDetailLayerOpen);
   const [mountedWidgetAppIds, setMountedWidgetAppIds] = useState<string[]>(activeAppId ? [activeAppId] : []);
   const visitedWidgetAppIds = activeAppId && !mountedWidgetAppIds.includes(activeAppId) ? [...mountedWidgetAppIds, activeAppId] : mountedWidgetAppIds;
-  const renderedWidgetAppIds = visitedWidgetAppIds.filter((appId) => visibleAppsById.get(appId)?.sidebar_enabled !== false);
+  const renderedWidgetAppIds = visitedWidgetAppIds.filter((appId) => {
+    const app = visibleAppsById.get(appId);
+    return app && app.sidebar_enabled !== false;
+  });
   const shouldMountDetailWidgets = hasMountedDetailWidgets || isDetailLayerOpen;
   const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;
   const sidebarFooterSlot = shouldMountDetailWidgets ? renderedWidgetAppIds.map((appId) => (
@@ -391,18 +394,14 @@ export function Sidebar({
         )) : null}
 
         <div className="bs-sidebar__bottom-fixed">
-          {showMobileChatThemeSwitcher ? (
-            <div className="bs-sidebar__mobile-chat-footer-row">
-              {sidebarFooterSlot}
-              <ThemeModeSwitcher
-                className="bs-sidebar__mobile-chat-theme-switcher"
-                onThemeModeChange={onThemeModeChange}
-                themeMode={themeMode}
-              />
-            </div>
-          ) : (
-            sidebarFooterSlot
-          )}
+          <div className={showMobileChatThemeSwitcher ? "bs-sidebar__mobile-chat-footer-row" : undefined}>
+            {sidebarFooterSlot}
+            {showMobileChatThemeSwitcher ? <ThemeModeSwitcher
+              className="bs-sidebar__mobile-chat-theme-switcher"
+              onThemeModeChange={onThemeModeChange}
+              themeMode={themeMode}
+            /> : null}
+          </div>
 
           {!isMobileLayout && sidebarEnabled ? (
             <SidebarShellControls

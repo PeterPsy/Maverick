@@ -213,7 +213,8 @@
   pointer-events: auto;
 }
 
-.bs-floating-chat-host__surface > .bs-widget-slot--fill {
+.bs-floating-chat-host__widget,
+.bs-floating-chat-host__widget > .bs-widget-slot--fill {
   width: 100%;
   height: 100%;
   min-width: 0;

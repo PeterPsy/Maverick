@@ -760,7 +760,7 @@ export function AppShell() {
     }
   }, [isSidebarPinned]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setMobilePrimaryAction({ available: false, label: "", preferredSurface: "app" });
   }, [activeApp?.app_id, activeAppId]);
 

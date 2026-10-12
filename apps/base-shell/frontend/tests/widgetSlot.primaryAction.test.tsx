@@ -7,6 +7,7 @@ import { createWidgetContext, listWidgets, type WidgetRegistryItem } from "../sr
 import { WidgetSlot } from "../src/components/WidgetSlot";
 import type { WidgetPrimaryActionState } from "../src/components/WidgetSlot";
 import { setMaverickFrameOrigin } from "../src/iframePolicy";
+import type { MaverickFrameScope } from "../src/iframePolicy";
 
 vi.mock("../src/api", () => ({
   createWidgetContext: vi.fn(),
@@ -107,6 +108,55 @@ describe("WidgetSlot primary action protocol", () => {
     const iframe = await waitForIframe(container);
     await act(async () => iframe.dispatchEvent(new Event("load")));
     expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("preserves the footer frame across callback changes and replays its latest action", async () => {
+    const first = vi.fn();
+    const next = vi.fn();
+    async function renderFooter(callback?: (state: WidgetPrimaryActionState) => void, active = Boolean(callback)) {
+      await act(async () => root.render(<WidgetSlot
+        activeWorkspaceId="default" content={{ active_app_id: callback ? ownerAppId : "chat" }}
+        contentKind="shell.sidebar.footer" frameScope={FRAME_SCOPE} hostAppId="base-shell"
+        label="App sidebar footer" onOpenApp={vi.fn()} onPrimaryActionStateChange={callback}
+        preferredOwnerAppId={ownerAppId} size="compact" isActive={active}
+      />));
+    }
+    await renderFooter(first);
+    const frame = await waitForIframe(container);
+    const frameWindow = frame.contentWindow!;
+    await dispatchWidgetState(frameWindow);
+    first.mockClear();
+    await renderFooter();
+    await dispatchWidgetState(frameWindow);
+    expect(first).not.toHaveBeenCalled();
+    await renderFooter(next, false);
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(listWidgets).toHaveBeenCalledOnce();
+    expect(createWidgetContext).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(next).toHaveBeenLastCalledWith({ available: true, label: "New Agent", preferredSurface: "sidebar" });
+    await dispatchWidgetState(frameWindow);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it("discards cached action state when the authenticated frame scope changes", async () => {
+    vi.mocked(fetch).mockImplementation(async () => isolatedLaunchResponse());
+    const callback = vi.fn();
+    async function renderFooter(frameScope: MaverickFrameScope = FRAME_SCOPE) {
+      await act(async () => root.render(<WidgetSlot
+        activeWorkspaceId="default" content={{}} contentKind="shell.sidebar.footer"
+        frameScope={frameScope} hostAppId="base-shell" label="App sidebar footer"
+        onOpenApp={vi.fn()} onPrimaryActionStateChange={callback} preferredOwnerAppId={ownerAppId} size="compact"
+      />));
+    }
+    await renderFooter();
+    const previous = await waitForIframe(container);
+    await dispatchWidgetState(previous.contentWindow!);
+    expect(callback.mock.lastCall?.[0].available).toBe(true);
+    await renderFooter({ ...FRAME_SCOPE, sessionGeneration: "new-session" });
+    expect(callback.mock.lastCall?.[0].available).toBe(false);
+    expect(await waitForIframe(container)).not.toBe(previous);
+    expect(createWidgetContext).toHaveBeenCalledTimes(2);
   });
 
   it("ends stalled frame loading with a recoverable timeout", async () => {

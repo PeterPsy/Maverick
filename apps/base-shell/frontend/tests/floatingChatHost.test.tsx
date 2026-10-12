@@ -60,6 +60,42 @@ describe("FloatingChatHost mount gate", () => {
     expect(container.querySelector("[data-testid='widget-slot']")).not.toBeNull();
   });
 
+  it.each(["overlay", "fixed-right"] as const)("keeps %s chat alive while Chat is active", async (floatingChatMode) => {
+    await renderHost(root, { floatingChatMode });
+    const widget = container.querySelector("[data-testid='widget-slot']");
+    await renderHost(root, { floatingChatMode, isChatAppActive: true });
+    expect(container.querySelector("[data-testid='widget-slot']")).toBe(widget);
+    expect(container.querySelector(".bs-floating-chat-host")?.getAttribute("aria-hidden")).toBe("true");
+    expect(widgetSlotMock.mock.calls.at(-1)?.[0].isActive).toBe(false);
+    await renderHost(root, { floatingChatMode });
+    expect(container.querySelector("[data-testid='widget-slot']")).toBe(widget);
+  });
+
+  it("preserves mobile chat across closing, reopening and visiting Chat", async () => {
+    await renderHost(root, { isMobileLayout: true, isMobileChatOpen: true });
+    const widget = container.querySelector("[data-testid='widget-slot']");
+    await renderHost(root, { isMobileLayout: true, isMobileChatOpen: false });
+    expect(container.querySelector("[data-testid='widget-slot']")).toBe(widget);
+    await renderHost(root, { isMobileLayout: true, isMobileChatOpen: true, isChatAppActive: true });
+    expect(container.querySelector("[data-testid='widget-slot']")).toBe(widget);
+    await renderHost(root, { isMobileLayout: true, isMobileChatOpen: true });
+    expect(container.querySelector("[data-testid='widget-slot']")).toBe(widget);
+  });
+
+  it("keeps previously opened placements warm but discards them with the frame scope", async () => {
+    await renderHost(root);
+    const overlay = container.querySelector("[data-testid='widget-slot']");
+    await renderHost(root, { floatingChatMode: "fixed-right" });
+    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(2);
+    await renderHost(root);
+    expect(container.querySelector("[data-testid='widget-slot']")).toBe(overlay);
+    await renderHost(root, { isChatAppActive: true, frameScope: { ...FRAME_SCOPE, sessionGeneration: "new-session" } });
+    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(0);
+    await renderHost(root, { frameScope: { ...FRAME_SCOPE, sessionGeneration: "new-session" } });
+    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(1);
+    expect(container.querySelector("[data-testid='widget-slot']")).not.toBe(overlay);
+  });
+
   it("passes active app params into the floating Chat widget context", async () => {
     await renderHost(root, {
       activeApp: {

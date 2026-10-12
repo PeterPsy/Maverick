@@ -37,7 +37,7 @@ const user = {
   account_type: "local",
 };
 
-export function fixtureServer(requests, feed) {
+export function fixtureServer(requests, feed, surfaceHandler) {
   let notifications = structuredClone(
     feed?.notifications ?? [
       { id: "fixture-reminder", title: "Promemoria di prova" },
@@ -51,6 +51,7 @@ export function fixtureServer(requests, feed) {
       send(response, JSON.stringify(body), "application/json", status);
     // Use a distinct localhost origin for app frame registration and lifecycle.
     const port = server.address().port;
+    if (await surfaceHandler?.(request, response, url, port)) return;
     if (url.pathname === "/api/app-frames/browser-launch") {
       let bytes = "";
       for await (const chunk of request) bytes += chunk;

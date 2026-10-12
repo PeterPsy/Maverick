@@ -188,6 +188,18 @@ describe("Sidebar widget mount gate", () => {
     expect(widgetSlotUnmountMock).not.toHaveBeenCalled();
     expect(widgetSlotMountMock).not.toHaveBeenCalled();
   });
+
+  it("keeps mobile footer widgets in the same parent while navigating through Chat", async () => {
+    const props = { apps: [app("chat"), app("storage")], isMobileLayout: true, isOpen: true };
+    await renderSidebar(root, primaryActionStateChange, { ...props, activeAppId: "chat" });
+    const footer = container.querySelector('[data-content-kind="shell.sidebar.footer"]')!;
+    const parent = footer.parentElement;
+    await renderSidebar(root, primaryActionStateChange, { ...props, activeAppId: "storage" });
+    await renderSidebar(root, primaryActionStateChange, { ...props, activeAppId: "chat" });
+    expect(container.querySelector('[data-content-kind="shell.sidebar.footer"]')).toBe(footer);
+    expect(footer.parentElement).toBe(parent);
+    expect(widgetSlotUnmountMock).not.toHaveBeenCalled();
+  });
 });
 
 function app(appId: string): AppRegistryItem {

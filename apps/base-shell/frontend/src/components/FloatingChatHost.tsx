@@ -1,12 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { AppRegistryItem } from "../api";
 import type { MaverickFrameScope } from "../iframePolicy";
 import { clampFloatingChatWidth, type FloatingChatMode } from "../session";
 import type { ShellThemeState } from "../theme";
-import { WidgetSlot } from "./WidgetSlot";
-
-type FloatingChatPlacement = "overlay" | "fixed-right" | "mobile-fullscreen";
+import { FloatingChatWidget, type FloatingChatPlacement } from "./FloatingChatWidget";
 
 export function FloatingChatHost({
   activeApp,
@@ -70,44 +68,22 @@ export function FloatingChatHost({
   const isDockMode = placement === "fixed-right";
   const isMobileMode = placement === "mobile-fullscreen";
   const isVisible = isMobileMode ? (isMobileChatOpen || isMobileChatClosing) && !isChatAppActive : !isChatAppActive;
-  const widgetSize = isDockMode || isMobileMode ? "fill" : "overlay";
-  const contentKind = isDockMode
-    ? "shell.dock.right"
-    : isMobileMode
-      ? "shell.overlay.mobile.fullscreen"
-      : "shell.overlay.bottomright";
-  const widgetLabel = isDockMode ? "Right dock widget" : isMobileMode ? "Mobile chat widget" : "Floating chat widget";
-  const content = useMemo(
-    () => ({
-      active_app: activeApp
-        ? {
-            app_id: activeApp.app_id,
-            description: activeApp.description,
-            name: activeApp.name,
-            params: activeAppParams,
-            views: activeApp.views,
-          }
-        : null,
-      mode: placement,
-      navigation_scope: isDockMode ? navigationScope || "chat-floating-dock" : isMobileMode ? "chat-floating-mobile" : "",
-      placement: isDockMode ? "right" : isMobileMode ? "mobile-fullscreen" : "bottom-right",
-      thread_id: isDockMode ? threadId || "" : "",
-      user: user?.username || null,
-    }),
-    [activeApp, activeAppParams, isDockMode, isMobileMode, navigationScope, placement, threadId, user?.username],
-  );
+  const scope = `${frameScope.sessionGeneration}:${activeWorkspaceId}`;
+  const [mounted, setMounted] = useState<{ scope: string; placements: FloatingChatPlacement[] }>(() => ({
+    scope, placements: isVisible ? [placement] : [],
+  }));
+  const scopedPlacements = mounted.scope === scope ? mounted.placements : [];
+  const renderedPlacements = isVisible && !scopedPlacements.includes(placement)
+    ? [...scopedPlacements, placement] : scopedPlacements;
+  useEffect(() => {
+    setMounted((current) => {
+      const placements = current.scope === scope ? current.placements : [];
+      if (current.scope === scope && (!isVisible || placements.includes(placement))) return current;
+      return { scope, placements: isVisible && !placements.includes(placement) ? [...placements, placement] : placements };
+    });
+  }, [scope, isVisible, placement]);
 
-  if (!isVisible) {
-    return null;
-  }
-
-  function handleCloseWidget() {
-    if (isMobileMode) {
-      onCloseMobileChat();
-      return;
-    }
-    onCloseDock();
-  }
+  if (!renderedPlacements.length) return null;
 
   function handleResizePointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     if (!isDockMode || event.button !== 0) {
@@ -179,31 +155,29 @@ export function FloatingChatHost({
   return (
     <section
       aria-hidden={!isVisible}
+      inert={!isVisible}
       aria-label={isMobileMode ? "Chat contestuale" : isDockMode ? "Right dock panel" : "Shell overlay widgets"}
       className={`bs-floating-chat-host is-${placement} ${isVisible ? "is-visible" : ""} ${isMobileChatClosing ? "is-closing" : ""} ${isResizeActive ? "is-resizing" : ""}`}
     >
       <div className="bs-floating-chat-host__surface">
-        <WidgetSlot
+        {renderedPlacements.map((openedPlacement) => <FloatingChatWidget
+          key={`${scope}:${openedPlacement}`}
+          placement={openedPlacement}
+          visible={isVisible && openedPlacement === placement}
+          activeApp={activeApp}
+          activeAppParams={activeAppParams}
           activeWorkspaceId={activeWorkspaceId}
-          content={content}
-          contentKind={contentKind}
           frameScope={frameScope}
-          hostAppId="base-shell"
-          label={widgetLabel}
-          isActive={isVisible}
-          onActiveThreadChange={({ navigationScope: nextNavigationScope, threadId: nextThreadId }) =>
-            onActiveThreadChange({
-              navigationScope: nextNavigationScope || navigationScope,
-              threadId: nextThreadId,
-            })
-          }
-          onCloseDock={handleCloseWidget}
+          navigationScope={navigationScope}
+          onActiveThreadChange={onActiveThreadChange}
+          onCloseDock={onCloseDock}
+          onCloseMobileChat={onCloseMobileChat}
           onOpenApp={onOpenApp}
           onOpenDock={onOpenDock}
-          preferredOwnerAppId="chat"
           shellTheme={shellTheme}
-          size={widgetSize}
-        />
+          threadId={threadId}
+          user={user}
+        />)}
       </div>
       <button
         aria-label="Ridimensiona chat laterale"

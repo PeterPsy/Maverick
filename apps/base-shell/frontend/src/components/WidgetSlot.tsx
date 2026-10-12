@@ -144,6 +144,7 @@ export function WidgetSlot({
   const shellThemeRef = useRef(shellTheme);
   const widgetFrameBootstrapThemesRef = useRef<Record<string, ShellThemeState>>({});
   const widgetFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const primaryActionStateRef = useRef<{ frameKey: string; state: WidgetPrimaryActionState } | null>(null);
   const contentSignature = JSON.stringify({ activeWorkspaceId, content });
   const themeSignature = shellThemeSignature(shellTheme);
   const supportsPrimaryActionSlot = contentKind === "shell.sidebar.footer";
@@ -151,6 +152,13 @@ export function WidgetSlot({
     ? `${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`
     : "";
   const handleLaunchError = useCallback((cause: Error) => setFrameError(cause.message), []);
+
+  useEffect(() => {
+    if (!supportsPrimaryActionSlot) return;
+    const cached = primaryActionStateRef.current;
+    onPrimaryActionStateChange?.(!frameError && cached?.frameKey === widgetFrameKey
+      ? cached.state : UNAVAILABLE_PRIMARY_ACTION_STATE);
+  }, [frameError, onPrimaryActionStateChange, supportsPrimaryActionSlot, widgetFrameKey]);
 
   useEffect(() => { setFrameError(null); }, [widgetFrameKey]);
   useEffect(() => {
@@ -172,9 +180,6 @@ export function WidgetSlot({
     setLoadedFrameKey("");
     setOverlaySize(collapsedOverlaySize());
     setCompactSlotHeight(COMPACT_SLOT_DEFAULT_HEIGHT);
-    if (supportsPrimaryActionSlot) {
-      onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
-    }
 
     async function loadWidget() {
       try {
@@ -191,9 +196,6 @@ export function WidgetSlot({
             setWidget(null);
             setContextToken(null);
             setIsResolvingWidget(false);
-            if (supportsPrimaryActionSlot) {
-              onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
-            }
           }
           return;
         }
@@ -228,9 +230,6 @@ export function WidgetSlot({
           setContextToken(null);
           setError(loadError instanceof Error ? loadError.message : "Widget non disponibile.");
           setIsResolvingWidget(false);
-          if (supportsPrimaryActionSlot) {
-            onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
-          }
         }
       }
     }
@@ -239,7 +238,7 @@ export function WidgetSlot({
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, contentKind, hostAppId, onPrimaryActionStateChange, preferredOwnerAppId, supportsPrimaryActionSlot]);
+  }, [activeWorkspaceId, contentKind, frameScope.sessionGeneration, hostAppId, preferredOwnerAppId]);
 
   function postWidgetContextChanged() {
     if (!widget) {
@@ -373,11 +372,13 @@ export function WidgetSlot({
         supportsPrimaryActionSlot &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
-        onPrimaryActionStateChange?.({
+        const state: WidgetPrimaryActionState = {
           available: payload.available === true,
           label: typeof payload.label === "string" ? payload.label : "",
           preferredSurface: payload.preferred_surface === "sidebar" ? "sidebar" : "app",
-        });
+        };
+        primaryActionStateRef.current = { frameKey: widgetFrameKey, state };
+        onPrimaryActionStateChange?.(state);
       }
       if (
         payload.type === "maverick.app.external-url" &&
@@ -486,6 +487,7 @@ export function WidgetSlot({
     supportsPrimaryActionSlot,
     widget?.owner_app_id,
     widget?.widget_id,
+    widgetFrameKey,
   ]);
 
   useEffect(() => {

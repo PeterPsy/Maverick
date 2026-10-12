@@ -4,11 +4,11 @@ import {platforms} from "./platforms.mjs";
 // Official Maverick installation. Other installations can change Connection settings.
 export const defaultConnectorUrl = "https://maverick.loopino.ai/app/browser?connector=1";
 
-export function selectedAgentTab(tab, agentTabUrl, binding) {
+export function selectedAgentTab(tab, agentTabUrl, identity) {
   if (!Number.isInteger(tab?.id) || typeof tab.url !== "string") throw new Error("active_tab_unavailable");
   if (tab.url === agentTabUrl) return {id:tab.id, url:"", title:"Maverick agent tab", allowed_platforms:Object.keys(platforms)};
-  if (binding?.tabId === tab.id && binding.allowedPlatforms?.length) {
-    return {id:tab.id, url:sharedTabUrl(tab.url, binding, agentTabUrl), title:tab.title || "Agent tab", allowed_platforms:binding.allowedPlatforms, reconnect:true};
+  if (identity?.tabId === tab.id && identity.allowedPlatforms?.length) {
+    return {id:tab.id, url:sharedTabUrl(tab.url, identity, agentTabUrl), title:tab.title || "Agent tab", allowed_platforms:identity.allowedPlatforms, reconnect:true};
   }
   throw new Error("agent_tab_required");
 }

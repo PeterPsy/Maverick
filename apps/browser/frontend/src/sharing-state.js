@@ -7,6 +7,7 @@ export const stopReasons = {
   platform_route_unavailable: "The shared tab left the supported content routes",
   connection_expired: "The Browser connection expired; reconnect from Companion",
   connection_revoked: "The Browser connection was stopped",
+  connection_replaced: "Replaced by a new connection for this agent tab",
   connection_unavailable: "The connection is unavailable for this Maverick account or workspace",
   connector_unauthorized: "The Browser bridge lease is invalid; reconnect from Companion",
   authentication_failed: "Maverick authentication expired; sign in in the Browser bridge and reconnect",

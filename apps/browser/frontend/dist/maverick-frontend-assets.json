@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "e17c2cd422a8ad31de78fc3dd2a0c3db860d255f73e581f6ae720d3467cf5d2e",
+  "build_id": "d3f90202f2f44b77194428126a4e32e41b933909ff9be67036a6a2338670a4ca",
   "entrypoints": [
     "companion/agent-tab.html",
     "companion/offscreen.html",
@@ -14,14 +14,14 @@
       "size_bytes": 8542
     },
     {
-      "path": "assets/index-CA3BEn3V.js",
-      "sha256": "5a7abfb33310c5fc040b3d38b2528ac30ec7723996e457688c24bdaf4d4e4b30",
-      "size_bytes": 28109
+      "path": "assets/index-Dxy01heS.js",
+      "sha256": "a3269bdabc77d73302d522f775b8544e9ba64d8f18b4de27df10d36b8d5ec392",
+      "size_bytes": 28207
     },
     {
-      "path": "assets/maverick-browser-companion-Cf3oP52w.zip",
-      "sha256": "a0a84deb89de5a1c7aa2536a1e35dc1ca27c17cb5bb5afd7d77ce0228633fe53",
-      "size_bytes": 29308
+      "path": "assets/maverick-browser-companion-DGan9OEu.zip",
+      "sha256": "63f6c7f59a6c71d5c94fd207276b924ba53a42303ee9bf58e3dc94fc927da33d",
+      "size_bytes": 29990
     }
   ],
   "revalidated": [
@@ -34,6 +34,11 @@
       "path": "companion/agent-tab.html",
       "sha256": "3f5e469d93144bc46a5fe1a324f5905f05fdafd6e75b63d567f54986b7a2d309",
       "size_bytes": 1379
+    },
+    {
+      "path": "companion/agent-tab.mjs",
+      "sha256": "5c0331933574e051c5b7ace8f26a0ea2848552c8b1e800920b04b59e33a504b9",
+      "size_bytes": 1446
     },
     {
       "path": "companion/connector-frame.mjs",
@@ -57,7 +62,7 @@
     },
     {
       "path": "companion/manifest.json",
-      "sha256": "b04d4715cd4516ea393074fd1255564ae2c557df7994dd2402f527af3da6f45f",
+      "sha256": "faf7c75151fbd9d3d015fc42bdb1aca07169ad7b4b2c13b60343c3daf71f53ea",
       "size_bytes": 574
     },
     {
@@ -92,8 +97,8 @@
     },
     {
       "path": "companion/popup.mjs",
-      "sha256": "774e79488af06caaae419d6a29a0b42e7634c7213b1dd84abcbd4d4b93f046d2",
-      "size_bytes": 3516
+      "sha256": "06dddbbaa6f7dc4f4a33fd092d5991ff154c12170057c5c432b81ffc625adf38",
+      "size_bytes": 3465
     },
     {
       "path": "companion/reader.js",
@@ -107,8 +112,8 @@
     },
     {
       "path": "companion/setup.mjs",
-      "sha256": "c91ce8770e1d24a1d5773c4438544e66a8af0e19fe86e4bceb15387bdec51966",
-      "size_bytes": 2008
+      "sha256": "7e61f6e8992c35c3333c4066671e94cc3d6b8eac5d11f7e95a1a196286eaf9a9",
+      "size_bytes": 2013
     },
     {
       "path": "companion/share-setup.mjs",
@@ -127,8 +132,8 @@
     },
     {
       "path": "companion/worker.mjs",
-      "sha256": "074855fd59074f0c79ddfad8bac02ee97d0ed6fdd347cba556fd1a0226a09637",
-      "size_bytes": 12910
+      "sha256": "55ef50a8d3ec3854a9e7c28be72b08134b807f4bb088429e7f12c778e450d39b",
+      "size_bytes": 12558
     },
     {
       "path": "companion/workflows.mjs",
@@ -142,7 +147,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "20a659a51ed11f78e19d481f2d31dc8788847a2c97b7b2bbdc0669a0b9fca7ef",
+      "sha256": "55581f496a0f6acc671c28ddadcb134bcf67ea32ac57aa0d33634d7af9c8e306",
       "size_bytes": 901
     }
   ]

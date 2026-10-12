@@ -89,7 +89,7 @@ export function createConnector(report) {
       starting=(async()=>{
         const shared=await bridge("status");
         if(attempt!==generation)throw new Error("Sharing was stopped. Connect again to retry.");
-        const result=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Shared Chrome tab",allowed_platforms:shared.allowed_platforms || []});
+        const result=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Shared Chrome tab",allowed_platforms:shared.allowed_platforms || [],agent_tab_id:shared.agent_tab_id});
         if(attempt!==generation) {
           await request({action:"companion.disconnect",session_id:result.connection.session_id});
           throw new Error("Sharing was stopped. Connect again to retry.");

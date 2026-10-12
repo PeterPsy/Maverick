@@ -12,8 +12,8 @@ required. Browser's isolated Playwright Lab remains available for public researc
 and authorized Maverick development inspection.
 
 The extension's user flow centers on a dedicated agent tab. Open agent tab
-focuses the already bound agent tab, or reuses an empty extension-owned start
-page before creating one. A
+focuses the remembered agent tab even after sharing stops, or reuses an empty
+extension-owned start page before creating one. A
 second explicit toolbar invocation on that tab grants Chrome tab-capture access;
 it can then connect without choosing an initial platform or profile. It asks for
 the six exact supported platform host groups and Maverick, not all-web access.
@@ -89,14 +89,32 @@ globe/control vectors, 22px cards and 18px controls in both popup and start page
 CSS follows Chrome's system color preference before first paint, without remote
 assets or new permissions. The popup presents Open agent tab from ordinary
 Chrome/platform pages and Connect agent tab only on its exact start page.
-Reconnect agent tab is available on the already bound source after navigation;
-the worker rechecks that binding and current route before replacing its lease.
+Reconnect agent tab is available on the remembered source after navigation or
+Disconnect; the worker rechecks its identity and current route before capture.
 Other platform tabs cannot become agent tabs. Settings and help are collapsed,
 and errors use a visible accessible status region. The user no longer selects a
 specific platform/profile or copies an address for the official installation.
 Existing single-platform leases keep their original scope; the new popup cannot
 create them. Installing Companion alone or opening
 `/app/browser?connector=1` manually does not select a tab.
+
+Companion 0.5.5 stores an opaque UUID and the source tab id as separate
+`agentTab` session metadata. Stop/revocation removes only the sharing binding;
+Open agent tab can still focus the source, including a login page requiring
+direct user action. Commands and reconnect remain restricted to the supported
+routes and require a fresh explicit capture grant. Closing the source forgets
+its identity; extension reload/browser restart clear Chrome session metadata.
+The UUID is navigation metadata, not a credential. It reaches `companion.connect`
+only through the authenticated UI. The schema-v3 connection store atomically
+revokes prior leases with the same UUID, user and workspace, cancels pending
+operations and inserts the replacement before returning. Independent agent
+tabs and principals remain isolated; older connections without identity retain
+their original lease semantics. Replaced records retain `connection_replaced`
+as their historical stop reason. A disconnected current source no longer leaves
+its replaced lease advertising readiness or consuming an active connection slot.
+The Core-owned Browser execution closure also includes the Companion identity
+registry and reconnect validator, so changes to either source invalidate the
+reviewed CLI/MCP read authority until its audit digest is refreshed.
 The selected Browser document announces bridge readiness; the frontend probes
 its worker status and enables Connect only after that response. A new user-selected
 sharing generation requesting automatic setup starts the authenticated lease once,
@@ -434,6 +452,19 @@ public-source/execution-closure checks passed. Mounted authenticated desktop
 and 390px mobile inspection showed the new Agent tab/Activity UI and the live
 Instagram connection. Anonymous download returned 200 with bytes matching the
 generated 0.5.4 ZIP.
+
+The 0.5.5 regression pass on 2026-10-12 completed 86 Browser Python tests,
+54 Node tests, both desktop/mobile UI suites, the full Chromium media/Connectors
+fixture, and the production-permission native-consent fixture. The latter two
+now assert old-lease revocation, absence of false Connected state after Disconnect,
+reuse of the navigated source and explicit reconnection without duplicate tabs.
+Schema-v2 migration, pending-work cancellation, six successive reconnects at
+capacity, and tab/actor/workspace isolation have focused backend coverage. The
+anonymous public 0.5.5 ZIP returned 200 with bytes matching the built artifact.
+The Browser execution-closure test and unused-import check passed. The global
+CLI/MCP metadata suite retains three failures from unchanged HEAD descriptors
+and baseline authority mismatches (including Agents/Storage); those surfaces
+were not changed by this regression fix.
 
 A full profile/media acceptance still requires verifying profile identity,
 bounded feed collection, opening collected posts/Reels,

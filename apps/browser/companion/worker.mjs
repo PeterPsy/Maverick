@@ -3,6 +3,8 @@ import {platforms} from "./platforms.mjs";
 import {attachConnectorFrame} from "./connector-frame.mjs";
 import {openConnectorWindow} from "./connector-window.mjs";
 import {createShareSetup} from "./share-setup.mjs";
+import {createAgentTabRegistry} from "./agent-tab.mjs";
+import {selectedAgentTab} from "./setup.mjs";
 import {observe} from "./dom-actions.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
 
@@ -14,6 +16,7 @@ chrome.tabs.onActivated.addListener(event=>{activationGenerations.set(event.wind
 chrome.windows.onRemoved.addListener(id=>activationGenerations.delete(id));
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const binding=async()=> (await chrome.storage.session.get("binding")).binding;
+const agentTabs=createAgentTabRegistry(chrome,chrome.runtime.getURL("agent-tab.html"));
 const sharedUrl=(value,b)=>sharedTabUrl(value,b,chrome.runtime.getURL("agent-tab.html"));
 const attach=b=>{
   if(attaching)return attaching;
@@ -121,13 +124,12 @@ async function execute(b,command) {
 }
 async function share(message) {
   const url=connectorUrl(message.url);const tab=await chrome.tabs.get(message.tabId);
-  const previous=await binding();
-  const reconnect=previous?.tabId === tab.id && previous.allowedPlatforms?.length;
-  const agentTab=message.agentTab === true && (tab.url === chrome.runtime.getURL("agent-tab.html") || reconnect && Boolean(sharedUrl(tab.url,previous)));
-  if (!agentTab) throw new Error("agent_tab_required");
+  if (message.agentTab !== true) throw new Error("agent_tab_required");
+  selectedAgentTab(tab,chrome.runtime.getURL("agent-tab.html"),await agentTabs.get());
   const approved=Object.keys(platforms);
   if (!await chrome.permissions.contains({origins:[...connectorOrigins(url),...approved.flatMap(key=>platforms[key].hosts.map(host=>`https://${host}/*`))]})) throw new Error("permission_denied");
   await chrome.storage.local.set({connectorUrl:url.href});
+  const identity=await agentTabs.remember(tab);
   await stop();
   try {
     await chrome.offscreen.createDocument({url:"offscreen.html",reasons:["USER_MEDIA"],justification:"Read-only capture of the single platform tab explicitly shared by the user."});
@@ -135,7 +137,7 @@ async function share(message) {
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     await capture("start",{streamId});
     const connector=await openConnectorWindow(url,{sourceTabId:tab.id,reuse:message.reuseConnector !== false});
-    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:null,allowedPlatforms:approved}});
+    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),agentTabId:identity.id,autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:null,allowedPlatforms:approved}});
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
     await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#171717"});
     // A tab may finish loading before onUpdated observes the stored binding.
@@ -153,14 +155,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return beginShare(message);
     }
     if(message.action === "agent.open" && sender.url === chrome.runtime.getURL("popup.html")) {
-      const current=await binding();let tab;
-      if(current?.allowedPlatforms?.length)tab=await scope(current).catch(()=>null);
-      if(!tab) {
-        const candidates=await chrome.tabs.query({url:chrome.runtime.getURL("agent-tab.html")});
-        tab=candidates.sort((a,b)=>(b.lastAccessed || 0)-(a.lastAccessed || 0))[0];
-      }
-      tab=tab ? await chrome.tabs.update(tab.id,{active:true}) : await chrome.tabs.create({url:chrome.runtime.getURL("agent-tab.html")});
-      await chrome.windows.update(tab.windowId,{focused:true});
+      const tab=await agentTabs.open();
       return {tabId:tab.id};
     }
     if(message.action === "stop" && sender.url === chrome.runtime.getURL("popup.html"))return stop();
@@ -177,13 +172,13 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return {cancelled:true};
     }
     if(message.action === "status") {
-      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
+      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,agent_tab_id:b.agentTabId,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
     }
     if(message.action === "execute")return execute(b,message.command);
     throw new Error("bridge_action_unavailable");
   })().then(reply).catch(error=>reply({error:error.message}));return true;
 });
-chrome.tabs.onRemoved.addListener(async id=>{const b=await binding();if(b && [b.tabId,b.connectorTabId].includes(id))await stop("shared_tab_closed");});
+chrome.tabs.onRemoved.addListener(async id=>{await agentTabs.forget(id);const b=await binding();if(b && [b.tabId,b.connectorTabId].includes(id))await stop("shared_tab_closed");});
 chrome.tabs.onUpdated.addListener(async (id,change,tab)=>{
   const b=await binding();if(!b)return;
   if(id===b.tabId && change.url) {try{sharedUrl(change.url,b);}catch{await stop("tab_left_platform_scope");}}

@@ -211,8 +211,13 @@ try {
   await context.route("https://unapproved-fixture.test/**",route=>route.fulfill({contentType:"text/html",body:"<h1>Out of scope</h1>"}));
   await instagram.bringToFront();
   const launcher=await openActionPopup(browser,extensionId,instagram.url());
+  const beforeLoginReturn=context.pages().length;
   await launcher.evaluate("document.querySelector('#open-agent').click();true");
-  const agent=await wait(()=>context.pages().find(page=>page.url().endsWith("/agent-tab.html")));
+  await new Promise(resolve=>setTimeout(resolve,300));
+  assert.equal(context.pages().length,beforeLoginReturn,'Leaving the supported route preserves the agent tab identity.');
+  const agent=instagram;
+  // Return to the empty start page to exercise empty cross-platform setup.
+  await agent.goto(`chrome-extension://${extensionId}/agent-tab.html`);
   await agent.bringToFront();
   const agentPopup=await openActionPopup(browser,extensionId,agent.url());
   assert.equal(await agentPopup.evaluate("document.querySelector('#share').textContent"),"Connect agent tab");
@@ -254,8 +259,8 @@ try {
   assert((await run('content.read',{},agentConnection)).text.includes('Bio visibile'));
   // Opening from another ordinary Chrome tab focuses the existing agent source.
   // Chrome's fallback popup-type bridge has no extension toolbar.
-  await instagram.bringToFront();
-  const returning=await openActionPopup(browser,extensionId,instagram.url());
+  const ordinary=await context.newPage();await ordinary.goto('https://www.instagram.com/ordinary-fixture/');await ordinary.bringToFront();
+  const returning=await openActionPopup(browser,extensionId,ordinary.url());
   const pageCount=context.pages().length;
   const previousBinding=(await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding;
   await returning.evaluate("document.querySelector('#open-agent').click();true");
@@ -274,6 +279,35 @@ try {
   const previousSessionId=agentConnection.session_id;
   agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.session_id !== previousSessionId));
   assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding.tabId,previousBinding.tabId);
+  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding.agentTabId,previousBinding.agentTabId);
+  assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
+  assert.equal(context.pages().length,pageCount);
+  const replaced=(await api({action:'companion.overview'})).connections.find(c=>c.session_id === previousSessionId);
+  assert.equal(replaced.status,'revoked');assert.equal(replaced.stop_reason,'connection_replaced');
+  assert.equal((await api({action:'companion.overview'})).connections.filter(c=>['connected','connecting'].includes(c.status)).length,1);
+  await agentFrame.locator('#refresh').click();
+  await agentFrame.waitForFunction(()=>!document.querySelector('#refresh').disabled);
+  await agentFrame.locator('#connections button').click();
+  await agentFrame.waitForFunction(()=>document.querySelector('#agent-state').textContent === 'Not connected');
+  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
+  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('agentTab'))).agentTab.tabId,previousBinding.tabId);
+  // Disconnect must leave the current Instagram page connectable and reusable.
+  await ordinary.bringToFront();
+  const stoppedLauncher=await openActionPopup(browser,extensionId,ordinary.url());
+  await stoppedLauncher.evaluate("document.querySelector('#open-agent').click();true");
+  await new Promise(resolve=>setTimeout(resolve,300));
+  assert.equal(context.pages().length,pageCount);
+  assert.equal(agent.url(),'https://www.instagram.com/');
+  await agent.bringToFront();
+  const stoppedPopup=await openActionPopup(browser,extensionId,agent.url());
+  assert.equal(await stoppedPopup.evaluate("document.querySelector('#share').hidden"),false);
+  assert.equal(await stoppedPopup.evaluate("document.querySelector('#share-label').textContent"),'Reconnect agent tab');
+  const afterStopReload=agentWindow.waitForEvent('framenavigated',{predicate:frame=>frame === agentWindow.mainFrame()});
+  await stoppedPopup.evaluate("document.querySelector('#share').click();true");
+  await afterStopReload;
+  agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
+  await agentFrame.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
+  agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected'));
   assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
   assert.equal(context.pages().length,pageCount);
   console.log(JSON.stringify({phase:'agent-tab-reused-and-reconnected',source_preserved:true,no_duplicate_tabs:true}));

@@ -77,7 +77,7 @@ class BrowserCompanionTests(unittest.TestCase):
     def test_existing_connection_database_preserves_platform_scope_during_migration(self):
         import sqlite3
         from companion_store import SCHEMA
-        old = SCHEMA.replace(",\n allowed_platforms_json TEXT NOT NULL DEFAULT '[]'", "").replace(",\n stop_reason TEXT NOT NULL DEFAULT ''", "")
+        old = SCHEMA.replace(",\n allowed_platforms_json TEXT NOT NULL DEFAULT '[]'", "").replace(",\n stop_reason TEXT NOT NULL DEFAULT ''", "").replace(",\n agent_tab_id TEXT NOT NULL DEFAULT ''", "")
         with closing(sqlite3.connect(self.root / "companion.sqlite3")) as db:
             db.executescript(old)
             db.execute("INSERT INTO connections VALUES(?,?,?,?,?,?,?,?,?,?,?)", ("chrome-existing", "default", "alice", "Existing", "hashed", "connected", time.time(), time.time(), time.time()+120, "https://www.instagram.com/", "Instagram"))
@@ -103,7 +103,7 @@ class BrowserCompanionTests(unittest.TestCase):
         import sqlite3
         from companion_store import SCHEMA
         with closing(sqlite3.connect(self.root / "companion.sqlite3")) as db:
-            db.executescript(SCHEMA.replace(",\n stop_reason TEXT NOT NULL DEFAULT ''", ""))
+            db.executescript(SCHEMA.replace(",\n stop_reason TEXT NOT NULL DEFAULT ''", "").replace(",\n agent_tab_id TEXT NOT NULL DEFAULT ''", ""))
             db.execute("PRAGMA user_version=1")
             db.execute("INSERT INTO connections VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", ("chrome-existing", "default", "alice", "Agent", "hashed", "connected", time.time(), time.time(), time.time()+120, "", "Agent", '["instagram","youtube"]'))
             db.commit()
@@ -111,7 +111,7 @@ class BrowserCompanionTests(unittest.TestCase):
         self.assertEqual(overview["connections"][0]["allowed_platforms"], ["instagram", "youtube"])
         self.assertIsNone(overview["connections"][0]["stop_reason"])
         with database(self.root) as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
 
     def media_completion(self):
         credentials = self.sharing()

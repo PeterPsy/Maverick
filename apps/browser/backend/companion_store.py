@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS connections (
  created_at REAL NOT NULL, seen_at REAL NOT NULL, expires_at REAL NOT NULL,
  tab_url TEXT NOT NULL DEFAULT '', tab_title TEXT NOT NULL DEFAULT '',
  allowed_platforms_json TEXT NOT NULL DEFAULT '[]',
- stop_reason TEXT NOT NULL DEFAULT ''
+ stop_reason TEXT NOT NULL DEFAULT '',
+ agent_tab_id TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS operations (
  operation_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, action TEXT NOT NULL,
@@ -59,6 +60,11 @@ def database(data_root: Path) -> Iterator[sqlite3.Connection]:
             if "stop_reason" not in columns:
                 connection.execute("ALTER TABLE connections ADD COLUMN stop_reason TEXT NOT NULL DEFAULT ''")
             connection.execute("PRAGMA user_version=2")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(connections)")}
+            if "agent_tab_id" not in columns:
+                connection.execute("ALTER TABLE connections ADD COLUMN agent_tab_id TEXT NOT NULL DEFAULT ''")
+            connection.execute("PRAGMA user_version=3")
         yield connection
         connection.commit()
     except BaseException:

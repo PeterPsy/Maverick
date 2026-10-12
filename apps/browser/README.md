@@ -8,14 +8,14 @@ proxy, hosted-browser or remote transcription service is used.
 
 ## Connect your agent tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.5.4,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.5.5,
 then load its folder with Chrome's “Load unpacked” developer-mode action.
 Use Chrome 120 or later. The official `https://maverick.loopino.ai` address is
 preconfigured; other installations can change Connection settings in Companion.
 Companion is centered on one dedicated agent tab, without selecting a platform,
 profile or initial URL. Choose **Open agent tab** from any Chrome page. It brings
-the already shared agent tab to the foreground, or reuses an existing empty start
-tab before creating one. On that tab, click Companion in Chrome's toolbar and
+the remembered agent tab to the foreground, including after Disconnect, or reuses
+an existing empty start tab before creating one. On that tab, click Companion in Chrome's toolbar and
 choose **Connect agent tab** once. This explicit
 invocation grants Chrome's tab-capture permission for that tab. The popup asks
 for the six supported platform hosts plus Maverick, not every website. By default
@@ -34,14 +34,25 @@ usual Chrome platform sessions. It can read, scroll, collect content and analyze
 images/video/audio; clicks, form entry, posting and messages have no command.
 Sign in to platforms directly in Chrome. Other tabs are not shared.
 
-On an already shared agent tab, Companion offers **Reconnect agent tab**. It
+On a remembered agent tab, Companion offers **Reconnect agent tab**. It
 retains that tab and its current platform page while replacing the bridge lease.
-Only the exact extension-owned start page or the existing bound agent tab can
+Only the exact extension-owned start page or the remembered agent tab can
 connect; unrelated platform pages cannot become agent tabs. The worker owns the
 native permission dialog and remaining setup, so popup closure cannot discard
 the user's Connect action. Existing single-platform leases remain enforceable
 and can be disconnected from the previous-connections section; the new popup
 does not create them.
+
+The agent tab's identity lives separately from the sharing binding in Chrome's
+session storage. Disconnect, automatic revocation and worker suspension retain
+the source tab and its page; closing the source tab forgets it. Extension reload
+and browser restart clear this session metadata and require a fresh setup.
+Keeping an identity never permits commands without a new explicit Connect.
+The authenticated UI sends the opaque identity when acquiring a lease. Within
+one database transaction, Browser revokes previous leases for that same identity,
+actor and workspace, cancels their pending work and creates the replacement.
+Other tabs, users and workspaces keep their own leases. Reconnecting therefore
+does not consume extra active slots or leave a false Connected row after Disconnect.
 
 The popup and empty start page share app-owned Maverick neutral tokens, native
 globe/control vectors, 22px cards and 18px controls. Light/dark presentation

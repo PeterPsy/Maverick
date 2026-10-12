@@ -8,7 +8,7 @@ from pathlib import Path
 import secrets
 import sqlite3
 import time
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from companion_store import database, encoded, public_connection, public_operation, sweep
 from platform_scope import PLATFORMS, platform_url, platform_for_url
@@ -17,7 +17,7 @@ from errors import BrowserValidationError
 STOP_REASONS = frozenset({
     "user_stopped", "connector_scope_required", "sharing_revoked", "extension_unavailable",
     "companion_unavailable", "platform_route_unavailable", "connection_expired", "connection_revoked",
-    "connection_unavailable", "connector_unauthorized", "authentication_failed", "heartbeat_failed",
+    "connection_unavailable", "connector_unauthorized", "authentication_failed", "heartbeat_failed", "connection_replaced",
 })
 
 
@@ -46,15 +46,37 @@ def require_connector(db: sqlite3.Connection, session_id: str, workspace_id: str
     return row
 
 
-def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str, allowed_platforms: object = None) -> dict:
+def revoke(db: sqlite3.Connection, session_id: str, reason: str) -> None:
+    db.execute("UPDATE connections SET status='revoked',secret_hash='',stop_reason=? WHERE session_id=? AND status!='revoked'", (reason, session_id))
+    db.execute(
+        "UPDATE operations SET status='cancelled',result_json=? WHERE session_id=? AND status IN ('queued','running','processing_media')",
+        (encoded({"error": "connection_revoked"}), session_id),
+    )
+
+
+def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str, allowed_platforms: object = None, agent_tab_id: object = None) -> dict:
     approved = [] if allowed_platforms is None else allowed_platforms
     if not isinstance(approved, list) or len(approved) > len(PLATFORMS) or any(not isinstance(key, str) or key not in PLATFORMS for key in approved) or len(set(approved)) != len(approved):
         raise BrowserValidationError("Choose supported platforms without duplicates.", field="allowed_platforms")
+    if agent_tab_id is not None:
+        try:
+            valid = bool(approved) and isinstance(agent_tab_id, str) and len(agent_tab_id) == 36 and str(UUID(agent_tab_id)) == agent_tab_id
+        except ValueError:
+            valid = False
+        if not valid:
+            raise BrowserValidationError("Choose a valid agent tab identity.", field="agent_tab_id")
     now = time.time()
     secret = secrets.token_urlsafe(32)
     session_id = "chrome-" + str(uuid4())
     with database(data_root) as db:
         sweep(db, now)
+        if agent_tab_id:
+            previous = db.execute(
+                "SELECT session_id FROM connections WHERE workspace_id=? AND user_id=? AND agent_tab_id=? AND status!='revoked'",
+                (workspace_id, user_id, agent_tab_id),
+            ).fetchall()
+            for row in previous:
+                revoke(db, row["session_id"], "connection_replaced")
         active = db.execute(
             "SELECT count(*) FROM connections WHERE workspace_id=? AND user_id=? AND status IN ('connecting','connected')",
             (workspace_id, user_id),
@@ -62,9 +84,9 @@ def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str,
         if active >= 4:
             raise CompanionError("connection_limit", "Disconnect an existing Chrome connection first.", 409)
         db.execute(
-            "INSERT INTO connections(session_id,workspace_id,user_id,display_name,secret_hash,status,created_at,seen_at,expires_at,allowed_platforms_json) "
-            "VALUES(?,?,?,?,?,'connecting',?,?,?,?)",
-            (session_id, workspace_id, user_id, display_name[:100], hashlib.sha256(secret.encode()).hexdigest(), now, now, now + 120, encoded(approved)),
+            "INSERT INTO connections(session_id,workspace_id,user_id,display_name,secret_hash,status,created_at,seen_at,expires_at,allowed_platforms_json,agent_tab_id) "
+            "VALUES(?,?,?,?,?,'connecting',?,?,?,?,?)",
+            (session_id, workspace_id, user_id, display_name[:100], hashlib.sha256(secret.encode()).hexdigest(), now, now, now + 120, encoded(approved), agent_tab_id or ""),
         )
         row = require_owner(db, session_id, workspace_id, user_id)
         return {"connection": public_connection(row), "connector_secret": secret}
@@ -126,9 +148,5 @@ def disconnect(data_root: Path, workspace_id: str, user_id: str, session_id: str
         raise BrowserValidationError("Choose a supported sharing stop reason.", field="reason")
     with database(data_root) as db:
         require_owner(db, session_id, workspace_id, user_id, allow_revoked=True)
-        db.execute("UPDATE connections SET status='revoked',secret_hash='',stop_reason=? WHERE session_id=? AND status!='revoked'", (reason, session_id))
-        db.execute(
-            "UPDATE operations SET status='cancelled',result_json=? WHERE session_id=? AND status IN ('queued','running','processing_media')",
-            (encoded({"error": "connection_revoked"}), session_id),
-        )
+        revoke(db, session_id, reason)
     return {"status": "revoked", "session_id": session_id}

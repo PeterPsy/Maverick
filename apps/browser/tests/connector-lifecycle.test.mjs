@@ -14,7 +14,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
       if (message.action === "execute") {executing = message; return;}
       if (message.action === "cancel") cancelled = true;
       queueMicrotask(() => dispatch({type: "maverick.browser.response", id: message.id,
-        result: message.action === "status" ? (statusFailure ? {error:"connector_scope_required"} : {url: "https://www.instagram.com/fixture/", active_operation: executing?.command.operation_id}) : {}}));
+        result: message.action === "status" ? (statusFailure ? {error:"connector_scope_required"} : {url: "https://www.instagram.com/fixture/", agent_tab_id:"5394d8de-023e-4e63-acf3-cdc9d56e2aee", active_operation: executing?.command.operation_id}) : {}}));
     },
   };
   t.mock.method(globalThis, "fetch", async (url, options) => {
@@ -57,6 +57,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   renewals.shift()();
   assert.equal(calls.filter(call => call.url.startsWith("/.well-known")).length, 1);
   assert.equal(calls.filter(call => call.action === "companion.connect").length, 1);
+  assert.equal(calls.find(call => call.action === "companion.connect").agent_tab_id,"5394d8de-023e-4e63-acf3-cdc9d56e2aee");
   await connector.stop(); assert.equal(states.at(-1), "stopped");
   delayed = true; const pending = connector.start();
   const rejection = assert.rejects(pending, /Sharing was stopped/);

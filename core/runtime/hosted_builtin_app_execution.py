@@ -84,6 +84,8 @@ def hosted_builtin_app_execution_roots(
                 "companion/dom-actions.mjs",
                 "companion/workflows.mjs",
                 "companion/worker.mjs",
+                "companion/agent-tab.mjs",
+                "companion/setup.mjs",
                 "companion/offscreen.mjs",
                 "companion/content.js",
                 "companion/popup.mjs",

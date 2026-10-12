@@ -14,14 +14,14 @@ const showDestination = () => {
 };
 showDestination(); input.oninput = showDestination;
 try {
-  const {binding} = await chrome.storage.session.get("binding");
+  const {binding, agentTab} = await chrome.storage.session.get(["binding", "agentTab"]);
   document.querySelector("#stop").hidden = !binding;
-  if (binding?.allowedPlatforms?.length) {
+  if (agentTab) {
     document.querySelector("#tab-title").textContent = "Your agent tab is open";
     document.querySelector("#tab-url").textContent = "Return to the tab your agent uses to view it or reconnect.";
   }
   const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-  selected = selectedAgentTab(tab, chrome.runtime.getURL("agent-tab.html"), binding);
+  selected = selectedAgentTab(tab, chrome.runtime.getURL("agent-tab.html"), agentTab);
   document.querySelector("#tab-title").textContent = selected.reconnect ? selected.title : "Your agent’s browser";
   document.querySelector("#tab-url").textContent = selected.url || "Starts empty. Maverick chooses pages when you ask.";
   document.querySelector("#share-label").textContent = selected.reconnect ? "Reconnect agent tab" : "Connect agent tab";
@@ -52,5 +52,5 @@ openAgent.onclick = async () => {
 document.querySelector("#stop").onclick = async () => {
   const result = await chrome.runtime.sendMessage({target: "worker", action: "stop"});
   report(result?.error || "Agent tab disconnected.", result?.error ? "error" : "info");
-  if (!result?.error) { document.querySelector("#stop").hidden = true; share.hidden = true; openAgent.hidden = false; }
+  if (!result?.error) document.querySelector("#stop").hidden = true;
 };

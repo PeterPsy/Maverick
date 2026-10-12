@@ -11,7 +11,7 @@ from core.installation.cloudflare import NoRedirect
 def dns_ready(host: str, address: str) -> bool:
     kind = 28 if ":" in address else 1
     for resolver in ("https://cloudflare-dns.com/dns-query", "https://dns.google/resolve"):
-        for name in (host, "af-" + uuid4().hex + ".sidecars." + host):
+        for name in (host, "af-" + uuid4().hex[:24] + ".sidecars." + host):
             try:
                 request = Request(resolver + "?" + urlencode({"name": name, "type": kind}),
                                   headers={"Accept": "application/dns-json"})

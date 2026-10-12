@@ -108,3 +108,10 @@ are excluded from new install plans. Each activation stages installation-owned
 Nginx virtual hosts, even when retaining the hostname, so destination servers
 receive the correct local port and certificate paths. Older virtual hosts stay
 available for selective rollback.
+
+After canonical activation, GET/HEAD web document requests to a previous public
+hostname on the same server redirect to the new address without caching the
+redirect, preserving app routes. `/setup`, APIs, app frames and localhost access
+remain direct. Installed/native clients with a saved server URL must use the new
+address; the UI reports this after an address change. Source-server writes should
+be drained during a server move to avoid divergence while DNS caches expire.

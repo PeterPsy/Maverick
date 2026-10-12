@@ -89,15 +89,16 @@ class InstallationService:
                 if workspace.status != "active":
                     continue
                 for binding in self.app_store.list_workspace_app_bindings(workspace.workspace_id):
-                    if binding.status != "enabled" or binding.app_id in seen:
+                    key = (binding.app_id, binding.source_record_id)
+                    if binding.status != "enabled" or key in seen:
                         continue
-                    seen.add(binding.app_id)
+                    seen.add(key)
                     from core.apps.surfaces import resolve_workspace_app_surface
                     _, parsed = resolve_workspace_app_surface(self.app_store, binding=binding, start_path=self.store.repository_root)
                     declaration = getattr(parsed.contract, "installation", None)
                     for endpoint in declaration.public_endpoints if declaration else []:
-                        requirements.append({"id": binding.app_id + "." + endpoint.endpoint_id,
-                            "label": endpoint.label, "app_id": binding.app_id, "kind": endpoint.kind,
+                        requirements.append({"id": workspace.workspace_id + "." + binding.app_id + "." + endpoint.endpoint_id,
+                            "label": endpoint.label + " · " + workspace.name, "app_id": binding.app_id, "kind": endpoint.kind,
                             "url": "https://" + host + endpoint.path.replace("{app_id}", binding.app_id) if host else "",
                             "provider_url": endpoint.provider_url, "configured": endpoint.requires_registration})
         return requirements
@@ -121,7 +122,8 @@ class InstallationService:
             problems.append({"code": "dns_automation_connection_required"})
         requirements = self.requirements(host)
         actions = [{**item, "code": "update_provider_registration"} for item in requirements
-                   if item.get("configured") and host != current["hostname"]]
+                   if item.get("configured") and (host != current["hostname"]
+                       or ("current_url" in item and item["current_url"] != item["url"]))]
         plan = {"plan_id": uuid4().hex, "created_at": timestamp(), "created_by": actor_user_id,
                 "generation": current["generation"], "previous": current,
                 "hostname": host, "public_url": "https://" + host, "target_ip": address_ip,

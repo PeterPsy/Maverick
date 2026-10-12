@@ -79,3 +79,12 @@ class DnsTransactionTests(unittest.TestCase):
             with self.subTest(obstruction=obstruction):
                 changes = dns_changes('maverick.example.com', '8.8.8.8', [wildcard, obstruction])
                 self.assertEqual(changes[0]['action'], 'create')
+
+    def test_plan_that_promised_no_mutation_cannot_silently_create_records(self):
+        wildcard = {'id': 'wildcard', 'name': '*.example.com', 'type': 'A', 'content': '8.8.8.8', 'ttl': 300, 'proxied': False}
+        self.plan['dns_changes'] = dns_changes(self.plan['hostname'], self.plan['target_ip'], [wildcard])
+        self.provider.inventory = [{**wildcard, 'content': '1.1.1.1'}, self.mail]
+        before = deepcopy(self.provider.inventory)
+        with self.assertRaisesRegex(InstallationError, 'dns_records_changed_since_plan'):
+            apply_dns(self.service, self.job, self.plan, self.private)
+        self.assertEqual(self.provider.inventory, before)

@@ -2,7 +2,7 @@ export type Requirement = { id: string; label: string; kind: string; url: string
 export type Configuration = { hostname: string; public_url: string; target_ip: string; generation: number; managed: boolean };
 export type Verification = { healthy: boolean; checks: { host: string; healthy: boolean; error?: string; status?: number }[] };
 export type Job = { job_id: string; plan_id: string; status: string; step: string; error_code?: string; retry_at?: string; confirmed_actions?: string[]; verification?: Verification };
-export type Plan = { plan_id: string; hostname: string; target_ip: string; public_url: string; certificate_names: string[];
+export type Plan = { plan_id: string; change_kind?: string; hostname: string; target_ip: string; public_url: string; certificate_names: string[];
   dns_changes: { name: string; action: string; after?: { type: string; content: string } }[];
   blocking_issues: { code: string; nameservers?: string[] }[]; external_actions: Requirement[]; requirements: Requirement[]; token_template_url?: string };
 export type Inspection = { configuration: Configuration; dns_credentials: { label: string; ref: string }[]; configured: boolean;

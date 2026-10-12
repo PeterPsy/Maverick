@@ -25,7 +25,8 @@ def apply_dns(service, job: dict, plan: dict, private: Path) -> dict:
         # A plan cannot silently take over a record edited since it was reviewed.
         expected = {item["name"]: item for item in plan["dns_changes"]}
         for item in changes:
-            if item["action"] != "keep" and item.get("before", []) != expected[item["name"]].get("before", []):
+            if item["action"] != "keep" and (item["action"] != expected[item["name"]]["action"]
+                    or item.get("before", []) != expected[item["name"]].get("before", [])):
                 raise InstallationError("dns_records_changed_since_plan", status=409)
         write_private(snapshot, {"zone_id": zone["id"], "changes": changes})
     backup = json.loads(snapshot.read_text())

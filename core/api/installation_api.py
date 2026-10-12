@@ -5,6 +5,8 @@ import os
 
 from core.api.http import json_response, read_json_body, status_line
 from core.api.session_api import RequestSession, require_session
+from core.installation.address_redirect import document_redirect
+from core.api.app_frame_scope import APP_FRAME_PROXY_SCOPE_KEY
 from core.installation.errors import InstallationError
 from core.installation.operations import OPERATIONS, invoke
 from core.installation.service import InstallationService
@@ -54,3 +56,16 @@ def handle_installation_api(state, environ, start_response):
         return json_response(start_response, {"error": error.code}, status=status_line(error.status))
     except Exception:
         return json_response(start_response, {"error": "installation_operation_failed"}, status="503 Service Unavailable")
+
+
+def handle_installation_document_redirect(state, environ, start_response):
+    path = environ.get("PATH_INFO", "/")
+    if path not in {"/", "/app"} and not path.startswith("/app/"):
+        return None
+    location = document_redirect(service_for_state(state).configuration(), path=path,
+        request_host=environ.get("HTTP_HOST", ""), method=environ.get("REQUEST_METHOD", "GET"),
+        query=environ.get("QUERY_STRING", ""), app_frame=environ.get(APP_FRAME_PROXY_SCOPE_KEY) is True)
+    if location is None:
+        return None
+    start_response("308 Permanent Redirect", [("Location", location), ("Cache-Control", "no-store"), ("Content-Length", "0")])
+    return [b""]

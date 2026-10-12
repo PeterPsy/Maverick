@@ -20,7 +20,7 @@ export function mountInstallation(root: HTMLElement) {
     <label class="installation-field">Vault connection<select data-settings-controlled name="dns_secret_ref" aria-label="Vault connection"><option value="">Choose a connection</option></select></label></div>
     <details data-installation-credential><summary>Add a Cloudflare connection</summary><p class="installation-muted">Create a token with Zone · DNS · Edit and Zone · Zone · Read, restricted to your domain. The token is saved in Vault.</p><a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer">Create a token ↗</a>
     <label class="installation-field">API token<input data-settings-controlled data-installation-token type="password" autocomplete="new-password" spellcheck="false"></label><button type="button" data-installation-action="save-token">Save in Vault</button></details>
-    <details><summary>Server settings</summary><label class="installation-field">Public server IP<input data-settings-controlled name="target_ip" placeholder="Detected automatically" required spellcheck="false"></label><p class="installation-muted">Check this value if the server uses NAT or a separate public IP.</p></details>
+    <details data-installation-server><summary>Server settings</summary><label class="installation-field">Public server IP<input data-settings-controlled name="target_ip" placeholder="Detected automatically" required spellcheck="false"></label><p class="installation-muted">Check this value if the server uses NAT or a separate public IP.</p></details>
     <div class="installation-actions"><button class="installation-primary" type="submit">Review setup</button></div></form><div data-installation-plan></div><div data-installation-job></div><div data-installation-verification></div>`;
   const query = <T extends Element = HTMLElement>(selector: string) => root.querySelector<T>(selector)!;
   const form = query<HTMLFormElement>('[data-installation-form]');
@@ -66,7 +66,9 @@ export function mountInstallation(root: HTMLElement) {
       refs.value = data.dns_credentials.some(item => item.ref === selected) ? selected : data.dns_credentials[0]?.ref || '';
       if (initial) {
         query<HTMLInputElement>('[name=address]').value = data.configuration.hostname;
-        query<HTMLInputElement>('[name=target_ip]').value = data.configuration.target_ip || data.worker?.public_ip || '';
+        const ip = data.configuration.target_ip || data.worker?.public_ip || '';
+        query<HTMLInputElement>('[name=target_ip]').value = ip;
+        query<HTMLDetailsElement>('[data-installation-server]').open = !ip;
       }
       job = data.latest_job || job;
       if (job) {

@@ -1,20 +1,20 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "dbe19978e870eddbdd59d624dcafba18418b6f374a2bd69839b073902d9a2497",
+  "build_id": "90c665fa7fda7393b4f1cfebfed9acc798b73873f69fb86ab0128f62e6a78ad4",
   "entrypoints": [
     "index.html",
     "installation.html"
   ],
   "immutable": [
     {
-      "path": "assets/LoginPaperBackground-BrXuiUle.js",
-      "sha256": "ed19e97f085cf2475740782b739590df41855f72c49ecb261a65b8d55de44bdf",
+      "path": "assets/LoginPaperBackground-4miI59X5.js",
+      "sha256": "39209345fdcb54c0b8c58d8934568232dcc741a8c1c1e5aae382480e79dc2fad",
       "size_bytes": 25133
     },
     {
-      "path": "assets/index-CIGdx1jv.js",
-      "sha256": "25f2519568ab796bbd98e29c1aa1ea04ee8ee4285fc0cdd8f327a3e70e55ab78",
-      "size_bytes": 596563
+      "path": "assets/index-CO4Rj2vn.js",
+      "sha256": "0bd64a213c4630efb08ba1ea806e32ea7be4f97cc4c7ae5719cfb117eb663b29",
+      "size_bytes": 596596
     },
     {
       "path": "assets/index-CngJo-WU.css",
@@ -22,9 +22,9 @@
       "size_bytes": 106169
     },
     {
-      "path": "assets/installation-Dxwkzht_.js",
-      "sha256": "ad60a8f700d2a7dd95d443e97d5973be7a3c3397b7b5c141b50d3a7ab0df669b",
-      "size_bytes": 16374
+      "path": "assets/installation-BKkaq9hx.js",
+      "sha256": "4db5af97ef661f4fb0a84df9cde03390b5d736844c8fea1de6ddccb7903bf3b8",
+      "size_bytes": 16754
     },
     {
       "path": "assets/installation-ovwXRYc1.css",
@@ -50,12 +50,12 @@
     },
     {
       "path": "index.html",
-      "sha256": "03c6a83396acd7364763d5c9f79d7bd6b5e916b278b2ef497f11c2c15922c329",
+      "sha256": "0cad7a54aed56bd875e3f9ada4565c11b46db6ad1b92a3ba9d2450363eba9489",
       "size_bytes": 2376
     },
     {
       "path": "installation.html",
-      "sha256": "05f199526e5ae8617b1733a557c9620bbf3e23cbcda7f0ef8c6ae999e343e0c1",
+      "sha256": "f237e000018973f1fe95292149c30e6e43c64275d1d1eea686807cb2828c3618",
       "size_bytes": 900
     },
     {
@@ -110,7 +110,7 @@
     },
     {
       "path": "sw.js",
-      "sha256": "fab94807ea5b7583052b82f88597356457384b2b1858121f83824ba8c5910b63",
+      "sha256": "8d80b7f152f7ab10355c3272181e569b186578d66a0bab354093056d500c98c7",
       "size_bytes": 14202
     }
   ],
@@ -119,7 +119,7 @@
     {
       "url": "/",
       "path": "index.html",
-      "sha256": "03c6a83396acd7364763d5c9f79d7bd6b5e916b278b2ef497f11c2c15922c329",
+      "sha256": "0cad7a54aed56bd875e3f9ada4565c11b46db6ad1b92a3ba9d2450363eba9489",
       "size_bytes": 2376
     },
     {
@@ -129,22 +129,22 @@
       "size_bytes": 95846
     },
     {
-      "url": "/apps/base-shell/assets/index-CIGdx1jv.js",
-      "path": "assets/index-CIGdx1jv.js",
-      "sha256": "25f2519568ab796bbd98e29c1aa1ea04ee8ee4285fc0cdd8f327a3e70e55ab78",
-      "size_bytes": 596563
-    },
-    {
       "url": "/apps/base-shell/assets/index-CngJo-WU.css",
       "path": "assets/index-CngJo-WU.css",
       "sha256": "ea4ffddfe4a2f8c231aa75ae47396f61bba43e452e76f361d898767b49b40caa",
       "size_bytes": 106169
     },
     {
-      "url": "/apps/base-shell/assets/installation-Dxwkzht_.js",
-      "path": "assets/installation-Dxwkzht_.js",
-      "sha256": "ad60a8f700d2a7dd95d443e97d5973be7a3c3397b7b5c141b50d3a7ab0df669b",
-      "size_bytes": 16374
+      "url": "/apps/base-shell/assets/index-CO4Rj2vn.js",
+      "path": "assets/index-CO4Rj2vn.js",
+      "sha256": "0bd64a213c4630efb08ba1ea806e32ea7be4f97cc4c7ae5719cfb117eb663b29",
+      "size_bytes": 596596
+    },
+    {
+      "url": "/apps/base-shell/assets/installation-BKkaq9hx.js",
+      "path": "assets/installation-BKkaq9hx.js",
+      "sha256": "4db5af97ef661f4fb0a84df9cde03390b5d736844c8fea1de6ddccb7903bf3b8",
+      "size_bytes": 16754
     },
     {
       "url": "/apps/base-shell/assets/installation-ovwXRYc1.css",
@@ -153,9 +153,9 @@
       "size_bytes": 5892
     },
     {
-      "url": "/apps/base-shell/assets/LoginPaperBackground-BrXuiUle.js",
-      "path": "assets/LoginPaperBackground-BrXuiUle.js",
-      "sha256": "ed19e97f085cf2475740782b739590df41855f72c49ecb261a65b8d55de44bdf",
+      "url": "/apps/base-shell/assets/LoginPaperBackground-4miI59X5.js",
+      "path": "assets/LoginPaperBackground-4miI59X5.js",
+      "sha256": "39209345fdcb54c0b8c58d8934568232dcc741a8c1c1e5aae382480e79dc2fad",
       "size_bytes": 25133
     },
     {

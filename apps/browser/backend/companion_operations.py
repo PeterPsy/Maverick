@@ -10,6 +10,7 @@ from uuid import uuid4
 from companion_connections import CompanionError, connection_url, heartbeat, require_connector, require_owner
 from companion_store import database, encoded, public_operation, sweep
 from companion_validation import command_payload
+from interaction_validation import INTERACTION_ACTIONS
 
 
 MAX_RESULT_BYTES = 8 * 1024 * 1024
@@ -24,6 +25,11 @@ def enqueue(data_root: Path, workspace_id: str, user_id: str, body: dict) -> dic
     with database(data_root) as db:
         sweep(db, now)
         connection = require_owner(db, session_id, workspace_id, user_id)
+        if action in INTERACTION_ACTIONS and connection["access_mode"] != "interactive":
+            raise CompanionError("interactive_connection_required", "Reconnect the Agent tab with interactive Companion to enable browser actions.", 403)
+        if action in INTERACTION_ACTIONS and "target_url" in parameters:
+            if connection_url(connection, parameters.pop("target_url")) != connection["tab_url"]:
+                raise CompanionError("shared_tab_changed", "Take a fresh snapshot of the current Agent tab.", 409)
         if connection["status"] != "connected" or connection["expires_at"] <= now:
             raise CompanionError("connector_offline", "Keep the Browser connector window open and share a supported platform tab.", 409)
         if action == "navigate":

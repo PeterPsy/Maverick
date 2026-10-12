@@ -17,16 +17,16 @@ export function mountShell(connectorMode) {
       <section class="panel agent-panel" aria-labelledby="agent-heading">
         <div class="section-title"><div><h2 id="agent-heading">Checking your agent tab…</h2><p id="agent-description">Connecting to Chrome.</p></div><span id="agent-state" class="badge">Checking</span></div>
         <div id="connections" class="records" aria-label="Agent connections"></div>
-        <p class="section-note agent-capabilities">Navigate, read, scroll and analyze images, video and audio across Instagram, X, Reddit, Facebook, LinkedIn and YouTube.</p>
+        <p class="section-note agent-capabilities">Browse HTTPS websites, click, fill fields, use the keyboard and analyze images, video and audio.</p>
         <p id="pending-note" class="section-note" hidden></p>
       </section>
       <details id="setup" class="panel setup">
         <summary><span><strong>Set up your agent tab</strong><small>Install once, then connect from Chrome</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
         <div class="setup-body">
           <ol class="setup-steps">
-            <li><strong>Install Companion 0.5.5</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. To update, replace the extracted files and reload the extension.</p></li>
+            <li><strong>Install Companion 0.6.0</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. To update, replace the extracted files and reload the extension.</p></li>
             <li><strong>Open your agent tab</strong><p>Open Companion in Chrome and choose Open agent tab. On that tab, click Companion in the toolbar and choose Connect agent tab. Allow access if Chrome asks.</p></li>
-            <li><strong>Ask Maverick</strong><p>Maverick connects automatically. Tell your agent what to research; it chooses the pages. Keep the agent tab and Maverick open in the same Chrome profile. Sign in to platforms directly in Chrome.</p></li>
+            <li><strong>Ask Maverick</strong><p>Maverick connects automatically. Tell your agent what to browse or change. Keep the agent tab and Maverick open in the same Chrome profile. Sign in directly in Chrome.</p></li>
           </ol>
           <details class="connection-settings"><summary>Using another Maverick installation?</summary><p>Set this address in Companion's Connection settings.</p><label for="url">Maverick address</label>
           <div class="copy"><input id="url" readonly spellcheck="false"><button id="copy" class="secondary">Copy address</button></div></details>
@@ -42,7 +42,7 @@ export function mountShell(connectorMode) {
       <div id="operations" class="records" aria-label="Recent operations"></div>
       <p id="activity-note" class="section-note"></p>
     </section>
-    <footer><span id="updated" role="status">Connecting to Browser…</span><p>Sign-in stays in Chrome. Posting, messages and form entry are not available.</p></footer>
+    <footer><span id="updated" role="status">Connecting to Browser…</span><p>The agent can submit forms and change pages when you ask. Disconnect stops access; sign-in stays in Chrome.</p></footer>
   </main>`;
   document.querySelector("#setup").open = connectorMode;
 }

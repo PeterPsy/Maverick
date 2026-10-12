@@ -53,6 +53,7 @@ export async function observe(action, p) {
       if (!value) return null;
       const url = new URL(value);
       const kept = new URLSearchParams();
+      if (navigation && p.website_scope === "https") return url.href;
       if (navigation) for (const key of ["v","q","query","keywords","keyword","search_query","id","type","sort","t","restrict_sr","f","city","p"])
         for (const value of url.searchParams.getAll(key).slice(0,2)) if (value.length <= 500) kept.append(key,value);
       url.search=kept.toString();url.hash="";return url.href;

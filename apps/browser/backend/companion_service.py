@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 
 import companion_connections as connections
 import companion_operations as operations
@@ -12,7 +13,7 @@ from errors import BrowserValidationError
 USER_ACTIONS = frozenset({"companion.connect", "companion.poll", "companion.progress", "companion.complete", "companion.disconnect"})
 COMPANION_ACTIONS = USER_ACTIONS | {"companion.overview", "operation.get", "operation.cancel", "content.collect", "video.analyze", "media.completed"}
 FIELDS = {
-    "companion.connect": {"display_name", "allowed_platforms", "agent_tab_id"},
+    "companion.connect": {"display_name", "allowed_platforms", "agent_tab_id", "access_mode", "website_scope"},
     "companion.overview": set(),
     "companion.disconnect": {"session_id", "reason"},
     "companion.poll": {"session_id", "connector_secret", "url", "title", "active_operation_id"},
@@ -50,7 +51,7 @@ def handle(
             name = body.get("display_name", "Chrome")
             if not isinstance(name, str) or not 1 <= len(name) <= 100:
                 raise BrowserValidationError("display_name must have 1–100 characters.", field="display_name")
-            return 201, connections.connect(data_root, workspace_id, user_id, name, body.get("allowed_platforms"), body.get("agent_tab_id"))
+            return 201, connections.connect(data_root, workspace_id, user_id, name, body.get("allowed_platforms"), body.get("agent_tab_id"), body.get("access_mode", "read_only"), body.get("website_scope", "platforms"))
         if action == "companion.overview":
             return 200, connections.overview(data_root, workspace_id, user_id)
         if action == "companion.poll":
@@ -70,5 +71,9 @@ def handle(
         return error.status, {"error": error.code, "detail": str(error)}
     except BrowserValidationError as error:
         return 400, {"error": "validation_error", "detail": str(error), "field": error.field}
+    except sqlite3.OperationalError as error:
+        if getattr(error, "sqlite_errorcode", 0) & 0xff in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+            return 503, {"error": "connection_store_busy", "detail": "Browser is processing another connection update. Retry status reads; do not replay an interaction."}
+        raise
     except (TypeError, ValueError):
         return 400, {"error": "invalid_connector_payload", "detail": "The connector payload is invalid."}

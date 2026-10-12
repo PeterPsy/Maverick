@@ -15,8 +15,8 @@ test("the worker owns consent and continues once after the popup disappears", as
   assert.equal(first, second);
   assert.equal(calls.length, 1, "Permission request must run synchronously within the message's user gesture");
   assert(calls[0].origins.includes("https://maverick.test/*"));
-  assert(calls[0].origins.includes("https://www.instagram.com/*"));
-  assert(!calls[0].origins.includes("https://*/*"));
+  assert(calls[0].origins.includes("https://*/*"));
+  assert(!calls[0].origins.includes("http://*/*"));
   grant(true);
   assert.deepEqual(await first, {status:"shared"});
   assert.equal(calls.length, 2, "No popup callback or second click is needed to share");

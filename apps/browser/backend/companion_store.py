@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS connections (
  tab_url TEXT NOT NULL DEFAULT '', tab_title TEXT NOT NULL DEFAULT '',
  allowed_platforms_json TEXT NOT NULL DEFAULT '[]',
  stop_reason TEXT NOT NULL DEFAULT '',
- agent_tab_id TEXT NOT NULL DEFAULT ''
+ agent_tab_id TEXT NOT NULL DEFAULT '',
+ access_mode TEXT NOT NULL DEFAULT 'read_only', website_scope TEXT NOT NULL DEFAULT 'platforms'
 );
 CREATE TABLE IF NOT EXISTS operations (
  operation_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, action TEXT NOT NULL,
@@ -44,11 +45,17 @@ def database(data_root: Path) -> Iterator[sqlite3.Connection]:
     descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     os.close(descriptor)
     os.chmod(path, 0o600)
-    connection = sqlite3.connect(path, timeout=5, isolation_level=None)
+    connection = sqlite3.connect(path, timeout=15, isolation_level=None)
     connection.row_factory = sqlite3.Row
     try:
-        connection.executescript(SCHEMA)
-        connection.execute("PRAGMA busy_timeout=5000")
+        connection.execute("PRAGMA busy_timeout=15000")
+        if connection.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+            connection.execute("PRAGMA journal_mode=WAL")
+        # Claims and completions stay durable; WAL avoids blocking readers on fsync.
+        connection.execute("PRAGMA synchronous=FULL")
+        # Existing connections must not contend on schema DDL during every poll.
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 4:
+            connection.executescript(SCHEMA)
         connection.execute("BEGIN IMMEDIATE")
         if connection.execute("PRAGMA user_version").fetchone()[0] < 1:
             columns = {row["name"] for row in connection.execute("PRAGMA table_info(connections)")}
@@ -65,6 +72,13 @@ def database(data_root: Path) -> Iterator[sqlite3.Connection]:
             if "agent_tab_id" not in columns:
                 connection.execute("ALTER TABLE connections ADD COLUMN agent_tab_id TEXT NOT NULL DEFAULT ''")
             connection.execute("PRAGMA user_version=3")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 4:
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(connections)")}
+            if "access_mode" not in columns:
+                connection.execute("ALTER TABLE connections ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'read_only'")
+            if "website_scope" not in columns:
+                connection.execute("ALTER TABLE connections ADD COLUMN website_scope TEXT NOT NULL DEFAULT 'platforms'")
+            connection.execute("PRAGMA user_version=4")
         yield connection
         connection.commit()
     except BaseException:
@@ -107,7 +121,8 @@ def public_connection(row: sqlite3.Row) -> dict:
         "display_name": row["display_name"], "url": row["tab_url"], "title": row["tab_title"],
         "last_seen": row["seen_at"], "expires_at": row["expires_at"], "owned_by": "user",
         "platform": platform_for_url(row["tab_url"]),
-        "sharing_mode": "agent_tab" if approved else "platform",
+        "sharing_mode": "agent_tab" if approved or row["website_scope"] == "https" else "platform",
+        "access_mode": row["access_mode"], "website_scope": row["website_scope"],
         "allowed_platforms": approved or ([platform_for_url(row["tab_url"])] if row["tab_url"] else []),
         "stop_reason": row["stop_reason"] or None,
     }

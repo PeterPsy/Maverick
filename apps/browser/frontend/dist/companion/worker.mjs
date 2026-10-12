@@ -1,10 +1,12 @@
-import {boundedCommand,connectorUrl,connectorOrigins,platformUrl,sharedTabUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
+import {boundedCommand,connectorUrl,connectorOrigins,sharedTabUrl,sameConnector,sameConnectorFrame} from "./scope.mjs";
 import {platforms} from "./platforms.mjs";
 import {attachConnectorFrame} from "./connector-frame.mjs";
 import {openConnectorWindow} from "./connector-window.mjs";
 import {createShareSetup} from "./share-setup.mjs";
 import {createAgentTabRegistry} from "./agent-tab.mjs";
 import {selectedAgentTab} from "./setup.mjs";
+import {interactionActions} from "./interaction-inputs.mjs";
+import {createInteractionController} from "./interaction-controller.mjs";
 import {observe} from "./dom-actions.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
 
@@ -47,6 +49,7 @@ async function stop(reason="sharing_stopped") {
   const shared=await binding();
   if(shared)await dom(shared,"video.restore",{},busy?.expected).catch(()=>{});
   await chrome.storage.session.remove("binding");
+  await chrome.storage.session.remove("interactionSnapshot");
   await chrome.alarms.clear("connector-wake");
   await capture("stop").catch(()=>{});
   const contexts=await chrome.runtime.getContexts({contextTypes:["OFFSCREEN_DOCUMENT"]});
@@ -64,13 +67,13 @@ async function scope(b) {
 async function dom(b,action,parameters={},expected) {
   const tab=await scope(b);
   if (!sharedUrl(tab.url,b)) throw new Error("agent_tab_empty");
-  if(expected && platformUrl(tab.url) !== expected.url)throw new Error("shared_tab_changed_during_operation");
+  if(expected && sharedUrl(tab.url,b) !== expected.url)throw new Error("shared_tab_changed_during_operation");
   const target={tabId:b.tabId,...(expected?.documentId ? {documentIds:[expected.documentId]} : {})};
   const loaded=await chrome.scripting.executeScript({target,files:["reader.js"]});
   if(expected && !expected.documentId)expected.documentId=loaded[0]?.documentId;
-  const results=await chrome.scripting.executeScript({target:{tabId:b.tabId,...(expected?.documentId ? {documentIds:[expected.documentId]} : {})},func:observe,args:[action,parameters]});
+  const results=await chrome.scripting.executeScript({target:{tabId:b.tabId,...(expected?.documentId ? {documentIds:[expected.documentId]} : {})},func:observe,args:[action,{...parameters,website_scope:b.websiteScope}]});
   const after=await scope(b);
-  if(expected && platformUrl(after.url) !== expected.url)throw new Error("shared_tab_changed_during_operation");
+  if(expected && sharedUrl(after.url,b) !== expected.url)throw new Error("shared_tab_changed_during_operation");
   if(results[0]?.result == null)throw new Error("observation_unavailable");
   if(results[0].result.error)throw new Error(results[0].result.detail || results[0].result.error);
   return results[0].result;
@@ -80,15 +83,15 @@ async function navigate(b,url) {
   const end=Date.now()+15000;
   while(Date.now()<end) {
     const tab=await scope(b);
-    if(tab.status === "complete" && platformUrl(tab.url) === platformUrl(url)) {
-      await delay(1000);return {url:platformUrl(tab.url),title:tab.title};
+    if(tab.status === "complete" && sharedUrl(tab.url,b) === sharedUrl(url,b)) {
+      await delay(1000);return {url:sharedUrl(tab.url,b),title:tab.title};
     }
     await delay(100);
   }
   throw new Error("navigation_timeout");
 }
 async function execute(b,command) {
-  boundedCommand(command);
+  boundedCommand(command,b);
   const initial=await scope(b);
   if(busy)throw new Error("operation_already_running");
   const task={id:command.operation_id,cancelled:false};busy=task;
@@ -104,12 +107,15 @@ async function execute(b,command) {
     return dom(b,a,p,expected);
   };
   const adapter={check,delay,dom:fixedDom,read:p=>fixedDom("content.read",p),scroll:p=>fixedDom("scroll",p),
-    navigate:async url=>{check();const result=await navigate(b,url);expected.url=platformUrl(url);expected.documentId=null;return result;},
+    navigate:async url=>{check();const result=await navigate(b,url);expected.url=sharedUrl(url,b);expected.documentId=null;return result;},
     capture:async(a,p)=>{check();await fixedDom("wait_for",{});const result=a === "frame" ? await screenshot(b,p) : await capture(a,p);await fixedDom("wait_for",{});return result;},
     cleanup:async(a,p)=>{await scope(b);return a === "video.restore" ? dom(b,a,p,expected) : capture(a,p);}};
   try {
     check();const p=command.parameters || {};let result;
+    const controls=createInteractionController(chrome,{scope,check,delay});
     if(command.action === "navigate")result=await adapter.navigate(p.url);
+    else if(interactionActions.has(command.action))result=await controls.run(b,command.action,p);
+    else if(command.action === "snapshot" && b.accessMode === "interactive")result={...await adapter.dom("snapshot",p),...await controls.snapshot(b,p)};
     else if(command.action === "content.collect")result=await collectContent(adapter,p);
     else if(command.action === "video.analyze")result=await analyzeVideo(adapter,p);
     else if(command.action === "screenshot")result=await adapter.capture("frame",{});
@@ -127,7 +133,7 @@ async function share(message) {
   if (message.agentTab !== true) throw new Error("agent_tab_required");
   selectedAgentTab(tab,chrome.runtime.getURL("agent-tab.html"),await agentTabs.get());
   const approved=Object.keys(platforms);
-  if (!await chrome.permissions.contains({origins:[...connectorOrigins(url),...approved.flatMap(key=>platforms[key].hosts.map(host=>`https://${host}/*`))]})) throw new Error("permission_denied");
+  if (!await chrome.permissions.contains({origins:[...connectorOrigins(url),"https://*/*"]})) throw new Error("permission_denied");
   await chrome.storage.local.set({connectorUrl:url.href});
   const identity=await agentTabs.remember(tab);
   await stop();
@@ -137,9 +143,9 @@ async function share(message) {
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     await capture("start",{streamId});
     const connector=await openConnectorWindow(url,{sourceTabId:tab.id,reuse:message.reuseConnector !== false});
-    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),agentTabId:identity.id,autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:null,allowedPlatforms:approved}});
+    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),agentTabId:identity.id,accessMode:"interactive",websiteScope:"https",autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:null,allowedPlatforms:approved}});
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
-    await chrome.action.setBadgeText({text:"READ"});await chrome.action.setBadgeBackgroundColor({color:"#171717"});
+    await chrome.action.setBadgeText({text:"AGENT"});await chrome.action.setBadgeBackgroundColor({color:"#171717"});
     // A tab may finish loading before onUpdated observes the stored binding.
     const loaded=await chrome.tabs.get(connector.id);
     if(loaded.status === "complete")await chrome.scripting.executeScript({target:{tabId:connector.id,frameIds:[0]},files:["shell-bridge.js"]});
@@ -172,7 +178,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return {cancelled:true};
     }
     if(message.action === "status") {
-      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,agent_tab_id:b.agentTabId,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
+      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,agent_tab_id:b.agentTabId,access_mode:b.accessMode,website_scope:b.websiteScope,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
     }
     if(message.action === "execute")return execute(b,message.command);
     throw new Error("bridge_action_unavailable");

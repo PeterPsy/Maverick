@@ -7,12 +7,14 @@ from typing import Any
 from errors import BrowserValidationError
 from reading_validation import validate_reading_action
 from platform_scope import platform_url, platform_for_url
+from interaction_validation import INTERACTION_ACTIONS, INTERACTION_FIELDS, validate_interaction
+from website_scope import website_url
 
 
 COMPANION_COMMANDS = frozenset({
     "navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame",
     "video.analyze", "content.collect", "tabs", "wait_for",
-})
+}) | INTERACTION_ACTIONS
 COMMAND_FIELDS = {
     "navigate": {"url", "mode"},
     "snapshot": {"max_chars", "max_items"},
@@ -24,7 +26,10 @@ COMMAND_FIELDS = {
     "content.collect": {"urls", "max_items", "max_batches"},
     "tabs": set(),
     "wait_for": {"state", "timeout_ms"},
+    **INTERACTION_FIELDS,
 }
+for _action in INTERACTION_ACTIONS:
+    COMMAND_FIELDS[_action] = COMMAND_FIELDS[_action] | {"mode", "target_url"}
 def command_payload(action: str, body: dict[str, Any]) -> dict[str, Any]:
     if action not in COMPANION_COMMANDS:
         raise BrowserValidationError("This action is unavailable in the shared Chrome tab.", field="action")
@@ -33,10 +38,17 @@ def command_payload(action: str, body: dict[str, Any]) -> dict[str, Any]:
         raise BrowserValidationError("Caller code, selectors, policy and extra fields are unavailable.", field=sorted(extras)[0])
     result = {key: value for key, value in body.items() if key in COMMAND_FIELDS[action]}
     if action == "navigate":
-        result["url"] = platform_url(body.get("url"))
-        if body.get("mode", "read_only") != "read_only":
-            raise BrowserValidationError("Shared Chrome supports read_only mode.", field="mode")
+        result["url"] = website_url(body.get("url"))
+        if body.get("mode", "read_only") not in {"read_only", "interactive"}:
+            raise BrowserValidationError("Choose a shared Chrome navigation mode.", field="mode")
         result.pop("mode", None)
+    if action in INTERACTION_ACTIONS:
+        if body.get("mode", "interactive") != "interactive":
+            raise BrowserValidationError("Chrome actions require interactive mode.", field="mode")
+        if "target_url" in result:
+            result["target_url"] = website_url(result["target_url"])
+        result.pop("mode", None)
+        validate_interaction(action, result)
     if action in {"snapshot", "content.read", "scroll", "video.frame"}:
         validate_reading_action("content.read" if action == "snapshot" else action, result)
     if action == "scroll" and body.get("target", "auto") not in ("auto", "document"):

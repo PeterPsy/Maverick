@@ -13,7 +13,7 @@ test("only an agent tab is connectable; ordinary platform and Chrome pages direc
   assert.match(setupError(new Error("platform_route_unavailable")), /messages and settings/u);
   assert.match(setupError(new Error("browser_connector_url_required")), /Connection settings/u);
   assert.equal(connectorUrl(defaultConnectorUrl).origin, "https://maverick.loopino.ai");
-  assert.match(setupError(new Error("permission_denied")), /Allow access/u);
+  assert.match(setupError(new Error("permission_denied")), /Allow HTTPS website access/u);
 });
 
 test("only the exact Companion agent page can start an empty multi-platform tab",()=>{

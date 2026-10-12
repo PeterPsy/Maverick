@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from companion_store import database, encoded, public_connection, public_operation, sweep
 from platform_scope import PLATFORMS, platform_url, platform_for_url
 from errors import BrowserValidationError
+from website_scope import website_url
 
 STOP_REASONS = frozenset({
     "user_stopped", "connector_scope_required", "sharing_revoked", "extension_unavailable",
@@ -54,7 +55,7 @@ def revoke(db: sqlite3.Connection, session_id: str, reason: str) -> None:
     )
 
 
-def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str, allowed_platforms: object = None, agent_tab_id: object = None) -> dict:
+def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str, allowed_platforms: object = None, agent_tab_id: object = None, access_mode: object = "read_only", website_scope: object = "platforms") -> dict:
     approved = [] if allowed_platforms is None else allowed_platforms
     if not isinstance(approved, list) or len(approved) > len(PLATFORMS) or any(not isinstance(key, str) or key not in PLATFORMS for key in approved) or len(set(approved)) != len(approved):
         raise BrowserValidationError("Choose supported platforms without duplicates.", field="allowed_platforms")
@@ -65,6 +66,10 @@ def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str,
             valid = False
         if not valid:
             raise BrowserValidationError("Choose a valid agent tab identity.", field="agent_tab_id")
+    if access_mode not in {"read_only", "interactive"} or website_scope not in {"platforms", "https"}:
+        raise BrowserValidationError("Choose a valid Chrome access mode and website scope.", field="access_mode")
+    if (access_mode == "interactive" or website_scope == "https") and (not agent_tab_id or access_mode != "interactive" or website_scope != "https"):
+        raise BrowserValidationError("Interactive HTTPS browsing requires an explicitly connected agent tab.", field="agent_tab_id")
     now = time.time()
     secret = secrets.token_urlsafe(32)
     session_id = "chrome-" + str(uuid4())
@@ -84,9 +89,9 @@ def connect(data_root: Path, workspace_id: str, user_id: str, display_name: str,
         if active >= 4:
             raise CompanionError("connection_limit", "Disconnect an existing Chrome connection first.", 409)
         db.execute(
-            "INSERT INTO connections(session_id,workspace_id,user_id,display_name,secret_hash,status,created_at,seen_at,expires_at,allowed_platforms_json,agent_tab_id) "
-            "VALUES(?,?,?,?,?,'connecting',?,?,?,?,?)",
-            (session_id, workspace_id, user_id, display_name[:100], hashlib.sha256(secret.encode()).hexdigest(), now, now, now + 120, encoded(approved), agent_tab_id or ""),
+            "INSERT INTO connections(session_id,workspace_id,user_id,display_name,secret_hash,status,created_at,seen_at,expires_at,allowed_platforms_json,agent_tab_id,access_mode,website_scope) "
+            "VALUES(?,?,?,?,?,'connecting',?,?,?,?,?,?,?)",
+            (session_id, workspace_id, user_id, display_name[:100], hashlib.sha256(secret.encode()).hexdigest(), now, now, now + 120, encoded(approved), agent_tab_id or "", access_mode, website_scope),
         )
         row = require_owner(db, session_id, workspace_id, user_id)
         return {"connection": public_connection(row), "connector_secret": secret}
@@ -121,6 +126,8 @@ def overview(data_root: Path, workspace_id: str, user_id: str) -> dict:
 
 
 def connection_url(row: sqlite3.Row, url: object, *, allow_empty: bool = False) -> str:
+    if row["website_scope"] == "https":
+        return "" if allow_empty and url == "" else website_url(url)
     approved = json.loads(row["allowed_platforms_json"])
     if approved:
         if allow_empty and url == "":

@@ -1,4 +1,6 @@
 import {platforms} from "./platforms.mjs";
+import {websiteUrl} from "./website-scope.mjs";
+import {interactionActions,interactionFields,validateInteraction} from "./interaction-inputs.mjs";
 
 const reserved = new Set(["accounts", "direct", "api", "challenge", "checkpoint", "oauth", "settings"]);
 
@@ -29,6 +31,7 @@ export function platformUrl(value,expectedPlatform=null) {
 }
 
 export function sharedTabUrl(value, binding, agentTabUrl) {
+  if (binding.websiteScope === "https") return value === agentTabUrl ? "" : websiteUrl(value);
   if (binding.allowedPlatforms?.length) {
     if (value === agentTabUrl) return "";
     const url = platformUrl(value);
@@ -83,9 +86,9 @@ export function sameConnector(tab, binding) {
   } catch { return false; }
 }
 
-export const observationActions = new Set(["navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame", "video.analyze", "content.collect", "tabs", "wait_for"]);
+export const observationActions = new Set(["navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame", "video.analyze", "content.collect", "tabs", "wait_for",...interactionActions]);
 
-export function boundedCommand(command) {
+export function boundedCommand(command,binding) {
   if (!command || !observationActions.has(command.action) || typeof command.operation_id !== "string") throw new Error("command_unavailable");
   const p = command.parameters || {};
   const fields = {
@@ -94,6 +97,7 @@ export function boundedCommand(command) {
     "video.frame": ["video_index", "time_seconds"], "video.analyze": ["video_index", "frame_count", "max_seconds", "include_audio", "save_evidence"],
     tabs: [], wait_for: ["state", "timeout_ms"],
     "content.collect": ["urls","max_items","max_batches"],
+    ...interactionFields,
   };
   if (Object.keys(p).some(key => !fields[command.action].includes(key))) throw new Error("command_field_unavailable");
   const limits = {max_chars: [1,100000], max_items: [1,200], max_batches: [1,40], pixels: [1,2000], steps: [1,5], settle_ms: [0,1500], video_index: [0,199], frame_count: [1,12], max_seconds: [1,180], timeout_ms: [1,15000]};
@@ -103,7 +107,11 @@ export function boundedCommand(command) {
   if ("time_seconds" in p && (typeof p.time_seconds !== "number" || !Number.isFinite(p.time_seconds) || p.time_seconds < 0 || p.time_seconds > 86400)) throw new Error("invalid_time_seconds");
   if ("direction" in p && !["up", "down"].includes(p.direction) || "target" in p && !["auto", "document"].includes(p.target)) throw new Error("invalid_scroll");
   if ("state" in p && !["load", "domcontentloaded"].includes(p.state)) throw new Error("invalid_wait_state");
-  if (command.action === "navigate") platformUrl(p.url);
+  if (command.action === "navigate") binding?.websiteScope === "https" ? websiteUrl(p.url) : platformUrl(p.url);
+  if (interactionActions.has(command.action)) {
+    if(binding?.accessMode !== "interactive")throw new Error("interactive_connection_required");
+    validateInteraction(command.action,p);
+  }
   if (command.action === "content.collect") {
     if(!Array.isArray(p.urls) || p.urls.length<1 || p.urls.length>2)throw new Error("invalid_collection_urls");
     for(const url of p.urls)platformUrl(url,platformForUrl(p.urls[0]));

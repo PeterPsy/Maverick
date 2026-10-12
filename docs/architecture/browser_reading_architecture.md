@@ -16,7 +16,8 @@ focuses the remembered agent tab even after sharing stops, or reuses an empty
 extension-owned start page before creating one. A
 second explicit toolbar invocation on that tab grants Chrome tab-capture access;
 it can then connect without choosing an initial platform or profile. It asks for
-the six exact supported platform host groups and Maverick, not all-web access.
+optional HTTPS website access plus Maverick; 0.6.0 also declares the required
+Chrome debugger permission for real input.
 The authenticated Browser UI records that approved platform list when creating
 the backend lease. Only user connector actions can set it; subsequent heartbeats
 and queued operations cannot change it. SQLite's versioned schema migration adds
@@ -28,7 +29,7 @@ navigation to that profile.
 The official Maverick address is preconfigured in Companion; other installations
 can change Connection settings. The popup sends the selected tab and destination
 to the worker within its button gesture. The worker synchronously requests optional
-permissions for the dedicated tab's approved platforms,
+permissions for HTTPS websites and the selected bridge,
 Maverick origin and isolated app-frame namespace, then completes setup even if
 Chrome closes the popup during the native consent dialog. Concurrent requests are
 deduplicated; denial never starts sharing. It then opens the stable
@@ -264,13 +265,58 @@ Every command is tied to the shared tab, approved URL and Chrome document id.
 A page replacement during observation fails the operation. Explicit navigation
 resets that document binding. Server Lab egress policy is not claimed to govern
 the user's Chrome; Chrome loads ordinary platform subresources using its existing
-session, while extension commands only target approved top-level platform routes.
+session. New interactive connections admit HTTPS website routes; legacy leases
+continue to enforce their approved platform routes.
 
-## Observation and collection contract
+## Interactive HTTPS Agent tab (Companion 0.6.0)
 
-The companion admits fixed navigate, snapshot, rendered-content, scroll,
+The user’s Connect action opts the source into interactive HTTPS browsing. Its
+immutable schema-v4 lease records `access_mode=interactive` and
+`website_scope=https`; earlier records migrate with `read_only`/`platforms` defaults.
+The caller cannot expand a lease through operation parameters or heartbeat fields.
+URLs retain ordinary application paths, queries and fragments and reject browser
+internal/file/HTTP schemes, URL credentials and local address literals. The user’s
+Chrome network remains distinct from the isolated Lab’s Core egress policy.
+
+Chrome’s required `debugger` permission provides trusted pointer and keyboard
+input. Optional HTTPS host access is requested inside the existing Connect gesture.
+The worker admits fixed click, type, press_key, hover, select_option and set_checked
+commands only for an interactive sharing binding. Backend queuing applies the same
+capability and actor/workspace checks. MCP descriptors classify every interaction
+as mutating and unsafe to retry automatically. Existing Lab interaction restrictions
+and the fixed Research web-only profile remain intact.
+
+A completed snapshot combines rendered content with a bounded control inventory.
+Refs hold actual DOM nodes in the isolated extension world; worker metadata pins
+them to the sharing generation and exact source document. Names use associated
+labels without including nested input/select values. Open shadow roots and
+same-origin iframes are included; cross-origin embedded controls require opening
+their page in the source tab. Password values are omitted.
+
+Interactions validate current node identity, signature, visibility, disabled state,
+hit testing and supported control type. Click/type/key/hover use fixed Chrome Input
+commands targeted only at the bound source; dropdowns use fixed DOM option changes.
+The debugger is attached for the action and detached in finally, including failures
+and cancellation. Cancellation releases pressed input and never replays the action.
+New snapshots, navigation, replaced nodes or sharing generations invalidate refs.
+Type replaces text with native input events; passwords and file input remain manual.
+Normal links and form targets use the source tab; unrelated open tabs remain outside
+control. JavaScript-created windows are not implicitly delegated. Submitted forms
+and account changes are authorized by the user’s task, not by page instructions.
+
+The installed app exposes browser_click/type/press_key for shared Chrome as well as
+existing governed dev inspection, plus browser_hover/select_option/set_checked for
+shared Chrome. Browser UI and Companion advertise their current access mode rather
+than treating older read-only connections as interactive. The bundled agent guide
+describes discovery, refs, polling and consequential actions. Updating an existing
+workspace copy requires the Skills app; the 2026-10-12 update was blocked by
+`authentication_required`, so the workspace copy has not yet received this guide.
+
+## Legacy read-only scope and platform collection
+
+Read-only companion leases admit fixed navigate, snapshot, rendered-content, scroll,
 screenshot, video-frame, tab and wait observations. Existing platform tabs bind
-navigation to the platform inferred at sharing. Dedicated agent tabs permit
+navigation to the platform inferred at sharing. Legacy read-only agent tabs permit
 navigation across the user-approved list. Reviewed exact HTTPS
 hosts, routes and retained source query keys live in `companion/platforms.json`,
 with a generated Chrome module and a matching Python validator. Instagram,
@@ -465,6 +511,22 @@ The Browser execution-closure test and unused-import check passed. The global
 CLI/MCP metadata suite retains three failures from unchanged HEAD descriptors
 and baseline authority mismatches (including Agents/Storage); those surfaces
 were not changed by this regression fix.
+
+The 0.6.0 pass on 2026-10-12 completed 93 Browser Python tests, 56 Node tests,
+both desktop/mobile UI suites, the full Chromium media/Connectors fixture and
+the native Chrome permission-consent fixture. Owned HTTPS fixtures verified
+trusted click, text and key input; dropdown, checkbox and hover interactions;
+open shadow roots and same-origin frames; stale, disabled and read-only control
+rejection; navigation ref invalidation; unrelated-tab isolation; and debugger
+detachment. Reconnection and tab reuse assertions also passed. Concurrent queue
+polling has focused coverage for one claim per operation, WAL and full synchronous
+durability. These fixtures do not change the user's real accounts.
+
+The frontend and downloadable 0.6.0 package were built locally because the official
+frontend wrapper returned `authentication_required`; no refresh event was emitted
+by that fallback build. The anonymous public ZIP returned 200 with bytes matching
+the built artifact. Users must update the unpacked extension, accept Chrome's new
+permissions and reconnect their Agent tab before the new capability is available.
 
 A full profile/media acceptance still requires verifying profile identity,
 bounded feed collection, opening collected posts/Reels,

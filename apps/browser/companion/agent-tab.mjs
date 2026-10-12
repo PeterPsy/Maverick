@@ -7,7 +7,7 @@ export function createAgentTabRegistry(chrome, startUrl, newId = () => crypto.ra
   const remember = async tab => {
     const previous = await get();
     const identity = previous?.tabId === tab.id ? previous
-      : {id:newId(), tabId:tab.id, allowedPlatforms:Object.keys(platforms)};
+      : {id:newId(), tabId:tab.id, allowedPlatforms:Object.keys(platforms),websiteScope:"https"};
     await chrome.storage.session.set({agentTab:identity});
     return identity;
   };

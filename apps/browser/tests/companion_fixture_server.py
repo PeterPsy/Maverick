@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 APP = ROOT / "apps/browser"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(APP / "backend"))
-from service import handle_action
+from service import handle_action, mcp_result_for_tool
 from core.api.app_frame_browser import _inject_message_relay
 from core.api.app_frame_launch import content_security_policy
 
@@ -118,6 +118,9 @@ class Handler(BaseHTTPRequestHandler):
             status,response = connectors_request(body)
         elif self.path == "/__test/connectors/mcp":
             status,response = connectors_request(body.get("arguments",{}), "mcp", tool_name=body["tool_name"])
+        elif self.path == "/__test/browser/mcp":
+            status,response = mcp_result_for_tool(WORKSPACE / "data/browser", body["tool_name"], body.get("arguments",{}),
+                                                  workspace_id="fixture", user_id="fixture-user", surface="mcp", dependencies=DEPENDENCIES)
         else:
             self.send_error(404); return
         content = json.dumps(response).encode()

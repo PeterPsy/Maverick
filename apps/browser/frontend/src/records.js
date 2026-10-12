@@ -2,6 +2,7 @@ export const labels = {
   "content.read": "Read page", "content.collect": "Collect content", snapshot: "Page snapshot",
   navigate: "Navigate", scroll: "Scroll page", screenshot: "Screenshot", "video.frame": "Video frame",
   "video.analyze": "Video analysis", tabs: "Inspect tabs", wait_for: "Wait for page",
+  click:"Click",type:"Fill field",press_key:"Press key",hover:"Hover",select_option:"Select option",set_checked:"Set checkbox",
   processing_media: "Saving media", queued: "Queued", running: "Running", completed: "Completed",
   failed: "Failed", expired: "Expired", cancelled: "Cancelled", connecting: "Connecting",
   connected: "Connected", offline: "Offline", revoked: "Stopped",

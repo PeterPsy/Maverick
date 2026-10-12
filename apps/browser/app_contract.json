@@ -3,7 +3,7 @@
   "contract_version": "1.0",
   "name": "Browser",
   "version": "0.4.0",
-  "description": "User-shared Chrome transport for Connectors and isolated Browser Lab research.",
+  "description": "Interactive user-connected Chrome Agent tab and isolated Browser Lab research.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -87,7 +87,10 @@
       "browser_operation_get",
       "browser_operation_cancel",
       "browser_video_analyze",
-      "browser_reference_manifest"
+      "browser_reference_manifest",
+      "browser_hover",
+      "browser_select_option",
+      "browser_set_checked"
     ],
     "cli_commands": [
       "browser"

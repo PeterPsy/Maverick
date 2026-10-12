@@ -116,7 +116,7 @@ class BrowserAppTests(unittest.TestCase):
                 self.assertEqual(status, 400)
                 self.assertEqual([action for action, _ in calls], ["session.create", "navigate", "click"])
 
-    def test_mcp_descriptor_matches_p0_tool_scope(self) -> None:
+    def test_mcp_descriptor_matches_lab_and_interactive_chrome_scope(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
         descriptor = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
         cli_descriptor = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
@@ -144,6 +144,9 @@ class BrowserAppTests(unittest.TestCase):
             "browser_click",
             "browser_type",
             "browser_press_key",
+            "browser_hover",
+            "browser_select_option",
+            "browser_set_checked",
         }
 
         self.assertEqual(set(parsed.contract.capabilities.mcp_tools), expected_tools)

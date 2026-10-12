@@ -88,7 +88,7 @@
     },
     "browser_navigate": {
       "effect_class": "mutating",
-      "description": "Navigate a Lab session after Core egress approval, or navigate a shared Chrome tab to an approved platform page. Check sharing_mode and allowed_platforms in browser_companion_status: agent_tab can cross approved platforms and start empty; platform stays on its initial platform. Chrome returns a queued operation_id.",
+      "description": "Navigate a Lab session after Core egress approval or your connected Chrome Agent tab. website_scope=https permits normal HTTPS websites; legacy platform sessions retain their scope. Chrome returns a queued operation_id.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -102,7 +102,8 @@
             "type": "string",
             "enum": [
               "read_only",
-              "maverick_dev_inspector"
+              "maverick_dev_inspector",
+              "interactive"
             ],
             "default": "read_only"
           }
@@ -116,12 +117,22 @@
     },
     "browser_snapshot": {
       "effect_class": "read",
-      "description": "Read a Lab accessibility snapshot or bounded rendered content from shared Chrome (queued operation_id).",
+      "description": "Read a Lab accessibility snapshot or shared Chrome content and stable element refs. Interactive Chrome includes controls, inputs, dropdown options and checkboxes; actions must use these refs. Chrome returns a queued operation_id.",
       "input_schema": {
         "type": "object",
         "properties": {
           "session_id": {
             "type": "string"
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "max_items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
           }
         },
         "required": [
@@ -340,7 +351,7 @@
     },
     "browser_click": {
       "effect_class": "mutating",
-      "description": "Click by snapshot ref only for maverick_dev_inspector targets.",
+      "description": "Click a snapshot ref in your interactive Chrome Agent tab (queued operation), or a governed Maverick dev-inspector target. Chrome needs session_id and ref; Lab additionally requires target_url and mode=maverick_dev_inspector.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -356,22 +367,22 @@
           "mode": {
             "type": "string",
             "enum": [
-              "maverick_dev_inspector"
+              "maverick_dev_inspector",
+              "interactive"
             ]
           }
         },
         "required": [
           "session_id",
-          "ref",
-          "target_url",
-          "mode"
+          "ref"
         ],
         "additionalProperties": false
-      }
+      },
+      "safe_to_retry": false
     },
     "browser_type": {
       "effect_class": "mutating",
-      "description": "Type into a snapshot ref only for maverick_dev_inspector targets.",
+      "description": "Replace text in an editable snapshot ref in your interactive Chrome Agent tab (queued operation), or type in a governed dev-inspector target. Chrome needs session_id, ref and text; Lab additionally requires target_url and mode=maverick_dev_inspector.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -390,23 +401,23 @@
           "mode": {
             "type": "string",
             "enum": [
-              "maverick_dev_inspector"
+              "maverick_dev_inspector",
+              "interactive"
             ]
           }
         },
         "required": [
           "session_id",
           "ref",
-          "text",
-          "target_url",
-          "mode"
+          "text"
         ],
         "additionalProperties": false
-      }
+      },
+      "safe_to_retry": false
     },
     "browser_press_key": {
       "effect_class": "mutating",
-      "description": "Press a key only for maverick_dev_inspector targets.",
+      "description": "Press a supported page key on a Chrome snapshot ref (queued operation), or in a Maverick dev-inspector target. Chrome requires ref; Lab additionally requires target_url and mode=maverick_dev_inspector. Chrome keys include Enter, Tab, Escape, arrows, Backspace and optional Shift.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -422,22 +433,26 @@
           "mode": {
             "type": "string",
             "enum": [
-              "maverick_dev_inspector"
+              "maverick_dev_inspector",
+              "interactive"
             ]
+          },
+          "ref": {
+            "type": "string",
+            "description": "Required for shared Chrome: an element ref from browser_snapshot."
           }
         },
         "required": [
           "session_id",
-          "key",
-          "target_url",
-          "mode"
+          "key"
         ],
         "additionalProperties": false
-      }
+      },
+      "safe_to_retry": false
     },
     "browser_companion_status": {
       "effect_class": "read",
-      "description": "List your shared Chrome connections, their sharing_mode and allowed_platforms, and recent operations. A dedicated agent_tab can start empty and navigate across its approved platforms. Sharing is performed by the user in Browser; credentials are never returned.",
+      "description": "List your Chrome Agent tab, access_mode, website_scope and operations. Interactive https sessions can browse normal HTTPS websites and act on snapshot refs. Existing read-only/platform sessions retain their scope. Sharing and credentials belong to the user-facing Chrome setup.",
       "input_schema": {
         "type": "object",
         "properties": {},
@@ -533,6 +548,89 @@
       },
       "output_schema": {
         "type": "object"
+      }
+    },
+    "browser_hover": {
+      "effect_class": "mutating",
+      "safe_to_retry": false,
+      "description": "Hover a rendered control in the interactive Chrome Agent tab; returns a queued operation_id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The connected interactive chrome- session."
+          },
+          "ref": {
+            "type": "string",
+            "description": "An element ref from the current browser_snapshot."
+          }
+        },
+        "required": [
+          "session_id",
+          "ref"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "browser_select_option": {
+      "effect_class": "mutating",
+      "safe_to_retry": false,
+      "description": "Select native dropdown options by their observed values in interactive shared Chrome; returns a queued operation_id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The connected interactive chrome- session."
+          },
+          "ref": {
+            "type": "string",
+            "description": "An element ref from the current browser_snapshot."
+          },
+          "values": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          }
+        },
+        "required": [
+          "session_id",
+          "ref",
+          "values"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "browser_set_checked": {
+      "effect_class": "mutating",
+      "safe_to_retry": false,
+      "description": "Set an observed checkbox or radio state in interactive shared Chrome; returns a queued operation_id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The connected interactive chrome- session."
+          },
+          "ref": {
+            "type": "string",
+            "description": "An element ref from the current browser_snapshot."
+          },
+          "checked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "ref",
+          "checked"
+        ],
+        "additionalProperties": false
       }
     }
   }

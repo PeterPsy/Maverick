@@ -1,6 +1,7 @@
 """Drive only the native permission dialog in the isolated Xvfb Chrome fixture."""
 import ctypes as c
 import sys
+import time
 
 x = c.CDLL("libX11.so.6")
 x.XOpenDisplay.restype = c.c_void_p
@@ -33,6 +34,8 @@ for i in range(count.value):
     if sys.argv[1] in title and not title.startswith("DevTools"):
         x.XRaiseWindow(d, children[i])
         x.XSetInputFocus(d, children[i], 2, 0)
+        x.XFlush(d)
+        time.sleep(0.2)
         break
 else:
     raise SystemExit("Source window not found in the Xvfb fixture")
@@ -45,6 +48,8 @@ if len(sys.argv) > 2:
         code = x.XKeysymToKeycode(d, x.XStringToKeysym(key))
         xt.XTestFakeKeyEvent(d, code, 1, 0)
         xt.XTestFakeKeyEvent(d, code, 0, 0)
+        x.XFlush(d)
+        time.sleep(0.25)
 x.XFlush(d)
 x.XFree(children)
 x.XCloseDisplay(d)

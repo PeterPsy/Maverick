@@ -39,7 +39,7 @@ test("disconnect preserves the navigated agent identity and opening reuses that 
   // A login navigation can stop sharing; identity still lets the user return.
   tabs.get(opened.id).url="https://www.instagram.com/accounts/login/";
   assert.equal((await registry.open()).id,opened.id);
-  assert.throws(()=>selectedAgentTab(tabs.get(opened.id),startUrl,identity),/platform_route_unavailable/u);
+  assert.equal(selectedAgentTab(tabs.get(opened.id),startUrl,identity).reconnect,true);
   await registry.forget(99);
   assert.equal((await registry.get()).id,identity.id);
   tabs.delete(opened.id);

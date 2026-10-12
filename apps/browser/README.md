@@ -1,14 +1,14 @@
 # Browser
 
-Browser provides read-only platform navigation through a user-shared Chrome
-session and governed public-web research through an isolated Playwright Lab.
+Browser provides interactive HTTPS browsing through a user-connected Chrome
+Agent tab and governed public-web research through an isolated Playwright Lab.
 Platform workflows and saved collections belong to the Connectors app.
 All browser, collection and speech components are open source; no scraping,
 proxy, hosted-browser or remote transcription service is used.
 
 ## Connect your agent tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.5.5,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.6.0,
 then load its folder with Chrome's “Load unpacked” developer-mode action.
 Use Chrome 120 or later. The official `https://maverick.loopino.ai` address is
 preconfigured; other installations can change Connection settings in Companion.
@@ -18,7 +18,7 @@ the remembered agent tab to the foreground, including after Disconnect, or reuse
 an existing empty start tab before creating one. On that tab, click Companion in Chrome's toolbar and
 choose **Connect agent tab** once. This explicit
 invocation grants Chrome's tab-capture permission for that tab. The popup asks
-for the six supported platform hosts plus Maverick, not every website. By default
+for HTTPS website access; the manifest also declares Chrome debugger control. By default
 it reuses the most recently used Maverick shell tab at the chosen origin in the
 same Chrome profile, including Chat or other apps, and opens Browser there.
 Private/API routes, other origins and the source tab are excluded. Uncheck
@@ -29,9 +29,9 @@ document connects automatically using the extension's explicit sharing generatio
 There is no second Connect button to press. Automatic setup is attempted once
 per generation; a failed attempt retains the manual retry control. Keep both tabs
 open. The agent navigates the dedicated source tab, not the bridge.
-It can navigate across Instagram, X, Reddit, Facebook, LinkedIn and YouTube, using your
-usual Chrome platform sessions. It can read, scroll, collect content and analyze
-images/video/audio; clicks, form entry, posting and messages have no command.
+It browses normal HTTPS websites using your Chrome session. It can read, scroll,
+click, hover, replace text, press keys, select options, set checkboxes and submit
+forms. Platform collection and image/video/audio analysis remain available.
 Sign in to platforms directly in Chrome. Other tabs are not shared.
 
 On a remembered agent tab, Companion offers **Reconnect agent tab**. It
@@ -59,13 +59,15 @@ globe/control vectors, 22px cards and 18px controls. Light/dark presentation
 follows Chrome's system color-scheme preference through CSS before first paint;
 the extension does not inherit a private shell theme. Connection settings and
 help are collapsed by default. Status updates have an accessible live region;
-errors remain visible. No remote fonts, UI library or new permissions are used.
+errors remain visible. No remote fonts or UI library are used. Chrome debugger
+access is a required permission for real pointer and keyboard input.
 
-The dedicated tab starts with an empty public URL. Its immutable approved
-platform list is saved in the user-created connection lease and returned by
-`browser_companion_status`. The backend and extension independently enforce the
-same list and reviewed content routes. Existing platform-tab connections retain
-their single-platform scope. Schema migration preserves existing sharing leases.
+The dedicated tab starts with an empty URL. New 0.6.0 connections have immutable
+`access_mode: interactive` and `website_scope: https`, reported by
+`browser_companion_status`. The backend and extension validate HTTPS URLs and
+reject browser/file schemes, credentials in URLs and local network literals.
+Existing connections retain read-only and platform-route scopes; schema-v4
+migration never grants them new authority. Connect again from 0.6.0 to opt in.
 
 The connector shell opens a fresh authenticated isolated Browser frame in Chrome;
 it works even when the original Maverick app uses another browser profile or the desktop application.
@@ -79,20 +81,50 @@ If setup fails, the status explains how
 to retry instead of remaining on “Connecting…”. After an extension update,
 replace the extracted files and reload it in `chrome://extensions`.
 
-Sharing is explicit and limited to one tab. Passwords, cookies, browser history,
-forms, social writes and caller JavaScript are outside the tool surface. The
-extension requests optional access to the selected Maverick origin, its isolated
-frame namespace and the selected platform, or the six supported platforms for a
-dedicated agent tab. It probes only app identity in the selected connector window and attaches to one exact Browser frame/document;
+Sharing is explicit and limited to one tab. Password entry, file selection,
+cookies, browser history and caller JavaScript remain outside the tool surface.
+The extension requests optional HTTPS website access plus the selected Maverick
+bridge, and only controls the exact source tab chosen by the user. It probes only app identity in the selected connector window and attaches to one exact Browser frame/document;
 other tabs, shell frames and replaced documents cannot execute its fixed commands.
 Within that selected Maverick shell tab, switching apps or returning to Browser
 from the rail keeps the connection alive while its bound Browser iframe remains
 mounted. The `connector=1` parameter starts setup; dropping it during native
 navigation does not revoke sharing. Leaving the Maverick origin or loading a
 non-shell route still stops the bridge. A full document reload requires reconnecting.
-Closing either tab, leaving approved platform routes, or revoking sharing stops
+Closing either tab, leaving the connection’s permitted URL scope, or revoking sharing stops
 capture. Reloading the connector requires a fresh user-owned connection.
 Frame captures may bring the shared platform window to the foreground.
+
+## Interactive Chrome commands
+
+Call `browser_snapshot` for the connected `chrome-` session, then poll
+`browser_operation_get` for its completed result. It includes bounded controls
+with opaque refs, roles, names, editable values (excluding passwords), dropdown
+options and checkbox states. Open shadow roots and same-origin embedded frames
+are included; cross-origin embedded controls are not. Open their page directly
+in the Agent tab when interaction is needed.
+
+Use those refs with `browser_click`, `browser_type`, `browser_press_key`,
+`browser_hover`, `browser_select_option` or `browser_set_checked`. `browser_type`
+replaces the field’s text; keys include Enter, Tab, Escape, arrows and optional
+Shift. These calls return queued operations. They perform user-requested actions
+which can submit forms or change an account. Their effects are mutating and not
+safe to replay automatically. Poll the existing operation rather than resending it.
+
+Refs retain actual DOM nodes in the source’s isolated extension world. Replaced
+nodes, changed control signatures, new snapshots, navigated documents and replaced
+sharing generations invalidate old refs. Hidden, disabled, covered, read-only or
+incompatible controls fail before input. The debugger attaches only to the bound
+source for each action, sends fixed Chrome input commands and always detaches;
+cancellation stops further input and releases pressed state without retrying.
+Normal links/form targets remain in the Agent tab. Click handlers which open
+independent JavaScript windows do not share those windows automatically.
+
+Snapshot refs and arguments never grant access by themselves. The backend checks
+actor/workspace ownership and interactive mode; Chrome independently verifies the
+sharing binding and exact source document. There is no raw selector, JavaScript
+or CDP-command tool. Existing Lab click/type/key tools retain their governed
+Maverick development policy.
 
 ## Workspace management
 

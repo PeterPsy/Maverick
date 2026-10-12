@@ -13,6 +13,7 @@ import {observe} from "../companion/dom-actions.mjs";
 import {analyzeVideo} from "../companion/workflows.mjs";
 import {openActionPopup} from "./extension-popup.mjs";
 import {platforms} from "../companion/platforms.mjs";
+import {verifyInteractiveChrome} from "./interactive-chrome.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const temporary=mkdtempSync(path.join(tmpdir(),"browser-companion-e2e-"));
@@ -29,7 +30,7 @@ try {
   }
   server.stderr.on("data",chunk=>process.stderr.write(chunk));
   const lines=createInterface({input:server.stdout});
-  const info=await Promise.race([new Promise(resolve=>lines.once("line",line=>resolve(JSON.parse(line)))),new Promise((_,reject)=>setTimeout(()=>reject(new Error("fixture_server_timeout")),10000))]);
+  const info=await Promise.race([new Promise(resolve=>lines.once("line",line=>resolve(JSON.parse(line)))),new Promise((_,reject)=>setTimeout(()=>reject(new Error("fixture_server_timeout")),30000))]);
   const origin=`http://maverick.localhost:${info.port}`;
   const transport=`http://127.0.0.1:${info.port}`;
   const frameOrigin=`http://af-0123456789abcdef01234567.sidecars.maverick.localhost:${info.port}`;
@@ -47,7 +48,7 @@ try {
   // The fast fixture pre-grants hosts. --permissions exercises the native dialog
   // with the unmodified production manifest on an isolated Xvfb display.
   const manifest=JSON.parse(readFileSync(path.join(extension,"manifest.json")));
-  if(!realConsent)manifest.host_permissions=[...Object.values(platforms).flatMap(spec=>spec.hosts.map(host=>`https://${host}/*`)),"http://*.localhost/*","http://localhost/*","http://127.0.0.1/*"];
+  if(!realConsent)manifest.host_permissions=["https://*/*","http://*.localhost/*","http://localhost/*","http://127.0.0.1/*"];
   writeFileSync(path.join(extension,"manifest.json"),JSON.stringify(manifest));
   execFileSync("espeak-ng",["-w",path.join(temporary,"voice.wav"),"Maverick browser reads video and records audio locally."]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc=size=320x180:rate=12","-i",path.join(temporary,"voice.wav"),"-t","5","-vf","format=yuv420p","-af","apad","-c:v","libx264","-threads","1","-c:a","aac","-movflags","+faststart",path.join(temporary,"video.mp4")]);
@@ -83,8 +84,11 @@ try {
     await new Promise(resolve=>setTimeout(resolve,300));
     execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','x11grab','-video_size','1366x768','-i',process.env.DISPLAY,'-frames:v','1','-y',path.join(tmpdir(),'maverick-consent.png')]);
     await popup.close();
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','x11grab','-video_size','1366x768','-i',process.env.DISPLAY,'-frames:v','1','-y',path.join(tmpdir(),'maverick-consent-after-close.png')]);
     execFileSync('python3',[path.join(root,'tests/consent-dialog.py'),'Maverick agent tab','allow']);
-    await wait(()=>worker.evaluate(()=>chrome.permissions.contains({origins:['https://www.instagram.com/*','https://www.youtube.com/*']})));
+    await wait(()=>worker.evaluate(()=>chrome.permissions.contains({origins:['https://*/*']})),10000).catch(async error=>{
+      console.error(JSON.stringify({phase:'consent-failed',permissions:await worker.evaluate(()=>chrome.permissions.getAll())}));throw error;
+    });
     console.log(JSON.stringify({phase:'native-consent',popup_closed_before_approval:true,first_click_continued:true}));
   }
   await wait(async()=>{
@@ -100,7 +104,7 @@ try {
   await connectorWindow.getByRole("button",{name:"Sign in as fixture user"}).click();
   await wait(()=>connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
   const connector=connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`));
-  await connector.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
+  await connector.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
   await wait(async()=> (await worker.evaluate(()=>chrome.storage.session.get("binding"))).binding?.connectorDocumentId);
   assert.equal(await connector.locator("#url").inputValue(),connectorAddress);
   assert.equal(await connector.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),"light");
@@ -115,6 +119,14 @@ try {
     assert.equal(result.status,"completed",JSON.stringify(result));return {...result.result,operation_id:queued.operation_id};
   };
   await run('navigate',{url:'https://www.instagram.com/fixture_user/'});
+  assert.equal(connection.access_mode,'interactive');assert.equal(connection.website_scope,'https');
+  const runMcp=async(tool_name,arguments_,expected='completed')=>{
+    const response=await fixtureFetch(`${origin}/__test/browser/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool_name,arguments:{session_id:connection.session_id,...arguments_}})});
+    const queued=await response.json();assert.equal(response.status,202,JSON.stringify(queued));
+    const operation=await wait(async()=>{const result=await api({action:'operation.get',operation_id:queued.operation_id});return ['completed','failed','cancelled','expired'].includes(result.status) ? result : null;},60000);
+    assert.equal(operation.status,expected,JSON.stringify(operation));return operation.result;
+  };
+  await verifyInteractiveChrome({context,worker,page:instagram,connection,run,runMcp});
   if(!connectorsOnly) {
   const content=await run("content.read");assert(content.text.includes("Bio visibile"));assert(!content.text.includes("must-not-be-read"));assert(!content.text.includes("hidden-secret"));assert.equal(content.videos[0].duration_seconds,5);
   const scrolling=await run("scroll",{pixels:600});assert.equal(scrolling.target,"rendered_container");assert(scrolling.moved);
@@ -205,10 +217,11 @@ try {
   assert(exported.ok);assert((await exported.text()).includes('Instagram acceptance collection'));
   assert.equal((await fixtureFetch(`${origin}/apps/platform-connectors/`)).status,404);
   assert.equal(consoleErrors.length,0,consoleErrors.join('\n'));
-  await instagram.goto("https://www.instagram.com/accounts/login/");
+  await instagram.goto("chrome://newtab/");
   await wait(async()=>{const overview=await api({action:"companion.overview"});return overview.connections.find(c=>c.session_id === connection.session_id)?.status === "revoked";});
   await context.route("https://x.com/**",route=>route.fulfill({contentType:"text/html",body:"<title>Fixture X</title><h1>X research fixture</h1>"}));
   await context.route("https://unapproved-fixture.test/**",route=>route.fulfill({contentType:"text/html",body:"<h1>Out of scope</h1>"}));
+  await context.route("http://unapproved-fixture.test/**",route=>route.fulfill({contentType:"text/html",body:"<h1>Out of HTTPS scope</h1>"}));
   await instagram.bringToFront();
   const launcher=await openActionPopup(browser,extensionId,instagram.url());
   const beforeLoginReturn=context.pages().length;
@@ -232,7 +245,7 @@ try {
   const agentWindow=connectorWindow;
   assert.equal(context.pages().filter(page=>page.url().startsWith(`${origin}/app/browser`)).length,1,'Sharing a new agent tab must reuse the existing Browser bridge.');
   let agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
-  await agentFrame.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
+  await agentFrame.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
   let agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.sharing_mode === 'agent_tab'));
   assert.equal(agentConnection.url,"");assert.deepEqual(agentConnection.allowed_platforms,Object.keys(platforms));
   // Native rail navigation can remove connector=1 and hide the retained Browser
@@ -275,7 +288,7 @@ try {
   await reconnecting.evaluate("document.querySelector('#share').click();true");
   await reloaded;
   agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
-  await agentFrame.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
+  await agentFrame.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
   const previousSessionId=agentConnection.session_id;
   agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.session_id !== previousSessionId));
   assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding.tabId,previousBinding.tabId);
@@ -306,7 +319,7 @@ try {
   await stoppedPopup.evaluate("document.querySelector('#share').click();true");
   await afterStopReload;
   agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
-  await agentFrame.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Connected'));
+  await agentFrame.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
   agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected'));
   assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
   assert.equal(context.pages().length,pageCount);
@@ -321,7 +334,7 @@ try {
   }
   await mcp('connectors_connections_refresh');
   assert((await mcp('connectors_status')).connections.some(c=>c.session_id === agentConnection.session_id && c.sharing_mode === 'agent_tab'));
-  await agent.goto('https://unapproved-fixture.test/');
+  await agent.goto('http://unapproved-fixture.test/');
   await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id)?.status === 'revoked');
   const stopped=(await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id);
   assert(stopped.stop_reason && stopped.stop_reason !== 'user_stopped','Automatic revocation must retain a diagnostic cause.');

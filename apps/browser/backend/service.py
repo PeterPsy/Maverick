@@ -104,7 +104,7 @@ DEFAULT_MOBILE_VIEWPORT = {"viewport_width": 390, "viewport_height": 844, "mobil
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
-    if action in {"companion.connect", "companion.disconnect", "companion.complete", "operation.cancel", "content.collect", "video.analyze", "media.completed"}:
+    if action in {"companion.connect", "companion.disconnect", "companion.complete", "operation.cancel", "content.collect", "video.analyze", "media.completed", "hover", "select_option", "set_checked"}:
         return [{"type": "maverick.app.data-changed", "resource": "companion"}]
     if action in ACTION_EVENTS:
         return [{"type": "maverick.app.data-changed", "resource": "state"}]
@@ -465,10 +465,10 @@ def operations_manifest() -> dict[str, Any]:
         },
         "mcp_tools": sorted(MCP_TOOL_ACTIONS),
         "chrome_companion": {
-            "mode": "read_only",
-            "actions": ["navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame", "video.analyze", "tabs", "wait_for"],
+            "mode": "interactive",
+            "actions": ["navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame", "video.analyze", "tabs", "wait_for", "click", "type", "press_key", "hover", "select_option", "set_checked"],
             "results": "Queued operations; poll operation.get for observed results, or cancel with operation.cancel.",
-            "authentication": "One supported platform tab explicitly shared through the human Chrome connector.",
+            "authentication": "One Agent tab explicitly connected by the user; access_mode and website_scope are immutable lease capabilities. Older read-only connections retain their scope.",
             "audio_transcription": "Declared Speech dependency with local_only enforced.",
             "saved_evidence": "Declared Storage dependency, verified callback identities.",
         },

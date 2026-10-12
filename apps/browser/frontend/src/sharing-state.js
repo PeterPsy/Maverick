@@ -16,13 +16,13 @@ export const stopReasons = {
 
 export function stopReason(error) {
   if (!error) return "user_stopped";
-  if (["shared_platform_scope_required", "invalid_platform_url"].includes(error.code)) return "platform_route_unavailable";
+  if (["shared_platform_scope_required", "invalid_platform_url","website_scope_required","invalid_website_url"].includes(error.code)) return "platform_route_unavailable";
   if (Object.hasOwn(stopReasons, error.code)) return error.code;
   return [401, 403].includes(error.status) ? "authentication_failed" : "heartbeat_failed";
 }
 
 export function connectionDetail(connection) {
-  const mode = connection.sharing_mode === "agent_tab" ? "Agent tab" : connection.platform || "Chrome";
+  const mode = connection.access_mode === "interactive" ? "Agent tab · Interactive" : connection.sharing_mode === "agent_tab" ? "Agent tab · Read only" : connection.platform || "Chrome";
   if (connection.status === "revoked") return `${mode} · ${Object.hasOwn(stopReasons, connection.stop_reason) ? stopReasons[connection.stop_reason] : "Sharing stopped; reconnect from Companion"}`;
   if (connection.status === "offline") return `${mode} · Bridge offline; reopen Browser and reconnect from Companion`;
   return `${mode} · ${connection.url || (connection.sharing_mode === "agent_tab" ? "Ready for agent navigation" : "Waiting for Chrome to share a page")}`;

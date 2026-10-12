@@ -93,7 +93,7 @@ class AgentTabReconnectTests(unittest.TestCase):
             db.execute("INSERT INTO connections VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", ("chrome-existing", "default", "alice", "Agent", "hashed", "connected", time.time(), time.time(), time.time()+120, "", "Agent", '["instagram","youtube"]', ""))
             db.commit()
         with database(self.root) as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 4)
             self.assertIn("agent_tab_id", {row["name"] for row in db.execute("PRAGMA table_info(connections)")})
             row = db.execute("SELECT * FROM connections WHERE session_id='chrome-existing'").fetchone()
             self.assertEqual(row["status"], "connected")

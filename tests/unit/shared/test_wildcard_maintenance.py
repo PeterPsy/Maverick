@@ -35,7 +35,7 @@ class WildcardMaintenanceTests(unittest.TestCase):
             self.assertNotIn("Sensitive", str(result))
 
     def test_first_activation_requires_real_renewal_dry_run_and_creates_restart_marker(self):
-        with tempfile.TemporaryDirectory() as folder, patch.object(maintenance, "refresh_credentials"):
+        with tempfile.TemporaryDirectory() as folder, patch.object(maintenance, "refresh_credentials"), patch.object(maintenance, "verify_wildcard_https") as https:
             calls = []
             def runner(command, **kwargs):
                 calls.append(command)
@@ -48,6 +48,20 @@ class WildcardMaintenanceTests(unittest.TestCase):
             self.assertIn("--apply", calls[2])
             self.assertTrue((state / "restart-required").exists())
             self.assertTrue(result["renewal_verified"])
+            https.assert_called_once_with("example.test")
+
+    def test_untrusted_live_https_is_not_active_and_retains_restart_intent(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(maintenance, "refresh_credentials"), patch.object(maintenance, "verify_wildcard_https", side_effect=OSError("Untrusted TLS")):
+            state = Path(folder)
+            (state / "renewal-verified-example.test").touch()
+            calls = []
+            def runner(command, **kwargs):
+                calls.append(command)
+                output = '{"certificate":"/verified/fullchain.pem", "backend_restart_required":true}' if len(calls) == 2 else ""
+                return subprocess.CompletedProcess(command, 0, output, "")
+            result = maintenance.maintain("example.test", "admin@example.test", Path("/nginx.conf"), state, runner=runner)
+            self.assertEqual(result["status"], "wildcard_https_verification_failed")
+            self.assertTrue((state / "restart-required").exists())
 
     def test_failed_dry_run_preserves_current_routing(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(maintenance, "refresh_credentials"):

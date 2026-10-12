@@ -51,6 +51,12 @@ installation environment, and applies `external_wildcard` routing. The
 transition preserves unrelated settings and restores both files on failure.
 An already active configuration is a no-op.
 
+After activation, the maintenance job opens a fresh random `af-` origin with
+the default public CA trust store and hostname verification enabled. It only
+reports `active` after this live TLS handshake succeeds. The backend restart
+intent is persisted before changing the configuration, so a failed verification
+or interrupted transition can be recovered by a later successful execution.
+
 `scripts/deploy/reload_nginx.py` discovers the single running Nginx master,
 validates its actual `-c` configuration and signals the same PID/start time.
 This supports migrated chroot installations where the systemd bus or Nginx PID

@@ -8,8 +8,12 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
+import socket
+import ssl
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -21,6 +25,22 @@ from core.shared.env_file import read_env_file
 from scripts.deploy.refresh_cloudflare_dns_credentials import DEFAULT_CREDENTIALS, refresh_credentials
 
 CA = "https://acme-v02.api.letsencrypt.org/directory"
+
+
+def verify_wildcard_https(hostname: str) -> None:
+    """A fresh reserved origin must pass public CA and hostname verification."""
+    host = "af-" + secrets.token_hex(12) + ".sidecars." + hostname
+    context = ssl.create_default_context()
+    for attempt in range(6):
+        try:
+            with socket.create_connection((host, 443), timeout=10) as connection:
+                with context.wrap_socket(connection, server_hostname=host):
+                    return
+        except OSError:
+            if attempt == 5:
+                raise
+            # Nginx processes SIGHUP asynchronously; allow the worker handover.
+            time.sleep(1)
 
 
 def certbot_command(hostname: str, email: str) -> list[str]:
@@ -57,6 +77,9 @@ def maintain(hostname: str, email: str, nginx_config: Path, state_root: Path, *,
         if renewal.returncode:
             return {"status": "renewal_verification_failed"}
         verified.touch(mode=0o600)
+    if os.environ.get("MAVERICK_BROWSER_ORIGIN_TLS_MODE") != "external_wildcard":
+        # Persist intent before the transition, including interruption recovery.
+        (state_root / "restart-required").touch(mode=0o600)
     activation = runner([str(ROOT / ".venv/bin/python"),
                          str(ROOT / "scripts/deploy/activate_browser_origin_wildcard.py"),
                          "--hostname", hostname, "--certificate-dir",
@@ -68,8 +91,12 @@ def maintain(hostname: str, email: str, nginx_config: Path, state_root: Path, *,
     activated = json.loads(activation.stdout)
     if activated.get("backend_restart_required"):
         (state_root / "restart-required").touch(mode=0o600)
+    try:
+        verify_wildcard_https(hostname)
+    except OSError:
+        return {"status": "wildcard_https_verification_failed"}
     return {"status": "active", "certificate": activated["certificate"],
-            "renewal_verified": True,
+            "renewal_verified": True, "wildcard_https_verified": True,
             "backend_restart_required": (state_root / "restart-required").exists()}
 
 

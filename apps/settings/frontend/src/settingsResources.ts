@@ -22,7 +22,7 @@ export function resourcesForPage(page: SettingsPageId): SettingsResource[] {
   if (page === 'app-links') return ['context', 'apps'];
   if (page === 'sessions') return ['context', 'sessions'];
   if (page === 'usage' || page === 'learning') return ['context'];
-  if (page === 'cache') return [];
+  if (page === 'cache' || page === 'installation') return [];
   return [page];
 }
 

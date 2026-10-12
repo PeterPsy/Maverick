@@ -78,7 +78,9 @@
     "cli_commands": [
       "settings"
     ],
-    "skills": [],
+    "skills": [
+      "installation-ops"
+    ],
     "views": [
       "settings"
     ],
@@ -110,7 +112,7 @@
     "cli": "cli/app_cli.py",
     "backend": null,
     "frontend": "frontend/dist",
-    "skills_root": null,
+    "skills_root": "skills",
     "hooks": {}
   },
   "storage": {

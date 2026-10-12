@@ -101,6 +101,7 @@ function patchNode(current: Node, next: Node) {
   const draftValue = dirty && 'value' in current ? String(current.value) : undefined;
   const checked = dirty && current instanceof HTMLInputElement ? current.checked : undefined;
   if (current.matches('[data-action-status]')) return;
+  if (current.hasAttribute('data-settings-owned-view') && current.getAttribute('data-settings-owned-view') === next.getAttribute('data-settings-owned-view')) return;
   for (const attribute of Array.from(current.attributes)) {
     if (current.hasAttribute('data-pending-action') && ['data-pending-action', 'aria-busy'].includes(attribute.name)) continue;
     if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);

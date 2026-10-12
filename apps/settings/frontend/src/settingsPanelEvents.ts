@@ -92,4 +92,3 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
     bindControl(button, 'click', () => actions.onClearRuntimeSession(button.dataset.runtimeClear || ''));
   });
 }
-

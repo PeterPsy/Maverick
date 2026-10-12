@@ -42,4 +42,3 @@ function speechModelSettingsCardHtml(
 function modelSupportsSpeechOutput(option: ProviderModelOption): boolean {
   return (option.output_modalities || []).includes('speech');
 }
-

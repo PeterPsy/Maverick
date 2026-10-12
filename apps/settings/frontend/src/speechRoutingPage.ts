@@ -225,4 +225,3 @@ function hostedProviderStatusForModel(
   const value = option.metadata?.hosted_provider_status;
   return typeof value === 'string' && value ? value : fallbackProvider?.status || '';
 }
-

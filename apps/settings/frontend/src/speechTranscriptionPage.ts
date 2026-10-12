@@ -127,4 +127,3 @@ function speechModelEndpoint(option: ProviderModelOption | null, fallback: strin
   const endpoint = option?.metadata?.endpoint;
   return typeof endpoint === 'string' && endpoint ? endpoint : fallback;
 }
-

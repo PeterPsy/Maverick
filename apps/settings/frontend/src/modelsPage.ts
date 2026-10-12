@@ -313,4 +313,3 @@ function reasoningSummary(modelId: string | undefined, defaultEffort: string | n
 function humanizeAgenticCode(value: string) {
   return value.replace(/[._-]+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 }
-

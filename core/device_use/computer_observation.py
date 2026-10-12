@@ -42,6 +42,8 @@ class NativeControl:
     x: float | None = None
     y: float | None = None
     bounds: dict | None = None
+    editable: bool = False
+    focused: bool = False
 
     def matches(self, selector):
         if 'region' in selector:
@@ -67,9 +69,12 @@ class NativeObservation:
     window_id: int | None = None
     fresh: bool = True
     pixels_only: bool = False
+    source_text_complete: bool | None = None
 
     @property
     def text_complete(self):
+        if self.source_text_complete is not None:
+            return self.source_text_complete
         return not any(marker in self.text for marker in (
             'observation_text_complete=false', 'pixel_text_complete=false',
             'Warning: AX tree truncated'))
@@ -105,12 +110,21 @@ def native_observation(result, tool, arguments):
             data = json.loads(text)
             receipt, target = data['observation_id'], data['tab_id']
             page = data['page']
+            focus = data.get('text_focus', {})
+            focus_signature = focus.get('signature') if isinstance(focus, dict) else None
             controls = [NativeControl(str(index), item.get('label', ''), item.get('kind', ''),
-                value=item.get('value'), actionable=not item.get('disabled', False), x=item.get('x'), y=item.get('y'))
+                identifier=item.get('identifier', ''),
+                value=item.get('value') if item.get('value_complete') is True else None,
+                actionable=not item.get('disabled', False), x=item.get('x'), y=item.get('y'),
+                editable=item.get('editable') is True,
+                focused=(item.get('focused') is True and isinstance(focus_signature, str)
+                         and bool(focus_signature) and item.get('focus_signature') == focus_signature
+                         and focus.get('editable') is True))
                 for index, item in enumerate(page.get('controls', [])) if isinstance(item, dict)]
             if not isinstance(receipt, str) or not isinstance(target, str):
                 return None
-            return NativeObservation(tool, target, receipt, controls, page.get('text', ''))
+            return NativeObservation(tool, target, receipt, controls, page.get('text', ''),
+                                     source_text_complete=page.get('text_complete') is True)
         except (ValueError, KeyError, TypeError, AttributeError):
             return None
     if tool != 'mac_peekaboo':

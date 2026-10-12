@@ -35,6 +35,12 @@ typing or keyboard focus. A native selector or expected effect can instead suppl
 both ax and pixel predicates for the same target. The runtime chooses only the
 current capture mode, including after input; both pixel predicates need regions.
 text expectations stand alone and cannot be combined with role/value/region.
+Companion browser steps support click, type and replace. Before a text step,
+click the exact editable field and observe it focused; supply its identifier or
+label with expect.focused=true for that click, then verify the complete resulting
+value after text input. Browser text is limited to 2000
+characters per step. Missing focus or value evidence requires a fresh read,
+never typing into another field or replaying input.
 A plan-required response has sent no input: provide the plan
 instead of repeating the same unplanned request. A configured recovery model can
 handle unplanned navigation before input starts.

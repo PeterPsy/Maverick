@@ -5,6 +5,7 @@ In delegated mode admitted native providers expose `computer_interact` for bound
 The Core-owned operator uses a separate provider context selected in Settings
 under **PC use decision model**, defaulting to Codex `gpt-6.1-sol` / `medium`.
 It is not a Chat thread or an inter-agent board participant.
+
 Only read-only UI tools and structured project, code and calendar capabilities
 remain directly available to the planner. Native UI input is brokered by Core
 through the original activation/session/turn authority, never a copied Mac lease.
@@ -613,3 +614,27 @@ returned pixel-only OCR and the planned pixel click did not yield a verifiable
 menu opening. That input was not repeated. The remaining menu and cross-desktop
 input acceptance is separate from the successful AX menu check and from these
 backend regression tests.
+
+### Verified companion browser forms (2026-10-12)
+
+Structured `mac_browser` steps support click, type and replace using the existing
+native browser actions. Text comes exclusively from the task's `prepared_text`,
+with at most 2000 characters per browser step. A text step resolves an exact
+observed identifier or label and requires that control to be editable and focused.
+Its focus signature must match the native observation receipt's `text_focus`;
+a page-metadata/focus race therefore sends no input. Native dispatch rechecks the
+same focus signature and consumes the existing single-use receipt.
+
+The native companion projects control identifiers, labels, editability, exact
+focus, bounded values and explicit coverage. Password, file and hidden values are
+omitted. A truncated or unattested value cannot verify the expected value.
+Positive effect predicates compare complete values of up to 2000 characters.
+Text input advances a structured step only after the resulting value is observed;
+pending or uncertain effects permit same-tab reads without replaying the input.
+Older executors without focus/value evidence cannot perform these text steps.
+
+The implementation is independent Maverick code. Its investigation baseline is
+the official ChatGPT macOS 26.1007.30912 (20156) distribution, whose packaged
+Computer Use and Browser components were inspected statically using REA 6.4.0.
+This establishes packaged APIs and relationships, not native decompilation,
+account-specific availability, or measured performance parity.

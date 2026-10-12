@@ -16,6 +16,10 @@ FLAT_SELECTOR_SCHEMA = {
     'anyOf': [{'required': ['label']}, {'required': ['identifier']}],
 }
 FLAT_EXPECTATION_SCHEMA = {key: value for key, value in FLAT_SELECTOR_SCHEMA.items() if key != 'anyOf'}
+FLAT_EXPECTATION_SCHEMA['properties'] = {**FLAT_SELECTOR_SCHEMA['properties'],
+    'value': {'type': 'string', 'minLength': 1, 'maxLength': 2000},
+    'focused': {'type': 'boolean', 'const': True,
+                'description': 'Require observed browser focus attested by the native receipt. Combine with the exact field label or identifier.'}}
 FLAT_EXPECTATION_SCHEMA['anyOf'] = [{'required': [key]} for key in ('label', 'identifier', 'role', 'value')]
 TEXT_EXPECTATION_SCHEMA = {
     'type': 'object', 'additionalProperties': False, 'required': ['text'],
@@ -40,6 +44,8 @@ EXPECTATION_SCHEMA = {
 STEP_SCHEMA = {
     'type': 'object', 'additionalProperties': False,
     'required': ['tool', 'target', 'action', 'control', 'expect'],
+    'allOf': [{'if': {'required': ['tool'], 'properties': {'tool': {'const': 'mac_browser'}}},
+               'then': {'properties': {'text': {'maxLength': 2000}}}}],
     'properties': {
         'tool': {'type': 'string', 'enum': ['mac_peekaboo', 'mac_browser']},
         'target': {'type': 'string', 'minLength': 1, 'maxLength': 200},
@@ -70,11 +76,14 @@ def validate_selector(value, *, expected=False):
         if 'region' not in pixel:
             raise ValueError('computer_actor_selector_invalid')
         return {'ax': ax, 'pixel': pixel}
-    keys = {'label', 'identifier', 'role', 'value', 'region'} | ({'text'} if expected else set())
+    keys = {'label', 'identifier', 'role', 'value', 'region'} | ({'text', 'focused'} if expected else set())
     if (not isinstance(value, dict) or not value or set(value) - keys
-        or any(not isinstance(item, str) or not item or len(item) > (500 if key == 'text' else 200)
-               for key, item in value.items() if key != 'region') or ('text' in value and len(value) != 1)
-        or (set(value) == {'region'})
+        or any(not isinstance(item, str) or not item or len(item) > (
+            500 if key == 'text' else 2000 if expected and key == 'value' else 200)
+               for key, item in value.items() if key not in {'region', 'focused'})
+        or ('focused' in value and value['focused'] is not True)
+        or ('text' in value and len(value) != 1)
+        or not (set(value) & {'label', 'identifier', 'role', 'value', 'text'})
         or (not expected and not (set(value) & {'label', 'identifier'}))):
         raise ValueError('computer_actor_selector_invalid')
     return {**value, **({'region': normalized_region(value['region'])} if 'region' in value else {})}
@@ -87,7 +96,8 @@ def validate_step(value, prepared_text):
         or value['action'] not in {'click', 'type', 'replace'}
         or not isinstance(value['target'], str) or not 0 < len(value['target']) <= 200
         or (value['action'] != 'click' and (value.get('text') not in prepared_text
-             or value['tool'] != 'mac_peekaboo'))
+             or not isinstance(value.get('text'), str)
+             or len(value['text']) > (2000 if value['tool'] == 'mac_browser' else 4000)))
         or (value['action'] == 'click' and 'text' in value)):
         raise ValueError('computer_actor_step_invalid')
     if 'window_id' in value and (value['tool'] != 'mac_peekaboo'
@@ -151,10 +161,16 @@ class ComputerTaskProgress:
             else:
                 native.update(action=step['action'], element=control.element)
         else:
-            if step['action'] != 'click' or control.x is None or control.y is None:
-                raise DeviceUseUnavailableError('computer_actor_step_invalid')
-            native = {'action': 'click', 'tab_id': step['target'], 'observation_id': observed.receipt,
-                      'x': control.x, 'y': control.y, 'observe_after': True}
+            native = {'tab_id': step['target'], 'observation_id': observed.receipt,
+                      'observe_after': True}
+            if step['action'] == 'click':
+                if control.x is None or control.y is None:
+                    raise DeviceUseUnavailableError('computer_actor_step_invalid')
+                native.update(action='click', x=control.x, y=control.y)
+            else:
+                if not control.editable or not control.focused:
+                    raise DeviceUseUnavailableError('computer_actor_browser_focus_required')
+                native['action'] = 'type_text' if step['action'] == 'type' else 'replace_text'
         if 'text' in step:
             native['text'] = step['text']
         observed.fresh = False
@@ -197,7 +213,7 @@ class ComputerTaskProgress:
             texts = '\n'.join(item.get('text', '') for item in result.result.get('contentItems', []) if isinstance(item, dict))
             # A failed verification read being pre-dispatch does not undo the
             # previously dispatched input whose effect is still unknown.
-            if (arguments.get('action') in {'click', 'click_point', 'type', 'replace'}
+            if (arguments.get('action') in {'click', 'click_point', 'type', 'replace', 'type_text', 'replace_text'}
                 and 'nessuna azione inviata' in texts.lower() and 'Full resta attivo' in texts):
                 self.pending = None
         if (self.pending is not None and observed and

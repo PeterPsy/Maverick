@@ -302,3 +302,33 @@ and distinct workspace A/B origins. The evidence is
 This closes the declared Design Studio browser-origin gate; it does not make
 Maverick generally production-ready or remove the blockers in
 `docs/security/production_readiness.md`.
+
+### Transition an existing installation to wildcard TLS
+
+Obtain `*.sidecars.<installation-domain>` through DNS-01 before changing the
+live router. An existing installation can switch without rerunning bootstrap:
+
+```bash
+sudo .venv/bin/python scripts/deploy/activate_browser_origin_wildcard.py \
+  --hostname <installation-domain> \
+  --certificate-dir /etc/letsencrypt/live/<installation-domain>-sidecars-wildcard \
+  --nginx-config /etc/nginx/sites-enabled/maverick-sidecars.<installation-domain>.conf
+```
+
+The default is certificate validation only. `--apply` requires a current wildcard
+SAN and matching private key, saves restricted backups under
+`/var/backups/maverick-wildcard`, installs the canonical wildcard router, tests
+Nginx, updates only `MAVERICK_BROWSER_ORIGIN_TLS_MODE` in the existing installation
+environment and reloads Nginx. A failure restores both configuration files.
+The platform's main router, provider settings, user sessions and app data stay
+in their existing owners. Restart the backend after a successful transition,
+then verify the reserved `af-*` and `sc-*` probes and a fresh browser session.
+
+Prefer a DNS authenticator with unattended renewal. A one-time manual TXT
+challenge can unblock issuance without an NS delegation or DNS API credential,
+but manual-mode certificates cannot renew unattended without an authentication
+hook. Record the actual certificate expiry and arrange DNS access or repeat
+manual DNS validation before it expires. Existing nginx deploy hooks must reload
+the certificate after renewal. A delegated standalone DNS authenticator also
+requires public inbound TCP and UDP port 53; local listener success alone does
+not prove CA reachability.

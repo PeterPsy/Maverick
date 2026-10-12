@@ -26,7 +26,7 @@ function activePageSkeletonHtml(page: SettingsPage): string {
   if (page.id === 'workspace-apps') {
     return workspaceAppsSkeletonHtml();
   }
-  if (page.id === 'platform-settings') {
+  if (['models', 'voice', 'computer-use', 'usage', 'sessions'].includes(page.id)) {
     return platformSettingsSkeletonHtml();
   }
   if (page.id === 'persistence') {

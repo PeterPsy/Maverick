@@ -23,6 +23,7 @@ export function appLinksPageHtml({
         <div>
           <p class="settings-kicker">App links</p>
           <h2>Provider app links</h2>
+          <button type="button" id="settings-refresh-app-links" class="settings-secondary" ${isLoading ? 'disabled' : ''}>Refresh links</button>
         </div>
       </div>
       <p class="settings-card-copy">Provider links are workspace-scoped. A selected provider is reused until it becomes unavailable; otherwise one-provider interface links use the first available candidate as their automatic default.</p>
@@ -63,7 +64,7 @@ function consumerDependencyHtml(
   const registryApp = appById(appRegistry, payload.consumer_app_id);
   return `<article class="settings-app-link-consumer" id="${escapeAttr(consumerAnchorId(payload.consumer_app_id))}">
     <header class="settings-app-link-consumer__header">
-      ${appIconHtml(registryApp, payload.consumer_app_id)}
+      ${appIconHtml(registryApp)}
       <span class="settings-app-copy">
         <strong>${escapeHtml(app?.name || payload.consumer_app_id)}</strong>
         <small>${escapeHtml(payload.consumer_app_id)} - ${escapeHtml(payload.status)}</small>
@@ -84,7 +85,7 @@ function dependencyHtml(
   const isSaving = savingKeys.has(dependencyKey(consumerAppId, dependency.alias));
   const effectiveSelectedIds = effectiveProviderIds(dependency);
   const automaticProviderId = automaticProviderIdFor(dependency);
-  return `<section class="settings-app-link-row">
+  return `<section class="settings-app-link-row" data-dependency-row="${escapeAttr(consumerAppId)}:${escapeAttr(dependency.alias)}">
     <header class="settings-app-link-row__header">
       <span class="settings-app-link-row__copy">
         <strong>${escapeHtml(dependency.alias)}</strong>
@@ -111,7 +112,7 @@ function dependencyHtml(
                   name="${escapeAttr(inputName)}"
                   type="${choiceType}"
                 />
-                ${appIconHtml(candidateApp, candidate.app_id)}
+                ${appIconHtml(candidateApp)}
                 <span>
                   <strong>${escapeHtml(candidate.name || candidate.app_id)}</strong>
                   <small>${escapeHtml(candidate.app_id)} - ${escapeHtml(candidate.interface_version)}${candidate.app_id === automaticProviderId ? ' - automatic default' : ''}</small>
@@ -193,46 +194,10 @@ function loadErrorHtml(error: { app_id: string; message: string; name: string })
   return `<p class="settings-platform-error">${escapeHtml(error.name || error.app_id)}: ${escapeHtml(error.message)}</p>`;
 }
 
-function appIconHtml(app: AppRegistryItem | null, fallbackAppId: string) {
+function appIconHtml(app: AppRegistryItem | null) {
   if (app?.logo?.kind === 'image' && app.logo.value) {
     return `<span class="settings-app-link-logo is-image"><img alt="" loading="lazy" src="${escapeAttr(app.logo.value)}" /></span>`;
   }
-  const icon = app?.logo?.value || defaultIcon(app, fallbackAppId);
+  const icon = app?.logo?.value || 'apps';
   return `<span class="settings-app-link-logo is-glyph"><span class="material-symbols-rounded" aria-hidden="true">${escapeHtml(icon)}</span></span>`;
-}
-
-function defaultIcon(app: AppRegistryItem | null, fallbackAppId: string): string {
-  const iconByAppId: Record<string, string> = {
-    agents: 'smart_toy',
-    'app-store': 'storefront',
-    'base-shell': 'dashboard',
-    chat: 'forum',
-    checklist: 'checklist',
-    crm: 'contacts',
-    'developer-kit': 'developer_board',
-    'docs-studio': 'description',
-    'document-generator': 'description',
-    'dynamic-views': 'dashboard_customize',
-    'gmail-app': 'mail',
-    memory: 'database',
-    'maverick-monitor': 'monitor_heart',
-    settings: 'admin_panel_settings',
-    skills: 'school',
-    speech: 'record_voice_over',
-    storage: 'cloud',
-    'website-studio': 'web_asset'
-  };
-  if (iconByAppId[fallbackAppId]) {
-    return iconByAppId[fallbackAppId];
-  }
-  if (app?.views.includes('chat')) {
-    return 'forum';
-  }
-  if (app?.views.includes('agents')) {
-    return 'smart_toy';
-  }
-  if (app?.views.includes('shell')) {
-    return 'dashboard';
-  }
-  return 'apps';
 }

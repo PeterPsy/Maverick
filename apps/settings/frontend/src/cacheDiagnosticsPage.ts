@@ -3,8 +3,8 @@ import type { CacheDiagnosticsViewState } from './cacheDiagnosticsController';
 import { escapeHtml } from './html';
 
 export function cacheDiagnosticsPageHtml(state: CacheDiagnosticsViewState): string {
-  const { confirmClear, dashboard, error, isClearing, isLoading } = state;
-  const actionLabel = isClearing ? 'Clearing…' : confirmClear ? 'Confirm clear cache' : 'Clear cache';
+  const { dashboard, error, isClearing, isLoading } = state;
+  const actionLabel = isClearing ? 'Clearing…' : 'Clear cache';
   return `<section class="settings-card settings-cache-diagnostics" aria-busy="${isLoading || isClearing}">
     <div class="settings-heading">
       <div>
@@ -21,11 +21,11 @@ export function cacheDiagnosticsPageHtml(state: CacheDiagnosticsViewState): stri
         <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
         Refresh
       </button>
-      <button class="${confirmClear ? 'settings-danger' : 'settings-secondary'}" id="clear-pwa-cache" type="button" ${isLoading || isClearing ? 'disabled' : ''}>
+      <button class="settings-secondary" id="clear-pwa-cache" type="button" ${isLoading || isClearing ? 'disabled' : ''}>
         <span class="material-symbols-rounded" aria-hidden="true">delete_sweep</span>
         ${actionLabel}
       </button>
-      ${confirmClear ? `<button class="settings-secondary" id="cancel-clear-pwa-cache" type="button">Cancel</button>` : ''}
+
     </div>
     <p class="settings-cache-diagnostics__note">Clear cache removes only Maverick's structured data and versioned file cache from this browser container. It does not delete server files, static app assets, or unrelated origin storage.</p>
   </section>`;

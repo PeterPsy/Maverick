@@ -13,10 +13,11 @@ export function activeSettingsPageHtml(context: {
   appLinksController: ReturnType<typeof createAppLinksController>;
   cacheDiagnosticsController: ReturnType<typeof createCacheDiagnosticsController>;
   page: SettingsPage;
-  pendingDeleteUserId: string;
   persistenceController: ReturnType<typeof createPersistenceController>;
   platformSettingsHtml: () => string;
   learningHtml: () => string;
+  sessionsHtml: () => string;
+  usageHtml: () => string;
   selectedUser: User | undefined;
   users: User[];
   workspaceApps: WorkspaceApp[];
@@ -24,7 +25,7 @@ export function activeSettingsPageHtml(context: {
 }): string {
   const { page, selectedUser } = context;
   if (page.id === 'users') {
-    return usersPageHtml({ pendingDeleteUserId: context.pendingDeleteUserId, selectedUser, users: context.users });
+    return usersPageHtml({ selectedUser, users: context.users }) + workspaceAccessPageHtml({ selectedUser, users: context.users, workspaces: context.workspaces, showPicker: false });
   }
   if (page.id === 'workspace-access') {
     return workspaceAccessPageHtml({ selectedUser, users: context.users, workspaces: context.workspaces });
@@ -44,7 +45,9 @@ export function activeSettingsPageHtml(context: {
       workspaceApps: context.workspaceApps,
     });
   }
-  if (page.id === 'platform-settings') return context.platformSettingsHtml();
+  if (['models', 'voice', 'computer-use'].includes(page.id)) return context.platformSettingsHtml();
+  if (page.id === 'usage') return context.usageHtml();
+  if (page.id === 'sessions') return context.sessionsHtml();
   if (page.id === 'learning') return context.learningHtml();
   if (page.id === 'cache') return cacheDiagnosticsPageHtml(context.cacheDiagnosticsController.viewState());
   return persistencePageHtml(context.persistenceController.viewState());

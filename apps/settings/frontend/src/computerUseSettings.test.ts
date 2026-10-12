@@ -42,7 +42,8 @@ describe('PC use decision model settings', () => {
     const mode = document.getElementById('settings-computer-use-mode') as HTMLSelectElement;
     mode.value = 'direct'; mode.dispatchEvent(new Event('change'));
     expect(state.fallbackModelId).toBe('');
-    expect((document.getElementById('settings-computer-use-model') as HTMLSelectElement).disabled).toBe(true);
+    expect(document.getElementById('settings-computer-use-model')).toBeNull();
+    expect(document.getElementById('settings-computer-use-fallback')).toBeNull();
     await controller.save();
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ execution_mode: 'direct', fallback_model_id: null, fallback_reasoning_effort: null });
   });

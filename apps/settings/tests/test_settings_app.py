@@ -33,7 +33,6 @@ class SettingsFrontendDistTests(unittest.TestCase):
         self.assertIn("color-scheme:dark", frontend_css)
         self.assertIn("--maverick-glass-surface", frontend_css)
         self.assertIn("backdrop-filter:blur(26px)", frontend_css)
-        self.assertIn("@keyframes settings-progress-sheen", frontend_css)
         self.assertIn("@keyframes settings-loading-skeleton-shimmer", frontend_css)
         self.assertIn(".settings-platform", frontend_css)
         self.assertNotIn("--settings-primary:#d72451", frontend_css)
@@ -63,7 +62,7 @@ class SettingsFrontendDistTests(unittest.TestCase):
         sidebar_source = (app_root / "frontend" / "src" / "widgets" / "settings-sidebar" / "main.ts").read_text(encoding="utf-8")
 
         self.assertIn("SETTINGS_PAGES", sidebar_source)
-        self.assertIn("Search pages", sidebar_source)
+        self.assertIn("Search settings", sidebar_source)
         self.assertIn("page_id", sidebar_source)
         self.assertNotIn("loadUsers", sidebar_source)
         self.assertIn("workspace-access", pages_source)
@@ -90,7 +89,8 @@ class SettingsFrontendDistTests(unittest.TestCase):
 
         self.assertEqual(chat_requirements["text-to-speech"].interface, "speech.synthesis")
         self.assertIn("speech.synthesis", speech_interfaces)
-        self.assertIn("speech: 'record_voice_over'", app_links_source)
+        self.assertIn("app?.logo?.value", app_links_source)
+        self.assertNotIn("iconByAppId", app_links_source)
         self.assertIn("Provider app links", app_links_source)
         self.assertIn("shared capabilities", pages_source)
         self.assertNotIn("Intra-app catalogs", app_links_source)
@@ -252,13 +252,12 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         app_root = Path(__file__).resolve().parents[1]
         main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")
         settings_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
-        styles_source = (app_root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        styles_source = "\n".join(path.read_text(encoding="utf-8") for path in (app_root / "frontend/src").rglob("*.css"))
         api_source = (app_root / "frontend" / "src" / "adminApi.ts").read_text(encoding="utf-8")
         agentic_binding_source = (app_root / "frontend" / "src" / "agenticBindingController.ts").read_text(encoding="utf-8")
 
-        self.assertIn("settingsPanelHtml(platformSettings, settingsPanelState)", main_source)
-        self.assertIn("Platform settings", settings_source)
-        self.assertIn("settings-user-settings-card", settings_source)
+        self.assertIn("settingsPanelHtml(platformSettings, settingsPanelState, selectedPageId)", main_source)
+        settings_source += "\n".join((app_root / "frontend/src" / name).read_text() for name in ("modelsPage.ts", "voicePage.ts", "speechRoutingPage.ts", "speechTranscriptionPage.ts", "settingsPanelEvents.ts", "usagePage.ts", "sessionsPage.ts"))
         self.assertNotIn("settings-hosted-text-model-settings-card", settings_source)
         self.assertIn("settings-agentic-runtimes-card", settings_source)
         self.assertIn("data-agentic-model-toggle", settings_source)
@@ -348,15 +347,25 @@ transpile('frontend/src/providerModelOptions.ts');
 transpile('frontend/src/providerUsageSummary.ts');
 transpile('frontend/src/executionFamilies.ts');
 transpile('frontend/src/usageHistoryFilters.ts');
+transpile('frontend/src/controlBindings.ts');
+transpile('frontend/src/settingsDom.ts');
+transpile('frontend/src/modelsPage.ts');
+transpile('frontend/src/usagePage.ts');
+transpile('frontend/src/sessionsPage.ts');
+transpile('frontend/src/settingsDrafts.ts');
+transpile('frontend/src/settingsPanelEvents.ts');
+transpile('frontend/src/speechRoutingPage.ts');
+transpile('frontend/src/speechTranscriptionPage.ts');
+transpile('frontend/src/voicePage.ts');
 transpile('frontend/src/settingsPanel.ts');
 
 const {
   createSettingsPanelState,
   hostedProviderRoutingDraft,
-  settingsPanelHtml,
   syncSettingsPanelDraft,
   updateHostedProviderRoutingDraft
-} = require(path.join(outDir, 'settingsPanel.js'));
+} = require(path.join(outDir, 'settingsDrafts.js'));
+const { settingsPanelHtml } = require(path.join(outDir, 'settingsPanel.js'));
 
 const openrouterModels = [
   {
@@ -625,11 +634,17 @@ state.providerUsageItems = [{
     secondary_window: null
   }]
 }];
-const html = settingsPanelHtml(settings, state);
+const { usagePageHtml } = require(path.join(outDir, 'usagePage.js'));
+const { sessionsPageHtml, createSessionsView } = require(path.join(outDir, 'sessionsPage.js'));
+const modelsHtml = settingsPanelHtml(settings, state);
+assert.ok(!modelsHtml.includes('settings-speech-model-settings-card'));
+assert.ok(!modelsHtml.includes('data-usage-history-chart'));
+assert.ok(!modelsHtml.includes('settings-runtime-settings-card'));
+const html = modelsHtml + settingsPanelHtml(settings, state, 'voice') + usagePageHtml(state) + sessionsPageHtml(settings, state, createSessionsView());
 
 assert.equal((html.match(/data-usage-history-chart/g) || []).length, 1);
 assert.ok(html.includes('Last 24 hours'));
-assert.ok(html.includes('settings-user-settings-card'));
+assert.ok(!html.includes('settings-user-settings-card'));
 assert.ok(!html.includes('settings-hosted-text-model-settings-card'));
 assert.ok(html.includes('settings-agentic-runtimes-card'));
 assert.ok(html.includes('settings-speech-model-settings-card'));
@@ -832,7 +847,7 @@ settings.agentic_admin.items.push(duplicateConfig);
 const duplicateHtml = settingsPanelHtml(settings, state);
 assert.equal((duplicateHtml.match(/data-agentic-model-toggle/g) || []).length, 2);
 settings.agentic_admin.items.pop();
-const containmentHtml = settingsPanelHtml(settings, state);
+const containmentHtml = settingsPanelHtml(settings, state) + sessionsPageHtml(settings, state, createSessionsView());
 assert.equal((containmentHtml.match(/data-agentic-model-toggle/g) || []).length, 1);
 assert.ok(containmentHtml.includes('data-agentic-provider-group="google-ai-studio"'));
 for (const expected of [
@@ -840,8 +855,8 @@ for (const expected of [
   'google-ai-studio → google-ai-studio · google-ai-studio',
   'Gemini 3.5 Pro',
   'Reasoning · Preset',
-  'Quarantined: Remote Agentic State Ambiguous',
-  'Pinned remote profile contained (NO-GO): Hosted Agent Runtime Disabled'
+  'remote_agentic_state_ambiguous',
+  'Contained: hosted_agent_runtime_disabled'
 ]) {
   assert.ok(containmentHtml.includes(expected), `missing containment projection: ${expected}`);
 }
@@ -1152,12 +1167,14 @@ function makeController() {
         app_root = Path(__file__).resolve().parents[1]
         panel_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
         summary_source = (app_root / "frontend" / "src" / "providerUsageSummary.ts").read_text(encoding="utf-8")
-        styles_source = (app_root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        styles_source = "\n".join(path.read_text(encoding="utf-8") for path in (app_root / "frontend/src").rglob("*.css"))
         components = json.loads((app_root / "components.json").read_text(encoding="utf-8"))
 
         self.assertNotIn("data-provider-usage-gauge", panel_source)
-        self.assertIn("data-agentic-provider-group", panel_source)
-        self.assertIn("providerUsageSummary", panel_source)
+        models_source = (app_root / "frontend/src/modelsPage.ts").read_text()
+        usage_source = (app_root / "frontend/src/usagePage.ts").read_text()
+        self.assertIn("data-agentic-provider-group", models_source)
+        self.assertIn("providerUsageSummary", usage_source)
         self.assertIn("remaining before limit", summary_source)
         self.assertIn("resets", summary_source)
         self.assertNotIn("Package limits", panel_source)
@@ -1188,6 +1205,7 @@ function makeController() {
         self.assertNotIn("dailyPeriods", filters_source)
         self.assertIn("provider_id", api_source)
         self.assertIn("model_id", api_source)
+        panel_source = (app_root / "frontend/src/usagePage.ts").read_text()
         self.assertIn("data-usage-history-filters", panel_source)
         self.assertEqual(panel_source.count("data-usage-history-chart"), 1)
         self.assertIn("mountUsageVisualizations", main_source)

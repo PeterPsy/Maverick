@@ -1,0 +1,62 @@
+.settings-platform {
+  gap: 16px;
+}
+
+.settings-platform-heading {
+  align-items: flex-start;
+}
+
+.settings-model-card-heading {
+  grid-template-columns: 2.3rem minmax(0, 1fr);
+  align-items: center;
+}
+
+.settings-model-card-heading .settings-kicker {
+  margin-bottom: 0.24rem;
+}
+
+
+.settings-platform-runtime-row {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+
+.settings-platform-runtime-copy strong {
+  overflow: hidden;
+  color: var(--maverick-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.settings-platform-runtime-copy small,
+.settings-platform-runtime-copy code {
+  color: var(--maverick-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.settings-platform-logout {
+  margin-top: 0.65rem;
+}
+
+.settings-platform-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 0.86rem;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: var(--maverick-inner-edge);
+  color: var(--maverick-accent);
+}
+
+.settings-platform-provider-forms {
+  display: grid;
+  gap: 14px;
+}

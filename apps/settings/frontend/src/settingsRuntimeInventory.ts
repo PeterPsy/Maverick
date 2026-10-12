@@ -1,15 +1,4 @@
-import {
-  getPlatformSettings,
-  getRuntimeSessionInventory,
-  type PlatformSettings,
-  type RuntimeCleanupPayload,
-  type RuntimeSessionInventoryPayload,
-} from './adminApi';
-
-export async function loadPlatformSettingsWithRuntimeInventory(): Promise<PlatformSettings> {
-  const settings = await getPlatformSettings();
-  return mergeRuntimeSessionInventory(settings, await requestRuntimeSessionInventoryQuiet());
-}
+import type { PlatformSettings, RuntimeCleanupPayload, RuntimeSessionInventoryPayload } from './adminApi';
 
 export function mergeRuntimeSessionInventory(
   settings: PlatformSettings,
@@ -30,12 +19,4 @@ export function mergeRuntimeSessionInventory(
       cleanup_scope: cleanupScope,
     },
   };
-}
-
-export async function requestRuntimeSessionInventoryQuiet(): Promise<RuntimeSessionInventoryPayload | null> {
-  try {
-    return await getRuntimeSessionInventory();
-  } catch {
-    return null;
-  }
 }

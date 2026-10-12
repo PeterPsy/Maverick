@@ -1,3 +1,4 @@
+import { confirmSettingsAction } from './settingsDialogs';
 import {
   clearParentPwaCache,
   requestParentPwaCacheDashboard,
@@ -6,7 +7,6 @@ import {
 import type { SettingsNotice } from './notice';
 
 export type CacheDiagnosticsViewState = {
-  confirmClear: boolean;
   dashboard: PwaCacheDashboard | null;
   error: string;
   isClearing: boolean;
@@ -21,7 +21,7 @@ export function createCacheDiagnosticsController(context: {
   let error = '';
   let isClearing = false;
   let isLoading = false;
-  let confirmClear = false;
+  let confirmationPending = false;
 
   async function ensureLoaded(force = false): Promise<void> {
     if (isLoading || (!force && dashboard)) {
@@ -42,12 +42,15 @@ export function createCacheDiagnosticsController(context: {
   }
 
   async function clear(): Promise<void> {
-    if (!confirmClear) {
-      confirmClear = true;
-      context.setNotice({ tone: 'info', message: 'Press Clear cache again to confirm removal from this browser.' });
-      context.render();
-      return;
-    }
+    if (isClearing || confirmationPending) return;
+    confirmationPending = true;
+    let confirmed = false;
+    try {
+      confirmed = await confirmSettingsAction({ title: 'Clear this browser cache?',
+        detail: 'Remove cached Maverick data and local file copies from this browser. Server files, conversations and settings are preserved.',
+        confirmLabel: 'Clear cache' });
+    } finally { confirmationPending = false; }
+    if (!confirmed) return;
     isClearing = true;
     error = '';
     context.render();
@@ -58,7 +61,6 @@ export function createCacheDiagnosticsController(context: {
       if (cleanup.status !== 'complete' || cleanup.pendingCleanupCount > 0) {
         throw new Error('Cache cleanup is still pending. Persistent cache reads remain blocked; retry Clear cache.');
       }
-      confirmClear = false;
       dashboard = result.dashboard;
       context.setNotice({
         tone: 'success',
@@ -73,18 +75,11 @@ export function createCacheDiagnosticsController(context: {
     }
   }
 
-  function cancelClear(): void {
-    if (!confirmClear) return;
-    confirmClear = false;
-    context.setNotice(null);
-    context.render();
-  }
-
   function viewState(): CacheDiagnosticsViewState {
-    return { confirmClear, dashboard, error, isClearing, isLoading };
+    return { dashboard, error, isClearing, isLoading };
   }
 
-  return { cancelClear, clear, ensureLoaded, viewState };
+  return { clear, ensureLoaded, viewState };
 }
 
 function errorMessage(error: unknown, fallback: string): string {

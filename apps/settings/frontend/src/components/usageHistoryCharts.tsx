@@ -30,13 +30,13 @@ export function mountUsageHistoryCharts(options: {
 }) {
   const filtersElement = document.querySelector<HTMLElement>('[data-usage-history-filters]');
   if (filtersElement) {
-    const root = createRoot(filtersElement);
+    const root = mountedRoots.get(filtersElement) || createRoot(filtersElement);
     root.render(<UsageHistoryFilterControls {...options} />);
     mountedRoots.set(filtersElement, root);
   }
   const chartElement = document.querySelector<HTMLElement>('[data-usage-history-chart]');
   if (chartElement) {
-    const root = createRoot(chartElement);
+    const root = mountedRoots.get(chartElement) || createRoot(chartElement);
     root.render(
       <UsageHistoryChart
         isLoading={options.isLoading}

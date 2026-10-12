@@ -1,0 +1,186 @@
+.settings-agentic-runtime-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.settings-runtime-provider-list {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-runtime-provider {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-runtime-provider-heading {
+  display: grid;
+  gap: 3px;
+  padding: 0 2px;
+}
+
+.settings-native-provider-activation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-runtime-provider-heading h4,
+.settings-runtime-provider-heading p {
+  margin: 0;
+}
+
+.settings-runtime-provider-heading h4 {
+  color: var(--maverick-text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.settings-runtime-provider-heading p {
+  color: var(--maverick-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.settings-runtime-family {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.settings-runtime-family-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-runtime-family-heading h3 {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.settings-runtime-family-heading::after {
+  width: 100%;
+  height: 1px;
+  background: var(--maverick-border);
+  content: "";
+}
+
+.settings-runtime-family-heading p,
+.settings-runtime-family-description {
+  margin: 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.settings-agentic-contract-callout {
+  grid-column: 1 / -1;
+  margin: 0;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 10px 12px;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-agentic-contract-callout > strong {
+  color: var(--maverick-text);
+}
+
+.settings-text-only-callout {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-models-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -0.25rem 0 0.25rem;
+}
+
+.settings-agentic-runtime {
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0 12px;
+}
+
+.settings-agentic-runtime > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  list-style: none;
+  padding: 12px 0;
+  cursor: pointer;
+}
+
+.settings-agentic-runtime-static__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.settings-agentic-runtime > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-model-summary-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.settings-model-summary-copy .settings-kicker {
+  margin: 0;
+}
+
+.settings-model-summary-copy strong {
+  overflow: hidden;
+  color: var(--maverick-text);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-model-summary-copy small {
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}
+
+.settings-agentic-summary-badges,
+.settings-agentic-taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-agentic-summary-badges {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.settings-model-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  cursor: pointer;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}

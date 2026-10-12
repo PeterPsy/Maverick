@@ -128,17 +128,14 @@ function persistenceHtml(state: PersistenceMigrationViewState) {
 
 function migrationProgressHtml(progress: MigrationProgress | null) {
   if (!progress) return '';
-  return `<div class="settings-migration-progress ${progress.phase === 'failed' ? 'is-failed' : ''} ${progress.phase === 'complete' ? 'is-complete' : ''}">
+  return `<div role="status" aria-live="polite" class="settings-migration-progress ${progress.phase === 'failed' ? 'is-failed' : ''} ${progress.phase === 'complete' ? 'is-complete' : ''}">
     <div class="settings-migration-progress-heading">
       <span class="material-symbols-rounded" aria-hidden="true">${progress.phase === 'complete' ? 'check_circle' : progress.phase === 'failed' ? 'error' : 'sync'}</span>
       <span>
         <strong>${escapeHtml(progress.title)}</strong>
         <small>${escapeHtml(progress.detail)}</small>
       </span>
-      <em>${progress.percent}%</em>
-    </div>
-    <div class="settings-progress-track" aria-label="Migration progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.percent}">
-      <span style="width: ${progress.percent}%"></span>
+
     </div>
   </div>`;
 }

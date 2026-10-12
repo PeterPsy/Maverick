@@ -1,3 +1,5 @@
+import { clearSettingsDrafts } from './settingsDom';
+import { bindControl } from './controlBindings';
 import { requestJson, type ComputerUseSettings, type PlatformSettings } from './adminApi';
 import { escapeHtml } from './html';
 
@@ -31,7 +33,12 @@ export function syncComputerUseDraft(state: ComputerUseDraft, settings: Platform
     state.saving = false;
     state.error = '';
   }
-  if (!workspaceChanged && state.savedSelection === savedSelection && !replaceDraft) return;
+  if (!workspaceChanged && !replaceDraft) {
+    if (state.savedSelection === savedSelection) return;
+    const draft = JSON.stringify([state.providerId || undefined, state.modelId || undefined, state.effort || undefined,
+      state.executionMode, state.fallbackModelId || undefined, state.fallbackEffort || undefined]);
+    if (state.savedSelection && draft !== state.savedSelection) { state.savedSelection = savedSelection; return; }
+  }
   Object.assign(state, { workspaceId, providerId: selection?.provider_id || '',
     modelId: selection?.model_id || '', effort: selection?.reasoning_effort || '',
     executionMode: selection?.execution_mode || 'delegated', fallbackModelId: selection?.fallback_model_id || '',
@@ -68,8 +75,8 @@ export function computerUseSettingsHtml(settings: PlatformSettings, state: Compu
           <option value="delegated" ${state.executionMode === 'delegated' ? 'selected' : ''}>Separate interface operator</option>
         </select>
       </label>
-      <label class="settings-platform-field settings-platform-field-wide"><span>Decision model</span>
-        <select id="settings-computer-use-model" ${disabled || (state.executionMode === 'direct' && model) ? 'disabled' : ''}>
+      ${state.executionMode === 'delegated' || !model || !validEffort ? `<label class="settings-platform-field settings-platform-field-wide"><span>Decision model</span>
+        <select id="settings-computer-use-model" ${disabled ? 'disabled' : ''}>
           ${!model ? `<option selected disabled value="">Unavailable: ${escapeHtml(state.modelId)}</option>` : ''}
           ${selection.providers.map((provider) => `<optgroup label="${escapeHtml(provider.label)}">${provider.models.map((option) =>
             `<option value="${escapeHtml(JSON.stringify([provider.provider_id, option.model_id]))}" ${provider.provider_id === state.providerId && option.model_id === state.modelId ? 'selected' : ''}>${escapeHtml(option.label)}</option>`
@@ -77,13 +84,13 @@ export function computerUseSettingsHtml(settings: PlatformSettings, state: Compu
         </select>
       </label>
       <label class="settings-platform-field settings-platform-field-wide"><span>Reasoning effort</span>
-        <select id="settings-computer-use-effort" ${disabled || !model || (state.executionMode === 'direct' && validEffort) ? 'disabled' : ''}>
+        <select id="settings-computer-use-effort" ${disabled || !model ? 'disabled' : ''}>
           ${!validEffort ? `<option selected disabled value="${escapeHtml(state.effort)}">Unavailable: ${escapeHtml(state.effort)}</option>` : ''}
           ${efforts.length ? efforts.map((option) => `<option value="${escapeHtml(option.effort)}" ${option.effort === state.effort ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('') : '<option value="">Default</option>'}
         </select>
       </label>
-      <label class="settings-platform-field settings-platform-field-wide"><span>Recovery model</span>
-        <select id="settings-computer-use-fallback" ${disabled || state.executionMode === 'direct' ? 'disabled' : ''}>
+      ${state.executionMode === 'delegated' ? `<label class="settings-platform-field settings-platform-field-wide"><span>Recovery model</span>
+        <select id="settings-computer-use-fallback" ${disabled ? 'disabled' : ''}>
           <option value="" ${!state.fallbackModelId ? 'selected' : ''}>Return to chat</option>
           ${state.fallbackModelId && !selection.providers.flatMap(provider => provider.models).some(option => option.model_id === state.fallbackModelId)
             ? `<option selected disabled value="${escapeHtml(state.fallbackModelId)}">Unavailable: ${escapeHtml(state.fallbackModelId)}</option>` : ''}
@@ -92,8 +99,11 @@ export function computerUseSettingsHtml(settings: PlatformSettings, state: Compu
             `<option value="${escapeHtml(option.model_id)}" ${option.model_id === state.fallbackModelId ? 'selected' : ''}>${escapeHtml(option.label)} · Mid</option>`).join('')}
         </select>
       </label>
+      ` : ''}
+      ` : '<p class="settings-card-copy">The selected chat model controls the interface directly.</p>'}
       ${!selection.available ? '<p class="settings-inline-error" role="alert">The saved model is unavailable. Choose an available model to continue PC use.</p>' : ''}
       ${state.error ? `<p class="settings-inline-error" role="alert">${escapeHtml(state.error)}</p>` : ''}
+      <button type="button" id="settings-computer-use-discard" class="settings-secondary" ${changed && !disabled ? '' : 'disabled'}>Discard edits</button>
       <button type="button" id="settings-computer-use-save" ${disabled || !model || !validEffort || !changed ? 'disabled' : ''}>
         <span class="material-symbols-rounded" aria-hidden="true">${state.saving ? 'sync' : 'save'}</span>
         ${state.saving ? 'Saving' : 'Save decision model'}
@@ -136,6 +146,7 @@ export function createComputerUseController(context: ControllerContext) {
       if (!current() || selection.workspace_id !== workspaceId) return;
       context.setSelection(selection);
       syncComputerUseDraft(state, getSettings(), true);
+      clearSettingsDrafts('[aria-labelledby="settings-computer-use-title"]');
       context.notify('PC use decision model updated.');
     } catch (error) {
       if (current()) {
@@ -149,17 +160,18 @@ export function createComputerUseController(context: ControllerContext) {
     }
   }
   function bind() {
-    document.getElementById('settings-computer-use-mode')?.addEventListener('change', (event) => {
+    bindControl(document.getElementById('settings-computer-use-discard'), 'click', () => { syncComputerUseDraft(state, getSettings(), true); clearSettingsDrafts('[aria-labelledby="settings-computer-use-title"]'); render(); });
+    bindControl(document.getElementById('settings-computer-use-mode'), 'change', (event) => {
       state.executionMode = (event.currentTarget as HTMLSelectElement).value as 'direct' | 'delegated';
       if (state.executionMode === 'direct') { state.fallbackModelId = ''; state.fallbackEffort = ''; }
       state.error = ''; render();
     });
-    document.getElementById('settings-computer-use-fallback')?.addEventListener('change', (event) => {
+    bindControl(document.getElementById('settings-computer-use-fallback'), 'change', (event) => {
       state.fallbackModelId = (event.currentTarget as HTMLSelectElement).value;
       state.fallbackEffort = state.fallbackModelId ? 'medium' : '';
       state.error = ''; render();
     });
-    document.getElementById('settings-computer-use-model')?.addEventListener('change', (event) => {
+    bindControl(document.getElementById('settings-computer-use-model'), 'change', (event) => {
       const [providerId, modelId] = JSON.parse((event.currentTarget as HTMLSelectElement).value) as [string, string];
       state.providerId = providerId;
       state.modelId = modelId;
@@ -170,12 +182,12 @@ export function createComputerUseController(context: ControllerContext) {
       state.error = '';
       render();
     });
-    document.getElementById('settings-computer-use-effort')?.addEventListener('change', (event) => {
+    bindControl(document.getElementById('settings-computer-use-effort'), 'change', (event) => {
       state.effort = (event.currentTarget as HTMLSelectElement).value;
       state.error = '';
       render();
     });
-    document.getElementById('settings-computer-use-save')?.addEventListener('click', () => { void save(); });
+    bindControl(document.getElementById('settings-computer-use-save'), 'click', () => { void save(); });
   }
   return { bind, save };
 }

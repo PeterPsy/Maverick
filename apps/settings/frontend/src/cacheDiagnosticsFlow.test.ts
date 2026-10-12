@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PwaCacheDashboard, PwaCacheMetricsSnapshot } from '@maverick/pwa-cache';
 import { bindCacheDiagnosticsEvents } from './bindEvents';
 import { createCacheDiagnosticsController } from './cacheDiagnosticsController';
+import { confirmSettingsAction } from './settingsDialogs';
 import { cacheDiagnosticsPageHtml } from './cacheDiagnosticsPage';
 import type { SettingsNotice } from './notice';
 
@@ -11,6 +12,8 @@ const parentProtocol = vi.hoisted(() => ({
   clear: vi.fn(),
   diagnostics: vi.fn(),
 }));
+
+vi.mock('./settingsDialogs', () => ({ confirmSettingsAction: vi.fn() }));
 
 vi.mock('@maverick/pwa-cache', () => ({
   clearParentPwaCache: parentProtocol.clear,
@@ -22,6 +25,7 @@ describe('Settings cache diagnostics flow', () => {
     parentProtocol.clear.mockReset();
     parentProtocol.diagnostics.mockReset();
     document.body.innerHTML = '';
+    vi.mocked(confirmSettingsAction).mockReset().mockResolvedValue(true);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -51,14 +55,13 @@ describe('Settings cache diagnostics flow', () => {
     await vi.waitFor(() => expect(parentProtocol.diagnostics).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(document.body.textContent).toContain('7'));
 
+    vi.mocked(confirmSettingsAction).mockResolvedValueOnce(false);
     document.querySelector<HTMLButtonElement>('#clear-pwa-cache')?.click();
+    await vi.waitFor(() => expect(confirmSettingsAction).toHaveBeenCalledOnce());
     expect(parentProtocol.clear).not.toHaveBeenCalled();
-    expect(document.querySelector('#clear-pwa-cache')?.textContent).toContain('Confirm clear cache');
-
     document.querySelector<HTMLButtonElement>('#clear-pwa-cache')?.click();
     await vi.waitFor(() => expect(parentProtocol.clear).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(controller.viewState().isClearing).toBe(false));
-    expect(controller.viewState().confirmClear).toBe(false);
     expect(notices.at(-1)).toEqual({ tone: 'success', message: '7 cached entries removed.' });
   });
 
@@ -78,10 +81,9 @@ describe('Settings cache diagnostics flow', () => {
 
     await controller.ensureLoaded();
     document.querySelector<HTMLButtonElement>('#clear-pwa-cache')?.click();
-    document.querySelector<HTMLButtonElement>('#clear-pwa-cache')?.click();
+    await vi.waitFor(() => expect(parentProtocol.clear).toHaveBeenCalledOnce());
 
     await vi.waitFor(() => expect(controller.viewState().isClearing).toBe(false));
-    expect(controller.viewState().confirmClear).toBe(true);
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('still pending');
     expect(notices.at(-1)?.tone).toBe('error');
   });

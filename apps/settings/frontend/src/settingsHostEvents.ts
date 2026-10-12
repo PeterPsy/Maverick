@@ -1,4 +1,5 @@
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { applySettingsTheme } from './settingsTheme';
 
 let hostVisible = true;
 
@@ -10,7 +11,8 @@ export function bindSettingsHostEvents(context: {
 }) {
   window.addEventListener('message', (event) => {
     if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
-    const payload = event.data as { app_id?: string; params?: Record<string, unknown>; type?: string; visible?: boolean };
+    const payload = event.data as { app_id?: string; params?: Record<string, unknown>; type?: string; visible?: boolean; theme?: unknown };
+    if (payload.type === 'maverick.shell.theme-changed' || (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'settings'))) applySettingsTheme(payload.theme);
     if (payload.type === 'maverick.app.visibility-changed' && payload.app_id === 'settings') {
       hostVisible = payload.visible === true;
       context.visibilityChanged(settingsHostVisible());

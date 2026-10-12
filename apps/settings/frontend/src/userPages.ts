@@ -3,32 +3,31 @@ import { escapeAttr, escapeHtml } from './html';
 import { bouncyToggleHtml } from './bouncyToggle';
 
 export function usersPageHtml({
-  pendingDeleteUserId,
   selectedUser,
   users,
 }: {
-  pendingDeleteUserId: string;
   selectedUser: User | undefined;
   users: User[];
 }) {
-  return `<form class="settings-card settings-create" id="create-user">
+  return `<details class="settings-card settings-user-create"><summary>Create a user</summary><form class="settings-create" id="create-user">
       <div>
         <p class="settings-kicker">New user</p>
         <h2>Create access</h2>
       </div>
-      <input name="username" placeholder="username" required />
-      <input name="password" type="password" placeholder="temporary password" required />
-      <input name="display_name" placeholder="display name" />
-      <input name="email" type="email" placeholder="email" />
-      <select name="platform_role">
+      <label>Username<input name="username" required autocomplete="username" /></label>
+      <label>Temporary password<input name="password" type="password" minlength="8" required autocomplete="new-password" /></label>
+      <label>Display name<input name="display_name"  /></label>
+      <label>Email<input name="email" type="email" /></label>
+      <label>Platform role<select name="platform_role">
         <option value="member">Member</option>
         <option value="admin">Admin</option>
-      </select>
+      </select></label>
       <button type="submit">
         <span class="material-symbols-rounded" aria-hidden="true">person_add</span>
         Create user
       </button>
-    </form>
+      <button type="button" data-user-discard class="settings-secondary">Discard edits</button><p data-action-status class="settings-action-status" role="status"></p>
+    </form></details>
     ${userPickerHtml(users, selectedUser)}
     ${
       selectedUser
@@ -58,6 +57,7 @@ export function usersPageHtml({
               <span class="material-symbols-rounded" aria-hidden="true">save</span>
               Save user
             </button>
+            <button type="button" data-user-discard class="settings-secondary">Discard edits</button><p data-action-status class="settings-action-status" role="status"></p>
           </form>
           <form class="settings-card settings-password" id="reset-password">
             <div class="settings-heading">
@@ -78,8 +78,9 @@ export function usersPageHtml({
             </button>
             <button type="button" class="settings-danger" id="delete-user">
               <span class="material-symbols-rounded" aria-hidden="true">person_remove</span>
-              ${pendingDeleteUserId === selectedUser.user_id ? 'Confirm delete' : 'Delete user'}
+              Delete user
             </button>
+            <button type="button" data-user-discard class="settings-secondary">Discard edits</button><p data-action-status class="settings-action-status" role="status"></p>
           </form>
         </div>`
         : '<section class="settings-card"><h2>No users</h2></section>'
@@ -90,15 +91,17 @@ export function workspaceAccessPageHtml({
   selectedUser,
   users,
   workspaces,
+  showPicker = true,
 }: {
   selectedUser: User | undefined;
   users: User[];
   workspaces: Workspace[];
+  showPicker?: boolean;
 }) {
-  return `${userPickerHtml(users, selectedUser)}
+  return `${showPicker ? userPickerHtml(users, selectedUser) : ''}
     ${
       selectedUser
-        ? `<section class="settings-card">
+        ? `<section class="settings-card" id="workspace-assignments">
           <div class="settings-heading">
             <div>
               <p class="settings-kicker">Workspace</p>
@@ -110,6 +113,7 @@ export function workspaceAccessPageHtml({
             </button>
           </div>
           <div class="settings-memberships">${membershipHtml(selectedUser, workspaces)}</div>
+          <button type="button" data-user-discard class="settings-secondary">Discard edits</button><p data-action-status class="settings-action-status" role="status"></p>
         </section>`
         : '<section class="settings-card"><h2>No users</h2></section>'
     }`;
@@ -147,13 +151,13 @@ function membershipHtml(user: User, workspaces: Workspace[]) {
     .map((workspace) => {
       const membership = user.memberships.find((item) => item.workspace_id === workspace.workspace_id);
       return `<label class="settings-membership">
-        <input type="checkbox" data-workspace-enabled="${escapeAttr(workspace.workspace_id)}" ${membership ? 'checked' : ''} />
+        <input type="checkbox" aria-label="Access to ${escapeAttr(workspace.name)}" data-workspace-enabled="${escapeAttr(workspace.workspace_id)}" ${membership ? 'checked' : ''} />
         <span class="settings-membership-icon material-symbols-rounded" aria-hidden="true">workspaces</span>
         <span>
           <strong>${escapeHtml(workspace.name)}</strong>
           <small>${escapeHtml(workspace.workspace_id)}</small>
         </span>
-        <select data-workspace-role="${escapeAttr(workspace.workspace_id)}">
+        <select aria-label="Role in ${escapeAttr(workspace.name)}" data-workspace-role="${escapeAttr(workspace.workspace_id)}">
           <option value="member" ${membership?.role !== 'admin' ? 'selected' : ''}>Member</option>
           <option value="admin" ${membership?.role === 'admin' ? 'selected' : ''}>Workspace admin</option>
         </select>

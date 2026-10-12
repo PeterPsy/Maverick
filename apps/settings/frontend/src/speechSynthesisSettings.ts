@@ -1,3 +1,5 @@
+import { clearSettingsDrafts } from './settingsDom';
+import { bindControl } from './controlBindings';
 import { getAppDependencies, requestJson } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
 
@@ -13,6 +15,8 @@ export type SpeechSynthesisState = {
   engines: SynthesisEngine[];
   engine: string;
   language: string;
+  savedEngine: string;
+  savedLanguage: string;
   loading: boolean;
   saving: boolean;
   loaded: boolean;
@@ -20,7 +24,7 @@ export type SpeechSynthesisState = {
 };
 
 export function createSpeechSynthesisState(): SpeechSynthesisState {
-  return { workspaceId: '', providerAppId: '', engines: [], engine: '', language: 'auto', loading: false, saving: false, loaded: false, error: '' };
+  return { workspaceId: '', providerAppId: '', engines: [], engine: '', language: 'auto', savedEngine: '', savedLanguage: 'auto', loading: false, saving: false, loaded: false, error: '' };
 }
 
 const optionalSecrets = {
@@ -72,10 +76,12 @@ export function createSpeechSynthesisController(context: {
     }
   }
 
-  function applyHealth(health: SynthesisHealth) {
+  function applyHealth(health: SynthesisHealth, replaceDraft = false) {
     state.engines = health.synthesis;
-    state.engine = health.settings.synthesis_engine;
-    state.language = health.settings.synthesis_language;
+    if (!state.loaded || replaceDraft || state.engine === state.savedEngine) state.engine = health.settings.synthesis_engine;
+    if (!state.loaded || replaceDraft || state.language === state.savedLanguage) state.language = health.settings.synthesis_language;
+    state.savedEngine = health.settings.synthesis_engine;
+    state.savedLanguage = health.settings.synthesis_language;
   }
 
   async function save() {
@@ -91,7 +97,8 @@ export function createSpeechSynthesisController(context: {
           _app_secret_request: optionalSecrets })
       });
       if (currentRevision !== revision) return;
-      applyHealth(result.engines);
+      applyHealth(result.engines, true);
+      clearSettingsDrafts('.settings-tts-group');
       context.notify('Text-to-speech settings updated.');
     } catch (error) {
       if (currentRevision === revision) state.error = error instanceof Error ? error.message : 'Unable to save text-to-speech settings.';
@@ -101,16 +108,19 @@ export function createSpeechSynthesisController(context: {
   }
 
   function bind() {
-    document.getElementById('settings-tts-engine')?.addEventListener('change', (event) => {
+    bindControl(document.getElementById('settings-tts-discard'), 'click', () => { state.engine = state.savedEngine; state.language = state.savedLanguage; clearSettingsDrafts('.settings-tts-group'); context.render(); });
+    bindControl(document.getElementById('settings-tts-engine'), 'change', (event) => {
       state.engine = (event.currentTarget as HTMLSelectElement).value;
       state.error = '';
       context.render();
     });
-    document.getElementById('settings-tts-language')?.addEventListener('input', (event) => {
+    bindControl(document.getElementById('settings-tts-language'), 'input', (event) => {
       state.language = (event.currentTarget as HTMLInputElement).value;
+      const discard = document.getElementById('settings-tts-discard') as HTMLButtonElement | null;
+      if (discard) discard.disabled = state.engine === state.savedEngine && state.language === state.savedLanguage;
     });
-    document.getElementById('settings-tts-save')?.addEventListener('click', () => { void save(); });
-    document.getElementById('settings-tts-retry')?.addEventListener('click', () => { void load(state.workspaceId, true); });
+    bindControl(document.getElementById('settings-tts-save'), 'click', () => { void save(); });
+    bindControl(document.getElementById('settings-tts-retry'), 'click', () => { void load(state.workspaceId, true); });
   }
 
   return { load, save, reset, bind };
@@ -137,6 +147,7 @@ export function speechSynthesisSettingsHtml(state: SpeechSynthesisState): string
       </label>
     </div>
     ${selected && !selected.available ? `<p class="settings-platform-error">${escapeHtml(selected.detail || 'The selected voice engine is unavailable.')}</p>` : ''}
+    <button type="button" class="settings-secondary" id="settings-tts-discard" ${disabled || (state.engine === state.savedEngine && state.language === state.savedLanguage) ? 'disabled' : ''}>Discard edits</button>
     <button type="button" class="settings-secondary" id="settings-tts-save" ${disabled || (state.engine !== 'auto' && !selected?.available) ? 'disabled' : ''}>${state.saving ? 'Saving…' : 'Save voice settings'}</button>` : ''}
     ${state.error ? `<p class="settings-platform-error" role="alert">${escapeHtml(state.error)}</p><button type="button" class="settings-secondary" id="settings-tts-retry" ${disabled ? 'disabled' : ''}>Retry</button>` : ''}
   </section>`;

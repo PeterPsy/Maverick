@@ -1,3 +1,4 @@
+import { applySettingsTheme } from '../../settingsTheme';
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import {
   DEFAULT_SETTINGS_PAGE_ID,
@@ -12,6 +13,7 @@ import './styles.css';
 const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';
 
 let query = '';
+let workspaceId = '';
 let selectedPageId: SettingsPageId = initialPageId();
 
 function initialPageId(): SettingsPageId {
@@ -21,9 +23,9 @@ function initialPageId(): SettingsPageId {
 function filteredPages() {
   const needle = query.trim().toLowerCase();
   if (!needle) {
-    return SETTINGS_PAGES;
+    return SETTINGS_PAGES.filter(page => page.id !== 'workspace-access');
   }
-  return SETTINGS_PAGES.filter((page) => `${page.title} ${page.summary} ${page.id}`.toLowerCase().includes(needle));
+  return SETTINGS_PAGES.filter((page) => `${page.title} ${page.summary} ${page.id} ${page.keywords}`.toLowerCase().includes(needle));
 }
 
 function isMobileLayoutViewport() {
@@ -38,7 +40,7 @@ function isMobileLayoutViewport() {
   }
 }
 
-function openPageInShell(pageId: SettingsPageId) {
+function openPageInShell(pageId: SettingsPageId, setting = '') {
   selectedPageId = pageId;
   render();
   window.parent?.postMessage(
@@ -47,7 +49,8 @@ function openPageInShell(pageId: SettingsPageId) {
       app_id: 'settings',
       params: {
         app_page: settingsAppPageFor(pageId),
-        page_id: pageId
+        page_id: pageId,
+        ...(setting ? { setting } : {})
       }
     },
     "*"
@@ -62,12 +65,20 @@ function handleShellMessage(event: MessageEvent) {
     return;
   }
   const payload = event.data as {
-    context?: { content?: { payload?: unknown } };
+    context?: { workspace_id?: string; content?: { payload?: unknown; shell_theme?: unknown } };
+    theme?: unknown;
     owner_app_id?: string;
     selection?: Record<string, unknown>;
     type?: string;
   };
+  if (payload.type === 'maverick.shell.theme-changed') { applySettingsTheme(payload.theme); return; }
   if (payload.type === 'maverick.widget.context-changed') {
+    applySettingsTheme(payload.context?.content?.shell_theme);
+    if (payload.context?.workspace_id && payload.context.workspace_id !== workspaceId) {
+      workspaceId = payload.context.workspace_id; query = '';
+      const search = document.querySelector<HTMLInputElement>('.settings-sidebar-search');
+      if (search) search.value = '';
+    }
     const pageId = settingsPageIdFromParams(activeAppParamsFromContext(payload.context?.content?.payload));
     if (pageId) {
       selectedPageId = pageId;
@@ -121,26 +132,24 @@ function render() {
     return;
   }
   const pages = filteredPages();
-  root.innerHTML = `<main class="settings-sidebar-widget ${isMobileLayoutViewport() ? 'is-shell-mobile' : ''}">
-    <div class="settings-sidebar-search-frame">
+  if (!root.querySelector('.settings-sidebar-search')) {
+    root.innerHTML = `<main class="settings-sidebar-widget"><div class="settings-sidebar-search-frame">
       <span class="material-symbols-rounded" aria-hidden="true">search</span>
-      <input
-        aria-label="Search settings pages"
-        class="settings-sidebar-search"
-        placeholder="Search pages"
-        value="${escapeAttr(query)}"
-      />
-    </div>
-    <div class="settings-sidebar-list">
-      ${pages.length ? pages.map(pageRowHtml).join('') : '<p class="settings-sidebar-empty">No pages found.</p>'}
-    </div>
-  </main>`;
+      <input aria-label="Search settings" class="settings-sidebar-search" placeholder="Search settings" /></div>
+      <nav class="settings-sidebar-list" aria-label="Settings sections"></nav></main>`;
+  }
+  root.querySelector('.settings-sidebar-widget')?.classList.toggle('is-shell-mobile', isMobileLayoutViewport());
+  const list = root.querySelector<HTMLElement>('.settings-sidebar-list');
+  if (list) list.innerHTML = pages.length ? ['AI', 'Workspace', 'System'].map(group => {
+    const grouped = pages.filter(page => page.group === group).sort((a, b) => a.id === 'models' ? -1 : b.id === 'models' ? 1 : 0);
+    return grouped.length ? `<div class="settings-sidebar-group"><h2>${group}</h2>${grouped.map(pageRowHtml).join('')}</div>` : '';
+  }).join('') : '<p class="settings-sidebar-empty">No settings found.</p>';
   bindEvents();
 }
 
 function pageRowHtml(page: SettingsPage) {
   const activeClass = page.id === selectedPageId ? 'is-active' : '';
-  return `<button class="settings-sidebar-row ${activeClass}" data-page-id="${escapeAttr(page.id)}" type="button">
+  return `<button class="settings-sidebar-row ${activeClass}" data-page-id="${escapeAttr(page.id)}" aria-current="${page.id === selectedPageId ? 'page' : 'false'}" type="button">
     <span class="material-symbols-rounded settings-sidebar-row__icon" aria-hidden="true">${escapeHtml(page.icon)}</span>
     <span class="settings-sidebar-row__copy">
       <strong>${escapeHtml(page.title)}</strong>
@@ -151,15 +160,19 @@ function pageRowHtml(page: SettingsPage) {
 
 function bindEvents() {
   const searchInput = document.querySelector<HTMLInputElement>('.settings-sidebar-search');
-  searchInput?.addEventListener('input', () => {
+  if (searchInput) searchInput.oninput = () => {
     query = searchInput.value;
     render();
-  });
+  };
   document.querySelectorAll<HTMLButtonElement>('[data-page-id]').forEach((button) => {
     button.addEventListener('click', () => {
       const pageId = settingsPageIdFromParams({ page_id: button.dataset.pageId || '' });
       if (pageId) {
-        openPageInShell(pageId);
+        const needle = query.toLowerCase();
+        const setting = pageId === 'models' && /default|model/.test(needle) ? 'default-model'
+          : pageId === 'voice' ? 'voice' : pageId === 'users' && /password/.test(needle) ? 'password'
+            : pageId === 'cache' ? 'cache' : pageId === 'computer-use' ? 'computer-use' : '';
+        openPageInShell(pageId, setting);
       }
     });
   });

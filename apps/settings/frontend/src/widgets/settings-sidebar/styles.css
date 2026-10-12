@@ -277,3 +277,7 @@ button {
   --settings-sidebar-scroll-under-bottom: 5.1rem;
   --settings-sidebar-scroll-under-top: 3.12rem;
 }
+
+.settings-sidebar-group { display: grid; gap: 4px; margin-bottom: 18px; }
+.settings-sidebar-group h2 { margin: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--maverick-text-soft); text-transform: uppercase; }
+.settings-sidebar-row:focus-visible { outline: 2px solid var(--maverick-text); outline-offset: -2px; }

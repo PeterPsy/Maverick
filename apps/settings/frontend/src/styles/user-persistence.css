@@ -1,0 +1,203 @@
+.settings-password {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.settings-password-icon {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--maverick-accent);
+}
+
+.settings-password-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.settings-profile-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 18px;
+}
+
+.settings-persistence {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.settings-persistence .settings-heading {
+  grid-column: 1 / -1;
+}
+
+.settings-migration-result {
+  display: flex;
+  align-items: center;
+  gap: 0.72rem;
+  grid-column: 1 / -1;
+  min-height: 3.1rem;
+  border-color: rgba(255, 255, 255, 0.24);
+  padding: 12px;
+}
+
+.settings-migration-plan {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.92rem;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 12px;
+}
+
+.settings-migration-plan > .material-symbols-rounded {
+  color: var(--maverick-accent);
+}
+
+.settings-migration-collections {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.settings-migration-collections span {
+  display: grid;
+  gap: 0.18rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.68rem;
+  padding: 0.5rem 0.58rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.settings-migration-collections small {
+  color: var(--maverick-text-muted);
+}
+
+.settings-migration-delete-source {
+  margin-top: 0.15rem;
+}
+
+.settings-migration-target {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-migration-target .settings-platform-field:first-child {
+  grid-column: 1 / -1;
+}
+
+.settings-migration-progress {
+  display: grid;
+  gap: 10px;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 12px;
+}
+
+.settings-migration-progress-heading {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-migration-progress-heading > .material-symbols-rounded {
+  color: var(--maverick-text);
+}
+
+.settings-migration-progress-heading em {
+  color: var(--maverick-text);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.settings-migration-progress.is-complete {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-migration-progress.is-complete .settings-migration-progress-heading > .material-symbols-rounded,
+.settings-migration-progress.is-complete .settings-migration-progress-heading em {
+  color: var(--maverick-accent);
+}
+
+.settings-migration-progress.is-failed {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-migration-progress.is-failed .settings-migration-progress-heading > .material-symbols-rounded,
+.settings-migration-progress.is-failed .settings-migration-progress-heading em {
+  color: var(--maverick-accent);
+}
+
+.settings-adapter-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+button.settings-adapter-card {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  justify-content: stretch;
+  gap: 12px;
+  width: 100%;
+  min-height: 5.2rem;
+  border-radius: var(--maverick-card-radius);
+  background: var(--maverick-glass-surface);
+  color: var(--maverick-text);
+  padding: 14px;
+  text-align: left;
+  font-size: 0.82rem;
+  font-weight: 400;
+}
+
+.settings-adapter-card:hover:not(:disabled) {
+  border-color: var(--maverick-border-strong);
+  background: rgba(255, 255, 255, 0.052);
+}
+
+.settings-adapter-card.is-active {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--maverick-accent);
+  cursor: default;
+}
+
+.settings-adapter-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.settings-adapter-card strong {
+  color: inherit;
+  font-size: 1rem;
+}
+
+.settings-adapter-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-adapter-card em {
+  align-self: start;
+  border: 1px solid var(--maverick-border);
+  border-radius: 999px;
+  color: var(--maverick-text-muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 400;
+  padding: 0.26rem 0.55rem;
+  text-transform: uppercase;
+}
+
+.settings-adapter-card.is-active em {
+  border-color: rgba(255, 255, 255, 0.26);
+  color: var(--maverick-accent);
+}

@@ -1,6 +1,8 @@
+import { runSettingsAction } from './settingsActions';
+import { bindControl } from './controlBindings';
 import type { AppDependenciesPayload, User, WorkspaceApp } from './adminApi';
 import type { createPersistenceController, MigrationTargetDraft } from './persistenceController';
-import { bindSettingsPanelEvents } from './settingsPanel';
+import { bindSettingsPanelEvents } from './settingsPanelEvents';
 import { bindBouncyToggles } from './bouncyToggle';
 import type { createCacheDiagnosticsController } from './cacheDiagnosticsController';
 
@@ -41,28 +43,31 @@ export function bindSettingsEvents(context: {
   appDependencies: () => AppDependenciesPayload[];
 }) {
   bindBouncyToggles();
-  document.getElementById('dismiss-notice')?.addEventListener('click', context.dismissNotice);
-  document.getElementById('create-user')?.addEventListener('submit', (event) => {
+  bindControl(document.getElementById('dismiss-notice'), 'click', context.dismissNotice);
+  bindControl(document.getElementById('create-user'), 'submit', (event) => {
     event.preventDefault();
-    context.createUser(event.currentTarget as HTMLFormElement).catch(context.showError);
+    const form = event.currentTarget as HTMLFormElement;
+    void runSettingsAction(form, () => context.createUser(form), context.showError);
   });
   const user = context.selectedUser();
-  document.getElementById('selected-user')?.addEventListener('change', (event) => {
+  bindControl(document.getElementById('selected-user'), 'change', (event) => {
     context.selectUser((event.currentTarget as HTMLSelectElement).value);
   });
-  document.getElementById('edit-user')?.addEventListener('submit', (event) => {
+  bindControl(document.getElementById('edit-user'), 'submit', (event) => {
     event.preventDefault();
-    if (user) context.updateSelectedUser(event.currentTarget as HTMLFormElement, user).catch(context.showError);
+    const form = event.currentTarget as HTMLFormElement;
+    if (user) void runSettingsAction(form, () => context.updateSelectedUser(form, user), context.showError);
   });
-  document.getElementById('reset-password')?.addEventListener('submit', (event) => {
+  bindControl(document.getElementById('reset-password'), 'submit', (event) => {
     event.preventDefault();
-    if (user) context.resetSelectedUserPassword(event.currentTarget as HTMLFormElement, user).catch(context.showError);
+    const form = event.currentTarget as HTMLFormElement;
+    if (user) void runSettingsAction(form, () => context.resetSelectedUserPassword(form, user), context.showError);
   });
-  document.getElementById('delete-user')?.addEventListener('click', () => {
+  bindControl(document.getElementById('delete-user'), 'click', () => {
     if (user) context.deleteSelectedUser(user).catch(context.showError);
   });
-  document.getElementById('save-memberships')?.addEventListener('click', () => {
-    if (user) context.updateMemberships(user).catch(context.showError);
+  bindControl(document.getElementById('save-memberships'), 'click', () => {
+    if (user) void runSettingsAction(document.getElementById('workspace-assignments'), () => context.updateMemberships(user), context.showError);
   });
   bindWorkspaceAppEvents(context);
   bindAppLinkEvents(context);
@@ -105,15 +110,13 @@ export function bindCacheDiagnosticsEvents(context: {
   cacheDiagnosticsController: CacheDiagnosticsController;
   showError: (error: unknown) => void;
 }) {
-  document.getElementById('refresh-pwa-cache')?.addEventListener('click', () => {
+  bindControl(document.getElementById('refresh-pwa-cache'), 'click', () => {
     context.cacheDiagnosticsController.ensureLoaded(true).catch(context.showError);
   });
-  document.getElementById('clear-pwa-cache')?.addEventListener('click', () => {
+  bindControl(document.getElementById('clear-pwa-cache'), 'click', () => {
     context.cacheDiagnosticsController.clear().catch(context.showError);
   });
-  document.getElementById('cancel-clear-pwa-cache')?.addEventListener('click', () => {
-    context.cacheDiagnosticsController.cancelClear();
-  });
+
 }
 
 function bindAppLinkEvents(context: {
@@ -122,7 +125,7 @@ function bindAppLinkEvents(context: {
   showError: (error: unknown) => void;
 }) {
   document.querySelectorAll<HTMLInputElement>('[data-dependency-choice]').forEach((input) => {
-    input.addEventListener('change', () => {
+    bindControl(input, 'change', () => {
       const choice = parseDependencyChoice(input.dataset.dependencyChoice || '');
       if (!choice) {
         return;
@@ -148,7 +151,7 @@ function bindAppLinkEvents(context: {
     });
   });
   document.querySelectorAll<HTMLButtonElement>('[data-dependency-save-default]').forEach((button) => {
-    button.addEventListener('click', () => {
+    bindControl(button, 'click', () => {
       const choice = parseDependencyChoice(button.dataset.dependencySaveDefault || '');
       if (choice) {
         context.saveDependencySelection(choice.consumerAppId, choice.alias, [choice.providerAppId]).catch(context.showError);
@@ -174,19 +177,19 @@ function bindWorkspaceAppEvents(context: {
   workspaceApps: () => WorkspaceApp[];
 }) {
   document.querySelectorAll<HTMLInputElement>('[data-app-toggle]').forEach((input) => {
-    input.addEventListener('change', () => {
+    bindControl(input, 'change', () => {
       const app = context.workspaceApps().find((item) => `${item.workspace_id}:${item.app_id}` === input.dataset.appToggle);
       if (app) context.setWorkspaceAppStatus(app, input.checked).catch(context.showError);
     });
   });
   document.querySelectorAll<HTMLButtonElement>('[data-app-install]').forEach((button) => {
-    button.addEventListener('click', () => {
+    bindControl(button, 'click', () => {
       const app = context.workspaceApps().find((item) => `${item.workspace_id}:${item.app_id}` === button.dataset.appInstall);
       if (app) context.installWorkspaceApp(app).catch(context.showError);
     });
   });
   document.querySelectorAll<HTMLButtonElement>('[data-app-uninstall]').forEach((button) => {
-    button.addEventListener('click', () => {
+    bindControl(button, 'click', () => {
       const app = context.workspaceApps().find((item) => `${item.workspace_id}:${item.app_id}` === button.dataset.appUninstall);
       if (app) context.uninstallWorkspaceApp(app).catch(context.showError);
     });
@@ -198,20 +201,20 @@ function bindPersistenceEvents(context: {
   showError: (error: unknown) => void;
 }) {
   document.querySelectorAll<HTMLButtonElement>('[data-adapter-target]').forEach((button) => {
-    button.addEventListener('click', () => {
+    bindControl(button, 'click', () => {
       const target = button.dataset.adapterTarget;
       if (target === 'json' || target === 'mongo') {
         context.persistenceController.prepare(target).catch(context.showError);
       }
     });
   });
-  document.getElementById('close-migration-modal')?.addEventListener('click', () => {
+  bindControl(document.getElementById('close-migration-modal'), 'click', () => {
     context.persistenceController.cancel();
   });
-  document.getElementById('cancel-migration')?.addEventListener('click', () => {
+  bindControl(document.getElementById('cancel-migration'), 'click', () => {
     context.persistenceController.cancel();
   });
-  document.getElementById('validate-migration')?.addEventListener('click', () => {
+  bindControl(document.getElementById('validate-migration'), 'click', () => {
     context.persistenceController.validateDraft().catch(context.showError);
   });
   document.querySelectorAll<HTMLInputElement>('[data-migration-field]').forEach((input) => {
@@ -225,13 +228,13 @@ function bindPersistenceEvents(context: {
         }
       }
     };
-    input.addEventListener('input', () => updateMigrationDraft(false));
-    input.addEventListener('change', () => updateMigrationDraft(true));
+    bindControl(input, 'input', () => updateMigrationDraft(false));
+    bindControl(input, 'change', () => updateMigrationDraft(true));
   });
-  document.getElementById('settings-delete-source')?.addEventListener('change', (event) => {
+  bindControl(document.getElementById('settings-delete-source'), 'change', (event) => {
     context.persistenceController.setDeleteSource((event.currentTarget as HTMLInputElement).checked);
   });
-  document.getElementById('confirm-migration')?.addEventListener('click', () => {
+  bindControl(document.getElementById('confirm-migration'), 'click', () => {
     context.persistenceController.apply().catch(context.showError);
   });
 }

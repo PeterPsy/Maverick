@@ -2,8 +2,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformSettings } from './adminApi';
-import type { SettingsPanelActions } from './settingsPanel';
-import { bindSettingsPanelEvents, createSettingsPanelState, settingsPanelHtml } from './settingsPanel';
+import type { SettingsPanelActions } from './settingsPanelEvents';
+import { bindSettingsPanelEvents } from './settingsPanelEvents';
+import { createSettingsPanelState } from './settingsDrafts';
+import { settingsPanelHtml } from './settingsPanel';
 import { createAgenticBindingController } from './agenticBindingController';
 
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = ''; });
@@ -62,7 +64,7 @@ describe('native connection activation in Settings', () => {
       method: 'POST', credentials: 'same-origin',
       body: JSON.stringify({ provider_id: 'antigravity-cli', confirmation: 'native-runtime-reviewed' })
     }));
-    expect(fetch).toHaveBeenNthCalledWith(2, '/api/settings/platform', expect.any(Object));
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/settings/platform?section=models', expect.any(Object));
     expect(document.querySelector('[data-native-provider-activate]')).toBeNull();
     expect(document.body.textContent).not.toContain('Native Agent Disabled');
   });

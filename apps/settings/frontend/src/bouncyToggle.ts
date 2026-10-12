@@ -1,3 +1,4 @@
+import { bindControl } from './controlBindings';
 export function bouncyToggleHtml(inputHtml: string, label: string, className = ''): string {
   return `<label class="settings-toggle settings-bouncy-toggle ${className}">
     ${inputHtml}
@@ -12,8 +13,8 @@ export function bouncyToggleHtml(inputHtml: string, label: string, className = '
 export function bindBouncyToggles(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>('.settings-bouncy-toggle').forEach((toggle) => {
     const setPressed = (pressed: boolean) => toggle.classList.toggle('is-pressed', pressed);
-    toggle.addEventListener('pointerdown', () => setPressed(true));
-    toggle.addEventListener('pointerup', () => setPressed(false));
-    toggle.addEventListener('pointerleave', () => setPressed(false));
+    bindControl(toggle, 'pointerdown', () => setPressed(true));
+    bindControl(toggle, 'pointerup', () => setPressed(false));
+    bindControl(toggle, 'pointerleave', () => setPressed(false));
   });
 }

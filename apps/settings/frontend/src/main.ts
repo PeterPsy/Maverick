@@ -2,25 +2,26 @@ import './styles.css';
 import './styles/learning.css';
 import './styles/learning-tickets.css';
 import './styles/speech-settings.css';
+import './styles/navigation.css';
 import { createSpeechSynthesisController } from './speechSynthesisSettings';
 import { createComputerUseController } from './computerUseSettings';
-import { loadSettingsBootstrap, requestPersistenceStatusQuiet } from './settingsBootstrap';
+import { requestPersistenceStatusQuiet } from './persistenceStatus';
+import { createSettingsResources, resourcesForPage } from './settingsResources';
+import { mergeSettingsSnapshot } from './settingsSnapshot';
+import { patchSettingsDom, rememberSettingsDrafts, clearSettingsDrafts, clearSettingsDomCache } from './settingsDom';
+import { beginSettingsBindings, bindControl } from './controlBindings';
+import { confirmSettingsAction, syncSettingsModalFocus } from './settingsDialogs';
+import { createSessionsView, scopedSessions, sessionsPageHtml } from './sessionsPage';
+import { usagePageHtml } from './usagePage';
 import { createLearningController } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { bindSettingsHostEvents, settingsHostVisible } from './settingsHostEvents';
 import { createAdminUser, deleteAdminUser, installWorkspaceApp as installWorkspaceAppBinding, resetAdminUserPassword, setWorkspaceAppEnabled, uninstallWorkspaceApp as uninstallWorkspaceAppBinding, updateAdminUser, updateAdminUserMemberships } from './adminActions';
-import { clearRuntimeSessions, getPlatformSettings, logout, requestJson } from './adminApi';
+import { clearRuntimeSessions, logout, requestJson } from './adminApi';
 import type { AppDependenciesPayload, PlatformSettings, PersistenceStatus, RuntimeCleanupPayload, User, Workspace, WorkspaceApp } from './adminApi';
-import { mergeRuntimeSessionInventory, requestRuntimeSessionInventoryQuiet } from './settingsRuntimeInventory';
-import {
-  createSettingsPanelState,
-  settingsPanelHtml,
-  syncSettingsPanelDraft,
-  updateHostedDraftModel,
-  updateHostedProviderRoutingDraft,
-  updateSpeechAudioModel,
-  updateSpeechConversationModel
-} from './settingsPanel';
+import { mergeRuntimeSessionInventory } from './settingsRuntimeInventory';
+import { createSettingsPanelState, syncSettingsPanelDraft, updateHostedDraftModel, updateHostedProviderRoutingDraft, updateSpeechAudioModel, updateSpeechConversationModel } from './settingsDrafts';
+import { settingsPanelHtml } from './settingsPanel';
 import {
   DEFAULT_SETTINGS_PAGE_ID,
   settingsPageById,
@@ -36,13 +37,16 @@ import { escapeHtml } from './html';
 import { createPersistenceController } from './persistenceController';
 import { persistenceMigrationModalHtml } from './persistencePage';
 import { saveHostedProviderSettings, saveSpeechProviderSettings } from './providerSettingsActions';
-import { mountUsageVisualizations, unmountUsageVisualizations } from './components/usageVisualizations';
 import { createProviderUsageController } from './providerUsageController';
 import { noticeHtml, type SettingsNotice } from './notice';
 import { createAgenticBindingController } from './agenticBindingController';
 import { createCacheDiagnosticsController } from './cacheDiagnosticsController';
 
+let usageVisualizations: typeof import('./components/usageVisualizations') | null = null;
+let usageVisualizationsRequest: Promise<unknown> | null = null;
 let users: User[] = [];
+let iconRegistry: import('./adminApi').AppRegistryItem[] = [];
+let iconWorkspaceId = '';
 let workspaces: Workspace[] = [];
 let workspaceApps: WorkspaceApp[] = [];
 let persistence: PersistenceStatus | null = null;
@@ -52,14 +56,13 @@ const initialNavigationParams = Object.fromEntries(new URLSearchParams(window.lo
 let selectedPageId: SettingsPageId = settingsPageIdFromParams(initialNavigationParams) || DEFAULT_SETTINGS_PAGE_ID;
 let selectedUserId = userIdFromNavigationParams(initialNavigationParams);
 let isLoading = true;
-let isInventoryLoading = true;
-let refreshGeneration = 0;
-let pendingDeleteUserId = '';
 let notice: SettingsNotice | null = null;
 let lastPublishedPageId = '';
 let lastPublishedUserId = '';
-let runtimeInventoryWorkspaceId = '';
-let isRuntimeInventoryLoading = false;
+const sessionsView = createSessionsView();
+let renderedPageId = '';
+let focusSetting = '';
+let draftsRemembered = false;
 
 const speechSynthesisController = createSpeechSynthesisController({
   state: settingsPanelState.speechSynthesis, render,
@@ -99,7 +102,7 @@ const providerUsageController = createProviderUsageController({
 });
 const agenticBindingController = createAgenticBindingController({
   getSettings: () => platformSettings, render, state: settingsPanelState,
-  setSettings: (settings, message) => { platformSettings = settings; notice = { tone: 'success', message }; }
+  setSettings: (settings, message) => { platformSettings = { ...platformSettings, ...settings, runtime: platformSettings?.runtime || settings.runtime, computer_use: platformSettings?.computer_use }; notice = { tone: 'success', message }; }
 });
 const cacheDiagnosticsController = createCacheDiagnosticsController({
   render,
@@ -133,32 +136,15 @@ function scalarParam(value: unknown): string { return typeof value === 'string' 
 function applyNavigationParams(params: Record<string, unknown>) {
   const pageId = settingsPageIdFromParams(params);
   const userId = userIdFromNavigationParams(params);
-  let changed = false;
-  if (pageId && pageId !== selectedPageId) {
-    selectedPageId = pageId;
-    changed = true;
-  }
+  const setting = scalarParam(params.setting);
+  focusSetting = ['default-model', 'voice', 'password', 'cache', 'computer-use'].includes(setting) ? setting : '';
+  if (pageId) selectedPageId = pageId;
   if (userId && userId !== selectedUserId) {
     selectedUserId = userId;
-    pendingDeleteUserId = '';
-    changed = true;
   }
-  if (!changed) {
-    return;
-  }
+  resources.cancelExcept(resourcesForPage(selectedPageId));
   render();
-  if (pageId === 'app-links') {
-    void ensureAppLinksLoaded();
-  }
-  if (pageId === 'platform-settings') {
-    void ensureRuntimeInventoryLoaded();
-    void providerUsageController.ensureLoaded();
-    void speechSynthesisController.load(platformSettings?.workspace.workspace_id || '');
-  }
-  if (pageId === 'learning') void learningController.load();
-  if (pageId === 'cache') {
-    void cacheDiagnosticsController.ensureLoaded();
-  }
+  void ensurePageLoaded();
 }
 
 function publishSelectedPage(page: SettingsPage) {
@@ -205,78 +191,60 @@ function publishUserDataChanged() {
   );
 }
 
-async function refresh() {
-  const generation = ++refreshGeneration;
-  isLoading = true;
-  isInventoryLoading = true;
-  render();
-  await loadSettingsBootstrap({
-    isCurrent: () => generation === refreshGeneration,
-    reportError: showError,
-    publishPlatform: (settingsPayload) => {
-      const previousWorkspaceId = platformSettings?.workspace.workspace_id || '';
-      const nextWorkspaceId = settingsPayload?.workspace.workspace_id || '';
-      platformSettings = settingsPayload;
-      if (previousWorkspaceId !== nextWorkspaceId) {
-        users = []; workspaces = []; workspaceApps = []; persistence = null;
-        appLinksController.reset();
-        learningController.reset();
-        runtimeInventoryWorkspaceId = '';
-        providerUsageController.reset();
-        speechSynthesisController.reset();
-      }
-      syncSettingsPanelDraft(settingsPanelState, platformSettings);
-      isLoading = false;
-      render();
-      if (selectedPageId === 'platform-settings') {
-        void ensureRuntimeInventoryLoaded();
-        void providerUsageController.ensureLoaded();
-        void speechSynthesisController.load(nextWorkspaceId, true);
-      }
-      if (selectedPageId === 'learning') void learningController.load();
-      if (selectedPageId === 'cache') void cacheDiagnosticsController.ensureLoaded();
-    },
-    publishInventory: (inventory) => {
-      isInventoryLoading = false;
-      users = inventory.users;
-      workspaces = inventory.workspaces;
-      workspaceApps = inventory.workspaceApps;
-      persistence = inventory.persistence;
-      if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
-        selectedUserId = users[0]?.user_id || '';
-      }
-      render();
-    },
-  });
-  if (generation !== refreshGeneration) return;
-  if (selectedPageId === 'app-links') {
-    void ensureAppLinksLoaded();
-  }
-}
-
-async function ensureAppLinksLoaded(force = false) {
-  const workspaceId = platformSettings?.workspace.workspace_id || '';
-  await appLinksController.ensureLoaded(workspaceId, workspaceApps, force);
-}
-
-async function ensureRuntimeInventoryLoaded(force = false) {
-  const workspaceId = platformSettings?.workspace.workspace_id || '';
-  if (!workspaceId || isRuntimeInventoryLoading || (!force && runtimeInventoryWorkspaceId === workspaceId)) {
-    return;
-  }
-  isRuntimeInventoryLoading = true;
-  try {
-    const inventory = await requestRuntimeSessionInventoryQuiet();
-    if (!inventory || platformSettings?.workspace.workspace_id !== workspaceId) {
-      return;
+const resources = createSettingsResources({
+  publish: (resource, raw) => {
+    if (resource === 'registry') {
+      const registry = raw as { workspace_id: string; items: import('./adminApi').AppRegistryItem[] };
+      iconRegistry = registry.items; iconWorkspaceId = registry.workspace_id || platformSettings?.workspace.workspace_id || '';
     }
-    platformSettings = mergeRuntimeSessionInventory(platformSettings, inventory);
-    runtimeInventoryWorkspaceId = workspaceId;
-    syncSettingsPanelDraft(settingsPanelState, platformSettings);
-    render();
-  } finally {
-    isRuntimeInventoryLoading = false;
+    else if (resource === 'users') {
+      users = (raw as { items: User[] }).items;
+      if (!selectedUserId || !users.some(user => user.user_id === selectedUserId)) selectedUserId = users[0]?.user_id || '';
+    } else if (resource === 'workspaces') workspaces = (raw as { items: Workspace[] }).items;
+    else if (resource === 'apps') workspaceApps = (raw as { items: WorkspaceApp[] }).items;
+    else if (resource === 'persistence') persistence = raw as PersistenceStatus;
+    else if (resource === 'sessions') {
+      if (platformSettings) platformSettings = mergeRuntimeSessionInventory(platformSettings, raw as import('./adminApi').RuntimeSessionInventoryPayload);
+      else sessionInventory = raw as import('./adminApi').RuntimeSessionInventoryPayload;
+    } else {
+      const next = raw as PlatformSettings;
+      const previousWorkspaceId = platformSettings?.workspace.workspace_id;
+      if (previousWorkspaceId && previousWorkspaceId !== next.workspace.workspace_id) {
+        resources.reset(); clearSettingsDomCache(); platformSettings = null; users = []; workspaces = []; workspaceApps = []; persistence = null;
+        sessionInventory = null; iconRegistry = []; iconWorkspaceId = ''; settingsPanelState.savedDrafts = null;
+        appLinksController.reset(); learningController.reset(); providerUsageController.reset(); speechSynthesisController.reset();
+        Object.assign(sessionsView, createSessionsView());
+        queueMicrotask(() => { render(); void ensurePageLoaded(); });
+      }
+      if (iconRegistry.length && !iconWorkspaceId) iconWorkspaceId = next.workspace.workspace_id;
+      const providersLoaded = resource === 'models' || resource === 'voice';
+      platformSettings = mergeSettingsSnapshot(platformSettings, next, resource);
+      if (sessionInventory) platformSettings = mergeRuntimeSessionInventory(platformSettings, sessionInventory);
+      if (providersLoaded || resource === 'computer-use') syncSettingsPanelDraft(settingsPanelState, platformSettings);
+    }
+  },
+  changed: () => render(),
+});
+let sessionInventory: import('./adminApi').RuntimeSessionInventoryPayload | null = null;
+
+async function ensurePageLoaded(force = false) {
+  const pageId = selectedPageId;
+  if (pageId === 'workspace-apps') void resources.ensure('registry', force);
+  await Promise.all(resourcesForPage(pageId).map(resource => resources.ensure(resource, force)));
+  if (selectedPageId !== pageId) return;
+  if (pageId === 'app-links' && resources.state('apps').loaded && resources.state('context').loaded) await ensureAppLinksLoaded(force);
+  if (pageId === 'usage' && platformSettings) {
+    void providerUsageController.ensureLoaded(force);
+    usageVisualizationsRequest ||= import('./components/usageVisualizations').then(module => { usageVisualizations = module; if (selectedPageId === 'usage') render(); }).catch(error => { usageVisualizationsRequest = null; if (selectedPageId === 'usage') showError(error); });
   }
+  if (pageId === 'voice' && platformSettings) void speechSynthesisController.load(platformSettings.workspace.workspace_id, force);
+  if (pageId === 'learning' && platformSettings) { void learningController.load(force); void resources.ensure('models'); }
+  if (pageId === 'cache') void cacheDiagnosticsController.ensureLoaded(force);
+}
+
+async function refresh() { await ensurePageLoaded(true); }
+async function ensureAppLinksLoaded(force = false) {
+  await appLinksController.ensureLoaded(platformSettings?.workspace.workspace_id || '', workspaceApps, force);
 }
 
 async function createUser(form: HTMLFormElement) {
@@ -288,22 +256,25 @@ async function createUser(form: HTMLFormElement) {
     email: String(data.get('email') || ''),
     platform_role: String(data.get('platform_role') || 'member')
   });
+  users = [...users, created];
   selectedUserId = created.user_id;
-  form.reset();
-  await refresh();
+  form.reset(); clearSettingsDrafts(form);
+  notice = { tone: 'success', message: 'User created.' }; render();
   publishUserDataChanged();
 }
 
 async function updateSelectedUser(form: HTMLFormElement, user: User) {
   const data = new FormData(form);
-  await updateAdminUser(user.user_id, {
+  const updated = await updateAdminUser(user.user_id, {
     display_name: String(data.get('display_name') || ''),
     email: String(data.get('email') || ''),
     platform_role: String(data.get('platform_role') || 'member'),
     account_type: String(data.get('account_type') || 'standard'),
     is_active: data.get('is_active') === 'on'
   });
-  await refresh();
+  users = users.map(item => item.user_id === updated.user_id ? updated : item);
+  clearSettingsDrafts(form);
+  notice = { tone: 'success', message: 'User updated.' }; render();
   publishUserDataChanged();
 }
 
@@ -315,27 +286,21 @@ async function resetSelectedUserPassword(form: HTMLFormElement, user: User) {
     throw new Error('Passwords do not match');
   }
   await resetAdminUserPassword(user.user_id, password);
-  form.reset();
+  form.reset(); clearSettingsDrafts(form);
   notice = { tone: 'success', message: 'Password updated.' };
   render();
 }
 
 async function deleteSelectedUser(user: User) {
   const label = user.display_name || user.username;
-  if (pendingDeleteUserId !== user.user_id) {
-    pendingDeleteUserId = user.user_id;
-    notice = {
-      tone: 'info',
-      message: `Press Delete user again to confirm permanent removal of ${label}.`
-    };
-    render();
-    return;
-  }
+  if (!await confirmSettingsAction({ title: `Delete ${label}?`,
+    detail: 'This permanently removes the user account and its workspace memberships. This action cannot be undone.',
+    confirmLabel: 'Delete user' })) return;
   await deleteAdminUser(user.user_id);
   selectedUserId = '';
-  pendingDeleteUserId = '';
   notice = { tone: 'success', message: `${label} deleted.` };
-  await refresh();
+  users = users.filter(item => item.user_id !== user.user_id);
+  selectedUserId = users[0]?.user_id || ''; render();
   publishUserDataChanged();
 }
 
@@ -347,27 +312,29 @@ async function updateMemberships(user: User) {
       return checkbox?.checked ? { workspace_id: workspace.workspace_id, role: role?.value || 'member' } : null;
     })
     .filter((membership): membership is { role: string; workspace_id: string } => Boolean(membership));
-  await updateAdminUserMemberships(user.user_id, memberships);
-  await refresh();
+  const updated = await updateAdminUserMemberships(user.user_id, memberships);
+  users = users.map(item => item.user_id === updated.user_id ? updated : item);
+  clearSettingsDrafts('.settings-memberships');
+  notice = { tone: 'success', message: 'Workspace access updated.' }; render();
   publishUserDataChanged();
 }
 
 async function installWorkspaceApp(app: WorkspaceApp) {
   await installWorkspaceAppBinding(app);
   appLinksController.invalidate();
-  await refresh();
+  await resources.ensure('apps', true);
 }
 
 async function setWorkspaceAppStatus(app: WorkspaceApp, enabled: boolean) {
   await setWorkspaceAppEnabled(app, enabled);
   appLinksController.invalidate();
-  await refresh();
+  await resources.ensure('apps', true);
 }
 
 async function uninstallWorkspaceApp(app: WorkspaceApp) {
   await uninstallWorkspaceAppBinding(app);
   appLinksController.invalidate();
-  await refresh();
+  await resources.ensure('apps', true);
 }
 
 async function saveDependencySelection(consumerAppId: string, alias: string, providerAppIds: string[]) {
@@ -375,28 +342,32 @@ async function saveDependencySelection(consumerAppId: string, alias: string, pro
 }
 
 async function clearRuntimeSessionsFromPanel(sessionIds?: string[]) {
-  const scopedIds = (sessionIds || []).filter(Boolean);
+  if (!platformSettings) return;
+  const workspaceId = platformSettings.workspace.workspace_id;
+  const candidates = scopedSessions(platformSettings, sessionsView);
+  const targets = sessionIds?.length ? candidates.filter(session => sessionIds.includes(session.session_id)) : candidates;
+  if (!targets.length) return;
+  const scope = sessionsView.scope === 'server' ? 'the entire server' : `workspace ${platformSettings.workspace.name}`;
+  const active = targets.filter(session => !['closed', 'completed', 'failed', 'terminated', 'stopped'].includes(session.status)).length;
+  if (!await confirmSettingsAction({ title: `Delete ${targets.length} runtime session${targets.length === 1 ? '' : 's'}?`,
+    detail: `Scope: ${scope}. ${active} sessions may have active agents. Their agents will stop and their conversations, turns and runtime files will be permanently removed.`,
+    confirmLabel: 'Delete sessions' })) return;
+  if (platformSettings.workspace.workspace_id !== workspaceId) return;
+  const scopedIds = targets.map(session => session.session_id);
   settingsPanelState.cleanupError = '';
-  if (scopedIds.length) {
-    scopedIds.forEach((sessionId) => settingsPanelState.cleaningSessionIds.add(sessionId));
-  } else {
-    settingsPanelState.clearingAllRuntime = true;
-  }
+  settingsPanelState.clearingAllRuntime = !sessionIds?.length;
+  scopedIds.forEach(id => settingsPanelState.cleaningSessionIds.add(id));
   render();
   try {
-    const payload = await clearRuntimeSessions(scopedIds.length ? scopedIds : undefined);
+    const payload = await clearRuntimeSessions(scopedIds);
+    if (platformSettings.workspace.workspace_id !== workspaceId) return;
     publishRuntimeCleanupChanged(payload);
-    platformSettings = mergeRuntimeSessionInventory(await getPlatformSettings(), payload);
-    runtimeInventoryWorkspaceId = platformSettings.workspace.workspace_id;
-    syncSettingsPanelDraft(settingsPanelState, platformSettings);
-    notice = {
-      tone: 'success',
-      message: scopedIds.length ? 'Runtime session cleaned.' : 'Runtime sessions cleaned.'
-    };
+    platformSettings = mergeRuntimeSessionInventory(platformSettings, payload);
+    notice = { tone: 'success', message: `${payload.cleared_sessions} runtime sessions deleted.` };
   } catch (error) {
-    settingsPanelState.cleanupError = error instanceof Error ? error.message : 'Unable to clean runtime sessions.';
+    settingsPanelState.cleanupError = error instanceof Error ? error.message : 'Unable to delete runtime sessions.';
   } finally {
-    scopedIds.forEach((sessionId) => settingsPanelState.cleaningSessionIds.delete(sessionId));
+    scopedIds.forEach(id => settingsPanelState.cleaningSessionIds.delete(id));
     settingsPanelState.clearingAllRuntime = false;
     render();
   }
@@ -451,59 +422,66 @@ async function logoutFromSettings() {
 }
 
 function platformSettingsPageHtml() {
-  return settingsPanelHtml(platformSettings, settingsPanelState);
+  return settingsPanelHtml(platformSettings, settingsPanelState, selectedPageId);
 }
 
 function render() {
   const root = document.getElementById('app');
-  const page = settingsPageById(selectedPageId);
-  const pageIsLoading = isLoading || (isInventoryLoading &&
-    ['users', 'workspace-access', 'workspace-apps', 'app-links', 'persistence'].includes(selectedPageId));
-  const user = pageIsLoading ? undefined : selectedUser();
   if (!root) return;
-  unmountUsageVisualizations();
-  root.innerHTML = `<main class="settings-shell">
-    <section class="settings-main">
-      <div class="settings-content">
-        ${
-          pageIsLoading
-            ? settingsAppSkeletonHtml(page)
-            : `<header class="detail-header">
-          <div class="detail-title-block">
-            <h2>${escapeHtml(page.title)}</h2>
-            <span class="detail-title-separator" aria-hidden="true"></span>
-            <p>${escapeHtml(page.summary)}</p>
-          </div>
-        </header>
-        ${noticeHtml(notice)}
-        ${activeSettingsPageHtml({
-          appLinksController,
-          cacheDiagnosticsController,
-          page,
-          pendingDeleteUserId,
-          persistenceController,
-          platformSettingsHtml: platformSettingsPageHtml,
-          learningHtml: () => learningPageHtml(learningController.viewState(), platformSettings?.provider.available_providers?.find((p) => p.provider_id === 'codex')?.model_options || []),
-          selectedUser: user,
-          users,
-          workspaceApps,
-          workspaces,
-        })}`
-        }
-      </div>
-    </section>
-    ${persistenceMigrationModalHtml(persistenceController.viewState())}
-  </main>`;
+  if (!draftsRemembered) { rememberSettingsDrafts(root); draftsRemembered = true; }
+  const started = performance.now();
+  const page = settingsPageById(selectedPageId);
+  const dependencies = resourcesForPage(selectedPageId);
+  isLoading = dependencies.some(resource => !resources.state(resource).loaded && !resources.state(resource).error);
+  const errors = dependencies.filter(resource => resources.state(resource).error && !resources.state(resource).loaded);
+  const staleErrors = dependencies.filter(resource => resources.state(resource).error && resources.state(resource).loaded);
+  const user = selectedUser();
+  if (renderedPageId === 'usage' && (selectedPageId !== 'usage' || isLoading || errors.length)) usageVisualizations?.unmountUsageVisualizations();
+  const changedPage = renderedPageId !== selectedPageId;
+  renderedPageId = selectedPageId;
+  const content = isLoading ? settingsAppSkeletonHtml(page) : errors.length ? errors.map(resource =>
+    `<section class="settings-card"><h2>Unable to load ${escapeHtml(resource)}</h2><p role="alert">${escapeHtml(resources.state(resource).error)}</p><button type="button" data-retry-resource="${resource}">Retry</button></section>`).join('') : activeSettingsPageHtml({
+      appLinksController, cacheDiagnosticsController, page, persistenceController,
+      platformSettingsHtml: platformSettingsPageHtml,
+      sessionsHtml: () => platformSettings ? sessionsPageHtml(platformSettings, settingsPanelState, sessionsView) : '',
+      usageHtml: () => usagePageHtml(settingsPanelState),
+      learningHtml: () => learningPageHtml(learningController.viewState(), platformSettings?.provider.available_providers?.find(p => p.provider_id === 'codex')?.model_options || []),
+      selectedUser: user, users, workspaceApps: workspaceApps.map(app => ({ ...app, logo: app.workspace_id === iconWorkspaceId ? iconRegistry.find(item => item.app_id === app.app_id)?.logo || null : null })), workspaces,
+    });
+  patchSettingsDom(root, `<main class="settings-shell"><section class="settings-main"><div class="settings-content" data-render-key="page:${page.id}:${['users', 'workspace-access'].includes(page.id) ? selectedUserId : ''}">
+    <header class="detail-header"><div class="detail-title-block"><h2>${escapeHtml(page.title)}</h2><span class="detail-title-separator" aria-hidden="true"></span><p>${escapeHtml(page.summary)}</p></div>
+    ${platformSettings ? `<div class="settings-context"><span>${escapeHtml(platformSettings.workspace.name)}</span><span>${escapeHtml(platformSettings.user.display_name || platformSettings.user.username)}</span><button type="button" id="settings-logout" class="settings-secondary">Logout</button></div>` : ''}</header>
+    ${noticeHtml(notice)}${staleErrors.map(resource => `<p role="alert">${escapeHtml(resources.state(resource).error)} <button type="button" data-retry-resource="${resource}">Retry</button></p>`).join('')}${content}
+    </div></section>${persistenceMigrationModalHtml(persistenceController.viewState())}</main>`);
   bindEvents();
+  syncSettingsModalFocus(persistenceController.cancel);
   learningController.setVisible(selectedPageId === 'learning' && settingsHostVisible() && !isLoading);
-  mountUsageVisualizations({ history: settingsPanelState.usageHistory, filters: settingsPanelState.usageHistoryFilters, isLoading: settingsPanelState.isLoadingUsageHistory, onFiltersChange: providerUsageController.updateUsageHistoryFilters, settings: platformSettings });
+  if (selectedPageId === 'usage' && !isLoading && !errors.length) usageVisualizations?.mountUsageVisualizations({ history: settingsPanelState.usageHistory, filters: settingsPanelState.usageHistoryFilters, isLoading: settingsPanelState.isLoadingUsageHistory, onFiltersChange: providerUsageController.updateUsageHistoryFilters, settings: platformSettings });
+  if (changedPage) document.querySelector('.settings-main')?.scrollTo?.(0, 0);
   publishSelectedPage(page);
-  if (!isLoading) {
-    publishSelectedUser(user);
+  if (!isLoading && ['users', 'workspace-access'].includes(selectedPageId)) publishSelectedUser(user);
+  if (focusSetting && !isLoading) {
+    const selectors: Record<string, string> = { 'default-model': '[data-agentic-model-toggle]', voice: '#settings-tts-engine', password: '#reset-password input', cache: '#clear-pwa-cache', 'computer-use': '#settings-computer-use-mode' };
+    const target = document.querySelector<HTMLElement>(selectors[focusSetting]);
+    if (target) { target.closest('details')?.setAttribute('open', ''); target.focus(); target.scrollIntoView?.({ block: 'center' }); focusSetting = ''; }
   }
+  performance.clearMeasures('settings.render');
+  performance.measure('settings.render', { start: started, end: performance.now() });
 }
 
 function bindEvents() {
+  beginSettingsBindings();
+  document.querySelectorAll<HTMLElement>('[data-user-discard]').forEach(button => bindControl(button, 'click', () => { const region = button.closest<HTMLElement>('form, #workspace-assignments'); if (region) { if (region instanceof HTMLFormElement) region.reset(); clearSettingsDrafts(region); render(); } }));
+  document.querySelectorAll<HTMLElement>('[data-speech-discard]').forEach(button => bindControl(button, 'click', () => { syncSettingsPanelDraft(settingsPanelState, platformSettings, { speech: true }); clearSettingsDrafts('.settings-speech-model-accordion'); render(); }));
+  document.querySelectorAll<HTMLElement>('[data-hosted-discard]').forEach(button => bindControl(button, 'click', () => { syncSettingsPanelDraft(settingsPanelState, platformSettings, { hostedModelId: button.dataset.hostedDiscard }); clearSettingsDrafts('[data-hosted-model-accordion]'); render(); }));
+  bindControl(document.getElementById('settings-refresh-app-links'), 'click', () => { void ensureAppLinksLoaded(true); });
+  document.querySelectorAll<HTMLElement>('[data-retry-resource]').forEach(button => bindControl(button, 'click', () => { void resources.ensure(button.dataset.retryResource as import('./settingsResources').SettingsResource, true).then(() => ensurePageLoaded()); }));
+  bindControl(document.getElementById('settings-session-search'), 'input', event => { sessionsView.query = (event.target as HTMLInputElement).value; sessionsView.page = 0; render(); });
+  bindControl(document.getElementById('settings-session-status'), 'change', event => { sessionsView.status = (event.target as HTMLSelectElement).value; sessionsView.page = 0; render(); });
+  bindControl(document.getElementById('settings-session-scope'), 'change', event => { sessionsView.scope = (event.target as HTMLSelectElement).value === 'server' ? 'server' : 'workspace'; sessionsView.page = 0; sessionsView.status = ''; clearSettingsDrafts('.settings-session-filters'); render(); });
+  bindControl(document.getElementById('settings-sessions-prev'), 'click', () => { sessionsView.page -= 1; render(); });
+  bindControl(document.getElementById('settings-sessions-next'), 'click', () => { sessionsView.page += 1; render(); });
+  bindControl(document.getElementById('create-workspace'), 'submit', event => { event.preventDefault(); const form = event.target as HTMLFormElement; void requestJson('/api/workspaces', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(form))) }).then(async () => { form.reset(); clearSettingsDrafts('#create-workspace'); await resources.ensure('workspaces', true); await resources.ensure('apps', true); notice = { tone: 'success', message: 'Workspace created.' }; render(); }).catch(showError); });
   speechSynthesisController.bind();
   learningController.bind();
   computerUseController.bind();
@@ -547,8 +525,7 @@ function bindEvents() {
     selectedUser,
     selectUser: (userId) => {
       selectedUserId = userId;
-      pendingDeleteUserId = '';
-      render();
+        render();
     },
     setWorkspaceAppStatus,
     showError,
@@ -570,6 +547,7 @@ function providerSettingsActionContext() {
       platformSettings = nextSettings;
     },
     settings: platformSettings,
+    getSettings: () => platformSettings,
     state: settingsPanelState
   };
 }

@@ -1,10 +1,11 @@
+import { clearSettingsDrafts } from './settingsDom';
 import {
   activateNativeProvider,
   configureAgenticWorkspaceBinding,
   getPlatformSettings,
   type PlatformSettings
 } from './adminApi';
-import { syncSettingsPanelDraft, type SettingsPanelState } from './settingsPanel';
+import { syncSettingsPanelDraft, type SettingsPanelState } from './settingsDrafts';
 
 type AgenticBindingControllerContext = {
   getSettings: () => PlatformSettings | null;
@@ -16,13 +17,15 @@ type AgenticBindingControllerContext = {
 export function createAgenticBindingController(context: AgenticBindingControllerContext) {
   return {
     activateProvider: async (providerId: string) => {
+      const workspaceId = context.getSettings()?.workspace.workspace_id;
       if (context.state.activatingNativeProviders.has(providerId)) return;
       context.state.activatingNativeProviders.add(providerId);
       context.state.nativeProviderErrors[providerId] = '';
       context.render();
       try {
         await activateNativeProvider(providerId);
-        const settings = await getPlatformSettings();
+        const settings = await getPlatformSettings('models');
+        if (context.getSettings()?.workspace.workspace_id !== workspaceId || settings.workspace.workspace_id !== workspaceId) return;
         syncSettingsPanelDraft(context.state, settings);
         context.setSettings(settings, 'Connection enabled. Selected models are available in Chat.');
       } catch (error) {
@@ -37,6 +40,7 @@ export function createAgenticBindingController(context: AgenticBindingController
       definitionId: string,
       options: { enabled?: boolean } = {}
     ) => {
+      const workspaceId = context.getSettings()?.workspace.workspace_id;
       const key = definitionId;
       const item = context.getSettings()?.agentic_admin?.items.find(
         (candidate) => candidate.definition_id === definitionId
@@ -99,8 +103,10 @@ export function createAgenticBindingController(context: AgenticBindingController
             require_confirmation_for_destructive: checked('require_confirmation_for_destructive')
           }
         });
-        const settings = await getPlatformSettings();
+        const settings = await getPlatformSettings('models');
+        if (context.getSettings()?.workspace.workspace_id !== workspaceId || settings.workspace.workspace_id !== workspaceId) return;
         syncSettingsPanelDraft(context.state, settings);
+        clearSettingsDrafts(form);
         context.setSettings(settings, `${item.display_name} binding updated for new sessions.`);
       } catch (error) {
         context.state.agenticBindingErrors[key] = error instanceof Error

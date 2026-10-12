@@ -1,5 +1,5 @@
 import { getProviderSubscriptionUsage, getUsageTimeseries, type PlatformSettings } from './adminApi';
-import type { SettingsPanelState } from './settingsPanel';
+import type { SettingsPanelState } from './settingsDrafts';
 import {
   defaultUsageHistoryFilters,
   mergeUsageHistoryFilters,
@@ -43,15 +43,8 @@ export function createProviderUsageController(context: {
       context.state.usageHistoryFilters = defaultUsageHistoryFilters();
     }
     loadedWorkspaceId = workspaceId;
-    const providers = [
-      settings?.provider.active_provider,
-      ...(settings?.provider.available_providers || []),
-    ].filter((provider) => provider !== null && provider !== undefined);
-    const supportsProviderUsage = providers.some(
-      (provider) => Boolean(provider.capabilities?.supports_subscription_usage)
-    );
     await Promise.all([
-      loadProviderUsage(workspaceId, supportsProviderUsage),
+      loadProviderUsage(workspaceId, true),
       loadUsageHistory(workspaceId),
     ]);
   }

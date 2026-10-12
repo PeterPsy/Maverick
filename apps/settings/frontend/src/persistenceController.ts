@@ -10,7 +10,6 @@ import {
 export type MigrationProgress = {
   target: 'json' | 'mongo';
   phase: 'validating' | 'applying' | 'restarting' | 'polling' | 'complete' | 'failed';
-  percent: number;
   title: string;
   detail: string;
 };
@@ -106,7 +105,6 @@ export function createPersistenceController(context: {
     migrationProgress = {
       target: migrationTarget,
       phase: 'validating',
-      percent: 10,
       title: `Dry run to ${migrationTarget.toUpperCase()}`,
       detail: 'Validating target adapter and collection copy plan before applying changes.',
     };
@@ -145,7 +143,6 @@ export function createPersistenceController(context: {
     migrationProgress = {
       target: migrationTarget,
       phase: 'applying',
-      percent: 38,
       title: `Migration to ${migrationTarget.toUpperCase()}`,
       detail: 'Copying the validated control-plane plan to the target adapter.',
     };
@@ -161,7 +158,6 @@ export function createPersistenceController(context: {
       migrationProgress = {
         target: migrationTarget,
         phase: 'failed',
-        percent: 100,
         title: 'Migration failed',
         detail: error instanceof Error ? error.message : 'Unable to apply migration.',
       };
@@ -175,7 +171,6 @@ export function createPersistenceController(context: {
     migrationProgress = {
       target,
       phase: 'restarting',
-      percent: 68,
       title: 'Restart backend',
       detail: migrationResult.backend_restart?.detail || 'Backend restart scheduled.',
     };
@@ -190,7 +185,6 @@ export function createPersistenceController(context: {
       migrationProgress = {
         target: kind,
         phase: 'polling',
-        percent: 84,
         title: 'Verifying cutover',
         detail: 'Waiting for the backend to become healthy with the new adapter.',
       };
@@ -202,7 +196,6 @@ export function createPersistenceController(context: {
         migrationProgress = {
           target: kind,
           phase: 'complete',
-          percent: 100,
           title: 'Migration complete',
           detail: cleanupScheduled
             ? `Active adapter: ${kind.toUpperCase()}. Source cleanup is scheduled after health check.`
@@ -217,7 +210,6 @@ export function createPersistenceController(context: {
     migrationProgress = {
       target: kind,
       phase: 'failed',
-      percent: 100,
       title: 'Verification not completed',
       detail: 'The backend did not confirm the new adapter before the timeout. Check service health and logs.',
     };

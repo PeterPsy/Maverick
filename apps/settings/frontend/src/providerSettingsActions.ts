@@ -1,10 +1,10 @@
+import { clearSettingsDrafts } from './settingsDom';
 import {
   configureHostedProvider,
   configureSpeechProvider,
-  getPlatformSettings,
   type PlatformSettings
 } from './adminApi';
-import { hostedProviderRoutingDraft, syncSettingsPanelDraft, type SettingsPanelState } from './settingsPanel';
+import { hostedProviderRoutingDraft, syncSettingsPanelDraft, type SettingsPanelState } from './settingsDrafts';
 
 type SettingsNotice = {
   message: string;
@@ -16,10 +16,13 @@ type ProviderSettingsActionContext = {
   setNotice: (notice: SettingsNotice) => void;
   setSettings: (settings: PlatformSettings) => void;
   settings: PlatformSettings | null;
+  getSettings: () => PlatformSettings | null;
   state: SettingsPanelState;
 };
 
 export async function saveHostedProviderSettings(context: ProviderSettingsActionContext) {
+  const workspaceId = context.settings?.workspace.workspace_id;
+  const savedModelId = context.state.hostedDraftModelId;
   const providerId = hostedProviderIdForModel(context.settings, context.state.hostedDraftModelId);
   if (!providerId || !context.state.hostedDraftModelId) {
     context.state.hostedProviderErrorModelId = context.state.hostedDraftModelId;
@@ -32,14 +35,16 @@ export async function saveHostedProviderSettings(context: ProviderSettingsAction
   context.state.hostedProviderErrorModelId = context.state.hostedDraftModelId;
   context.render();
   try {
-    await configureHostedProvider({
+    const provider = await configureHostedProvider({
       provider_id: providerId,
       model_id: context.state.hostedDraftModelId,
       openrouter_provider_routing: hostedProviderRoutingDraft(context.state, context.state.hostedDraftModelId)
     });
-    const settings = await getPlatformSettings();
+    if (context.getSettings()?.workspace.workspace_id !== workspaceId || !context.settings) return;
+    const settings = { ...context.getSettings()!, provider };
     context.setSettings(settings);
-    syncSettingsPanelDraft(context.state, settings);
+    syncSettingsPanelDraft(context.state, settings, { hostedModelId: savedModelId });
+    document.querySelectorAll<HTMLElement>('[data-hosted-model-accordion]').forEach(element => { if (element.dataset.hostedModelAccordion === savedModelId) clearSettingsDrafts(element); });
     context.setNotice({ tone: 'success', message: 'Hosted model settings updated.' });
   } catch (error) {
     context.state.hostedProviderErrorModelId = context.state.hostedDraftModelId;
@@ -66,6 +71,7 @@ function hostedProviderIdForModel(settings: PlatformSettings | null, modelId: st
 }
 
 export async function saveSpeechProviderSettings(context: ProviderSettingsActionContext) {
+  const workspaceId = context.settings?.workspace.workspace_id;
   const providerId = context.settings?.provider.speech_stt?.active_provider?.provider_id;
   if (!providerId || !context.state.speechAudioModelId || !context.state.speechConversationModelId) {
     context.state.speechProviderError = 'Speech provider not loaded.';
@@ -76,14 +82,16 @@ export async function saveSpeechProviderSettings(context: ProviderSettingsAction
   context.state.speechProviderError = '';
   context.render();
   try {
-    await configureSpeechProvider({
+    const provider = await configureSpeechProvider({
       provider_id: providerId,
       audio_transcription_model_id: context.state.speechAudioModelId,
       conversation_model_id: context.state.speechConversationModelId
     });
-    const settings = await getPlatformSettings();
+    if (context.getSettings()?.workspace.workspace_id !== workspaceId || !context.settings) return;
+    const settings = { ...context.getSettings()!, provider };
     context.setSettings(settings);
-    syncSettingsPanelDraft(context.state, settings);
+    syncSettingsPanelDraft(context.state, settings, { speech: true });
+    clearSettingsDrafts('.settings-speech-model-accordion');
     context.setNotice({ tone: 'success', message: 'Speech model settings updated.' });
   } catch (error) {
     context.state.speechProviderError = error instanceof Error ? error.message : 'Unable to update speech model settings.';

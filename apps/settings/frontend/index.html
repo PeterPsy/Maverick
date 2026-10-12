@@ -3,6 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <script>
+      (() => {
+        const theme = new URLSearchParams(location.search).get('maverick_theme');
+        if (theme !== 'light' && theme !== 'dark') return;
+        document.documentElement.dataset.maverickTheme = theme;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
     <title>Settings</title>
     <link
       rel="stylesheet"

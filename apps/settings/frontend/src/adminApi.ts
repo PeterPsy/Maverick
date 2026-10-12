@@ -30,6 +30,7 @@ export type WorkspaceApp = {
   version: string;
   source_id: string;
   installed: boolean;
+  logo?: AppLogo | null;
   status: 'uninstalled' | 'installed' | 'enabled' | 'disabled' | 'failed' | 'updating' | 'rolled_back';
 };
 
@@ -237,6 +238,7 @@ export type NativeAgentStatus = {
   provider_status: string;
   availability: 'installed' | 'not_installed' | 'unknown';
   installed: boolean;
+  logo?: AppLogo | null;
   executable_name: string | null;
   runtime_version: string | null;
   health: string;
@@ -756,8 +758,8 @@ export function saveAppDependencySelection(
   });
 }
 
-export function getPlatformSettings(): Promise<PlatformSettings> {
-  return requestJson<PlatformSettings>('/api/settings/platform');
+export function getPlatformSettings(section: 'all' | 'models' | 'voice' = 'all'): Promise<PlatformSettings> {
+  return requestJson<PlatformSettings>(section === 'all' ? '/api/settings/platform' : `/api/settings/platform?section=${section}`);
 }
 
 export function getProviderSubscriptionUsage(): Promise<ProviderSubscriptionUsagePayload> {

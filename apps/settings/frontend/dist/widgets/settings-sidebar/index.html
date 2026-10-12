@@ -7,10 +7,19 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&opsz=20..48&wght@400&display=swap"
     />
+    <script>
+      (() => {
+        const theme = new URLSearchParams(location.search).get('maverick_theme');
+        if (theme !== 'light' && theme !== 'dark') return;
+        document.documentElement.dataset.maverickTheme = theme;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
     <title>Settings Sidebar Widget</title>
-    <script type="module" crossorigin src="/apps/settings/assets/widgets/settings-sidebar/index-8ul3ovhO.js"></script>
-    <link rel="modulepreload" crossorigin href="/apps/settings/assets/pages-DUQjEraw.js">
-    <link rel="stylesheet" crossorigin href="/apps/settings/assets/index-ZDYKsvKC.css">
+    <script type="module" crossorigin src="/apps/settings/assets/widgets/settings-sidebar/index-DOWvIxWY.js"></script>
+    <link rel="modulepreload" crossorigin href="/apps/settings/assets/pages-DhW5MLpK.js">
+    <link rel="stylesheet" crossorigin href="/apps/settings/assets/index-Duus7dcy.css">
   </head>
   <body>
     <div id="settings-sidebar-root"></div>

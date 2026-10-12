@@ -1,3 +1,4 @@
+import { bindControl } from './controlBindings';
 import { getAppDependencies, requestJson, saveAppDependencySelection, type AppDependenciesPayload } from './adminApi';
 import { connectAppEventSocket } from '@maverick/pwa-cache';
 import { bindLearningTickets } from './learningTicketBindings';
@@ -190,25 +191,25 @@ export function createLearningController(context: { render: () => void; workspac
         }
         updateFormHints();
       };
-      form.addEventListener('input', remember);
-      form.addEventListener('change', remember);
+      bindControl(form, 'input', remember);
+      bindControl(form, 'change', remember);
       updateFormHints();
     }
-    form?.addEventListener('submit', (event) => { event.preventDefault(); void save(form); });
-    document.querySelector('#learning-refresh')?.addEventListener('click', () => { void load(true); });
-    document.querySelector('#learning-discard')?.addEventListener('click', () => { state.dirty = false; drafts.clear(); itemDrafts.clear(); state.notice = ''; render(); });
-    document.querySelector('#learning-pause')?.addEventListener('click', () => { void mutate({ action: 'learning.configure', settings: { paused: !state.data!.settings.paused } }); });
-    document.querySelector<HTMLSelectElement>('#learning-session')?.addEventListener('change', (event) => { state.selectedSession = (event.target as HTMLSelectElement).value; render(); });
+    bindControl(form, 'submit', (event) => { event.preventDefault(); void save(form!); });
+    bindControl(document.querySelector('#learning-refresh'), 'click', () => { void load(true); });
+    bindControl(document.querySelector('#learning-discard'), 'click', () => { state.dirty = false; drafts.clear(); itemDrafts.clear(); state.notice = ''; render(); });
+    bindControl(document.querySelector('#learning-pause'), 'click', () => { void mutate({ action: 'learning.configure', settings: { paused: !state.data!.settings.paused } }); });
+    bindControl(document.querySelector<HTMLSelectElement>('#learning-session'), 'change', (event) => { state.selectedSession = (event.target as HTMLSelectElement).value; render(); });
     document.querySelectorAll<HTMLDetailsElement>('[data-learning-disclosure]').forEach((element) => {
       element.open = Boolean(state.openSections?.includes(element.dataset.learningDisclosure!));
-      element.addEventListener('toggle', () => {
+      bindControl(element, 'toggle', () => {
         if (!element.isConnected) return;
         const sections = new Set(state.openSections);
         if (element.open) sections.add(element.dataset.learningDisclosure!); else sections.delete(element.dataset.learningDisclosure!);
         state.openSections = [...sections];
       });
     });
-    document.querySelector('#learning-analyze')?.addEventListener('click', () => {
+    bindControl(document.querySelector('#learning-analyze'), 'click', () => {
       const session = document.querySelector<HTMLSelectElement>('#learning-session')?.value;
       if (session) void mutate({ action: 'learning.analyze_now', session_id: session });
     });
@@ -216,27 +217,27 @@ export function createLearningController(context: { render: () => void; workspac
       document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[${attribute}]`).forEach((element) => {
         const key = attribute + ':' + element.getAttribute(attribute);
         if (itemDrafts.has(key)) element.value = itemDrafts.get(key)!;
-        element.addEventListener('input', () => { itemDrafts.set(key, element.value); state.dirty = true; updateFormHints(); });
+        bindControl(element, 'input', () => { itemDrafts.set(key, element.value); state.dirty = true; updateFormHints(); });
       });
     }
-    document.querySelectorAll<HTMLAnchorElement>('.learning-results a[href^="/app/"]').forEach((link) => link.addEventListener('click', (event) => {
+    document.querySelectorAll<HTMLAnchorElement>('.learning-results a[href^="/app/"]').forEach((link) => bindControl(link, 'click', (event) => {
       if (window.parent === window || event.ctrlKey || event.metaKey) return;
       event.preventDefault();
       const parts = new URL(link.href).pathname.split('/').filter(Boolean);
       const origin = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }).__MAVERICK_PLATFORM_ORIGIN__ || '*';
       window.parent.postMessage({ type: 'maverick.app.open-app', app_id: decodeURIComponent(parts[1]), params: { app_page: parts.slice(2).map(decodeURIComponent).join('/') } }, origin);
     }));
-    document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button) => button.addEventListener('click', () => {
+    document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button) => bindControl(button, 'click', () => {
       ticketViews.set(state.tab, { ticketView: state.ticketView, ticketFilter: state.ticketFilter, ticketSearch: state.ticketSearch, ticketCategory: state.ticketCategory });
       detailEpoch++; state.tab = button.dataset.learningTab as LearningView['tab']; state.detail = null;
       Object.assign(state, { ticketView: undefined, ticketFilter: undefined, ticketSearch: undefined, ticketCategory: undefined }, ticketViews.get(state.tab));
       render();
     }));
-    document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button, index, buttons) => button.addEventListener('keydown', (event) => {
+    document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button, index, buttons) => bindControl(button, 'keydown', (event) => {
       const next = { ArrowRight: (index + 1) % buttons.length, ArrowLeft: (index + buttons.length - 1) % buttons.length, Home: 0, End: buttons.length - 1 }[event.key];
       if (next !== undefined) { event.preventDefault(); buttons[next].click(); document.querySelector<HTMLElement>(`#${buttons[next].id}`)?.focus(); }
     }));
-    document.querySelectorAll<HTMLElement>('[data-learning-job]').forEach((button) => button.addEventListener('click', async () => {
+    document.querySelectorAll<HTMLElement>('[data-learning-job]').forEach((button) => bindControl(button, 'click', async () => {
       const jobId = button.dataset.learningJob;
       const command = button.dataset.learningCommand;
       if (command !== 'inspect') { await mutate({ action: 'learning.job', job_id: jobId, command }); return; }
@@ -247,7 +248,7 @@ export function createLearningController(context: { render: () => void; workspac
         if (revision === generation && epoch === detailEpoch) { state.detail = result.job; render(); }
       } catch (error) { if (revision === generation && epoch === detailEpoch) { state.error = message(error); render(); } }
     }));
-    document.querySelectorAll<HTMLElement>('[data-learning-item]').forEach((button) => button.addEventListener('click', () => {
+    document.querySelectorAll<HTMLElement>('[data-learning-item]').forEach((button) => bindControl(button, 'click', () => {
       const itemId = button.dataset.learningItem;
       reviewItem(itemId!, button.dataset.learningCommand!);
     }));

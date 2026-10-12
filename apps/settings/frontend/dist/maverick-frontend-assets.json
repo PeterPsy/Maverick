@@ -1,20 +1,20 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "78e95dcdff82ad864b87afe097f48b96af4b39d8d0bbcc0956cb5c53b48be5f5",
+  "build_id": "3277cbf12952713c0ec481c227eb9e2c1175847ae095d34d04ce55400a0dc8a1",
   "entrypoints": [
     "index.html",
     "widgets/settings-sidebar/index.html"
   ],
   "immutable": [
     {
-      "path": "assets/app-BiOAJbaZ.js",
-      "sha256": "ae503ec6acb2baf8ec406bc39e9d8a9dc3446498a6c48ace2360c5da0ca66659",
-      "size_bytes": 178743
+      "path": "assets/app-ChBMEMhn.js",
+      "sha256": "4913f0bc404dfeabaa9c7dc09dc1e856515d5eb88331d80412be5158a9699e5b",
+      "size_bytes": 193532
     },
     {
-      "path": "assets/app-Dx-rK9vw.css",
-      "sha256": "c287772495af2d02b0d6e98552e1ce6588c1cb6e4895ca21c3e0594d117303bf",
-      "size_bytes": 73711
+      "path": "assets/app-xGzhk0HL.css",
+      "sha256": "a09c5afa7a422d681a2a4cf84fc060c83b20d01bea975b12704278060f4f270e",
+      "size_bytes": 78266
     },
     {
       "path": "assets/index-Duus7dcy.css",
@@ -22,30 +22,30 @@
       "size_bytes": 7669
     },
     {
-      "path": "assets/pages-BbZCQO9_.js",
-      "sha256": "8bb9ec3c79cb323d62c83220094267bf56e919533cb8ea4bfe8868ea4d1a4141",
-      "size_bytes": 6189
+      "path": "assets/pages-ZxBuXJVj.js",
+      "sha256": "f333f3d7d8ed2f40db55699433a0525c25e74919ed73b9c6eb212355a4cb07b9",
+      "size_bytes": 6417
     },
     {
-      "path": "assets/usageVisualizations-C29KQ_b0.js",
-      "sha256": "ecd1c2147d5aab553422cd9776009537b54f7b50e7ea12474f90bc6cb869921f",
+      "path": "assets/usageVisualizations-CGe7Lw1e.js",
+      "sha256": "64dfe0795ddd7f900110038fb889decd9a4041ec8ec2b32216df89e55a8358a8",
       "size_bytes": 198617
     },
     {
-      "path": "assets/widgets/settings-sidebar/index-I_SAWwdx.js",
-      "sha256": "feb0e6505dc84527cde5d1662005f13b15b0564f7032acbdad89c8ecb55135ab",
+      "path": "assets/widgets/settings-sidebar/index-BrnVNNXp.js",
+      "sha256": "51a9503d856776450c90ab55e56dec888bb339b9d5bba50e5a0e0470370c0053",
       "size_bytes": 4570
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "e804cddf0f854da174084ddbdfc3dd832c72918fac4fcf90c66f0ae5b878ce41",
+      "sha256": "5d5ff97985173943263ab291a4c3048977b90d416e3e47cdf86ea7ab40fc4bc2",
       "size_bytes": 1066
     },
     {
       "path": "widgets/settings-sidebar/index.html",
-      "sha256": "00cb25deaedc908eab21e6904ecb10bfc62a0c27e253d3ad5297fe09dce5bf95",
+      "sha256": "6e2bec9462384ebe3115a32ea90275f3fc1a6b1fc5b18d488fe6fe3da41ef0a0",
       "size_bytes": 1126
     }
   ]

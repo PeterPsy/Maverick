@@ -29,6 +29,25 @@ function renderedLogo(appId: string): string {
 }
 
 describe("AppLogo", () => {
+  it("uses an app-owned compact silhouette with the native theme colour", () => {
+    const custom = { ...app("example"), logo: { kind: "image" as const, value: "/apps/example/maverick-icon-compact.png" } };
+    const markup = renderToStaticMarkup(<AppLogo app={custom} className="bs-app-logo--rail" />);
+    expect(markup).toContain("is-glyph");
+    expect(markup).toContain("bs-app-logo__compact");
+    expect(markup).toContain("background-color:currentColor");
+    expect(markup).toContain("mask:");
+    expect(markup).toContain("/apps/example/maverick-icon-compact.png");
+    expect(markup).not.toContain("<img");
+  });
+
+  it("preserves full-colour external image logos", () => {
+    const custom = { ...app("example"), logo: { kind: "image" as const, value: "https://cdn.example/logo.png" } };
+    const markup = renderToStaticMarkup(<AppLogo app={custom} />);
+    expect(markup).toContain("is-image");
+    expect(markup).toContain('<img');
+    expect(markup).toContain('src="https://cdn.example/logo.png"');
+  });
+
   it("uses the document glyph for Docs Studio and Document Generator", () => {
     expect(renderedLogo("docs-studio")).toBe(renderedLogo("document-generator"));
     expect(renderedLogo("docs-studio")).toContain(">description<");

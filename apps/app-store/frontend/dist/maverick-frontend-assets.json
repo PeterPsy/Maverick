@@ -1,25 +1,25 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "7dc95a1ec2e0d04721d4ff129d6ec57b4670fd53e2e021f2ca1f0af95d939ab1",
+  "build_id": "138f823eea109ef0ee8a535e13023d9f18efccdb8dc633c466f0aabb64d7ee86",
   "entrypoints": [
     "index.html",
     "widgets/app-shortcuts/index.html"
   ],
   "immutable": [
     {
-      "path": "assets/app-AuVZazkg.js",
-      "sha256": "f4bda73dfcbce6e1ad26eed1f187640770ad47dcecedcf5acf0815b5c7179adb",
-      "size_bytes": 74499
-    },
-    {
       "path": "assets/app-DGXlyoJH.css",
       "sha256": "920e12adb5ed482345aac4bc9259951b764a7db7bb54952d686d509efcad5b6f",
       "size_bytes": 33135
     },
     {
-      "path": "assets/app-icons-CioHTMa7.js",
-      "sha256": "a67cf19cd6e5b4885c827fa8579761c6972139fadc7caab3f1f3093855429c8a",
-      "size_bytes": 4626
+      "path": "assets/app-DM3XGweL.js",
+      "sha256": "f9099b9a6c8f0a328801ef7af9d14d9f97afc337377a7ef1309d16cc7d4ca8f9",
+      "size_bytes": 74499
+    },
+    {
+      "path": "assets/app-icons-FaUUwnDn.js",
+      "sha256": "52ecf70d1c9641227d67b184e588bd061616e328d72eb026354d59929b567f53",
+      "size_bytes": 5020
     },
     {
       "path": "assets/index-bYI1O_RF.css",
@@ -27,20 +27,20 @@
       "size_bytes": 8121
     },
     {
-      "path": "assets/widgets/app-shortcuts/index-AGIZZj54.js",
-      "sha256": "6323c13cfdc776df44f6735fc1500dc73a10069173aaa3d66644ed2149f78ab3",
+      "path": "assets/widgets/app-shortcuts/index-D1jXC4Mt.js",
+      "sha256": "a164426233e9e2145cfbe3846ae891fcfd1cd036f034eb8cddbd520c57412a31",
       "size_bytes": 6494
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "2690d209c67bc98c17a840ed1f267a97f747effa08f0d87c4db82fe6dc15e4e6",
+      "sha256": "2994d66f5d3e3ef15e72661da521a1d7a5b053245c6abe8610fa53890fe8d843",
       "size_bytes": 2515
     },
     {
       "path": "widgets/app-shortcuts/index.html",
-      "sha256": "ea28d038d0851162c7a185edac34826aee3f784b589ffcda275c788c468b3886",
+      "sha256": "0c79b030c2970711f26c7a2f6f7873df1c6add1770b93ae7869a0ddf8661818b",
       "size_bytes": 1724
     }
   ]

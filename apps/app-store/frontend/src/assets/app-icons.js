@@ -113,11 +113,26 @@
     }
     const logo = app?.logo;
     if (logo?.kind === "image" && logo.value) {
+      const platformOrigin = window.__MAVERICK_PLATFORM_ORIGIN__;
+      const source = platformOrigin ? new URL(String(logo.value), platformOrigin).href : String(logo.value);
+      // SDK compact assets share the glyph frame and inherit its theme colour.
+      if (/^\/apps\/[^/]+\/maverick-icon-compact\.png(?:[?#].*)?$/.test(String(logo.value))) {
+        const compact = document.createElement("span");
+        compact.className = "app-owned-compact-glyph";
+        compact.style.width = "100%";
+        compact.style.height = "100%";
+        compact.style.backgroundColor = "currentColor";
+        const mask = `url(${JSON.stringify(source)}) center / contain no-repeat`;
+        compact.style.mask = mask;
+        compact.style.webkitMask = mask;
+        frame.classList.add("is-glyph");
+        frame.append(compact);
+        return frame;
+      }
       const image = document.createElement("img");
       image.alt = "";
       image.loading = "lazy";
-      const platformOrigin = window.__MAVERICK_PLATFORM_ORIGIN__;
-      image.src = platformOrigin ? new URL(String(logo.value), platformOrigin).href : String(logo.value);
+      image.src = source;
       frame.classList.add("is-image");
       frame.append(image);
       return frame;

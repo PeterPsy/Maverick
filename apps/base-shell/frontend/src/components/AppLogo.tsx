@@ -2,6 +2,18 @@ import { AppRegistryItem } from "../api";
 
 export function AppLogo({ app, className = "" }: { app: AppRegistryItem; className?: string }) {
   if (app.logo?.kind === "image" && app.logo.value) {
+    // SDK compact assets are transparent silhouettes; native frames own their colour.
+    if (/^\/apps\/[^/]+\/maverick-icon-compact\.png(?:[?#].*)?$/.test(app.logo.value)) {
+      const mask = `url(${JSON.stringify(app.logo.value)}) center / contain no-repeat`;
+      return (
+        <span className={`bs-app-logo is-glyph ${className}`}>
+          <span aria-hidden="true" className="bs-app-logo__compact" style={{
+            width: "100%", height: "100%", backgroundColor: "currentColor",
+            mask, WebkitMask: mask,
+          }} />
+        </span>
+      );
+    }
     return (
       <span className={`bs-app-logo is-image ${className}`}>
         <img alt="" loading="lazy" src={app.logo.value} />

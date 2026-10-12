@@ -535,6 +535,7 @@ function createElement(tagName) {{
     children: [],
     className: "",
     textContent: "",
+    style: {{}},
     classList: {{
       classes: [],
       add(name) {{ this.classes.push(name); }},
@@ -589,7 +590,9 @@ const imageIcon = icons.renderIcon({{
   app_id: "browser", frontend_role: "workspace", surfaces: ["frontend"],
   logo: {{kind: "image", value: "/apps/browser/maverick-icon-compact.png"}},
 }}, "test-icon");
-assert(imageIcon.children[0].src === "https://maverick.example/apps/browser/maverick-icon-compact.png", "public icons use the platform origin across app frames");
+assert(imageIcon.classList.classes.includes("is-glyph"), "compact app assets use the native glyph frame");
+assert(imageIcon.children[0].style.backgroundColor === "currentColor", "compact assets inherit theme colour");
+assert(imageIcon.children[0].style.mask.includes("https://maverick.example/apps/browser/maverick-icon-compact.png"), "compact assets use the platform origin across app frames");
 const externalIcon = icons.renderIcon({{
   app_id: "external", frontend_role: "workspace", surfaces: ["frontend"],
   logo: {{kind: "image", value: "https://cdn.example/icon.png"}},

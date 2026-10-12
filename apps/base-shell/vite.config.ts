@@ -53,7 +53,7 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {
-      input: { index: "frontend/index.html" },
+      input: { index: "frontend/index.html", installation: "frontend/installation.html" },
     },
   },
   root: "frontend",

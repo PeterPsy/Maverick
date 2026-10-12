@@ -57,6 +57,8 @@ logger = logging.getLogger(__name__)
 
 
 _ROOT_SHELL_STATIC_ASSETS = {
+    "/setup": "installation.html",
+    "/setup/": "installation.html",
     "/favicon.ico": "favicon.ico",
     "/manifest.webmanifest": "manifest.webmanifest",
     "/material-symbols-rounded.woff2": "material-symbols-rounded.woff2",

@@ -394,6 +394,15 @@ export function AppShell() {
         measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
+      if (currentSession.user.platform_role === "admin") {
+        try {
+          const response = await fetch("/api/admin/installation", { credentials: "same-origin", signal: controller.signal });
+          if (response.ok && !(await response.json()).configured) {
+            window.location.replace("/setup");
+            return;
+          }
+        } catch { if (controller.signal.aborted) return; }
+      }
       await shellCacheLifecycle.transition(shellCachePrincipal(currentSession));
       if (shellLoadVersionRef.current !== loadVersion) {
         return;

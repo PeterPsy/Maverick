@@ -628,7 +628,9 @@ same focus signature and consumes the existing single-use receipt.
 The native companion projects control identifiers, labels, editability, exact
 focus, bounded values and explicit coverage. Password, file and hidden values are
 omitted. A truncated or unattested value cannot verify the expected value.
-Positive effect predicates compare complete values of up to 2000 characters.
+Positive effect predicates compare complete values of up to 2000 characters
+literally, preserving leading/trailing whitespace. Missing values cannot match
+the literal string `None`.
 Text input advances a structured step only after the resulting value is observed;
 pending or uncertain effects permit same-tab reads without replaying the input.
 Older executors without focus/value evidence cannot perform these text steps.
@@ -638,3 +640,13 @@ the official ChatGPT macOS 26.1007.30912 (20156) distribution, whose packaged
 Computer Use and Browser components were inspected statically using REA 6.4.0.
 This establishes packaged APIs and relationships, not native decompilation,
 account-specific availability, or measured performance parity.
+
+The final native revision `ef03cb1` is integrated on `maverick-integration`.
+[Actions run 38290031187](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38290031187)
+built, tested, signed, installed and launched Mac
+0.4.0 (70). Core revisions `e01fb62c` and `c6d98501` passed all 132 Device Use
+tests. The backend activation replaced PID 2456307 with 2553318 and returned
+HTTP 200 with `status=ok`; the inaccessible systemd bus was handled by a normal
+SIGTERM to the exact verified `maverick-core.service` process, whose host unit
+has `Restart=always`. No ChatGPT account session or performance comparison was
+performed.

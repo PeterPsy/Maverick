@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.apps.models import AppInstallationDeclaration, AppPublicEndpointDeclaration
+
 from dataclasses import asdict, dataclass, fields
 from typing import Any, Protocol
 
@@ -209,6 +211,9 @@ class AppDocumentStore:
             for surface in capabilities_payload.get("view_surfaces", [])
         ]
         return AppContractDescriptor(
+            installation=AppInstallationDeclaration([
+                AppPublicEndpointDeclaration(**item)
+                for item in payload.get("installation", {}).get("public_endpoints", [])]),
             provides=[
                 AppProvidedInterfaceDeclaration(**item)
                 for item in payload.get("provides", [])

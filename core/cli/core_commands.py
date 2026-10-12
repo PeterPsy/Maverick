@@ -9,6 +9,7 @@ from core.apps.store import AppStore
 from core.cli.app_sdk_commands import app_sdk_command_specs
 from core.cli.developer_context_commands import developer_context_command_specs
 from core.cli.identity_commands import identity_command_specs
+from core.cli.installation_commands import installation_command_specs
 from core.cli.job_commands import job_command_specs
 from core.cli.inter_agent_commands import inter_agent_command_specs
 from core.cli.persistence_commands import persistence_command_specs
@@ -51,6 +52,8 @@ def _core_command_specs(
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build all core-owned CLI command specs without mixing command domains."""
     specs: list[tuple[CliCommandDefinition, Any]] = []
+    specs.extend(installation_command_specs(secret_store=secret_store, app_store=app_store,
+        workspace_store=workspace_store, observability_store=observability_store, start_path=start_path))
     specs.extend(
         identity_command_specs(
             identity_store=identity_store,

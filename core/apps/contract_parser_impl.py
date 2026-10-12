@@ -31,6 +31,7 @@ from core.apps.contract_validation import (
     _reject_unexpected_fields,
 )
 from core.apps.contract_widgets import parse_widget_declarations
+from core.apps.contract_installation import parse_installation
 from core.apps.errors import AppContractValidationError
 from core.apps.models import AppContractDescriptor, ParsedAppContract
 
@@ -60,6 +61,7 @@ ROOT_FIELDS = {
     "rollback_support",
     "widgets",
     "services",
+    "installation",
 }
 
 
@@ -99,6 +101,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         description=_expect_string(root, "description"),
         publisher=_expect_string(root, "publisher"),
         contract=AppContractDescriptor(
+            installation=parse_installation(root.get("installation", {}), app_id),
             provides=parse_provided_interfaces(root),
             requires=parse_required_interfaces(root),
             distribution=parse_distribution_section(_expect_mapping(root.get("distribution", {}), label="distribution")),

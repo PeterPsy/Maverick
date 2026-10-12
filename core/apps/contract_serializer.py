@@ -373,6 +373,12 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                 for sidecar in parsed.contract.services.http_sidecars
             ],
         }
+    if parsed.contract.installation.public_endpoints:
+        payload["installation"] = {"public_endpoints": [
+            {"id": item.endpoint_id, "label": item.label, "kind": item.kind,
+             "path": item.path, "provider_url": item.provider_url,
+             "requires_registration": item.requires_registration}
+            for item in parsed.contract.installation.public_endpoints]}
     return payload
 
 

@@ -13,6 +13,10 @@ class GatewayError(Exception):
         super().__init__(message)
         self.status, self.code = status, code
 
+    @property
+    def uncertain_send(self):
+        return self.status >= 500 or (self.status == 409 and self.code in {"gateway_error", "IDEMPOTENCY_OUTCOME_UNKNOWN"})
+
 def normalize_origin(raw: object) -> str:
     if not isinstance(raw, str) or len(raw) > 300:
         raise GatewayError("Enter a valid gateway URL.", 400)
@@ -68,27 +72,43 @@ class Gateway:
         headers = {"X-API-Key": self.key, "Accept": "application/json", "Content-Type": "application/json"}
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
-        conn = _connection(self.origin)
+        return _request(self.origin, method, path, headers, body)
+
+def _request(origin, method, path, headers, body=None):
+    conn = _connection(origin)
+    try:
+        conn.request(method, path, body=None if body is None else json.dumps(body).encode(), headers=headers)
+        response = conn.getresponse()
+        content = response.read(MAX_BODY + 1)
+        if len(content) > MAX_BODY:
+            raise GatewayError("The gateway response is too large. Narrow your search.", 413)
         try:
-            conn.request(method, path, body=None if body is None else json.dumps(body).encode(), headers=headers)
-            response = conn.getresponse()
-            content = response.read(MAX_BODY + 1)
-            if len(content) > MAX_BODY:
-                raise GatewayError("The gateway response is too large. Narrow your search.", 413)
-            try:
-                data = json.loads(content)
-            except (ValueError, UnicodeError):
-                raise GatewayError("The gateway returned an invalid response.") from None
-            if response.status >= 300:
-                messages = {401: "OpenWA rejected the API key.", 403: "This API key cannot perform that operation.",
-                    404: "The requested OpenWA resource was not found.", 409: "The operation is pending or its outcome is uncertain. Refresh before retrying.",
-                    429: "OpenWA is rate limiting requests. Try again later.", 501: "Your WhatsApp engine does not support this operation."}
-                raise GatewayError(messages.get(response.status, "OpenWA could not complete this request."), response.status)
-            return data
-        except (OSError, http.client.HTTPException):
-            message = "The gateway is unreachable or the request timed out."
-            if route.endswith(("/messages/send-text", "/messages/reply")):
-                message += " The message may already have been sent. Check the conversation before retrying."
-            raise GatewayError(message, 503, "gateway_unavailable") from None
-        finally:
-            conn.close()
+            data = json.loads(content)
+        except (ValueError, UnicodeError):
+            raise GatewayError("The gateway returned an invalid response.") from None
+        if response.status >= 300:
+            messages = {401: "OpenWA rejected the API key.", 403: "This API key cannot perform that operation.",
+                404: "The requested OpenWA resource was not found.", 409: "The send outcome is uncertain. Check the conversation before preparing a new send.",
+                429: "OpenWA is rate limiting requests. Try again later.", 501: "Your WhatsApp engine does not support this operation."}
+            code = "gateway_error"
+            # Upstream messages and arbitrary codes may contain sensitive payloads.
+            if response.status == 409 and isinstance(data, dict) and data.get("code") in (
+                "IDEMPOTENCY_KEY_IN_PROGRESS", "IDEMPOTENCY_OUTCOME_UNKNOWN"
+            ):
+                code = data["code"]
+                if code == "IDEMPOTENCY_KEY_IN_PROGRESS":
+                    messages[409] = "This send is still running. Wait, then retry with the same message."
+            raise GatewayError(messages.get(response.status, "OpenWA could not complete this request."), response.status, code)
+        return data
+    except (OSError, http.client.HTTPException):
+        message = "The gateway is unreachable or the request timed out."
+        if path.endswith(("/messages/send-text", "/messages/reply")):
+            message += " The message may already have been sent. Check the conversation before retrying."
+        raise GatewayError(message, 503, "gateway_unavailable") from None
+    finally:
+        conn.close()
+
+def check_readiness(origin):
+    data = _request(origin, "GET", "/api/health/ready", {"Accept": "application/json"})
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        raise GatewayError("The OpenWA provider is not ready.", 503, "gateway_unavailable")

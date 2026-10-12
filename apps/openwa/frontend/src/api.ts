@@ -20,7 +20,7 @@ export interface Chat {
   name?: string;
   unreadCount?: number;
   isGroup?: boolean;
-  lastMessage?: { body?: string };
+  lastMessage?: string;
 }
 export interface Message {
   id: string;
@@ -34,11 +34,17 @@ export interface Message {
   chatName?: string;
 }
 export interface Status {
+  send_scope: string;
   connection: Connection;
   can_configure: boolean;
   source: { repository: string; version: string };
 }
 export type Row = Record<string, unknown>;
+export class BackendError extends Error {
+  constructor(message: string, public status: number, public code: string) {
+    super(message);
+  }
+}
 export function items<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw as T[];
   if (raw && typeof raw === "object") {
@@ -68,8 +74,10 @@ export async function callBackend<T>(
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(
+    throw new BackendError(
       error.detail || error.error || `Request failed (${response.status}).`,
+      response.status,
+      error.error || "request_failed",
     );
   }
   return response.json() as Promise<T>;

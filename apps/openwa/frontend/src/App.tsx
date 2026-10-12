@@ -214,7 +214,8 @@ export function App() {
         />
         {session && chat ? (
           <Conversation
-            key={session.id + chat.id}
+            key={JSON.stringify([status.send_scope, session.id, chat.id])}
+            sendScope={status.send_scope}
             session={session}
             chat={chat}
             canSend={online === true && status.connection.role !== "viewer"}

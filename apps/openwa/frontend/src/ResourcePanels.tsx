@@ -146,7 +146,7 @@ export function ResourcePanel({
                   </span>
                   <span className="chat-description">
                     <strong>{c.name || c.id.split("@")[0]}</strong>
-                    <small>{c.lastMessage?.body || c.id}</small>
+                    <small>{c.lastMessage || c.id}</small>
                   </span>
                   {!!c.unreadCount && (
                     <span className="unread">{c.unreadCount}</span>

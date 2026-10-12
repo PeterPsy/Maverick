@@ -123,6 +123,12 @@ h3 {
 .wide {
   width: 100%;
 }
+.send-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
 .dot,
 .session-dot {
   width: 7px;

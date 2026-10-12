@@ -21,6 +21,6 @@ try:
             response[key] = result[key]
 except GatewayError as error:
     response = backend_response(error.status, {"error": error.code, "detail": str(error)})
-    if payload.body.get("action") in {"messages.send", "messages.reply"}:
+    if payload.body.get("action") in {"messages.send", "messages.reply"} and error.uncertain_send:
         response["app_events"] = [event("notifications")]
 emit_json(response)

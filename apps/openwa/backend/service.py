@@ -1,4 +1,6 @@
 """Native authentication, secrets and events around OpenWA operations."""
+import hashlib
+import json
 from actions import READ_ACTIONS, WRITE_ACTIONS, integer, perform, text
 from gateway import Gateway, GatewayError, SECRET, normalize_origin
 from state import configuration, save_configuration, notifications, dismiss, notify
@@ -17,7 +19,8 @@ def handle(payload, body=None):
     config = configuration(payload.data_root)
     if action in {"status", "connection.get"}:
         return {"connection": {**config, "credential_available": bool(key)}, "can_configure": payload.platform_role == "admin",
-                "source": {"repository": "https://github.com/rmyndharis/OpenWA", "version": "0.24.0"}}
+                "source": {"repository": "https://github.com/rmyndharis/OpenWA", "version": "0.24.0"},
+                "send_scope": hashlib.sha256(json.dumps([payload.data_root, user, config["url"]]).encode()).hexdigest()}
     if action == "connection.save":
         if payload.platform_role != "admin":
             raise GatewayError("Only a platform administrator can configure the gateway.", 403)
@@ -45,7 +48,7 @@ def handle(payload, body=None):
     try:
         data = perform(Gateway(config["url"], key), action, body)
     except GatewayError as error:
-        if action in {"messages.send", "messages.reply"} and error.status >= 500:
+        if action in {"messages.send", "messages.reply"} and error.uncertain_send:
             key_id = body.get("idempotency_key")
             if isinstance(key_id, str):
                 notify(payload.data_root, user, "send-" + key_id[:100], "Check your WhatsApp send", str(error), str(body.get("session_id", "")))

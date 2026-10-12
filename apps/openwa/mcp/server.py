@@ -21,6 +21,6 @@ else:
         emit_json({'ok': True, **result})
     except GatewayError as error:
         result = {'ok': False, 'error': error.code, 'detail': str(error), 'status_code': error.status}
-        if tool in {'openwa_messages_send', 'openwa_messages_reply'} and error.status >= 500:
+        if tool in {'openwa_messages_send', 'openwa_messages_reply'} and error.uncertain_send:
             result['app_events'] = [event('notifications')]
         emit_json(result)

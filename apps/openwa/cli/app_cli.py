@@ -16,6 +16,6 @@ try:
     emit_json({'ok': True, **result})
 except GatewayError as error:
     result = {'ok': False, 'error': error.code, 'detail': str(error), 'status_code': error.status}
-    if payload.arguments.get('action') in {'messages.send', 'messages.reply'} and error.status >= 500:
+    if payload.arguments.get('action') in {'messages.send', 'messages.reply'} and error.uncertain_send:
         result['app_events'] = [event('notifications')]
     emit_json(result)

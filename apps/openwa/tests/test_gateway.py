@@ -2,13 +2,14 @@
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import runpy
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 from actions import perform
-from gateway import Gateway, GatewayError, normalize_origin, _connection
+from gateway import Gateway, GatewayError, normalize_origin, _connection, check_readiness
 from service import handle
 from state import configuration, notify, notifications, dismiss
 
@@ -115,5 +116,99 @@ class GatewayTests(unittest.TestCase):
             with self.assertRaises(GatewayError):handle(self.payload)
         self.assertEqual(notifications(self.temp.name,'alice',0,50)['total'],1)
         self.assertEqual(notifications(self.temp.name,'bob',0,50)['total'],0)
+
+    def test_idempotency_conflicts_preserve_only_recognized_codes(self):
+        for code in ['IDEMPOTENCY_KEY_IN_PROGRESS', 'IDEMPOTENCY_OUTCOME_UNKNOWN', 'secret-key']:
+            with self.subTest(code=code):
+                response = MagicMock(status=409)
+                response.read.return_value = json.dumps({'code': code, 'message': 'private-key'}).encode()
+                conn = MagicMock()
+                conn.getresponse.return_value = response
+                with patch('gateway._connection', return_value=conn), self.assertRaises(GatewayError) as error:
+                    Gateway('https://example.com', 'private-key').request('POST', '/sessions/s/messages/send-text')
+                self.assertEqual(error.exception.code, code if code.startswith('IDEMPOTENCY_') else 'gateway_error')
+                self.assertNotIn('private-key', str(error.exception))
+
+    def test_unknown_conflict_notifies_once_but_in_progress_does_not(self):
+        self.payload.body = {'action': 'messages.reply', 'session_id': 'session-1', 'chat_id': '123@c.us',
+                             'text': 'Hello', 'message_id': 'quote-1', 'idempotency_key': 'request-abcdefghijkl'}
+        with patch('service.Gateway') as gateway:
+            gateway.return_value.request.side_effect = GatewayError('Still running', 409, 'IDEMPOTENCY_KEY_IN_PROGRESS')
+            with self.assertRaises(GatewayError):
+                handle(self.payload)
+            self.assertEqual(notifications(self.temp.name, 'alice', 0, 50)['total'], 0)
+            gateway.return_value.request.side_effect = GatewayError('Check the chat', 409, 'IDEMPOTENCY_OUTCOME_UNKNOWN')
+            for _ in range(2):
+                with self.assertRaises(GatewayError):
+                    handle(self.payload)
+        self.assertEqual(notifications(self.temp.name, 'alice', 0, 50)['total'], 1)
+        self.assertEqual(notifications(self.temp.name, 'bob', 0, 50)['total'], 0)
+
+    def test_missing_credentials_do_not_create_an_uncertain_send_notice(self):
+        self.payload.body = {'action': 'messages.send', 'session_id': 'session-1', 'chat_id': '123@c.us',
+                             'text': 'Hello', 'idempotency_key': 'request-abcdefghijkl'}
+        self.payload.raw['app_secrets'] = {}
+        with self.assertRaises(GatewayError) as error:
+            handle(self.payload)
+        self.assertEqual(error.exception.code, 'connection_required')
+        self.assertEqual(notifications(self.temp.name, 'alice', 0, 50)['total'], 0)
+
+    def test_send_scope_is_stable_and_separates_actors_workspaces_and_gateways(self):
+        first = handle(self.payload)['send_scope']
+        self.assertEqual(first, handle(self.payload)['send_scope'])
+        self.payload.user_id = 'bob'
+        self.assertNotEqual(first, handle(self.payload)['send_scope'])
+        self.payload.user_id = 'alice'
+        with tempfile.TemporaryDirectory() as other:
+            self.payload.data_root = other
+            self.assertNotEqual(first, handle(self.payload)['send_scope'])
+        self.payload.data_root = self.temp.name
+        from state import save_configuration
+        save_configuration(self.temp.name, {'url': 'https://example.com', 'configured': True})
+        self.assertNotEqual(first, handle(self.payload)['send_scope'])
+
+    def test_readiness_is_credential_free_and_rejects_unready_provider(self):
+        for status, body, succeeds in [(200, {'status': 'ok'}, True), (503, {'status': 'error'}, False),
+                                      (200, {'status': 'error'}, False), (200, [], False)]:
+            with self.subTest(status=status, body=body):
+                response = MagicMock(status=status)
+                response.read.return_value = json.dumps(body).encode()
+                conn = MagicMock()
+                conn.getresponse.return_value = response
+                with patch('gateway._connection', return_value=conn):
+                    if succeeds:
+                        check_readiness('https://example.com')
+                    else:
+                        with self.assertRaises(GatewayError):
+                            check_readiness('https://example.com')
+                self.assertNotIn('X-API-Key', conn.request.call_args.kwargs['headers'])
+                self.assertEqual(conn.request.call_args.args[:2], ('GET', '/api/health/ready'))
+                conn.close.assert_called_once()
+
+    def test_readiness_reports_unreachable_provider(self):
+        conn = MagicMock()
+        conn.request.side_effect = ConnectionRefusedError()
+        with patch('gateway._connection', return_value=conn), self.assertRaises(GatewayError) as error:
+            check_readiness('http://127.0.0.1:2785')
+        self.assertEqual(error.exception.status, 503)
+        conn.close.assert_called_once()
+
+    def test_uncertain_conflicts_emit_notification_events_on_every_entrypoint(self):
+        app = Path(__file__).resolve().parents[1]
+        self.payload.arguments = {'action': 'messages.send'}
+        self.payload.body = {'action': 'messages.send'}
+        self.payload.raw['tool_name'] = 'openwa_messages_send'
+        for entrypoint in ['backend/app_backend.py', 'cli/app_cli.py', 'mcp/server.py']:
+            for code in ['IDEMPOTENCY_OUTCOME_UNKNOWN', 'IDEMPOTENCY_KEY_IN_PROGRESS']:
+                with self.subTest(entrypoint=entrypoint, code=code), \
+                     patch('core.app_sdk.runtime.read_entrypoint_payload', return_value=self.payload), \
+                     patch('core.app_sdk.runtime.emit_json') as emit, \
+                     patch('service.handle', side_effect=GatewayError('Check chat', 409, code)):
+                    runpy.run_path(str(app / entrypoint), run_name='__main__')
+                result = emit.call_args.args[0]
+                if code == 'IDEMPOTENCY_OUTCOME_UNKNOWN':
+                    self.assertEqual(result['app_events'], [{'type': 'maverick.app.data-changed', 'resource': 'notifications'}])
+                else:
+                    self.assertNotIn('app_events', result)
 
 if __name__=='__main__':unittest.main()

@@ -1,0 +1,396 @@
+{
+  "tools": {
+    "openwa_reference_manifest": {
+      "description": "Describe OpenWA app surfaces.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "effect_class": "read"
+    },
+    "openwa_status": {
+      "description": "OpenWA status.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_sessions_list": {
+      "description": "OpenWA sessions.list.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_session_get": {
+      "description": "OpenWA session.get.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_session_qr": {
+      "description": "OpenWA session.qr.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_chats_list": {
+      "description": "OpenWA chats.list.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_contacts_list": {
+      "description": "OpenWA contacts.list.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_messages_list": {
+      "description": "OpenWA messages.list.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "chat_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "session_id",
+          "chat_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_webhooks_list": {
+      "description": "OpenWA webhooks.list.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_templates_list": {
+      "description": "OpenWA templates.list.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
+    },
+    "openwa_session_create": {
+      "description": "OpenWA session.create.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "mutating"
+    },
+    "openwa_session_start": {
+      "description": "OpenWA session.start.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "mutating"
+    },
+    "openwa_session_stop": {
+      "description": "OpenWA session.stop.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "mutating"
+    },
+    "openwa_session_logout": {
+      "description": "OpenWA session.logout.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "destructive"
+    },
+    "openwa_session_pair": {
+      "description": "OpenWA session.pair.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "phone"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "mutating"
+    },
+    "openwa_messages_send": {
+      "description": "OpenWA messages.send.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "chat_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "chat_id",
+          "text",
+          "idempotency_key"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "mutating"
+    },
+    "openwa_messages_reply": {
+      "description": "OpenWA messages.reply.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "chat_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "message_id": {
+            "type": "string",
+            "description": "WhatsApp waMessageId of the quoted message; not the database row ID."
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "chat_id",
+          "text",
+          "message_id",
+          "idempotency_key"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "mutating"
+    }
+  }
+}

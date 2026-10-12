@@ -7,6 +7,8 @@ export function mountInstallation(root: HTMLElement) {
   let jobPlan: Plan | undefined;
   let job: Job | undefined;
   let busy = false;
+  let revision = 0;
+  const actionDrafts = new Map<string, string[]>();
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const requests = new Set<AbortController>();
@@ -30,13 +32,17 @@ export function mountInstallation(root: HTMLElement) {
   };
   function redraw() {
     if (disposed) return;
+    const confirmation = root.querySelector<HTMLFormElement>('[data-installation-confirm]');
+    if (confirmation) actionDrafts.set(confirmation.dataset.installationConfirm!, new FormData(confirmation).getAll('action_id').map(String));
     query('[data-installation-plan]').innerHTML = plan ? planHtml(plan, busy) : '';
     query('[data-installation-job]').innerHTML = job ? jobHtml(job, jobPlan) : '';
+    if (job && actionDrafts.has(job.job_id)) root.querySelectorAll<HTMLInputElement>('[data-installation-confirm] input').forEach(input => { input.checked = actionDrafts.get(job!.job_id)!.includes(input.value); });
+    root.querySelectorAll<HTMLButtonElement>('[data-installation-job] button').forEach(button => { button.disabled = busy; });
     form.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = busy; });
   }
   async function run<T>(operation: (signal: AbortSignal) => Promise<T>, action = true): Promise<T | undefined> {
     const controller = new AbortController(); requests.add(controller);
-    if (action) { busy = true; redraw(); message('Working…'); }
+    if (action) { revision += 1; busy = true; redraw(); message('Working…'); }
     try {
       const result = await operation(controller.signal);
       if (disposed) return undefined;
@@ -48,9 +54,10 @@ export function mountInstallation(root: HTMLElement) {
     } finally { requests.delete(controller); if (action) { busy = false; redraw(); } }
   }
   async function refresh(initial = false) {
+    const requestedRevision = revision;
     const inspected = await run(signal => installationRequest<Inspection>('inspect', undefined, signal), false);
     if (disposed) return;
-    if (inspected) {
+    if (inspected && requestedRevision === revision) {
       data = inspected;
       query('[data-installation-overview]').innerHTML = overviewHtml(data);
       const refs = query<HTMLSelectElement>('[name=dns_secret_ref]');
@@ -64,7 +71,7 @@ export function mountInstallation(root: HTMLElement) {
       job = data.latest_job || job;
       if (job) {
         const result = await run(signal => installationRequest<{ job: Job; plan: Plan }>('status', { job_id: job!.job_id }, signal), false);
-        if (result) { job = result.job; jobPlan = result.plan; }
+        if (result && requestedRevision === revision) { job = result.job; jobPlan = result.plan; }
       }
       redraw();
     }
@@ -109,7 +116,9 @@ export function mountInstallation(root: HTMLElement) {
     }
   };
   const onInput = (event: Event) => { if ((event.target as Element).closest('[data-installation-form]')) { plan = undefined; redraw(); } };
+  const onChange = (event: Event) => onInput(event);
+  root.addEventListener('change', onChange);
   root.addEventListener('submit', onSubmit); root.addEventListener('click', onClick); root.addEventListener('input', onInput);
   void refresh(true);
-  return { destroy() { disposed = true; if (timer) clearTimeout(timer); requests.forEach(controller => controller.abort()); token.value = ''; root.replaceChildren(); root.removeEventListener('submit', onSubmit); root.removeEventListener('click', onClick); root.removeEventListener('input', onInput); } };
+  return { destroy() { disposed = true; if (timer) clearTimeout(timer); requests.forEach(controller => controller.abort()); token.value = ''; root.replaceChildren(); root.removeEventListener('submit', onSubmit); root.removeEventListener('click', onClick); root.removeEventListener('input', onInput); root.removeEventListener('change', onChange); } };
 }

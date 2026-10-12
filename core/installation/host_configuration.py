@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.installation.environment import ADDRESS_KEYS, address_environment, target_environment
 from core.installation.errors import InstallationError
+from core.installation.validation import record_id
 from core.installation.private_state import write_private
 from core.shared.env_file import read_env_file
 from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
@@ -57,7 +58,7 @@ def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
     identifier = configuration["installation_id"]
     if identifier == "uninitialized":
         raise InstallationError("installation_worker_not_initialized", status=409)
-    path = Path("/etc/nginx/conf.d/maverick-installation-" + identifier + ".conf")
+    path = Path("/etc/nginx/conf.d/maverick-installation-" + record_id(identifier) + ".conf")
     backup = private / "nginx-before"
     existed = path.exists()
     if not backup.exists():
@@ -100,7 +101,6 @@ def restore_host(service, private: Path) -> None:
     if metadata.exists():
         snapshot = json.loads(metadata.read_text())
         identifier = service.configuration()["installation_id"]
-        from core.installation.validation import record_id
         path = Path("/etc/nginx/conf.d/maverick-installation-" + record_id(identifier) + ".conf")
         if snapshot["existed"]:
             atomic_replace(path, (private / "nginx-before").read_bytes())

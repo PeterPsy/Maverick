@@ -27,8 +27,9 @@ def parse_installation(payload: dict, app_id: str) -> AppInstallationDeclaration
         decoded = unquote(path) if isinstance(path, str) else ""
         if (not isinstance(path, str) or len(path) > 256 or "?" in path or "#" in path or "\\" in decoded
                 or any(part in {".", ".."} for part in decoded.split("/"))
+                or path.count("{app_id}") != 1 or not re.fullmatch(r"/[A-Za-z0-9{}/._~-]+", path)
                 or not any(path == prefix or path.startswith(prefix + "/")
-                           for prefix in ("/api/apps/" + app_id, "/apps/" + app_id, "/app/" + app_id))):
+                           for prefix in ("/api/apps/{app_id}", "/apps/{app_id}", "/app/{app_id}"))):
             raise AppContractValidationError("Public endpoint path must belong to its app")
         label = entry.get("label", identifier)
         if not isinstance(label, str) or not label.strip() or len(label) > 128:

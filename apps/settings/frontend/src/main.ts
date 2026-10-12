@@ -1,4 +1,5 @@
 import './styles.css';
+import { createInstallationPage } from './installationPage';
 import './styles/learning.css';
 import './styles/learning-tickets.css';
 import './styles/speech-settings.css';
@@ -47,6 +48,7 @@ import { createCacheDiagnosticsController } from './cacheDiagnosticsController';
 
 let usageVisualizations: typeof import('./components/usageVisualizations') | null = null;
 let usageVisualizationsRequest: Promise<unknown> | null = null;
+const installationPage = createInstallationPage();
 let users: User[] = [];
 let iconRegistry: import('./adminApi').AppRegistryItem[] = [];
 let iconWorkspaceId = '';
@@ -469,6 +471,7 @@ function render() {
     ${noticeHtml(notice)}${staleErrors.map(resource => `<p role="alert">${escapeHtml(resources.state(resource).error)} <button type="button" data-retry-resource="${resource}">Retry</button></p>`).join('')}${content}
     </div></section>${persistenceMigrationModalHtml(persistenceController.viewState())}</main>`);
   bindEvents();
+  installationPage.attach(selectedPageId === 'installation' ? document.getElementById('installation-root') : null);
   syncSettingsModalFocus(persistenceController.cancel);
   learningController.setVisible(selectedPageId === 'learning' && settingsHostVisible() && !isLoading);
   if (selectedPageId === 'usage' && !isLoading && !errors.length) usageVisualizations?.mountUsageVisualizations({ history: settingsPanelState.usageHistory, filters: settingsPanelState.usageHistoryFilters, isLoading: settingsPanelState.isLoadingUsageHistory, onFiltersChange: providerUsageController.updateUsageHistoryFilters, settings: platformSettings });

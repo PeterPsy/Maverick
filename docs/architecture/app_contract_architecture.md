@@ -3271,3 +3271,21 @@ older writers; explicit cleanup retains the database-wide durable epoch,
 including RAM-to-IndexedDB recovery across distinct documents. SDK-owned
 `pwa.read_model` POSTs always inject an empty, optional app-secret selector:
 a display request must not initiate credential resolution or OAuth prompting.
+
+## Installation public endpoint dependencies
+
+Apps may declare optional `installation.public_endpoints` metadata in their
+contract. Each entry has a unique `id`, `label`, `kind` (`oauth_redirect`,
+`webhook`, or `public_url`), `path`, optional HTTPS `provider_url`, and boolean
+`requires_registration` (default true except for `public_url`). At most 32 entries
+are accepted. Paths belong to `/api/apps/{app_id}`, `/apps/{app_id}` or
+`/app/{app_id}` and use the literal `{app_id}` placeholder exactly once. Core
+substitutes the installed workspace binding id, preserving fork/local identities.
+Traversal, encoded traversal, foreign app paths and unknown fields are rejected.
+
+This metadata describes address dependencies only. It does not expose a route,
+grant anonymous access, deliver secrets, or bypass existing route ownership and
+authorization. Apps still implement their endpoints through their approved
+hosting contract. The installation planner collects enabled apps’ declarations
+and shows provider registrations required before changing the canonical address.
+Core-owned OAuth registrations remain Core dependencies rather than app contracts.

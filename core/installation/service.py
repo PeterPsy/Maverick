@@ -11,6 +11,7 @@ from core.installation.cloudflare import CloudflareDns, dns_changes, token_templ
 from core.installation.errors import InstallationError
 from core.installation.store import InstallationStore
 from core.installation.validation import hostname, public_ip, secret_ref
+from core.secrets.errors import SecretError
 from core.shared.env_file import read_env_file
 
 ACTIVE_STATES = {"queued", "preparing", "waiting_dns", "waiting_ca", "waiting_external_actions", "activating", "verifying", "rolling_back"}
@@ -61,12 +62,24 @@ class InstallationService:
     def requirements(self, host: str) -> list[dict]:
         requirements = []
         env = self.environment
-        configured_google = bool(env.get("MAVERICK_GOOGLE_REDIRECT_URI"))
-        if configured_google:
-            requirements.append({"id": "core.google", "label": "Google", "kind": "oauth_redirect",
-                "url": "https://" + host + "/api/auth/google/callback" if host else "",
-                "current_url": env.get("MAVERICK_GOOGLE_REDIRECT_URI", ""),
-                "provider_url": "https://console.cloud.google.com/auth/clients", "configured": True})
+        def ready(reference):
+            if not self.secret_store:
+                return False
+            try:
+                kind, identifier = reference.split("/", 1)
+                item = (self.secret_store.get_secret_by_alias(identifier) if kind == "platform:secret-alias"
+                        else self.secret_store.get_secret(identifier))
+                return item.status == "active"
+            except (ValueError, KeyError, SecretError):
+                return False
+        references = [env.get("MAVERICK_GOOGLE_CLIENT_ID_REF", "platform:secret-alias/google-oauth-client-id"),
+                      env.get("MAVERICK_GOOGLE_CLIENT_SECRET_REF", "platform:secret-alias/google-oauth-client-secret")]
+        configured_google = all(ready(reference) for reference in references)
+        requirements.append({"id": "core.google", "label": "Google · Calendar, Mail & Drive", "kind": "oauth_redirect",
+            "url": "https://" + host + "/api/auth/google/callback" if host else "",
+            "current_url": env.get("MAVERICK_GOOGLE_REDIRECT_URI", ""),
+            "provider_url": "https://console.cloud.google.com/auth/clients", "configured": configured_google,
+            "state": "configured" if configured_google else "connection_required"})
         if self.app_store and self.workspace_store:
             seen = set()
             for workspace in self.workspace_store.list_workspaces():
@@ -82,7 +95,7 @@ class InstallationService:
                     for endpoint in declaration.public_endpoints if declaration else []:
                         requirements.append({"id": binding.app_id + "." + endpoint.endpoint_id,
                             "label": endpoint.label, "app_id": binding.app_id, "kind": endpoint.kind,
-                            "url": "https://" + host + endpoint.path if host else "",
+                            "url": "https://" + host + endpoint.path.replace("{app_id}", binding.app_id) if host else "",
                             "provider_url": endpoint.provider_url, "configured": endpoint.requires_registration})
         return requirements
 

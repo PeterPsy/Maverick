@@ -49,3 +49,55 @@ only installation-owned DNS/configuration changes and retains unrelated settings
 The worker service is production infrastructure authorized by installation
 administration. Status and stop commands are documented with its deployment
 template; it is not an agent-owned detached task.
+
+## Operations and deployment
+
+HTTP administration is under `/api/admin/installation`: GET the base path or
+`/verify`; POST `/plan`, `/apply`, `/status`, `/confirm`, `/retry`, `/rollback`.
+All require a human administrator session. CLI/MCP ids are
+`core.installation.<operation>`; agents need full-access administrator context.
+For example, inspect `core.installation.plan` for its current schema, then supply
+`address`, `target_ip`, and `dns_secret_ref`. `apply` accepts a `plan_id`, returns
+a durable `job_id` and is idempotent. `confirm` accepts only known `action_ids`.
+
+On a Linux systemd/Nginx host, install the Certbot Cloudflare plugin
+(`python3-certbot-dns-cloudflare`) and the system Python D-Bus package
+(`python3-dbus`). From the repository root, run:
+
+```sh
+sudo /usr/bin/python3 scripts/deploy/install_installation_worker.py
+```
+
+The installer discovers `maverick-core.service`'s RootDirectory, so normal and
+migrated/chroot hosts use the same deployment path. A custom Core unit may be
+selected with `--core-unit`. It installs `maverick-installation.service` and
+`maverick-installation.timer`; the worker runs one bounded tick every 30 seconds.
+The API service account owns public job metadata; root owns private journals and
+credential projections outside the repository. Status/stop on the host:
+
+```sh
+systemctl status maverick-installation.timer maverick-installation.service
+journalctl -u maverick-installation.service
+systemctl stop maverick-installation.timer
+```
+
+A deployment bootstrap installs this worker once, before asking users to enter
+their address. Queued jobs survive backend restarts; a host-side completion step
+restarts Core only after activation. Once the new manager owns an installation,
+it disables the previous `maverick-wildcard-tls.timer`. Local expiry checks run
+at most every six hours and renew within 30 days of expiry; provider/CA failures
+remain visible in status. Staging renewal tests run once per certificate/job.
+Existing valid certificate lineages are reused without forced production orders.
+
+Fresh installations route administrator login to `/setup` when no public
+hostname is configured. Setup can be reached through an existing HTTPS origin or
+a localhost tunnel before public DNS/TLS is ready. Credentials require a secure
+browser context. The same UI is available in Settings → Installation later.
+
+Server moves run on the destination after restoring application data, control
+plane records, and the Vault encryption key/keyring. Keep the source available
+while DNS caches expire. The worker proves that the reviewed public IP reaches
+this destination's job nonce before changing the canonical address. It does not
+transfer data, register a new Google project, or alter the source host remotely.
+Name/domain changes pause for exact external callback registrations. Web readiness
+is separate from optional provider/account connection readiness.

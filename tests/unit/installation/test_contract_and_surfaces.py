@@ -22,14 +22,14 @@ from core.runtime.tool_schema import provider_safe_tool_schema
 
 class ContractAndSurfacesTests(unittest.TestCase):
     def test_public_endpoint_roundtrip_and_ownership(self):
-        entry = {'id': 'callback', 'kind': 'oauth_redirect', 'path': '/api/apps/demo/oauth/callback', 'label': 'Demo'}
+        entry = {'id': 'callback', 'kind': 'oauth_redirect', 'path': '/api/apps/{app_id}/oauth/callback', 'label': 'Demo'}
         declaration = parse_installation({'public_endpoints': [entry]}, 'demo')
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             write_app_contract_file(root, build_parsed_app_contract(app_id='demo', name='Demo', version='1.0.0',
                 description='Demo', publisher='maverick', contract=build_app_contract(installation=declaration)))
             self.assertEqual(parse_app_contract_file(root).contract.installation, declaration)
-        for path in ['/api/apps/other/callback', '/api/apps/demo/%2e%2e/secrets', '/api/apps/demo/%5csecrets']:
+        for path in ['/api/apps/other/callback', '/api/apps/{app_id}/%2e%2e/secrets', '/api/apps/{app_id}/%5csecrets']:
             with self.subTest(path=path), self.assertRaises(AppContractValidationError):
                 parse_installation({'public_endpoints': [{**entry, 'path': path}]}, 'demo')
 

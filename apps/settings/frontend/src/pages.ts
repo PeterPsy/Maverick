@@ -10,7 +10,8 @@ export type SettingsPageId =
   | 'sessions'
   | 'learning'
   | 'cache'
-  | 'persistence';
+  | 'persistence'
+  | 'installation';
 
 export function settingsPageDomKey(workspaceId: string, page: SettingsPageId, userId = '') {
   return `page:${JSON.stringify([workspaceId, page, ['users', 'workspace-access'].includes(page) ? userId : ''])}`;
@@ -26,6 +27,7 @@ export type SettingsPage = {
 };
 
 export const SETTINGS_PAGES: SettingsPage[] = [
+  { id: 'installation', title: 'Installation', summary: 'Manage this server’s address, DNS, certificates and service connections.', icon: 'dns', group: 'System', keywords: 'domain server address dns cloudflare certificate https migration' },
   { id: 'voice', title: 'Voice', summary: 'Configure speech synthesis and transcription.', icon: 'record_voice_over', group: 'AI', keywords: 'voice speech audio transcription language' },
   { id: 'computer-use', title: 'PC use', summary: 'Choose direct control or a separate interface operator.', icon: 'desktop_windows', group: 'AI', keywords: 'pc computer device operator recovery model' },
   { id: 'usage', title: 'Usage', summary: 'Inspect workspace tokens and provider subscriptions.', icon: 'monitoring', group: 'AI', keywords: 'tokens consumption subscription cost quota history' },

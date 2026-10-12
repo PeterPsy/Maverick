@@ -3374,3 +3374,15 @@ It should not own:
 - workspace business content
 
 This is the foundation required to rebuild the core in a clean and scalable way.
+
+## Standalone installation address control
+
+`core/installation` owns installation-wide address planning, DNS-provider
+connections, durable jobs, public HTTPS verification and selective restoration.
+Native admin-only HTTP/CLI/MCP operations use one typed catalog. Local infrastructure
+state belongs in `.maverick/installation`, outside tenant workspaces. Credentials
+remain in Core Secrets and are delivered only to the fixed provider/Certbot
+consumer. An operator-managed root worker performs privileged host changes;
+request handlers and runtime agents do not execute privileged shell commands.
+See `installation_address` through Developer Context for the workflow and host
+lifecycle. Settings and Base Shell own UI; the Core remains headless.

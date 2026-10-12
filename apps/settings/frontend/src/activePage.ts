@@ -25,6 +25,7 @@ export function activeSettingsPageHtml(context: {
   workspaces: Workspace[];
 }): string {
   const { page, selectedUser } = context;
+  if (page.id === 'installation') return '<div id="installation-root" data-settings-owned-view="installation"></div>';
   if (page.id === 'users') {
     return usersPageHtml({ selectedUser, users: context.users }) + workspaceAccessPageHtml({ selectedUser, users: context.users, workspaces: context.workspaces, showPicker: false });
   }

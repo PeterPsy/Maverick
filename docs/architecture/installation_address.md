@@ -89,8 +89,8 @@ at most every six hours and renew within 30 days of expiry; provider/CA failures
 remain visible in status. Staging renewal tests run once per certificate/job.
 Existing valid certificate lineages are reused without forced production orders.
 
-Fresh installations route administrator login to `/setup` when no public
-hostname is configured. Setup can be reached through an existing HTTPS origin or
+Fresh installations route administrator login to `/setup` when the public
+hostname is missing or no healthy unmanaged web configuration has been verified. Setup can be reached through an existing HTTPS origin or
 a localhost tunnel before public DNS/TLS is ready. Credentials require a secure
 browser context. The same UI is available in Settings → Installation later.
 
@@ -101,3 +101,10 @@ this destination's job nonce before changing the canonical address. It does not
 transfer data, register a new Google project, or alter the source host remotely.
 Name/domain changes pause for exact external callback registrations. Web readiness
 is separate from optional provider/account connection readiness.
+
+The normal installer renders/enables the same worker and seeds its metadata
+directory for the Core service user. The legacy wildcard-maintenance templates
+are excluded from new install plans. Each activation stages installation-owned
+Nginx virtual hosts, even when retaining the hostname, so destination servers
+receive the correct local port and certificate paths. Older virtual hosts stay
+available for selective rollback.

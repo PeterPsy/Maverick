@@ -1,5 +1,6 @@
 """Durable host worker: bootstrap, resume, verify, activate and roll back."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
@@ -116,7 +117,6 @@ class InstallationWorker:
             return self.store.write("jobs", job, job["job_id"])
         intent = private / "activation.json"
         if intent.exists():
-            import json
             return self.activate(job, plan, private, json.loads(intent.read_text()))
         self.save_step(job, "preparing")
         dns = self.dns(self.service, job, plan, private)
@@ -187,14 +187,22 @@ class InstallationWorker:
                 job["verification"] = result
             job.update(status="rolled_back", step="rolled_back", updated_at=timestamp())
             return self.store.write("jobs", job, job["job_id"])
-        expected = original.get("activated_generation", plan["generation"])
-        if configuration["generation"] != expected:
-            raise InstallationError("stale_installation_rollback", status=409)
-        private = self.store.root / "private" / original["job_id"]
-        self.dns_restore(self.service, original, plan, private)
-        self.restore(self.service, private)
-        restored = {**plan["previous"], "generation": configuration["generation"] + 1,
-                    "installation_id": configuration["installation_id"], "updated_at": timestamp()}
+        rollback_private = self.store.root / "private" / job["job_id"]
+        intent = rollback_private / "rollback.json"
+        if intent.exists():
+            restored = json.loads(intent.read_text())
+            if configuration["generation"] != restored["generation"] and configuration["generation"] != restored["generation"] - 1:
+                raise InstallationError("stale_installation_rollback", status=409)
+        else:
+            expected = original.get("activated_generation", plan["generation"])
+            if configuration["generation"] != expected:
+                raise InstallationError("stale_installation_rollback", status=409)
+            private = self.store.root / "private" / original["job_id"]
+            self.dns_restore(self.service, original, plan, private)
+            self.restore(self.service, private)
+            restored = {**plan["previous"], "generation": configuration["generation"] + 1,
+                        "installation_id": configuration["installation_id"], "updated_at": timestamp()}
+            write_private(intent, restored)
         marker = self.store.root / "private" / "restart-required"
         marker.write_text(job["job_id"])
         marker.chmod(0o600)

@@ -5,49 +5,13 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 
-def render_service(root: Path, *, root_directory="", core_unit="maverick-core.service") -> str:
-    if not re.fullmatch(r"[a-zA-Z0-9_.-]+\.service", core_unit):
-        raise ValueError("Invalid Core unit")
-    if any(c in str(root) + root_directory for c in '\n\r%"'):
-        raise ValueError("Unsupported systemd path")
-    inside = str(root)
-    env = root_directory.rstrip("/") + inside + "/.env"
-    host_root = root_directory.rstrip("/") + inside
-    after_tick = f"/usr/bin/python3 {host_root}/scripts/deploy/installation_after_tick.py --root {host_root} --core-unit {core_unit}"
-    chroot = f"RootDirectory={root_directory}\nRootDirectoryStartOnly=yes\nMountAPIVFS=yes\n" if root_directory else ""
-    return f'''[Unit]
-Description=Maverick installation address and TLS worker
-After=network-online.target {core_unit}
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=root
-WorkingDirectory={inside}
-{chroot}EnvironmentFile=-{env}
-ExecStart=/usr/bin/env -- {inside}/.venv/bin/python {inside}/scripts/deploy/installation_worker.py
-ExecStartPost={after_tick}
-TimeoutStartSec=15min
-UMask=0077
-'''
-
-
-TIMER = '''[Unit]
-Description=Resume Maverick installation changes and maintain TLS
-[Timer]
-OnBootSec=30s
-OnUnitInactiveSec=30s
-Unit=maverick-installation.service
-[Install]
-WantedBy=timers.target
-'''
+from core.installation.host_units import render_service, TIMER
 
 
 def install(core_unit):

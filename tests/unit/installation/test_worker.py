@@ -62,3 +62,39 @@ class InstallationWorkerTests(unittest.TestCase):
         result = self.worker(probe=unavailable).advance(pending)
         self.assertEqual(result["status"], "verifying")
         self.assertEqual(result["step"], "restarting")
+
+    def test_activation_recovers_after_environment_write_without_double_generation(self):
+        original = self.service.store.write
+        fail = [True]
+        def crash(kind, value, key='current'):
+            if kind == 'configuration' and fail[0]:
+                fail[0] = False
+                raise OSError('Simulated publication interruption')
+            return original(kind, value, key)
+        with patch.object(self.service.store, 'write', side_effect=crash):
+            with self.assertRaises(OSError):
+                self.worker().advance(self.job)
+        resumed = self.worker().advance(self.service.status(self.job['job_id'])['job'])
+        self.assertEqual(resumed['activated_generation'], 1)
+        self.assertEqual(self.service.configuration()['generation'], 1)
+        self.assertEqual(resumed['step'], 'restarting')
+
+    def test_rollback_recovery_verifies_after_restart(self):
+        self.worker().advance(self.job)
+        rollback = self.service.rollback(self.job['job_id'])
+        original = self.service.store.write
+        fail = [True]
+        def crash(kind, value, key='current'):
+            if kind == 'jobs' and value.get('step') == 'rollback_restarting' and fail[0]:
+                fail[0] = False
+                raise OSError('Simulated rollback publication interruption')
+            return original(kind, value, key)
+        worker = self.worker(restore=lambda *a: None, dns_restore=lambda *a: None)
+        with patch.object(self.service.store, 'write', side_effect=crash):
+            with self.assertRaises(OSError):
+                worker.rollback(rollback)
+        resumed = worker.rollback(self.service.status(rollback['job_id'])['job'])
+        self.assertEqual(self.service.configuration()['generation'], 2)
+        self.assertEqual(resumed['status'], 'rolling_back')
+        (self.service.store.root / 'private/restart-required').unlink()
+        self.assertEqual(worker.rollback(resumed)['status'], 'rolled_back')

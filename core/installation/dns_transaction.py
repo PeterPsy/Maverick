@@ -55,6 +55,7 @@ def restore_dns(service, original_job: dict, plan: dict, private: Path) -> None:
     provider = service.dns_factory(service.secret_store, plan["dns_secret_ref"], actor_user_id=original_job["actor_user_id"])
     backup = json.loads(snapshot.read_text())
     marker = "Maverick job " + original_job["job_id"]
+    operations = []
     for item in backup["changes"]:
         if item["action"] == "keep":
             continue
@@ -63,12 +64,17 @@ def restore_dns(service, original_job: dict, plan: dict, private: Path) -> None:
         before = item.get("before", [])
         signature = lambda record: {key: value for key, value in record.items() if key in FIELDS}
         remaining = [signature(record) for record in before]
+        owned = []
         for record in current:
             if record.get("comment") == marker:
-                provider.delete(backup["zone_id"], record["id"])
+                owned.append(record)
             elif signature(record) in remaining:
                 remaining.remove(signature(record))
             else:
                 raise InstallationError("dns_rollback_conflict", status=409)
+        operations.append((owned, remaining))
+    for owned, remaining in operations:
+        for record in owned:
+            provider.delete(backup["zone_id"], record["id"])
         for record in remaining:
             provider.create(backup["zone_id"], record)

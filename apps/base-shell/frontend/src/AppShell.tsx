@@ -397,7 +397,8 @@ export function AppShell() {
       if (currentSession.user.platform_role === "admin") {
         try {
           const response = await fetch("/api/admin/installation", { credentials: "same-origin", signal: controller.signal });
-          if (response.ok && !(await response.json()).configured) {
+          const installation = response.ok ? await response.json() : null;
+          if (installation && (!installation.configured || installation.setup_required)) {
             window.location.replace("/setup");
             return;
           }

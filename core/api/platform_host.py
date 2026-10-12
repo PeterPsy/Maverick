@@ -57,8 +57,6 @@ logger = logging.getLogger(__name__)
 
 
 _ROOT_SHELL_STATIC_ASSETS = {
-    "/setup": "installation.html",
-    "/setup/": "installation.html",
     "/favicon.ico": "favicon.ico",
     "/manifest.webmanifest": "manifest.webmanifest",
     "/material-symbols-rounded.woff2": "material-symbols-rounded.woff2",
@@ -254,7 +252,7 @@ class PlatformHost:
                     start_path=self.start_path,
                     start_response=start_response,
                 )
-            if path == "/" or path == "/app" or path.startswith("/app/"):
+            if path in {"/setup", "/setup/", "/", "/app"} or path.startswith("/app/"):
                 return handle_root_shell(
                     self.state,
                     environ=environ,
@@ -262,6 +260,7 @@ class PlatformHost:
                     root_shell_app_id=self.state.root_shell_app_id,
                     start_path=self.start_path,
                     start_response=start_response,
+                    document="installation.html" if path in {"/setup", "/setup/"} else "index.html",
                 )
             if path.startswith("/apps/"):
                 app_path = path.removeprefix("/apps/")

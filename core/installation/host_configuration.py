@@ -23,9 +23,8 @@ def render_nginx(host: str, certificates: dict, port: int) -> str:
     location / {{ return 301 https://$host$request_uri; }}
 }}
 server {{
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name {name};
     ssl_certificate {pair['fullchain']};
     ssl_certificate_key {pair['private_key']};
@@ -50,10 +49,6 @@ server {{
 
 
 def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
-    # Existing deployments already have live virtual hosts and valid cert paths.
-    if plan["hostname"] == plan["previous"]["hostname"]:
-        check_nginx()
-        return {"nginx_changed": False}
     configuration = service.configuration()
     identifier = configuration["installation_id"]
     if identifier == "uninitialized":

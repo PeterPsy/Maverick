@@ -53,7 +53,10 @@ class InstallationService:
                 if item.status == "active" and item.kind == "api_key" and "cloudflare" in (str(item.alias) + item.label).lower():
                     credentials.append({"label": item.label, "ref": "platform:secrets/" + item.secret_id})
         jobs = self.store.list_jobs()
+        worker = self.store.read("worker") or {}
+        setup_required = not configuration["hostname"] or not (configuration.get("managed") or worker.get("verification", {}).get("healthy"))
         return {"configuration": configuration, "dns_credentials": credentials,
+                "setup_required": setup_required,
                 "worker": self.store.read("worker"), "latest_job": jobs[0] if jobs else None,
                 "requirements": self.requirements(configuration.get("hostname", "")),
                 "configured": bool(configuration["hostname"]),

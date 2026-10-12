@@ -328,6 +328,7 @@ def handle_root_shell(
     root_shell_app_id: str,
     start_path: Path,
     start_response: StartResponse,
+    document: str = "index.html",
 ) -> list[bytes]:
     """Serve the configured root shell app for the active workspace."""
     try:
@@ -345,7 +346,8 @@ def handle_root_shell(
         return serve_frontend(
             start_response,
             frontend_root=(source_root / parsed.contract.entrypoints.frontend).resolve(),
-            subpath="/",
+            subpath=document,
+            spa_fallback=False,
             environ=environ,
         )
     except Exception:

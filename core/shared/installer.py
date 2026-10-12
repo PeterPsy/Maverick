@@ -16,6 +16,7 @@ from typing import Any
 from urllib import error, request
 
 from core.api.control_store import ControlStoreSettings, build_control_plane_collections
+from core.installation.host_units import render_service, TIMER
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
 from core.shared.env_file import quote_env_value, read_env_file, unquote_env_value
@@ -140,8 +141,12 @@ def render_install_plan(config: InstallerConfig, *, force_https_nginx: bool = Fa
 
     outputs: dict[Path, str] = {}
     for template_path in sorted((templates_root / "systemd").glob("*")):
+        if template_path.name.startswith("maverick-wildcard-tls."):
+            continue
         rendered = _render_template(template_path, substitutions)
         outputs[config.systemd_dir / template_path.name] = rendered
+    outputs[config.systemd_dir / "maverick-installation.service"] = render_service(config.install_root)
+    outputs[config.systemd_dir / "maverick-installation.timer"] = TIMER
     if config.nginx_conf_path is not None:
         outputs[config.nginx_conf_path] = render_nginx_config(config, force_https=force_https_nginx)
     outputs[secret_key_path] = secret_key_content
@@ -529,6 +534,8 @@ def apply_install_plan(
             _ensure_symlink(config.live_nginx_enabled_path, config.live_nginx_conf_path, run_command=runner)
     if config.acme_root is not None:
         runner(["mkdir", "-p", str(config.acme_root)])
+    runner(["install", "-d", "-o", config.service_user, "-g", config.service_group, "-m", "0700",
+            str(config.install_root / ".maverick" / "installation")])
     runner(["systemctl", "daemon-reload"])
     runner(["systemctl", "enable", "maverick-core.service"])
     runner(["systemctl", "enable", "maverick-rescue.service"])
@@ -536,6 +543,8 @@ def apply_install_plan(
     runner(["systemctl", "restart", "maverick-core.service"])
     runner(["systemctl", "restart", "maverick-rescue.service"])
     runner(["systemctl", "start", "maverick-backend-watchdog.timer"])
+    runner(["systemctl", "enable", "maverick-installation.timer"])
+    runner(["systemctl", "start", "maverick-installation.timer"])
     if config.live_nginx_conf_path is not None:
         runner(["nginx", "-t"])
         runner(["systemctl", "reload", "nginx"])

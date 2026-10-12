@@ -25,13 +25,14 @@ class WildcardTransitionTests(unittest.TestCase):
             nginx.write_text("original routing"); env.write_text("MAVERICK_BROWSER_ORIGIN_TLS_MODE=managed_exact\nOTHER=keep\n")
             original_env = env.read_bytes()
             calls = []
-            def runner(command, **kwargs):
-                calls.append(command)
-                if "-t" in command:
-                    self.assertEqual(env.read_bytes(), original_env)
-                    raise subprocess.CalledProcessError(1, command)
+            def tester():
+                calls.append("test")
+                self.assertEqual(env.read_bytes(), original_env)
+                raise subprocess.CalledProcessError(1, ["nginx", "-t"])
+            def reloader():
+                calls.append("reload")
             with self.assertRaises(subprocess.CalledProcessError):
-                transition.apply_transition(nginx, env, "invalid routing", runner=runner)
+                transition.apply_transition(nginx, env, "invalid routing", tester=tester, reloader=reloader)
             self.assertEqual(nginx.read_text(), "original routing")
             self.assertEqual(env.read_bytes(), original_env)
             self.assertEqual(len(calls), 2)
@@ -42,13 +43,15 @@ class WildcardTransitionTests(unittest.TestCase):
             nginx.write_text("original routing"); env.write_text("MAVERICK_BROWSER_ORIGIN_TLS_MODE=managed_exact\nOTHER=keep\n")
             env.chmod(0o600)
             calls = []
-            def runner(command, **kwargs):
-                calls.append(command)
+            def tester():
+                calls.append("test")
+            def reloader():
+                calls.append("reload")
                 if len(calls) == 2:
                     self.assertIn("external_wildcard", env.read_text())
-                    raise subprocess.CalledProcessError(1, command)
+                    raise subprocess.CalledProcessError(1, ["reload"])
             with self.assertRaises(subprocess.CalledProcessError):
-                transition.apply_transition(nginx, env, "wildcard routing", runner=runner)
+                transition.apply_transition(nginx, env, "wildcard routing", tester=tester, reloader=reloader)
             self.assertEqual(nginx.read_text(), "original routing")
             self.assertEqual(env.read_text(), "MAVERICK_BROWSER_ORIGIN_TLS_MODE=managed_exact\nOTHER=keep\n")
             self.assertEqual(env.stat().st_mode & 0o777, 0o600)

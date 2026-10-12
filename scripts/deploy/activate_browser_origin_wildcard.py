@@ -7,13 +7,13 @@ import json
 import os
 from pathlib import Path
 import re
-import subprocess
 import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from core.shared.installer_tls import hosted_sidecar_tls_errors
+from scripts.deploy.reload_nginx import check_nginx, reload_nginx
 
 
 def external_tls_environment(content: str) -> str:
@@ -51,20 +51,20 @@ def atomic_replace(path: Path, data: bytes) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
-def apply_transition(nginx_path: Path, env_path: Path, nginx_content: str, *, runner=subprocess.run) -> None:
+def apply_transition(nginx_path: Path, env_path: Path, nginx_content: str, *, tester=check_nginx, reloader=reload_nginx) -> None:
     """Test before reload and restore both files if a step fails."""
     original_nginx = nginx_path.read_bytes()
     original_env = env_path.read_bytes()
     next_env = external_tls_environment(original_env.decode()).encode()
     try:
         atomic_replace(nginx_path, nginx_content.encode())
-        runner(["/usr/sbin/nginx", "-t"], check=True, capture_output=True)
+        tester()
         atomic_replace(env_path, next_env)
-        runner(["/usr/sbin/nginx", "-s", "reload"], check=True, capture_output=True)
+        reloader()
     except BaseException:
         atomic_replace(nginx_path, original_nginx)
         atomic_replace(env_path, original_env)
-        runner(["/usr/sbin/nginx", "-s", "reload"], check=False, capture_output=True)
+        reloader()
         raise
 
 
@@ -99,6 +99,11 @@ def main() -> int:
         if os.geteuid() != 0:
             parser.error("Apply requires root privileges for nginx configuration.")
         nginx_path, env_path = args.nginx_config.resolve(strict=True), args.env_file.resolve(strict=True)
+        environment_changed = external_tls_environment(env_path.read_text()).encode() != env_path.read_bytes()
+        if not environment_changed and nginx_path.read_text() == content:
+            print(json.dumps({"status": "already_active", "mode": "external_wildcard",
+                "certificate": str(certificate), "backend_restart_required": False}))
+            return 0
         backup = Path("/var/backups/maverick-wildcard") / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         backup.mkdir(parents=True, mode=0o700)
         for source, name in [(nginx_path, "sidecars.conf"), (env_path, "installation.env")]:
@@ -107,7 +112,7 @@ def main() -> int:
             destination.chmod(0o600)
         apply_transition(nginx_path, env_path, content)
     print(json.dumps({"status": "applied" if args.apply else "ready", "mode": "external_wildcard",
-        "certificate": str(certificate), "backend_restart_required": bool(args.apply)}))
+        "certificate": str(certificate), "backend_restart_required": bool(args.apply and environment_changed)}))
     return 0
 
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Maverick wildcard TLS every fifteen minutes
+
+[Timer]
+OnCalendar={{FIRST_ATTEMPT_UTC}}
+OnUnitActiveSec=15min
+Persistent=true
+Unit=maverick-wildcard-tls.service
+
+[Install]
+WantedBy=timers.target

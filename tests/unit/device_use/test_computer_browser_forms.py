@@ -129,6 +129,24 @@ class ComputerBrowserFormTests(unittest.TestCase):
                 self.assertFalse(progress.complete())
                 self.assertIsNotNone(progress.pending)
 
+    def test_missing_value_is_not_the_literal_string_none(self):
+        progress = ComputerTaskProgress(browser_task(text='None'))
+        self.observe(progress, browser_result())
+        progress.prepare({'step_index': 0})
+        self.observe(progress, browser_result(value='None', complete=False))
+        self.assertFalse(progress.complete())
+        self.observe(progress, browser_result(value='None', complete=True, generation=2))
+        self.assertTrue(progress.complete())
+
+    def test_browser_value_verification_preserves_literal_whitespace(self):
+        progress = ComputerTaskProgress(browser_task(text=' new subject '))
+        self.observe(progress, browser_result())
+        progress.prepare({'step_index': 0})
+        self.observe(progress, browser_result(value='new subject'))
+        self.assertFalse(progress.complete())
+        self.observe(progress, browser_result(value=' new subject ', generation=2))
+        self.assertTrue(progress.complete())
+
     def test_browser_text_limit_matches_the_native_contract_and_plan_schema(self):
         valid = browser_task(text='x' * 2000)['steps'][0]
         self.assertTrue(Draft202012Validator(STEP_SCHEMA).is_valid(valid))

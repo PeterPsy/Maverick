@@ -44,6 +44,7 @@ class NativeControl:
     bounds: dict | None = None
     editable: bool = False
     focused: bool = False
+    value_is_exact: bool = False
 
     def matches(self, selector):
         if 'region' in selector:
@@ -54,9 +55,21 @@ class NativeControl:
                     and bounds['x'] + bounds['width'] <= region['x'] + region['width']
                     and bounds['y'] + bounds['height'] <= region['y'] + region['height']):
                 return False
-        return all((role_name(self.role) == role_name(value) if key == 'role' else
-                    normalized(getattr(self, key, None)) == normalized(value))
-                   for key, value in selector.items() if key != 'region')
+        for key, value in selector.items():
+            if key == 'region':
+                continue
+            actual = getattr(self, key, None)
+            if key == 'value' and actual is None:
+                return False
+            if key == 'value' and self.value_is_exact:
+                matches = actual == value
+            elif key == 'role':
+                matches = role_name(actual) == role_name(value)
+            else:
+                matches = normalized(actual) == normalized(value)
+            if not matches:
+                return False
+        return True
 
 
 @dataclass
@@ -114,12 +127,13 @@ def native_observation(result, tool, arguments):
             focus_signature = focus.get('signature') if isinstance(focus, dict) else None
             controls = [NativeControl(str(index), item.get('label', ''), item.get('kind', ''),
                 identifier=item.get('identifier', ''),
-                value=item.get('value') if item.get('value_complete') is True else None,
+                value=(item.get('value') if item.get('value_complete') is True
+                       and isinstance(item.get('value'), str) else None),
                 actionable=not item.get('disabled', False), x=item.get('x'), y=item.get('y'),
                 editable=item.get('editable') is True,
                 focused=(item.get('focused') is True and isinstance(focus_signature, str)
                          and bool(focus_signature) and item.get('focus_signature') == focus_signature
-                         and focus.get('editable') is True))
+                         and focus.get('editable') is True), value_is_exact=True)
                 for index, item in enumerate(page.get('controls', [])) if isinstance(item, dict)]
             if not isinstance(receipt, str) or not isinstance(target, str):
                 return None

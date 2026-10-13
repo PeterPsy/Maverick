@@ -24,6 +24,57 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); });
 
+it("prevents Backspace navigation from the page and locked message fields", async () => {
+  const button = document.createElement("button");
+  const locked = document.createElement("textarea");
+  locked.value = "Unconfirmed send";
+  locked.readOnly = true;
+  document.body.append(button, locked);
+  try {
+    for (const target of [document.body, button, locked]) {
+      for (const shiftKey of [false, true]) {
+        const event = new KeyboardEvent("keydown", { key: "Backspace", shiftKey, bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+      }
+    }
+    expect(locked.value).toBe("Unconfirmed send");
+    locked.readOnly = false;
+    locked.disabled = true;
+    const event = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+    locked.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  } finally { button.remove(); locked.remove(); }
+});
+
+it("leaves text deletion, modifiers and explicit browser navigation to their controls", async () => {
+  const input = document.createElement("input");
+  const textarea = document.createElement("textarea");
+  const editor = document.createElement("div");
+  editor.contentEditable = "true";
+  document.body.append(input, textarea, editor);
+  try {
+    for (const target of [input, textarea, editor]) {
+      const event = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    for (const options of [{ key: "Delete" }, { key: "ArrowLeft", altKey: true },
+      { key: "Backspace", ctrlKey: true }, { key: "Backspace", metaKey: true }, { key: "Backspace", altKey: true }]) {
+      const event = new KeyboardEvent("keydown", { ...options, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+  } finally { input.remove(); textarea.remove(); editor.remove(); }
+});
+
+it("removes keyboard protection when the app unmounts", async () => {
+  await act(async () => root.render(null));
+  const event = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+  document.body.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+});
+
 it("accepts live theme on navigation and theme changes only from the trusted parent", async () => {
   await message({ type: "maverick.app.navigate", app_id: "openwa", theme: { effective: "light" } });
   expect(document.documentElement.dataset.maverickTheme).toBe("light");

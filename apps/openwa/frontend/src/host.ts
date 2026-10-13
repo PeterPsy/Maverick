@@ -45,11 +45,24 @@ export function useMaverickHost(
         applyTheme(data.theme.effective);
     };
     window.addEventListener("message", listener);
+    document.addEventListener("keydown", preventBackspaceNavigation);
     return () => {
       stop();
       window.removeEventListener("message", listener);
+      document.removeEventListener("keydown", preventBackspaceNavigation);
     };
   }, [refresh, onSession]);
+}
+
+function preventBackspaceNavigation(event: KeyboardEvent) {
+  if (event.key !== "Backspace" || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  const target = event.composedPath()[0];
+  if (target instanceof HTMLTextAreaElement && !target.disabled && !target.readOnly) return;
+  if (target instanceof HTMLInputElement && !target.disabled && !target.readOnly &&
+    !["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"].includes(target.type)) return;
+  if (target instanceof HTMLElement && target.isContentEditable) return;
+  // Locked drafts and non-editable controls must not invoke browser history.
+  event.preventDefault();
 }
 
 function applyTheme(theme: string) {

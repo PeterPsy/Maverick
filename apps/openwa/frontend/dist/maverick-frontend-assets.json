@@ -1,25 +1,25 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "a3b8cb6b56bef687b2abab3bc6d1dca403e5ac318909bb2b3e9d91b0d9a48a11",
+  "build_id": "8f8747d61584b594e6800af1bf0c9550fbdbf9952bff529752e0ee553bca478a",
   "entrypoints": [
     "index.html"
   ],
   "immutable": [
     {
+      "path": "assets/index-DFBb-pBy.js",
+      "sha256": "4b9aa82bb692b06c50b6900062231b8b8c69b703adb60c98feb6391d11bb77ef",
+      "size_bytes": 258224
+    },
+    {
       "path": "assets/index-DNwzmK5l.css",
       "sha256": "a039e1fac4b5ac3ab03b8a004ff58bf8df82f2c4541b91c2aabcff3b646eb9af",
       "size_bytes": 15254
-    },
-    {
-      "path": "assets/index-Dp6340mK.js",
-      "sha256": "67780e007f19a67c4df428809ea42a0ca7803473c7dd988ae7d6889a8b13170d",
-      "size_bytes": 257727
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "050b7ada9940ed078643dd4065982dda974c7710fd252e94e0f39de259793f3a",
+      "sha256": "0f5244cc79d5994dbd18b8c7bd807532f209b904d36e574ba837353c8dfe9918",
       "size_bytes": 800
     },
     {

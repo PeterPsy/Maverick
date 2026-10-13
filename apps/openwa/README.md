@@ -16,6 +16,8 @@ Reads run one at a time per panel, schedule the next poll after completion, and 
 
 The interface uses app-owned Maverick dark/light tokens, neutral primary controls, compact session navigation and a search field labelled as filtering the current page. Connected indicators, unread counters and outgoing message surfaces use the monochrome palette; connected sessions omit the redundant `ready` badge, while linking and unavailable states remain visible. Session navigation scrolls independently on desktop and horizontally on mobile. QR failures are visible and retryable; outdated QR images disappear on a failed refresh. A provider outage is presented separately from phone linking and disables unavailable session creation. Theme bootstrap runs before first paint, with live shell updates accepted only through the trusted parent relay.
 
+Backspace deletes text in editable controls. On the page or a locked send draft it suppresses the browser's default history navigation, so deleting cannot leave the app. A locked attempt keeps its exact text until resolved through send recovery. Explicit browser navigation shortcuts retain their normal behavior.
+
 ## Integration
 
 - Official SDK lifecycle and native React interface, with Maverick theme and mobile spacing.

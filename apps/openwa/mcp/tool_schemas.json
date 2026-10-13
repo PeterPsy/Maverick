@@ -391,6 +391,38 @@
         "openwa-api-key"
       ],
       "effect_class": "mutating"
+    },
+    "openwa_messages_image": {
+      "description": "Read one WhatsApp image using the session, chat and waMessageId returned by message reads. Returns bounded image bytes as content_base64; does not send or export anything.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "chat_id": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string"
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4194304
+          }
+        },
+        "required": [
+          "session_id",
+          "chat_id",
+          "message_id"
+        ]
+      },
+      "required_secrets": [
+        "openwa-api-key"
+      ],
+      "effect_class": "read"
     }
   }
 }

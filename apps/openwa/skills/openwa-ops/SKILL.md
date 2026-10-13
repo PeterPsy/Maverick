@@ -13,6 +13,18 @@ Start with `status` and `sessions.list`. Use the returned session and chat ident
 
 QR challenges and pairing codes are authentication material. Direct the user to **Manage session** in `/app/openwa`; do not paste challenges into chat, logs or generated files. Pairing and logout must refer to the intended session. Logout disconnects the account and requires explicit authorization.
 
+Message lists omit inline media. Read a selected image with `messages.image`
+(MCP `openwa_messages_image`) using its exact session, chat and returned `waMessageId`
+as `message_id`. The response contains `mimetype`, `size_bytes` and `content_base64`;
+inspect the image rather than printing its base64. The read accepts JPEG, PNG, WebP
+and GIF up to 4 MiB (`max_bytes` may reduce that limit). It does not send or save a
+file. Use Storage if a persistent copy is requested. A missing/expired image is an
+explicit failure, not permission to read provider-private files.
+
+For native CLI image bytes use `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` on
+that one invocation and consume the JSON into an image viewer or Storage;
+the default text compaction can truncate base64. Never print the payload.
+
 ## Send messages
 
 Require user authorization for the exact recipient and message. A request to install the app, connect an account or inspect a conversation does not authorize sending. Prepare the recipient and full text for review if either is missing from the authorization. Do not send a test message or perform bulk messaging on your own initiative.

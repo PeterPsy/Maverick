@@ -57,6 +57,25 @@ HTTP 429 pacing refusals preserve the allowlisted `SEND_PACING_LIMITED` code and
 
 ## Read scheduling and error recovery
 
+Message lists deliberately omit inline media so polling stays bounded. `messages.image`
+(MCP `openwa_messages_image`) reads one stored image through the authenticated provider
+media endpoint using the exact session, chat and returned `waMessageId`. It returns
+`mimetype`, `size_bytes` and `content_base64`; `max_bytes` defaults to and cannot exceed
+4 MiB. Only JPEG, PNG, WebP and GIF are accepted. Redirects, active content, empty or
+oversized bodies and missing media fail explicitly; provider error bodies and keys
+are never forwarded. The image stays in browser memory and is not automatically
+saved to Storage. Navigating away cancels the browser read. Revoked, expired or
+never-stored media cannot be recovered by this operation. No provider restart or
+private database access is required.
+Native CLI callers consuming bytes must request `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full`
+for that call; generic text compaction is not a binary transport. Consume the JSON
+directly into an image viewer or Storage without logging the base64.
+
+The image-read change passed 45 backend and 51 frontend tests, SDK validation
+and the official frontend build. The selected real 134,856-byte JPEG was read
+through the native CLI and rendered in the mounted app at 1440×1000 and 390×844.
+No WhatsApp message was sent and the provider was not restarted.
+
 The browser bounds every backend request to 28 seconds. Read-only requests accept cancellation signals and discard cancelled results. Polling waits for completion, coalesces repeated refresh requests into one follow-up read, and cancels on hiding, offline state, superseded queries or teardown. Status/resources use a 10-second interval, messages 8 seconds and linking QR 5 seconds. Failed reads exponentially increase that delay up to 60 seconds; a manual retry or visibility resume resets the delay. Resource and message polling stop when the gateway is unavailable; messages also require a ready session. Mutations use neither the read scheduler nor visibility cancellation. A send timeout retains the original attempt and warns that delivery may already have happened.
 
 Query changes clear old rows immediately, while failed refreshes of the same query retain their rows. Resource errors have their own retry action and cannot be dismissed by unrelated successful status reads. Tab changes reset pagination in the same state update. Confirmed sends clear the attempt independently of message reads and return to the newest page. Synchronous dispatch guards prevent duplicate submissions before React can render the busy state.

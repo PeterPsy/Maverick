@@ -16,6 +16,7 @@
               "chats.list",
               "contacts.list",
               "messages.list",
+              "messages.image",
               "webhooks.list",
               "templates.list",
               "session.create",
@@ -61,6 +62,11 @@
           },
           "url": {
             "type": "string"
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4194304
           }
         },
         "required": [
@@ -91,7 +97,8 @@
           "session.pair": "mutating",
           "messages.send": "mutating",
           "messages.reply": "mutating",
-          "connection.save": "mutating"
+          "connection.save": "mutating",
+          "messages.image": "read"
         }
       }
     },

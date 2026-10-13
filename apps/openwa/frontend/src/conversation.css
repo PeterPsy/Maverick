@@ -44,6 +44,18 @@
 .message p {
   white-space: pre-wrap;
 }
+.message-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+}
+.message-image p[role="alert"] {
+  margin-top: 8px;
+  color: var(--muted);
+}
 .message.outgoing {
   align-self: flex-end;
   background: var(--hover);

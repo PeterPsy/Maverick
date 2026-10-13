@@ -56,7 +56,8 @@
       "openwa_session_logout",
       "openwa_session_pair",
       "openwa_messages_send",
-      "openwa_messages_reply"
+      "openwa_messages_reply",
+      "openwa_messages_image"
     ],
     "cli_commands": [
       "openwa",

@@ -4,6 +4,7 @@ import { Icon } from "./Icons";
 import { Dialog } from "./Dialog";
 import { isRateLimited, retryBlocked, sendAttemptKey, useSendAttempt, type SendAttempt } from "./sendAttempts";
 import { useMessages } from "./useMessages";
+import { MessageImage } from "./MessageImage";
 
 export function Conversation({
   session,
@@ -137,7 +138,11 @@ export function Conversation({
                 (message.direction === "outgoing" ? "outgoing" : "incoming")
               }
             >
-              <p>{message.body || `[${message.type || "Message"}]`}</p>
+              {message.type === "image" && message.waMessageId && <MessageImage
+                key={`${sendScope}:${session.id}:${chat.id}:${message.waMessageId}`}
+                sessionId={session.id} chatId={chat.id} messageId={message.waMessageId} available={online}
+              />}
+              {(message.body || message.type !== "image" || !message.waMessageId) && <p>{message.body || `[${message.type || "Message"}]`}</p>}
               <footer>
                 {message.waMessageId && canSend && <button
                   type="button" className="reply-button" disabled={busy || !!attempt || !!storageError}

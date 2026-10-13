@@ -12,7 +12,7 @@ An active send or retry shows **Sending…**, with recovery warnings hidden unti
 
 The default workspace has a dedicated local provider at `http://127.0.0.1:2785`. Administrators can configure another public HTTPS OpenWA gateway in the app after binding its key through Vault. API keys go through Core Secrets; app configuration stores only connection metadata. Remote private addresses, redirects and URL credentials are rejected.
 
-The app supports session creation/start/stop/logout, QR and phone pairing, bounded chat/contact/message reads, text sends/replies and read-only webhook/template inspection. Incoming messages refresh while the conversation is visible and its session is ready. Connection and uncertain-send notifications appear in Maverick's central inbox.
+The app supports session creation/start/stop/logout, QR and phone pairing, bounded chat/contact/message reads, image viewing, text sends/replies and read-only webhook/template inspection. Select **View image** on an image message to load it; captions remain visible. Incoming messages refresh while the conversation is visible and its session is ready. Connection and uncertain-send notifications appear in Maverick's central inbox.
 
 Reads run one at a time per panel, schedule the next poll after completion, and stop when the app is hidden or offline. Repeated failures gradually increase the polling interval up to one minute; **Retry** and returning to the app refresh immediately. Every browser request has a 28-second deadline. Switching sessions, gateways, tabs or pages cancels obsolete reads and clears previous-query rows. A failed refresh of the current page retains its rows and presents a local retry action. Sending keeps its separate confirmation and recovery flow, including across navigation.
 
@@ -27,7 +27,7 @@ Backspace deletes text in editable controls. On the page or a locked send draft 
 - Workspace-owned SQLite configuration and per-user notification receipts.
 - Provider readiness included in the health hook, independently of whether a phone is linked.
 - `whatsapp.workspace` and `notifications.inbox` contracts.
-- Declared `openwa` and administrator-only `provider` CLI commands and 17 MCP tools, with effects and secret requirements. Provider maintenance does not request the WhatsApp API key. Core continues to decide whether a runtime may invoke them.
+- Declared `openwa` and administrator-only `provider` CLI commands and 18 MCP tools, with effects and secret requirements. Provider maintenance does not request the WhatsApp API key. Core continues to decide whether a runtime may invoke them.
 - A bundled `openwa-ops` skill. Sending requires authorization for the recipient and message; installation or account linking does not authorize messages.
 
 The shared source lives in the Maverick `design` repository at `apps/openwa`, registered as a forkable platform app. Installation data remains in each workspace's `data/openwa`; moving the source does not reset an existing account. This local provider targets the `default` full-access workspace and runs independently of app entrypoints because WhatsApp needs persistent browser state and network access. An explicit provider start enables recovery through Maverick's backend recovery and background tick hooks; an explicit stop disables it. See [OPERATIONS.md](OPERATIONS.md) for lifecycle, isolation and verification limits.

@@ -1,9 +1,9 @@
 """Explicit domain operations over OpenWA; no arbitrary route forwarding."""
 import re
 from urllib.parse import quote
-from gateway import GatewayError
+from gateway import GatewayError, MAX_IMAGE_BYTES
 
-READ_ACTIONS = {"sessions.list", "session.get", "session.qr", "chats.list", "contacts.list", "messages.list", "webhooks.list", "templates.list"}
+READ_ACTIONS = {"sessions.list", "session.get", "session.qr", "chats.list", "contacts.list", "messages.list", "messages.image", "webhooks.list", "templates.list"}
 WRITE_ACTIONS = {"session.create", "session.start", "session.stop", "session.logout", "session.pair", "messages.send", "messages.reply"}
 
 def text(body, name, limit, optional=False, strip=True):
@@ -70,6 +70,11 @@ def perform(gateway, action, body):
     if action == "messages.list":
         return gateway.request("GET", root + "/messages", query={"chatId": chat_id(body), "limit": integer(body, "limit", 50, 1, 100),
             "offset": integer(body, "offset", 0, 0, 100000), "inlineMedia": "false"})
+    if action == "messages.image":
+        cid = chat_id(body)
+        mid = text(body, "message_id", 200)
+        route = root + "/messages/" + quote(cid, safe="") + "/" + quote(mid, safe="") + "/media"
+        return gateway.read_image(route, integer(body, "max_bytes", MAX_IMAGE_BYTES, 1, MAX_IMAGE_BYTES))
     if action in {"messages.send", "messages.reply"}:
         key = text(body, "idempotency_key", 100)
         if not re.fullmatch(r"[A-Za-z0-9_-]{12,100}", key):

@@ -15,7 +15,7 @@ tool = str(payload.raw.get('tool_name') or '').split('.')[-1]
 if tool == 'openwa_reference_manifest':
     emit_json({'app_id': 'openwa', 'reference_manifest': {'entity_types': []}})
 else:
-    actions = {'openwa_' + name.replace('.', '_'): name for name in ('status', 'sessions.list', 'session.get', 'session.qr', 'chats.list', 'contacts.list', 'messages.list', 'webhooks.list', 'templates.list', 'session.create', 'session.start', 'session.stop', 'session.logout', 'session.pair', 'messages.send', 'messages.reply')}
+    actions = {'openwa_' + name.replace('.', '_'): name for name in ('status', 'sessions.list', 'session.get', 'session.qr', 'chats.list', 'contacts.list', 'messages.list', 'messages.image', 'webhooks.list', 'templates.list', 'session.create', 'session.start', 'session.stop', 'session.logout', 'session.pair', 'messages.send', 'messages.reply')}
     try:
         result = handle(payload, {**payload.arguments, 'action': actions.get(tool, 'unknown')})
         emit_json({'ok': True, **result})

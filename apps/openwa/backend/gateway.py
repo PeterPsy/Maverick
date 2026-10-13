@@ -1,4 +1,5 @@
 """Bounded OpenWA REST transport. Credentials never enter URLs or responses."""
+import base64
 import http.client
 import ipaddress
 import json
@@ -7,6 +8,8 @@ from urllib.parse import urlsplit, urlencode
 
 SECRET = "openwa-api-key"
 MAX_BODY = 6 * 1024 * 1024
+MAX_IMAGE_BYTES = 4 * 1024 * 1024
+IMAGE_MIMETYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 class GatewayError(Exception):
     def __init__(self, message: str, status: int = 502, code: str = "gateway_error"):
@@ -73,6 +76,32 @@ class Gateway:
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
         return _request(self.origin, method, path, headers, body)
+
+    def read_image(self, route: str, max_bytes: int):
+        if not route.startswith("/sessions/") or ".." in route or "?" in route:
+            raise GatewayError("Invalid image operation.", 400)
+        conn = _connection(self.origin)
+        try:
+            conn.request("GET", "/api" + route, headers={"X-API-Key": self.key, "Accept": "image/*"})
+            response = conn.getresponse()
+            if response.status != 200:
+                messages = {401: "OpenWA rejected the API key.", 403: "This API key cannot read this image.",
+                            404: "This image is no longer available from the gateway.",
+                            429: "OpenWA is rate limiting requests. Try again later."}
+                raise GatewayError(messages.get(response.status, "OpenWA could not read this image."), response.status)
+            mimetype = (response.getheader("Content-Type") or "").split(";", 1)[0].strip().lower()
+            if mimetype not in IMAGE_MIMETYPES:
+                raise GatewayError("This message does not contain a supported image.", 415)
+            content = response.read(max_bytes + 1)
+            if len(content) > max_bytes:
+                raise GatewayError("This image exceeds the requested size limit.", 413)
+            if not content:
+                raise GatewayError("The gateway returned an empty image.", 502)
+            return {"mimetype": mimetype, "size_bytes": len(content), "content_base64": base64.b64encode(content).decode("ascii")}
+        except (OSError, http.client.HTTPException):
+            raise GatewayError("The image could not be loaded. Try again.", 503, "gateway_unavailable") from None
+        finally:
+            conn.close()
 
 def _request(origin, method, path, headers, body=None):
     conn = _connection(origin)

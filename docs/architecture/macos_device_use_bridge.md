@@ -924,3 +924,9 @@ replacement probe coincided with its move to an inactive Space. The returned
 result was indeterminate and the fresh pixel image retained the original text.
 Permissions stayed granted. Cross-desktop capture does not certify writable AX
 focus or typing; that acceptance remains open and is not inferred from OCR.
+
+Actions run [38379743849](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38379743849)
+verified native `10d1fc1` and installed/launched 0.4.2 (76). The Swift suite and
+all 18 signed physical cases passed; the download and three real application
+captures retained their byte/image evidence. The app restart disconnected this
+chat's native session, so final installation confirmation is runner evidence.

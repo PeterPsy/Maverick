@@ -46,8 +46,13 @@ def list_connections(data_root: Path) -> list[dict[str, Any]]:
 
 
 def get_connection(data_root: Path, connection_id: str) -> dict[str, Any]:
-    for item in read_state(data_root).get("connections", []):
+    connections = read_state(data_root).get("connections", [])
+    for item in connections:
         if str(item.get("id") or "") == connection_id:
+            return normalize_connection(item)
+    for item in connections:
+        refs = item.get("external_refs") or {}
+        if refs.get("managed_by") == "platform" and connection_id in refs.get("previous_connection_ids", []):
             return normalize_connection(item)
     raise ValueError(f"Drive connection `{connection_id}` was not found.")
 
@@ -55,7 +60,7 @@ def get_connection(data_root: Path, connection_id: str) -> dict[str, Any]:
 def resolve_connected_connection(data_root: Path, connection_id: str) -> dict[str, Any]:
     """Return a connected replacement for a stale Drive connection when safe."""
     connection = get_connection(data_root, connection_id)
-    if connection.get("status") == "connected":
+    if connection.get("status") == "connected" or connection.get("external_refs", {}).get("managed_by") == "platform":
         return connection
     replacement = connected_replacement_for_connection(data_root, connection)
     return replacement or connection

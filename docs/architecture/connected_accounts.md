@@ -91,6 +91,19 @@ source files, preserve newer shared edits, and keep provider IDs namespaced by
 connection. Mail does not migrate OAuth authority or pending send approvals.
 Storage retains the selected inventory adapter when importing an indexed source.
 
+Storage must preserve saved workspace Drive references when their owner adopts
+personal accounts. For each enabled Google account with Drive capability, it
+imports only workspace Drive file and directory metadata whose manual connection
+email matches that account's verified email, retaining the original stable file
+IDs and locators. Old connection IDs become reference aliases on that account's
+Core-managed projection; the old connection's credentials, OAuth flows, view
+state and cached bytes are not imported. Provider operations use only the matching
+current invocation handle. Aliases remain unavailable when that account is
+disabled or removed and cannot fall back to manual credentials or another account.
+Imports are tracked independently per account, so enabling an account later
+retains its saved references too. Source data stays untouched and later private
+metadata edits take precedence.
+
 Calendar, Mail and Storage project every workspace-enabled account into their
 existing domain connection models and use the SDK broker-aware HTTP transport.
 Each operation resolves the handle for its concrete connection; an unavailable

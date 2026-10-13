@@ -86,6 +86,11 @@ an empty set or disabled app. `previous_data_root` identifies a trusted original
 individual-account subtree. Apps may import their own schema with
 `core.app_sdk.account_state.migrate_account_state`; it serializes imports and
 records completed sources without moving files or provider authority.
+An app may also opt into a workspace importer with `migrate_workspace`. The SDK
+validates the host-owned `workspace_data_root` against the personal destination
+and rejects symlink roots. Use `workspace_migration_id` for independently tracked
+imports, such as one Drive account enabled later; failed imports remain retryable.
+Without an ID, the workspace importer runs once for the personal store.
 
 Use `core.app_sdk.connected_accounts.account_urlopen` with a `urllib.request.Request`
 and `Authorization: Bearer <access_handle>`. Core validates current user ownership,

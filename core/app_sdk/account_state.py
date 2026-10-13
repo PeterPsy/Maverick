@@ -7,7 +7,7 @@ from pathlib import Path
 from core.app_sdk.storage import read_json_state, write_json_state
 
 
-def migrate_account_state(payload, migrate, *, migrate_workspace=None):
+def migrate_account_state(payload, migrate, *, migrate_workspace=None, workspace_migration_id=None):
     """Import each trusted source once; apps own its schema and merge behavior."""
     root = Path(payload["data_root"])
     workspace_source = payload.get("workspace_data_root") if migrate_workspace else None
@@ -19,9 +19,14 @@ def migrate_account_state(payload, migrate, *, migrate_workspace=None):
         fcntl.flock(lock, fcntl.LOCK_EX)
         marker = read_json_state(root, ".platform-account-migrations.json", {"imported": []})
         imported = set(marker["imported"])
-        if migrate_workspace and workspace_source and not marker.get("workspace_imported"):
+        workspace_imported = (workspace_migration_id in marker.get("workspace_imports", [])
+                              if workspace_migration_id else marker.get("workspace_imported"))
+        if migrate_workspace and workspace_source and not workspace_imported:
             migrate_workspace(source, root)
-            marker["workspace_imported"] = True
+            if workspace_migration_id:
+                marker["workspace_imports"] = sorted({*marker.get("workspace_imports", []), workspace_migration_id})
+            else:
+                marker["workspace_imported"] = True
             write_json_state(root, ".platform-account-migrations.json", marker)
         for account in payload.get("external_accounts", []):
             previous = account.get("previous_data_root")

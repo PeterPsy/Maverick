@@ -3,7 +3,7 @@
 from pathlib import Path
 from core.app_sdk.account_state import migrate_account_state
 from drive_connection_store import read_state, update_state
-from platform_account_migration import migrate_state
+from platform_account_migration import migrate_state, migrate_workspace_account
 
 
 def attach_platform_account(payload):
@@ -11,6 +11,11 @@ def attach_platform_account(payload):
         return
     root = Path(payload["data_root"])
     migrate_account_state(payload, migrate_state)
+    for account in payload["external_accounts"]:
+        if account.get("provider") == "google" and "drive" in account.get("services", []):
+            migrate_account_state(payload, migrate_state,
+                migrate_workspace=lambda source, target: migrate_workspace_account(source, target, account),
+                workspace_migration_id="storage-drive:" + account["account_id"])
     projected = {}
     for account in payload["external_accounts"]:
         if account.get("provider") != "google":

@@ -120,6 +120,7 @@ body,
   height: 100%;
   min-height: 100%;
   margin: 0;
+  background: transparent;
   overflow: hidden;
 }
 
@@ -198,7 +199,7 @@ input {
   gap: 12px;
   flex: 1;
   min-height: 0;
-  padding: 0 4px var(--chat-sidebar-scroll-under-bottom);
+  padding-bottom: var(--chat-sidebar-scroll-under-bottom);
 }
 
 .bs-chat-sidebar-block {
@@ -206,7 +207,6 @@ input {
   flex-direction: column;
   flex: 1;
   min-height: 100px;
-  padding: 10px 6px 6px;
 }
 
 .bs-chat-sidebar-block--tasks {

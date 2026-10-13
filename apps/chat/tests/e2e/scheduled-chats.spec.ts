@@ -150,7 +150,7 @@ for (const theme of ["dark", "light"]) {
     const state = await installMocks(page);
     state.chats = Array.from({ length: 18 }, (_, index) => ({ ...fixture(), id: `task-${index}`, title: `Task ${index + 1}`, status: index < 12 ? "active" : "paused" }));
     await page.setViewportSize({ width: 320, height: 700 });
-    await page.route("**/sidebar-test", route => route.fulfill({ contentType: "text/html", body: `<html><body style="margin:0"><iframe title="Chat sidebar" src="/apps/chat/widgets/chat-sidebar/index.html?maverick_theme=${theme}" style="width:100vw;height:100vh;border:0"></iframe><script>window.messages=[];window.addEventListener('message',event=>window.messages.push(event.data));</script></body></html>` }));
+    await page.route("**/sidebar-test", route => route.fulfill({ contentType: "text/html", body: `<html style="color-scheme:${theme}"><body style="margin:0;background:${theme === "dark" ? "#171719" : "#edf0f4"}"><iframe title="Chat sidebar" src="/apps/chat/widgets/chat-sidebar/index.html?maverick_theme=${theme}" style="width:100vw;height:100vh;border:0"></iframe><script>window.messages=[];window.addEventListener('message',event=>window.messages.push(event.data));</script></body></html>` }));
     await page.goto("/sidebar-test");
     const sidebar = page.frameLocator('iframe[title="Chat sidebar"]');
     const chats = sidebar.getByRole("region", { name: "Chats", exact: true });

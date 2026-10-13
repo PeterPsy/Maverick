@@ -44,6 +44,10 @@ Chat glass tokens and lazy-loads the graph editor.
 
 The sidebar presents Chats and Scheduled tasks as separate sibling sections,
 without container backgrounds, borders or shadows; spacing separates the lists.
+Primary and footer widget canvases are transparent from first paint in both
+themes, allowing the Shell sidebar surface to show through. Sections add no
+container insets; the host owns outer spacing and the widget retains clearance
+for the overlaid header and footer.
 Both use the same view selector, search and action toolbar. Task filters and
 search are local to the task block; the chat search shortcut remains scoped to
 Chats. Each list scrolls independently, keeping both toolbars available. Task

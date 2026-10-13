@@ -9,6 +9,9 @@ try {
   const mode = JSON.parse(localStorage.getItem('maverick:base-shell:session') || '{}').themeMode;
   if (mode === 'light' || (mode === 'system' && matchMedia('(prefers-color-scheme: light)').matches)) document.documentElement.dataset.theme = 'light';
 } catch { /* Start with the native dark theme. */ }
+if (document.documentElement.dataset.theme === 'light') {
+  document.getElementById('installation-brand')!.setAttribute('src', '/apps/base-shell/sidebar-logo-black.svg');
+}
 
 async function start() {
   try {

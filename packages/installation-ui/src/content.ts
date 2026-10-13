@@ -26,6 +26,7 @@ export function overviewHtml(data: Inspection): string {
   const online = data.worker?.checked_at && Date.now() - Date.parse(data.worker.checked_at) < 20 * 60 * 1000;
   return `<section class="installation-card"><div class="installation-card-heading"><div><p class="installation-eyebrow">This installation</p><h2>${e(config.hostname || 'Choose your address')}</h2></div><span class="installation-badge">${config.managed ? 'Managed' : 'Setup available'}</span></div>
     <div class="installation-facts"><div><span>Public address</span><strong>${config.public_url ? link(config.public_url, config.public_url) : 'Not configured'}</strong></div><div><span>Automation</span><strong>${online ? 'Worker online' : 'Worker unavailable'}</strong></div><div><span>Certificate renewal</span><strong>${e(data.worker?.renewal_state || (config.managed ? 'Scheduled' : 'Complete setup to manage'))}</strong></div></div>
+    ${data.worker?.verification?.healthy === false ? '<p role="alert">The secure connection needs attention. Check the connection for current diagnostics.</p>' : ''}
     ${!online ? '<p class="installation-muted">The server administrator can enable automation with <code>sudo /usr/bin/python3 scripts/deploy/install_installation_worker.py</code>.</p>' : ''}
     ${data.requirements.length ? `<details><summary>Service connections</summary>${data.requirements.map(item => `<div class="installation-notice"><strong>${e(item.label)}</strong><p>${item.configured ? 'Provider configured · check registration when changing address' : 'Connection required · web setup can continue'}</p><code>${e(item.url)}</code>${item.provider_url ? `<p>${link(item.provider_url, 'Open provider')}</p>` : ''}</div>`).join('')}</details>` : ''}
     <div class="installation-actions"><button type="button" data-installation-action="verify">Check connection</button><a href="${e(config.public_url + '/setup')}" target="_blank" rel="noopener">Open recovery setup ↗</a></div></section>`;
@@ -55,5 +56,6 @@ export function jobHtml(job: Job, plan?: Plan): string {
 }
 
 export function verificationHtml(result: Verification): string {
-  return `<div class="installation-verification" role="status"><strong>${result.healthy ? 'Connection verified' : 'Some connections need attention'}</strong><ul>${result.checks.map(item => `<li><code>${e(item.host)}</code><span>${item.healthy ? 'HTTPS ready' : e(item.error || 'Unavailable')}</span></li>`).join('')}</ul></div>`;
+  const title = (host: string) => host.startsWith('af-') ? 'Secure app pages' : host.startsWith('sc-') ? 'Secure app services' : 'Maverick address';
+  return `<div class="installation-verification" role="status"><strong>${result.healthy ? 'Connection verified' : 'Some connections need attention'}</strong><ul>${result.checks.map(item => `<li><span>${title(item.host)}</span><span>${item.healthy ? 'HTTPS ready' : e(item.error || 'Unavailable')}</span></li>`).join('')}</ul><details><summary>Technical details</summary>${result.checks.map(item => `<p><code>${e(item.host)}</code></p>`).join('')}</details></div>`;
 }

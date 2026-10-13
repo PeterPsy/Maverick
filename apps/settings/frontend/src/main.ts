@@ -471,7 +471,7 @@ function render() {
     ${noticeHtml(notice)}${staleErrors.map(resource => `<p role="alert">${escapeHtml(resources.state(resource).error)} <button type="button" data-retry-resource="${resource}">Retry</button></p>`).join('')}${content}
     </div></section>${persistenceMigrationModalHtml(persistenceController.viewState())}</main>`);
   bindEvents();
-  installationPage.attach(selectedPageId === 'installation' ? document.getElementById('installation-root') : null);
+  installationPage.attach(selectedPageId === 'installation' && settingsHostVisible() ? document.getElementById('installation-root') : null);
   syncSettingsModalFocus(persistenceController.cancel);
   learningController.setVisible(selectedPageId === 'learning' && settingsHostVisible() && !isLoading);
   if (selectedPageId === 'usage' && !isLoading && !errors.length) usageVisualizations?.mountUsageVisualizations({ history: settingsPanelState.usageHistory, filters: settingsPanelState.usageHistoryFilters, isLoading: settingsPanelState.isLoadingUsageHistory, onFiltersChange: providerUsageController.updateUsageHistoryFilters, settings: platformSettings });
@@ -578,7 +578,10 @@ function showError(error: unknown) {
 
 bindSettingsHostEvents({
   navigate: applyNavigationParams,
-  visibilityChanged: (visible) => learningController.setVisible(selectedPageId === 'learning' && visible && !isLoading),
+  visibilityChanged: (visible) => {
+    learningController.setVisible(selectedPageId === 'learning' && visible && !isLoading);
+    installationPage.attach(visible && selectedPageId === 'installation' ? document.getElementById('installation-root') : null);
+  },
 });
 
 refresh().catch(showError);

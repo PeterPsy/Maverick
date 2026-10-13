@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "90c665fa7fda7393b4f1cfebfed9acc798b73873f69fb86ab0128f62e6a78ad4",
+  "build_id": "21b73dddd9c27f1040b69a721c4758db2c5169c248ca08ac9952ec99c708c0d0",
   "entrypoints": [
     "index.html",
     "installation.html"
@@ -22,14 +22,14 @@
       "size_bytes": 106169
     },
     {
-      "path": "assets/installation-BKkaq9hx.js",
-      "sha256": "4db5af97ef661f4fb0a84df9cde03390b5d736844c8fea1de6ddccb7903bf3b8",
-      "size_bytes": 16754
+      "path": "assets/installation-D9odMyOn.js",
+      "sha256": "ba9453ec41d7fd12a2fe5d5dc223016e65851b6467264e10936d63a83a77ed36",
+      "size_bytes": 17347
     },
     {
-      "path": "assets/installation-ovwXRYc1.css",
-      "sha256": "05d26bae3f8810f74b67f98ecf3e6ad4c3655ee8ba56b091877663ed071d7a0e",
-      "size_bytes": 5892
+      "path": "assets/installation-DSSY1HGs.css",
+      "sha256": "b383ff66fa18d428ab52794e9bffc215a17debb3c7bdc34ae0d8f29e8c89eb02",
+      "size_bytes": 5996
     },
     {
       "path": "assets/modulepreload-polyfill-B5Qt9EMX.js",
@@ -55,8 +55,8 @@
     },
     {
       "path": "installation.html",
-      "sha256": "f237e000018973f1fe95292149c30e6e43c64275d1d1eea686807cb2828c3618",
-      "size_bytes": 900
+      "sha256": "fbe193cc930c6bec28ae308b20a5f1e8e81c86a1284de87cdbc2df41198a998c",
+      "size_bytes": 924
     },
     {
       "path": "manifest.webmanifest",
@@ -110,7 +110,7 @@
     },
     {
       "path": "sw.js",
-      "sha256": "8d80b7f152f7ab10355c3272181e569b186578d66a0bab354093056d500c98c7",
+      "sha256": "f003a01d2e4d615e9d2065d1bb778b9c38180d8081f366d6133add1daeac311d",
       "size_bytes": 14202
     }
   ],
@@ -141,16 +141,16 @@
       "size_bytes": 596596
     },
     {
-      "url": "/apps/base-shell/assets/installation-BKkaq9hx.js",
-      "path": "assets/installation-BKkaq9hx.js",
-      "sha256": "4db5af97ef661f4fb0a84df9cde03390b5d736844c8fea1de6ddccb7903bf3b8",
-      "size_bytes": 16754
+      "url": "/apps/base-shell/assets/installation-D9odMyOn.js",
+      "path": "assets/installation-D9odMyOn.js",
+      "sha256": "ba9453ec41d7fd12a2fe5d5dc223016e65851b6467264e10936d63a83a77ed36",
+      "size_bytes": 17347
     },
     {
-      "url": "/apps/base-shell/assets/installation-ovwXRYc1.css",
-      "path": "assets/installation-ovwXRYc1.css",
-      "sha256": "05d26bae3f8810f74b67f98ecf3e6ad4c3655ee8ba56b091877663ed071d7a0e",
-      "size_bytes": 5892
+      "url": "/apps/base-shell/assets/installation-DSSY1HGs.css",
+      "path": "assets/installation-DSSY1HGs.css",
+      "sha256": "b383ff66fa18d428ab52794e9bffc215a17debb3c7bdc34ae0d8f29e8c89eb02",
+      "size_bytes": 5996
     },
     {
       "url": "/apps/base-shell/assets/LoginPaperBackground-4miI59X5.js",

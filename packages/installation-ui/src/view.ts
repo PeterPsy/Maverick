@@ -66,7 +66,7 @@ export function mountInstallation(root: HTMLElement) {
       refs.value = data.dns_credentials.some(item => item.ref === selected) ? selected : data.dns_credentials[0]?.ref || '';
       if (initial) {
         query<HTMLInputElement>('[name=address]').value = data.configuration.hostname;
-        const ip = data.configuration.target_ip || data.worker?.public_ip || '';
+        const ip = (data.configuration.managed ? data.configuration.target_ip : data.worker?.public_ip) || data.configuration.target_ip || '';
         query<HTMLInputElement>('[name=target_ip]').value = ip;
         query<HTMLDetailsElement>('[data-installation-server]').open = !ip;
       }

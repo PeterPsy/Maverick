@@ -27,8 +27,14 @@ def runtime_background_context(state, workspace_id, app_id, *, recovery=False):
             for stream in session_streams:
                 if stream.source_app_id != app_id:
                     continue
-                requests.append({"request_id": stream.request_id, "session_id": stream.session_id,
-                                 "turn_id": stream.turn_id, "status": stream.status})
+                request = {"request_id": stream.request_id, "session_id": stream.session_id,
+                           "turn_id": stream.turn_id, "status": stream.status}
+                if stream.turn_id and stream.status in {"completed", "failed", "cancelled"}:
+                    event = store.find_turn_event(turn_id=stream.turn_id, event_type=f"runtime.turn.{stream.status}")
+                    if event is not None:
+                        request["output_text"] = str(event.payload.get("output_text") or "")[:16_000]
+                        request["failure_reason"] = str(event.payload.get("failure_reason") or "")[:1_000]
+                requests.append(request)
         if store.has_turn_with_status(session.session_id, {"queued", "active", "waiting_for_tool_confirmation"}):
             busy.add(session.session_id)
         if recovery and len(recent) < 100 and session.session_kind == "chat_root" and session.thread_visibility == "user":
@@ -41,7 +47,7 @@ def runtime_background_context(state, workspace_id, app_id, *, recovery=False):
                     "runtime_session_id": session.session_id, "turn_status": turn.status,
                     "session_kind": session.session_kind, "thread_visibility": session.thread_visibility,
                     "project_id": session.project_id or "", "input_text": (turn.input_text or "")[:16_000],
-                    "output_text": str((event.payload if event else {}).get("output_text") or "")[:16_000],
+                    **({"output_text": str(event.payload.get("output_text") or "")[:16_000]} if event else {}),
                     "completed_at": (turn.completed_at or turn.updated_at).isoformat(),
                     "metrics": {"duration_seconds": max(0, ((turn.completed_at or turn.updated_at) - (turn.started_at or turn.created_at)).total_seconds())}})
                 if len(recent) >= 100:

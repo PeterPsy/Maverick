@@ -22,18 +22,33 @@ persist runtime request payloads before dispatch. Every dispatch uses Core's
 durable stream idempotency key. Recovery replays the exact request, reconciles
 Core-provided request states and deduplicates terminal events. Ambiguous launch
 state is never retried under a fresh key. Known failed blocks require an explicit
-retry. Deleted schedules are tombstoned until in-flight callbacks are fenced.
+retry with a new dispatch key, including definitive admission failures without a
+turn. An explicitly retried ambiguous stopped launch retains its original key
+and payload. Pausing, cancelling or deleting also cancels unsubmitted outbox
+records. Recovery checks the persisted task/run/step fence before replaying any
+launch; a late launch callback interrupts the bound turn through Core before
+worker activation. Deleted schedules are tombstoned until in-flight callbacks
+are fenced.
 CLI/MCP operations enqueue durable outbox records; hosted background hooks admit
 those turns with the full platform context and the persisted initiating actor.
 Mounted backend actions can dispatch immediately through the same outbox.
 
+Successful recovery waits for the persisted final result before exposing a
+checkpoint. Core's source-owned request states include bounded terminal output
+when the terminal event exists; a missing output field is distinct from an
+authoritatively empty result. Delayed terminal callbacks use the same rule and
+cannot launch a successor with a placeholder result.
+
 The bottom composer belongs to the schedule's management conversation. It uses
-the normal Chat composer and transcript, and submits app runtime requests with
-a bounded graph context and a stable scheduled-task reference. AI graph creation
+the normal Chat composer and transcript. The management conversation is
+initialized with the task goal and a stable scheduled-task reference; graph edits
+read the latest state through the app's operations. AI graph creation
 and edits use the same validated `chat_scheduled` MCP/CLI operations as manual
 editing. Block instructions are injected into each worker turn; optional stable
 workspace skill ids use explicit runtime skill activation. Worker conversations
 remain inspectable through the authorized Core transcript surface.
+The block inspector follows refreshed skill selections while preserving the
+user's in-progress comma-separated input when its parsed selection is unchanged.
 
 Scheduled-task references use `scheduled_chat`, `/app/chat/scheduled/<id>`, and
 the existing isolated-frame reference drag broker. Reference resolution and all

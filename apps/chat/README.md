@@ -230,3 +230,10 @@ Schedules, runs, outboxes and notification receipts live in
 closed. Core owns runtime admission and idempotent session/turn dispatch.
 Checkpoint, failure and completion notifications appear in the central Shell
 inbox. See [Scheduled tasks architecture](../../docs/architecture/scheduled_tasks.md).
+
+Stopped outbox launches cannot replay after recovery, and late launch callbacks
+interrupt their turns before worker activation. Retry uses a new dispatch key
+after a definitive failure; an ambiguous stopped launch retains its original
+key. Recovery waits for the final result before allowing checkpoint confirmation
+and downstream handoff. AI edits refresh the selected block's skill IDs without
+interrupting manual comma-separated entry.

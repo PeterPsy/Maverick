@@ -394,6 +394,34 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 app_id="sample-consumer",
             )
 
+    def test_runtime_callback_terminalizes_a_late_queued_turn_before_worker_activation(self) -> None:
+        store = self._runtime_store()
+        repo_root = make_temp_repo_root(self)
+        now = datetime.now(UTC)
+        create_runtime_session(store, session_id="late-chat", workspace_id="default", agent_id="worker",
+                               source_app_id="sample-consumer", start_path=repo_root)
+        store.save_turn(RuntimeTurnRecord(turn_id="late-turn", session_id="late-chat", workspace_id="default",
+            status="queued", input_text="work", created_at=now, updated_at=now, started_at=None,
+            completed_at=None, failure_reason=None))
+        state = SimpleNamespace(runtime_store=store, app_event_bus=None, runtime_event_bus=None)
+        parsed = SimpleNamespace(contract=SimpleNamespace(capabilities=SimpleNamespace(data_events=[]),
+            permissions=SimpleNamespace(runtime=SimpleNamespace(create_sessions=True))))
+        response = {"status_code": 200, "runtime_turn_interrupt_requests": [{"turn_id": "late-turn", "reason": "Stopped"}]}
+        with (
+            patch.object(runtime_requests, "run_json_entrypoint", return_value=response),
+            patch.object(runtime_requests, "publish_declared_app_events"),
+            patch.object(runtime_requests, "_resolved_provider_id", return_value="provider"),
+            patch.object(runtime_requests, "interrupt_runtime_provider_turn", return_value=False),
+            patch.object(runtime_requests, "dispatch_source_app_runtime_event"),
+            patch.object(runtime_requests, "release_idle_runtime_processes"),
+        ):
+            runtime_requests._invoke_runtime_request_callback(state, callback={"action": "started"}, request={},
+                request_id="request", status="submitted", session_id="late-chat", turn_id="late-turn", stream_id="stream",
+                actor_id="owner", error="", workspace_id="default", app_id="sample-consumer", source_root=repo_root,
+                backend_entrypoint="backend.py", data_root=str(repo_root / "data"), parsed=parsed, start_path=repo_root)
+        self.assertEqual(store.get_turn("late-turn").status, "cancelled")
+        self.assertEqual(store.get_turn("late-turn").cancellation_reason, "Stopped")
+
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
         callback_payloads: list[dict[str, object]] = []
         callback_invocations: list[dict[str, object]] = []

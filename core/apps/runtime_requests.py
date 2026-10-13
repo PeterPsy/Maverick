@@ -1617,6 +1617,12 @@ def _invoke_runtime_request_callback(
     status_code = int(result.get("status_code", 200))
     if status_code >= 400:
         raise AppHostingError(str(result.get("json") or result))
+    apply_app_runtime_requests(
+        state, result=result, workspace_id=workspace_id, app_id=app_id,
+        source_root=source_root, backend_entrypoint=backend_entrypoint,
+        data_root=data_root, parsed=parsed, start_path=start_path,
+        actor_user_id=actor_id,
+    )
     return result
 
 

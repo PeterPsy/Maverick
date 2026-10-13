@@ -44,3 +44,37 @@ class RuntimeRequestReplayTests(unittest.TestCase):
             result = replay_runtime_request(SimpleNamespace(),stream=stream,request=request,actor_id='owner')
         self.assertEqual(result['status'],'running')
         self.assertEqual(result['callback_status_code'],500)
+
+    def test_launch_callback_applies_its_interrupt_before_returning_to_the_worker(self):
+        parsed = SimpleNamespace(contract=SimpleNamespace(
+            capabilities=SimpleNamespace(data_events=[]),
+            permissions=SimpleNamespace(runtime=SimpleNamespace(create_sessions=True)),
+        ))
+        result = {'status_code': 200, 'json': {}, 'runtime_turn_interrupt_requests': [{'turn_id': 'turn', 'reason': 'Stopped'}]}
+        state = SimpleNamespace(app_event_bus=None)
+        with patch.object(runtime_requests, 'run_json_entrypoint', return_value=result), \
+             patch.object(runtime_requests, 'publish_declared_app_events'), \
+             patch('core.apps.background_generation.apply_background_generation_requests'), \
+             patch.object(runtime_requests, '_apply_one_runtime_interrupt_request', return_value={'interrupted': True}) as interrupt:
+            runtime_requests._invoke_runtime_request_callback(state, callback={'action': 'started'}, request={}, request_id='request',
+                status='submitted', session_id='chat', turn_id='turn', stream_id='stream', actor_id='owner', error='',
+                workspace_id='default', app_id='consumer', source_root=Path('/app'), backend_entrypoint='backend.py',
+                data_root='/data', parsed=parsed, start_path=Path('/repo'))
+        interrupt.assert_called_once_with(state, request={'turn_id': 'turn', 'reason': 'Stopped'}, workspace_id='default', app_id='consumer')
+
+    def test_launch_callback_cannot_interrupt_without_the_contract_permission(self):
+        parsed = SimpleNamespace(contract=SimpleNamespace(
+            capabilities=SimpleNamespace(data_events=[]),
+            permissions=SimpleNamespace(runtime=SimpleNamespace(create_sessions=False)),
+        ))
+        result = {'status_code': 200, 'runtime_turn_interrupt_requests': [{'turn_id': 'turn'}]}
+        with patch.object(runtime_requests, 'run_json_entrypoint', return_value=result), \
+             patch.object(runtime_requests, 'publish_declared_app_events'), \
+             patch('core.apps.background_generation.apply_background_generation_requests'), \
+             patch.object(runtime_requests, '_apply_one_runtime_interrupt_request') as interrupt:
+            with self.assertRaises(runtime_requests.AppHostingError):
+                runtime_requests._invoke_runtime_request_callback(SimpleNamespace(app_event_bus=None), callback={'action': 'started'},
+                    request={}, request_id='request', status='submitted', session_id='chat', turn_id='turn', stream_id='stream',
+                    actor_id='owner', error='', workspace_id='default', app_id='consumer', source_root=Path('/app'),
+                    backend_entrypoint='backend.py', data_root='/data', parsed=parsed, start_path=Path('/repo'))
+        interrupt.assert_not_called()

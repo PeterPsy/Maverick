@@ -2,6 +2,7 @@
 
 import json
 
+from scheduled_dispatch import request_stopped
 from scheduled_store import new_id, now, open_run
 
 MAX_PARALLEL = 4
@@ -118,19 +119,24 @@ def settle_run(db, chat, run_id):
 
 def started(db, body):
     request = db.execute("SELECT * FROM scheduled_requests WHERE id=?", (body.get("dispatch_id", ""),)).fetchone()
-    if not request or body.get("request_id") != request["id"] or request["status"] not in ACTIVE:
+    if not request or body.get("request_id") != request["id"] or request["status"] not in ACTIVE | {"cancelled"}:
         return {"ignored": True}
     chat = db.execute("SELECT * FROM scheduled_chats WHERE id=?", (request["chat_id"],)).fetchone()
     session_id, turn_id = body.get("runtime_session_id", ""), body.get("turn_id", "")
-    if body.get("runtime_request_status") == "failed":
-        complete_request(db, chat, request, "failed", "", str(body.get("error") or "Runtime admission failed"), session_id, turn_id)
+    if request["turn_id"] and request["turn_id"] != turn_id:
+        return {"ignored": True}
+    stopped = request_stopped(db, chat, request)
+    status = body.get("runtime_request_status")
+    if status in TERMINAL and status != "completed":
+        complete_request(db, chat, request, status, "", str(body.get("error") or "Runtime admission failed"), session_id, turn_id)
+    elif stopped:
+        complete_request(db, chat, request, "cancelled", "", "Scheduled task stopped", session_id, turn_id)
     else:
         db.execute("UPDATE scheduled_requests SET status='running',session_id=?,turn_id=?,updated_at=? WHERE id=?", (session_id, turn_id, now(), request["id"]))
         if request["kind"] == "message" and not chat["deleted"]:
             db.execute("UPDATE scheduled_chats SET chat_session_id=? WHERE id=?", (session_id, chat["id"]))
     result = {"_scheduled_changed": True}
-    run = db.execute("SELECT * FROM scheduled_runs WHERE id=?", (request["run_id"],)).fetchone() if request["kind"] == "block" else None
-    if turn_id and (chat["deleted"] or (request["kind"] == "block" and (chat["paused"] or run["finished_at"] is not None))):
+    if turn_id and stopped:
         result["runtime_turn_interrupt_requests"] = [{"turn_id": turn_id, "reason": "Scheduled task stopped"}]
     return result
 
@@ -168,13 +174,15 @@ def runtime_event(db, body):
         return {"ignored": True}
     if request["turn_id"] and request["turn_id"] != turn_id:
         return {"ignored": True}
+    status = body.get("turn_status") or str(body.get("action", "")).removeprefix("runtime.turn.")
+    if status == "completed" and "output_text" not in body:
+        return {"ignored": True}
     event_id = body.get("runtime_event_id") or str(body.get("action", "")) + ":" + turn_id
     if not db.execute("INSERT OR IGNORE INTO scheduled_events VALUES(?,?)", (event_id, now())).rowcount:
         return {"ignored": True}
     if body.get("action") == "runtime.turn.queued":
         return started(db, {"dispatch_id": request["id"], "request_id": request["id"], "runtime_request_status": "submitted",
                             "runtime_session_id": body.get("runtime_session_id", ""), "turn_id": turn_id})
-    status = body.get("turn_status") or str(body.get("action", "")).removeprefix("runtime.turn.")
     if status not in TERMINAL:
         return {"ignored": True}
     chat = db.execute("SELECT * FROM scheduled_chats WHERE id=?", (request["chat_id"],)).fetchone()

@@ -2,6 +2,7 @@
 
 import json
 
+from scheduled_dispatch import cancel_unsubmitted_request
 from scheduled_runtime import ACTIVE, create_run, dispatch_ready, settle_run
 from scheduled_store import now, open_run
 
@@ -17,12 +18,10 @@ def control(db, chat, body):
     result = {"_scheduled_changed": True}
     if action in {"scheduled.pause", "scheduled.delete", "scheduled.cancel"}:
         result["runtime_turn_interrupt_requests"] = interrupts(db, chat["id"], blocks_only=action != "scheduled.delete")
-        queued = db.execute("SELECT id,run_id,node_id FROM scheduled_requests WHERE chat_id=? AND status='queued'" +
-                            (" AND kind='block'" if action != "scheduled.delete" else ""), (chat["id"],)).fetchall()
-        for request in queued:
-            db.execute("UPDATE scheduled_requests SET status='cancelled' WHERE id=?", (request["id"],))
-            db.execute("UPDATE scheduled_steps SET status='cancelled' WHERE run_id=? AND node_id=? AND request_id=?",
-                       (request["run_id"], request["node_id"], request["id"]))
+        unsubmitted = db.execute("SELECT * FROM scheduled_requests WHERE chat_id=? AND (status='queued' OR (status='launching' AND turn_id=''))" +
+                                (" AND kind='block'" if action != "scheduled.delete" else ""), (chat["id"],)).fetchall()
+        for request in unsubmitted:
+            cancel_unsubmitted_request(db, request)
         if action == "scheduled.pause":
             db.execute("UPDATE scheduled_chats SET paused=1,revision=revision+1,updated_at=? WHERE id=?", (now(), chat["id"]))
             if run:
@@ -69,7 +68,7 @@ def control(db, chat, body):
         request = db.execute("SELECT * FROM scheduled_requests WHERE id=?", (step["request_id"],)).fetchone()
         if request and request["status"] in ACTIVE:
             raise ValueError("Wait for the previous turn to stop before retrying")
-        if request and not request["turn_id"]:
+        if request and request["status"] != "failed" and not request["turn_id"]:
             # An unconfirmed launch keeps its original key and payload, never a fresh turn.
             db.execute("UPDATE scheduled_requests SET status='launching',updated_at=? WHERE id=?", (now(), request["id"]))
             db.execute("UPDATE scheduled_steps SET status='running' WHERE run_id=? AND node_id=?", (run["id"], step["node_id"]))

@@ -90,6 +90,24 @@ test("creates a schedule, saves manual blocks and keeps the composer below React
   await expect(page.locator(".scheduled-composer [role=textbox]")).toContainText("skill-block graph");
 });
 
+test("refreshes an open inspector after AI edits and preserves the new skills on save", async ({ page }) => {
+  const state = await installMocks(page);
+  await page.goto("/apps/chat/?app_page=scheduled/schedule-1");
+  await page.locator('.react-flow__node[data-id="calendar"]').click();
+  const skills = page.getByLabel("Workspace skill IDs");
+  await skills.fill("old-skill");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  state.chats[0].graph.nodes[0].skill_ids = ["ai-skill", "review"];
+  state.chats[0].revision++;
+  await page.evaluate(() => window.postMessage({ type: "maverick.app.data-changed", owner_app_id: "chat", resource: "scheduled-chats" }, window.location.origin));
+  await expect(skills).toHaveValue("ai-skill, review");
+  await skills.press("End");
+  await skills.pressSequentially(", planning");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((state.writes.at(-1)!.graph as ScheduledConfig["graph"]).nodes[0].skill_ids).toEqual(["ai-skill", "review", "planning"]);
+});
+
 test("stops at checkpoints and confirms only the explicit run and block identities", async ({ page }) => {
   const state = await installMocks(page);
   await page.goto("/apps/chat/?app_page=scheduled/schedule-1");

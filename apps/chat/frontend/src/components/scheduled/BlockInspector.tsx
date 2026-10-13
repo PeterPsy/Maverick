@@ -1,5 +1,5 @@
 import { ExternalLink, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ScheduledBlock, ScheduledGraph, ScheduledStep } from "../../api/scheduledChats";
 import { openChatThreadRouteInShell } from "../../lib/shellNavigation";
 
@@ -8,6 +8,11 @@ export function BlockInspector({ block, step, graph, locked, onChange, onDelete,
   onChange: (block: ScheduledBlock) => void; onDelete: () => void; onClose: () => void; onRetry: () => void;
 }) {
   const [skillsText, setSkillsText] = useState(block.skill_ids.join(", "));
+  const savedSkillsText = block.skill_ids.join(", ");
+  useEffect(() => {
+    setSkillsText(current => current.split(",").map(id => id.trim()).filter(Boolean).join(", ") === savedSkillsText
+      ? current : savedSkillsText);
+  }, [block.id, savedSkillsText]);
   return <aside className="scheduled-inspector" aria-label="Block details">
     <header><strong>Skill block</strong><button className="scheduled-icon-button" aria-label="Close block details" onClick={onClose} type="button"><X size={17} /></button></header>
     <label>Title<input value={block.title} disabled={locked || busy} maxLength={120} onChange={event => onChange({ ...block, title: event.target.value })} /></label>

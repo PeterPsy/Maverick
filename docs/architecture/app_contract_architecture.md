@@ -871,6 +871,14 @@ or certificate metadata participates.
 
 Apps may also return `runtime_turn_interrupt_requests` for turns that belong to a user-visible runtime session sourced by that same app. The core validates workspace, visibility, and source-app ownership, performs the generic interrupt operation, records the runtime terminal event, and dispatches the same source-app runtime event hook. The durable cancellation-intent CAS is the sole public ownership decision, so exactly one concurrent request reports `interrupted=true`. Terminal-outbox ownership is technical only: a worker or another caller may drain it without creating another successful interrupt result. The app still owns any product-level decision to mark its own node, job, or workflow as stopped or failed.
 
+Successful runtime request callbacks apply the same governed runtime-result
+envelope before returning to the queued worker. This lets an app interrupt a
+late launch whose app-owned work was already stopped, before provider activation.
+Background request states carry source-owned terminal output bounded to 16,000
+characters and failure text bounded to 1,000 characters when the persisted
+terminal event exists. Both normal ticks and recovery preserve the difference
+between an unavailable result (no `output_text` field) and a valid empty result.
+
 Apps that need to translate a long-running runtime turn into an app-owned streaming protocol require an app-agnostic durable runtime stream rather than direct access to runtime persistence. The generic boundary owns submission, a durable `stream_id`, monotonically sequenced runtime events, reads after an acknowledged sequence, inspection, recovery, and idempotent interrupt. Every operation is scoped to the current workspace and the session's `source_app_id`; the authenticated actor and ownership fields are stamped by core. App-specific route names, event schemas, correlation records, SSE encoding, and terminal packages remain in the app backend. A sidecar or browser must not receive provider credentials, core cookies, arbitrary host paths, or a reusable runtime capability through this surface.
 
 A trusted app result may supply `on_behalf_of_user_id` to preserve the approving actor for deferred background work. It cannot override an authenticated actor with a different user. Core runs the usual live actor/profile and remote-admission gates for each new session and stamps ownership; apps do not provide execution authority.

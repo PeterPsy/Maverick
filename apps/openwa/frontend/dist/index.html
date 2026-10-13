@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenWA</title>
+    <script>
+      (() => {
+        const theme = new URLSearchParams(location.search).get("maverick_theme");
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.maverickTheme = theme;
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/apps/openwa/assets/index-BMZCLmj9.js"></script>
+    <link rel="stylesheet" crossorigin href="/apps/openwa/assets/index-BER8ytmx.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

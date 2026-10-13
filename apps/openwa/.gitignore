@@ -1,0 +1,8 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+provider/upstream/node_modules/
+provider/upstream/dist/
+provider/upstream/dashboard/node_modules/
+provider/upstream/

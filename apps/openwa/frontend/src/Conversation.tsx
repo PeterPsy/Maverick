@@ -41,10 +41,11 @@ export function Conversation({
   async function send(e: FormEvent) {
     e.preventDefault();
     if (sending.current || storageError || retryBlocked(attempt) || !draft.trim() || !canSend || session.status !== "ready") return;
-    const current: SendAttempt = attempt || { text: draft, quote, key: crypto.randomUUID(),
-      createdAt: Date.now(), state: "in_progress", error: "This send has no confirmed outcome. Check the conversation before retrying." };
+    const current: SendAttempt = { ...(attempt || { text: draft, quote, key: crypto.randomUUID(), createdAt: Date.now() }),
+      state: "in_progress", error: "This send has no confirmed outcome. Check the conversation before retrying.",
+      status: undefined, code: undefined };
     // Persist before handing anything to the provider, including the quoted message.
-    if (!save({ ...current, state: "in_progress" })) return;
+    if (!save(current)) return;
     sending.current = true;
     setBusy(true);
     try {
@@ -162,7 +163,7 @@ export function Conversation({
       {(!online || session.status !== "ready") && <p className="conversation-notice" role="status">
         {online ? "This session is not ready. Manage the session to reconnect." : "The gateway is unavailable. Messages will refresh when it reconnects."}
       </p>}
-      {(storageError || attempt) && (
+      {(storageError || (attempt && !busy)) && (
         <div className="error-banner send-warning" role="alert">
           <p>{storageError || (blocked
             ? "The send outcome is uncertain. Check the conversation before preparing another send."
@@ -180,7 +181,7 @@ export function Conversation({
           <Icon name="close" size={16} />
         </button>
       </div>}
-      <form className="composer" onSubmit={send}>
+      <form className="composer" onSubmit={send} aria-busy={busy}>
         <textarea
           aria-label="Message"
           placeholder={canSend ? "Write a message…" : "Sending is unavailable for this connection"}

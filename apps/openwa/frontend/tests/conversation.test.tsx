@@ -62,6 +62,50 @@ afterEach(async () => {
 });
 
 describe("durable send attempts", () => {
+  it.each(["success", "timeout"])("shows progress without a recovery alert until the send settles with %s", async (outcome) => {
+    let complete!: (data: unknown) => void;
+    let fail!: (error: Error) => void;
+    request.mockImplementation((action) => action === "messages.send"
+      ? new Promise((resolve, reject) => { complete = resolve; fail = reject; }) : Promise.resolve([]));
+    await render(); await compose("Sending normally"); await submit();
+    const saved = JSON.parse(localStorage.getItem(key)!);
+    expect(saved.text).toBe("Sending normally");
+    expect(container.querySelector(".send-warning")).toBeNull();
+    const button = container.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!;
+    expect(button.textContent).toBe("Sending…");
+    expect(button.disabled).toBe(true);
+    await act(async () => {
+      if (outcome === "success") complete({ id: "sent" });
+      else fail(new BackendError("The request timed out. Check the conversation before retrying.", 504, "request_timeout"));
+    });
+    expect(sends()).toHaveLength(1);
+    if (outcome === "success") {
+      expect(container.querySelector(".send-warning")).toBeNull();
+      expect(localStorage.getItem(key)).toBeNull();
+      expect(container.querySelector("textarea")!.value).toBe("");
+    } else {
+      expect(container.querySelector(".send-warning")!.textContent).toContain("The request timed out");
+      expect(JSON.parse(localStorage.getItem(key)!).key).toBe(saved.key);
+    }
+  });
+
+  it("hides the previous failure during an active retry and keeps its original key", async () => {
+    localStorage.setItem(key, JSON.stringify({ text: "Retry me", key: "request-abcdefghijkl", createdAt: Date.now(),
+      state: "retryable", error: "Previous failure", status: 503, code: "gateway_unavailable" }));
+    let complete!: (data: unknown) => void;
+    request.mockImplementation((action) => action === "messages.send"
+      ? new Promise((resolve) => { complete = resolve; }) : Promise.resolve([]));
+    await render();
+    expect(container.querySelector(".send-warning")!.textContent).toContain("Previous failure");
+    await submit();
+    expect(container.querySelector(".send-warning")).toBeNull();
+    expect(JSON.parse(localStorage.getItem(key)!).error).not.toContain("Previous failure");
+    expect(JSON.parse(localStorage.getItem(key)!)).not.toHaveProperty("status");
+    expect(sends()[0][1]?.idempotency_key).toBe("request-abcdefghijkl");
+    await act(async () => complete({ id: "sent" }));
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
   it("keeps a refused send's text and key without presenting uncertain-delivery recovery", async () => {
     request.mockImplementation(async (action) => {
       if (action === "messages.send") throw new BackendError("Send allowance reached", 429, "SEND_PACING_LIMITED");

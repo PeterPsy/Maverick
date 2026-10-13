@@ -8,6 +8,8 @@ Open `/app/openwa`, select a session and choose **Manage session**. Start it and
 
 Retry an unconfirmed send with **Retry same send**. If the provider reports an unknown outcome, check the chat and choose **I found the message**, or **Prepare a new send** and confirm that the message is missing. Preparing keeps the draft and requires another press of **Send**; it never sends automatically. Keys older than 23 hours require this recovery because the provider forgets them after 24 hours. Recovery is local to this browser; clearing its storage or switching devices does not restore the attempt.
 
+An active send or retry shows **Sending…**, with recovery warnings hidden until its request settles. The attempt is still saved before dispatch. A failed request or a restored unconfirmed attempt shows the recovery warning; confirmed success clears the saved attempt and draft. Starting a retry replaces the previous failure explanation while keeping its exact text, quote, retry key and first-attempt time.
+
 The default workspace has a dedicated local provider at `http://127.0.0.1:2785`. Administrators can configure another public HTTPS OpenWA gateway in the app after binding its key through Vault. API keys go through Core Secrets; app configuration stores only connection metadata. Remote private addresses, redirects and URL credentials are rejected.
 
 The app supports session creation/start/stop/logout, QR and phone pairing, bounded chat/contact/message reads, text sends/replies and read-only webhook/template inspection. Incoming messages refresh while the conversation is visible and its session is ready. Connection and uncertain-send notifications appear in Maverick's central inbox.

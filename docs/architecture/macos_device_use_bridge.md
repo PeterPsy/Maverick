@@ -990,7 +990,52 @@ route verified the exact `maverick-core.service` identity and `Restart=always`,
 then restarted that managed service. PID 2780468 changed to 2862343 at
 16:19:56 UTC on 13 October 2026. The service is active/running, `/health` reports
 `status=ok`, and authenticated CLI discovery succeeds with the newly loaded
-registry. Core v53 source is loaded; post-update Mac relay acceptance still
-requires a fresh user connection. No unmanaged replacement server was started.
-Real Electron editing and ChatGPT A/B acceptance remain unmeasured; the successful
-TextEdit and browser cases do not establish universal application parity.
+registry. Core v53 source is loaded. No unmanaged replacement server was started.
+
+The user's reconnection at 16:25 UTC completed live build-78 relay acceptance:
+the public tools selected TextEdit text with context, pasted RTF bold on its
+inactive Space, and restored regular formatting and the original text. A bounded
+loopback companion form verified semantic fill, checkbox, option by value,
+contextual selection, HTML bold, explicit local upload and cross-origin frame
+fill. Its server was stopped, upload fixture removed after byte validation,
+and the original companion tab returned to about:blank. Core audit reported
+ordinary fill at 97.266 ms native / 232.424 ms bridge and cross-origin fill at
+158.855 / 303.903 ms; these are individual calls, not model or comparative timing.
+
+Real Antigravity AXValue replacement returned an unconfirmed readback. PID
+preparation initially refused the app's off-window activation
+sentinel (-1, 1330). Native candidate `7c77eaf5423b63aeed086afc44f467d825e64dae`
+uses only the validated field/window intersection when AXActivationPoint is
+unusable, still requiring app-local focused-field proof before keyboard input.
+The later 17:00 UTC reconnection found a Chromium AXValue readback defect:
+AXValue and AXNumberOfCharacters described an empty paragraph, while the exact
+field's text marker range contained the previous task marker (34 UTF-16 units).
+That PID insertion had succeeded. Native web fields with declared text-marker
+access now read that field's complete marker range for observations, stale-state
+checks and action outcomes. Length is capped at 64,000 UTF-16 units and must
+match the string; a failed declared marker read cannot fall back to AXValue.
+The signed opt-in Electron regression recovers only the exact task marker before
+checking accents, emoji, restoration and unchanged system focus. Native web
+typing/replacement use one typed clipboard transaction, with exact window/PID
+Cmd-V routing and restoration of every prior representation (at most 32 MiB
+across 16 items), without overwriting a later human clipboard change. AppKit
+Unicode insertion keeps its previous route; explicit AXValue remains a distinct
+operation. The empty Chromium paragraph is normalized only when its bounded AX
+child subtree has no text. Selection is sent once and verified through a bounded
+250 ms readback; text outcomes allow at most one second of readback. Focus is
+prepared before a replacement changes its own observed selection.
+
+Native revision `0b817c3fe6a60523e0b169e87f237bf1b03e9720` passed all 24 signed
+cases on the managed runner, including real TextEdit RTF bold and Antigravity
+Unicode typing, replacement, selection and paste. Both editors restored their
+test content and preserved system focus; Electron also verified clipboard bytes.
+The signed gate verifies successful evidence for every requested editor, rather
+than using the obsolete 21-case count. Run 38440430469 verified the staged and
+installed deep/strict signatures, atomically replaced the existing app, and
+reported `Installed and running: 0.5.1 (79)` at 17:41:39 UTC on 13 October 2026.
+Its normal Quit closed the previous Device Use socket. The post-install
+inventory-only run 38440905401 is queued; the installation log already verifies
+the actual destination and launch. No backend restart is required for these
+native-only fixes, which retain the paired v53 contract.
+Passing native/browser cases do not establish universal application parity or
+a ChatGPT A/B benchmark.

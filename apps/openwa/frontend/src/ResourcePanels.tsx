@@ -38,10 +38,11 @@ export function SessionSidebar({
             onSelect(s.id);
           }}
         >
-          <span className={"session-dot " + s.status} />
+          <span className={"session-dot " + s.status} role="img"
+            aria-label={s.status === "ready" ? "Connected" : s.status.replaceAll("_", " ")} />
           <span>
             <strong>{s.name}</strong>
-            <small>{s.phone || s.status.replaceAll("_", " ")}</small>
+            {(s.phone || s.status !== "ready") && <small>{s.phone || s.status.replaceAll("_", " ")}</small>}
           </span>
         </button>
       ))}
@@ -106,7 +107,7 @@ export function ResourcePanel({
       <div className="panel-heading">
         <div>
           <h2>{session?.name || "Your conversations"}</h2>
-          {session && (
+          {session && session.status !== "ready" && (
             <span className={"status-pill " + session.status}>
               {session.status.replaceAll("_", " ")}
             </span>

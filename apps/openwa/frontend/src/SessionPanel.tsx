@@ -75,9 +75,9 @@ export function SessionPanel({
         <p className="muted">
           {session.phone || "Link this device from WhatsApp on your phone."}
         </p>
-        <span className={"status-pill " + session.status}>
+        {session.status !== "ready" && <span className={"status-pill " + session.status}>
           {session.status.replaceAll("_", " ")}
-        </span>
+        </span>}
         {session.lastError && (
           <p className="error-banner">{session.lastError}</p>
         )}

@@ -105,7 +105,7 @@
   background: #747474;
 }
 .session-dot.ready {
-  background: var(--success);
+  background: var(--accent);
 }
 .session-dot.qr_ready,
 .session-dot.authenticating,
@@ -132,10 +132,6 @@
   padding: 3px 7px;
   color: var(--muted);
   margin-top: 7px;
-}
-.status-pill.ready {
-  color: var(--success);
-  border-color: rgba(159, 240, 202, 0.18);
 }
 .status-pill.qr_ready {
   color: var(--warning);
@@ -230,7 +226,7 @@
   margin-top: 5px;
 }
 .unread {
-  background: var(--success);
+  background: var(--accent);
   color: var(--primary-text);
   font-size: 11px;
   min-width: 17px;

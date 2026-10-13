@@ -46,8 +46,8 @@
 }
 .message.outgoing {
   align-self: flex-end;
-  background: rgba(159, 240, 202, 0.075);
-  border-color: rgba(159, 240, 202, 0.08);
+  background: var(--hover);
+  border-color: var(--border-strong);
 }
 .message footer {
   display: flex;

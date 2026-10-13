@@ -865,3 +865,35 @@ release build, native catalog smoke and stable signing checks in Actions run
 `37639586942`. Its explicit install completed with `Installed and running:
 0.1.2 (46)` on `MacBook-Pro-6`. Physical GUI control and macOS permission
 retention are separate from the build, installation and browser-fixture checks.
+
+## Desktop and companion reliability, 13 October 2026
+
+The owned Mac browser retains its existing separate persistent profile and now
+stages GUID-named downloads locally. Its `list_tabs` read returns bounded progress
+and verified artifacts: completed event plus stable regular-file size/inode and
+streamed SHA-256. Symlinks, changed files and missing bytes cannot certify an
+artifact. Native paths remain Mac-local; user deliverables still use official
+Storage upload sessions and final size/hash readback. Download history and user
+cursor independence survive socket recovery; observations must be reacquired.
+Pending calls are never replayed. Metadata budgets omit whole records and expose incomplete coverage.
+
+Same-scope native shell reload is presentation recovery, not authority renewal.
+The Mac executor retains the already admitted socket and active operation across
+document generations and WebKit renderer loss. Explicit Stop, positively detected
+lock and server/workspace runtime retirement still revoke it. Recovery does not
+recreate or resend an invocation.
+
+Window inventory reports primary/auxiliary candidates and OS permissions, and
+distinguishes unverified entries from IDs that failed their last observation.
+WindowServer may retain closed surfaces. Such IDs do not establish a live view;
+failed IDs are excluded from automatic resolution for that turn. Exact IDs and
+AX-proved small windows remain supported, including on other Spaces. Compact AX
+capture now reads a deeper bounded tree before projecting useful whole records.
+Pixel fallback remains read-only observation plus capture-bound pointer input;
+it never supplies keyboard-focus or writable-field evidence.
+
+The companion retains separate monouse observations for each tab. Observing B
+does not invalidate A. Navigation invalidates the affected tab, while transport
+reconnection and turn completion invalidate all tab receipts. Its existing
+persistent browser profile remains the primary path for account continuity;
+Browser Lab's ephemeral development/research sessions are a separate capability.

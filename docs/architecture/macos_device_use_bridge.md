@@ -982,9 +982,15 @@ Device Use socket; a fresh user connection is needed for live relay acceptance.
 
 Core source and the native contract both use v53 and digest
 `1fae7ddd33dabce4111e3360226d2ba4252e616bb99f1d1762cd4edad12d2947`.
-The official `core.recovery.restart_backend` attempt returned `restarted=false`
-because systemd is unavailable in this environment, with `healthy=true`.
-The running backend therefore still requires a managed reload before the new
-contract can be claimed active. No unmanaged replacement server was started.
+Focused Core contract/provider/reconnection verification passed 59 tests.
+The ordinary `core.recovery.restart_backend` attempt returned `restarted=false`
+because its migrated root cannot reach host systemd, with `healthy=true`.
+After the user's explicit restart request, the existing host-namespace systemctl
+route verified the exact `maverick-core.service` identity and `Restart=always`,
+then restarted that managed service. PID 2780468 changed to 2862343 at
+16:19:56 UTC on 13 October 2026. The service is active/running, `/health` reports
+`status=ok`, and authenticated CLI discovery succeeds with the newly loaded
+registry. Core v53 source is loaded; post-update Mac relay acceptance still
+requires a fresh user connection. No unmanaged replacement server was started.
 Real Electron editing and ChatGPT A/B acceptance remain unmeasured; the successful
 TextEdit and browser cases do not establish universal application parity.

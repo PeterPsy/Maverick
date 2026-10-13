@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from core.api.app_frame_browser import APP_FRAME_BOOTSTRAP_PATH
 from core.api.asgi_application import PlatformAsgiHost
 from core.api.widget_browser_launch import WIDGET_BROWSER_LAUNCH_PATH
+from core.apps.widgets import list_workspace_widgets
 from tests.integration.app_hosting import test_app_frame_browser_origin as app_frame_fixtures
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
 
@@ -20,13 +21,22 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
     def test_nested_cross_owner_widget_uses_a_parent_bound_origin(self) -> None:
         asyncio.run(self._assert_nested_cross_owner_widget_launch())
 
-    async def _assert_nested_cross_owner_widget_launch(self) -> None:
+    def test_universal_widget_binds_the_context_and_origin_to_the_actual_parent(self) -> None:
+        asyncio.run(self._assert_nested_cross_owner_widget_launch(universal=True))
+
+    async def _assert_nested_cross_owner_widget_launch(self, *, universal: bool = False) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(Path(temp_dir))
             state = app_frame_fixtures.AppFrameBrowserOriginIntegrationTests._state_with_frontend(
                 repo_root,
                 include_other_app=True,
             )
+            host_app_id = "frame-demo" if universal else "frame-host"
+            if universal:
+                contract_path = repo_root / "apps" / "other-demo" / "app_contract.json"
+                contract = json.loads(contract_path.read_text())
+                contract["widgets"][0]["host"] = "*"
+                contract_path.write_text(json.dumps(contract))
             app = PlatformAsgiHost(state)
             platform_host = "maverick.localhost:8000"
             platform_origin = f"http://{platform_host}"
@@ -48,7 +58,7 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
                 method="POST",
                 body=json.dumps(
                     {
-                        "host_app_id": "frame-host",
+                        "host_app_id": host_app_id,
                         "owner_app_id": "other-demo",
                         "widget_id": "other-widget",
                         "message_id": "message-1",
@@ -70,6 +80,36 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
                 "owner_app_id": "other-demo",
                 "widget_id": "other-widget",
             }
+            if universal:
+                for consumer in ("frame-demo", "other-demo"):
+                    items = list_workspace_widgets(state.app_store, workspace_id="default",
+                        host=consumer, content_kind="frame.demo", start_path=repo_root)
+                    self.assertTrue(any(item.host == consumer and item.owner_app_id == "other-demo" for item in items))
+                forged_context = {"host_app_id": "other-demo", "owner_app_id": "other-demo",
+                    "widget_id": "other-widget", "content": {"kind": "frame.demo", "payload": {}}}
+                for request_host, headers in ((parent["host"], self._parent_headers(parent)),
+                        (platform_host, {"cookie": platform_cookie, "content-type": "application/json"})):
+                    denied_status, _, _ = await self._invoke(app, host=request_host,
+                        path="/api/apps/widgets/context", method="POST",
+                        body=json.dumps(forged_context).encode(), headers=headers)
+                    self.assertEqual(denied_status, 403)
+                foreign_parent = await app_frame_fixtures.AppFrameBrowserOriginIntegrationTests._bootstrap_app_frame(
+                    self, app, app_id="other-demo", launch_path="/apps/other-demo/",
+                    platform_host=platform_host, platform_origin=platform_origin, platform_cookie=platform_cookie,
+                )
+                replay_status, replay_body, _ = await self._invoke(
+                    app, host=foreign_parent["host"], path=WIDGET_BROWSER_LAUNCH_PATH,
+                    method="POST", body=json.dumps(request).encode(), headers=self._parent_headers(foreign_parent),
+                )
+                self.assertEqual(replay_status, 403)
+                self.assertEqual(json.loads(replay_body)["error"], "widget_context_mismatch")
+                own_status, own_body, _ = await self._invoke(app, host=foreign_parent["host"],
+                    path="/api/apps/widgets/context", method="POST",
+                    body=json.dumps(forged_context).encode(), headers=self._parent_headers(foreign_parent))
+                self.assertEqual(own_status, 200)
+                own_launch = await self._issue_launch(app, foreign_parent,
+                    {**request, "context_token": json.loads(own_body)["context_token"]})
+                self.assertEqual(own_launch["host_app_id"], "other-demo")
 
             direct_status, direct_body, _direct_headers = await self._invoke(
                 app,
@@ -135,7 +175,7 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
             self.assertNotEqual(nested_origin, platform_origin)
             self.assertEqual(wrong_parent_launch["parent_origin"], parent["origin"])
             self.assertEqual(wrong_parent_launch["owner_app_id"], "other-demo")
-            self.assertEqual(wrong_parent_launch["host_app_id"], "frame-host")
+            self.assertEqual(wrong_parent_launch["host_app_id"], host_app_id)
             self.assertEqual(wrong_parent_launch["widget_id"], "other-widget")
             self.assertEqual(
                 wrong_parent_launch["bootstrap_url"],

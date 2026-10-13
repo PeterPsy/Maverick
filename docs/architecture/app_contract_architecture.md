@@ -2408,6 +2408,18 @@ That pattern makes the chat app aware of other apps' source trees and breaks the
 
 The model should be registry-driven.
 
+Widgets may declare `host: "*"` to offer the same app-owned renderer to any
+enabled app. A lookup with `host=<app_id>` includes these widgets and returns
+that concrete host id in the registry item, so consumers use the ordinary
+context and isolated-launch protocol. An unfiltered lookup retains `"*"` as
+declaration metadata. Universal widget contexts may only be created by an
+authenticated isolated app frame naming its own app id as `host_app_id`.
+Nested launches bind that concrete host to the authenticated parent; another
+app cannot replay the signed context. Widget-owner visibility, enablement,
+content kinds, workspace/user identity, and exact-origin checks still apply.
+Storage's `file-preview` widget uses this contract for PDF previews across apps;
+the PDF renderer and file reads remain Storage-owned.
+
 An app contract may declare widgets with a structure like:
 
 ```json

@@ -231,7 +231,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(footer_widget.frontend.mount, "frontend/dist/widgets/storage-sidebar-footer")
         self.assertTrue((STORAGE_ROOT / "frontend" / "dist" / "widgets" / "storage-sidebar-footer" / "index.html").is_file())
         widget = widgets["file-preview"]
-        self.assertEqual(widget.host, "chat")
+        self.assertEqual(widget.host, "*")
         self.assertIn("storage.file.preview", widget.content_kinds)
         self.assertEqual(widget.frontend.mount, "frontend/dist/widgets/file-preview")
         self.assertTrue((STORAGE_ROOT / "frontend" / "dist" / "widgets" / "file-preview" / "index.html").is_file())

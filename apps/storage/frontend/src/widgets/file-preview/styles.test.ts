@@ -40,11 +40,11 @@ describe('storage file preview widget styles', () => {
     const source = readStyle('main.tsx');
     const styles = readStyle('styles.css');
 
-    expect(source).toContain("import * as pdfjs from 'pdfjs-dist';");
-    expect(source).toContain('pdfjs.getDocument({ url: previewUrl })');
-    expect(source).toContain('<canvas ref={canvasRef} />');
+    expect(source).toContain("import { PdfPreview } from '../../pdfPreview';");
+    expect(readStyle('../../filePreview.tsx')).toContain('<PdfPreview previewUrl={previewUrl} fileName={file.name} />');
+    expect(readStyle('../../filePreview.tsx')).not.toContain('<iframe');
     expect(source).not.toContain('<iframe');
-    expect(styles).toContain('.file-widget__pdf-page canvas');
+    expect(readStyle('../../styles/pdf-preview.css')).toContain('.pdf-preview__page canvas');
     expect(styles).not.toContain('.file-widget__document iframe');
   });
 
@@ -56,7 +56,7 @@ describe('storage file preview widget styles', () => {
     expect(source).toContain('schedulePreviewConversion(() => renderPreview(file, { signal }), signal)');
     expect(source).toContain('return readPreviewText(file, undefined, { signal });');
     expect(source).toContain("['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl");
-    expect(source).toContain('<PdfCanvasPreview file={file} previewUrl={previewUrl} downloadUrl={downloadUrl} />');
+    expect(source).toContain('<PdfPreview previewUrl={previewUrl} fileName={file.name}');
   });
 
   it('renders DOCX blobs as styled document pages instead of monospaced fallback text', () => {

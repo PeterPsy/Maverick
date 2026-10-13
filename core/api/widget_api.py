@@ -7,6 +7,7 @@ from typing import Any
 
 from core.api.app_mounts import is_public_app_static_asset, serve_frontend
 from core.api.app_frame_scope import (
+    APP_FRAME_APP_ID_SCOPE_KEY,
     APP_FRAME_OWNER_MISMATCH_ERROR,
     APP_FRAME_PROXY_SCOPE_KEY,
     app_frame_owner_matches,
@@ -15,7 +16,7 @@ from core.api.http import StartResponse, json_response, query_params, read_json_
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.api.widget_context import sign_widget_context, verify_widget_context
-from core.apps.widgets import list_workspace_widgets, resolve_workspace_widget
+from core.apps.widgets import list_workspace_widgets, resolve_workspace_widget, widget_supports_host
 from core.observability.service import record_platform_audit, record_platform_event
 
 
@@ -127,7 +128,15 @@ def handle_widget_api(
             )
             return json_response(start_response, {"error": "widget_not_available"}, status="404 Not Found")
         content_kind = payload["content"].get("kind") if isinstance(payload["content"], dict) else None
-        if payload["host_app_id"] != resolved.widget.host or content_kind not in resolved.widget.content_kinds:
+        universal_parent_matches = resolved.widget.host != "*" or (
+            environ.get(APP_FRAME_PROXY_SCOPE_KEY) is True
+            and payload["host_app_id"] == environ.get(APP_FRAME_APP_ID_SCOPE_KEY)
+        )
+        if (
+            not widget_supports_host(resolved.widget.host, payload["host_app_id"])
+            or not universal_parent_matches
+            or content_kind not in resolved.widget.content_kinds
+        ):
             record_platform_audit(
                 state.observability_store,
                 action="apps.widgets.context",

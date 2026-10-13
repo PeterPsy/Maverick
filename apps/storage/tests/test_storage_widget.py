@@ -42,6 +42,8 @@ class StorageWidgetTestCase(unittest.TestCase):
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         shutil.copy2(REPO_ROOT / "core" / "__init__.py", repo_root / "core" / "__init__.py")
         shutil.copytree(REPO_ROOT / "core" / "app_sdk", repo_root / "core" / "app_sdk")
+        shutil.copytree(REPO_ROOT / "core" / "shared", repo_root / "core" / "shared",
+            ignore=shutil.ignore_patterns("__pycache__"))
         source_apps_root = REPO_ROOT / "apps"
         for app_id in ("base-shell", "chat", "storage"):
             shutil.copytree(
@@ -124,10 +126,17 @@ class StorageWidgetTestCase(unittest.TestCase):
         self.assertEqual(registry_status, 200)
         self.assertEqual(registry_payload["items"][0]["owner_app_id"], "storage")
         self.assertEqual(registry_payload["items"][0]["widget_id"], "file-preview")
+        self.assertEqual(registry_payload["items"][0]["host"], "chat")
         self.assertEqual(registry_payload["items"][0]["frontend_mount"], "/api/apps/widgets/storage/file-preview/frontend/")
         self.assertEqual(mount_status, 200)
         self.assertIn("text/html", mount_headers["Content-Type"])
         self.assertIn(b"Storage file preview", mount_payload)
+
+        other_status, other_payload, _ = self.invoke(app, path="/api/apps/widgets",
+            query_string="host=mail&content_kind=storage.file.preview", cookie=cookie)
+        self.assertEqual(other_status, 200)
+        self.assertEqual(other_payload["items"][0]["owner_app_id"], "storage")
+        self.assertEqual(other_payload["items"][0]["host"], "mail")
 
     def test_platform_exposes_storage_sidebar_widget(self) -> None:
         repo_root = self.make_repo_root()

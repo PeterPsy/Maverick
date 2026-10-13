@@ -64,9 +64,42 @@ Workspace file storage for uploaded files and generated artifacts.
 - CSV and XLSX previews expose structured rows to the frontend so the preview modal can render spreadsheet-like tables instead of plain delimited text.
 - Text, Markdown, CSV, ODT, and XLSX previews are bounded by server-side byte, row, column, and archive budgets before extraction. Agents that need the document body should call `storage_read_text` / `file.text.read` instead of treating preview output as complete source text. That read path extracts supported text, Markdown, DOCX, PPTX, XLSX, and ODT files, but returns one deterministic transport-safe page at a time: at most 12,000 characters and at most 16 KiB when the text value is JSON serialized conservatively. Callers must continue with `next_offset` while `has_more=true`. Responses expose `page_char_count`, `page_serialized_bytes`, `transport_max_chars`, `transport_max_serialized_bytes`, and `transport_limited`; `complete=true` only when one response contains the whole document. A caller-supplied oversized `max_chars` is therefore safely clamped rather than producing an inline result that an outer tool transport could truncate while metadata still appears complete.
 - Markdown previews render common Markdown structure, including headings, lists, code blocks, links, blockquotes, and pipe tables, in both the Storage app and the file-preview widget instead of showing raw Markdown text.
-- The file-preview chat widget renders the file body as one neutral Chat-style document box with a compact clickable title row, keeps the skeleton visible until inline preview content is ready, and posts bounded height updates. Chat mounts it on a Storage-owned nested origin through a parent-bound one-shot Core launch; it is never served through Chat's authenticated frame authority. Video previews preload without autoplay and use the centered play/pause toggle. Local DOCX, PPTX, and XLSX files first request Storage's rendered PDF preview; when the server renderer is unavailable, DOCX files are rendered lazily as paginated HTML with their document styles while other Office formats fall back to extracted text. Embedded DOCX HTML chunks are disabled and embedded assets use data URLs. PDF output renders page 1 through PDF.js canvas instead of a nested browser PDF iframe. The widget keeps original-file downloads separate from rendered preview URLs, provides explicit open/download fallback actions, and groups fullscreen/open/download actions beside the title.
+- The file-preview widget renders the file body as one neutral document box with a compact clickable title row, keeps the skeleton visible until inline preview content is ready, and posts bounded height updates. Any enabled app can discover it through the widget registry. Its renderer runs on a Storage-owned nested origin through a parent-bound one-shot Core launch. Video previews preload without autoplay and use the centered play/pause toggle. Local DOCX, PPTX, and XLSX files first request Storage's rendered PDF preview; when the server renderer is unavailable, DOCX files are rendered lazily as paginated HTML with their document styles while other Office formats fall back to extracted text. Embedded DOCX HTML chunks are disabled and embedded assets use data URLs. PDF output uses the same paginated PDF.js canvas viewer as the Storage modal. The widget keeps original-file downloads separate from rendered preview URLs, provides explicit open/download fallback actions, and groups fullscreen/open/download actions beside the title.
 - Markdown files can be edited from the Storage preview modal with a source editor and live rendered preview, copied in full to the clipboard, then saved back to the same validated workspace storage path. Agent-driven edits should use `storage_update_markdown_file`: the dedicated MCP tool accepts up to 100 exact replacements and requires the current file SHA-256. Storage holds its write lock, verifies the hash and each expected occurrence count, applies all replacements in memory, and atomically replaces the file only after every guard succeeds. Stale hashes, missing matches, and ambiguous matches return a machine-readable `409 conflict` with no partial write. The generic `update_markdown_file` action keeps full-content replacement for the existing UI and also accepts the guarded replacement form.
 - The Storage preview modal header exposes a fullscreen toggle; it uses the browser Fullscreen API when allowed and falls back to an in-app fullscreen layout when iframe policy blocks native fullscreen. On mobile, the preview modal fills the app viewport below the shell header with borderless chrome, truncates long titles on one row, hides the fullscreen action, fits image previews inside the available box without cropping, and renders content directly below that header.
+
+## PDF previews
+
+The Storage modal and `file-preview` widget share a lazily loaded PDF.js viewer.
+Browser PDF plugins cannot run inside Maverick's isolated app frames. The viewer
+loads local, Drive, converted-document and device-cache preview URLs, retains
+authenticated Storage media reads, and resolves its bundled worker against the
+public module URL. It renders one page at a time, with previous/next controls,
+a page-number input, zoom and fit-to-width. Resize observation fits narrow
+screens and fullscreen layouts. Closing or replacing a preview cancels rendering
+and destroys the PDF loading task. Invalid files show an error; password-protected
+files offer a download explanation. The existing modal/widget download actions
+remain available. PDF.js and its worker are loaded only when a PDF is opened.
+
+Consumer apps use the generic widget protocol from their authenticated app frame:
+
+1. Discover `GET /api/apps/widgets?host=<consumer_app_id>&content_kind=storage.file.preview`.
+2. Create `POST /api/apps/widgets/context` with that concrete `host_app_id`, the
+   returned owner/widget ids, and `content: {kind: "storage.file.preview", payload:
+   {file_id: "<stable Storage file id>"}}`. Local path references are also supported.
+3. Use the returned context token and frontend mount with
+   `POST /api/apps/widgets/browser-launch`, validate its exact-origin attestation,
+   and complete the CORS bootstrap before navigating the nested iframe.
+
+The widget declares `host: "*"`; filtered registry results report the concrete
+consumer id. Core binds the context and launch to the actual authenticated parent.
+Consumers do not import Storage source or implement their own PDF reader.
+
+`node --test apps/storage/tests/pdf-preview.browser.test.mjs` verifies real PDF
+pixels, page changes, zoom, invalid files, authenticated media, and a worker served
+from a separate public asset origin in both modal and widget at desktop/mobile widths.
+Use `STORAGE_PREVIEW_SCREENSHOT_DIR` for optional visual evidence and
+`PLAYWRIGHT_BROWSERS_PATH` when installed browsers live outside the session home.
 
 ## Agent-First Drive To Memory Contract
 

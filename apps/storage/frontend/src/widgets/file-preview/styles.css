@@ -219,23 +219,6 @@ button {
   margin: 2rem auto;
 }
 
-.file-widget__pdf-page {
-  display: grid;
-  justify-items: center;
-  width: 100%;
-  min-height: 100%;
-  padding: 0.72rem;
-}
-
-.file-widget__pdf-page canvas {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
-}
-
 .file-widget__document pre {
   width: 100%;
   min-height: 100%;

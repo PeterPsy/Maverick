@@ -9,6 +9,7 @@ from core.api.app_frame_launch import clean_relative_origin_url
 from core.api.session_api import RequestSession
 from core.api.widget_context import verify_widget_context
 from core.apps.errors import AppHostingError
+from core.apps.widgets import widget_supports_host
 
 
 def clean_nested_widget_launch_path(
@@ -52,7 +53,7 @@ def nested_widget_context_matches(
     return (
         payload.get("workspace_id") == context.workspace_id
         and payload.get("user_id") == context.user.user_id
-        and payload.get("host_app_id") == widget_host
+        and widget_supports_host(widget_host, str(payload.get("host_app_id") or ""))
         and payload.get("owner_app_id") == owner_app_id
         and payload.get("widget_id") == widget_id
         and content_kind in content_kinds

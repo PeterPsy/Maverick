@@ -36,12 +36,17 @@ class ResolvedWidget:
     parsed: ParsedAppContract
 
 
-def widget_registry_item(owner_app_id: str, widget: WidgetDeclaration) -> WidgetRegistryItem:
+def widget_supports_host(declared_host: str, host_app_id: str) -> bool:
+    """Universal declarations accept concrete hosts, never a wildcard context."""
+    return bool(host_app_id) and host_app_id != "*" and declared_host in {host_app_id, "*"}
+
+
+def widget_registry_item(owner_app_id: str, widget: WidgetDeclaration, *, host: str | None = None) -> WidgetRegistryItem:
     """Build the public registry item for one widget declaration."""
     return WidgetRegistryItem(
         owner_app_id=owner_app_id,
         widget_id=widget.widget_id,
-        host=widget.host,
+        host=host if widget.host == "*" and host is not None else widget.host,
         content_kinds=list(widget.content_kinds),
         frontend_mount=f"/api/apps/widgets/{owner_app_id}/{widget.widget_id}/frontend/",
         actions={
@@ -79,11 +84,11 @@ def list_workspace_widgets(
         ):
             continue
         for widget in parsed.contract.widgets:
-            if host is not None and widget.host != host:
+            if host is not None and not widget_supports_host(widget.host, host):
                 continue
             if content_kind is not None and content_kind not in widget.content_kinds:
                 continue
-            items.append(widget_registry_item(binding.app_id, widget))
+            items.append(widget_registry_item(binding.app_id, widget, host=host))
     return sorted(items, key=lambda item: (item.owner_app_id, item.widget_id))
 
 

@@ -41,7 +41,7 @@ from core.apps.sidecar_browser_sessions import (
     SidecarBrowserBinding,
     SidecarBrowserSession,
 )
-from core.apps.widgets import resolve_workspace_widget
+from core.apps.widgets import resolve_workspace_widget, widget_supports_host
 from core.identity.errors import SessionNotFoundError, UserNotFoundError
 from core.shared.browser_origin_tls import BrowserOriginTlsError
 from core.workspaces.service import resolve_active_workspace_for_user
@@ -543,7 +543,9 @@ def _current_app_frame(
             user=user,
             start_path=start_path,
         )
-        if resolved_widget is None or resolved_widget.widget.host != binding.widget_host:
+        if resolved_widget is None or not widget_supports_host(resolved_widget.widget.host, binding.widget_host):
+            return None
+        if resolved_widget.widget.host == "*" and binding.parent_app_id != binding.widget_host:
             return None
         current = (
             resolved_widget.binding,

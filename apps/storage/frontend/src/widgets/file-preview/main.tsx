@@ -1,20 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
-import * as pdfjs from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { callBackend, decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, readPreviewText, renderPreview, storageMediaStreamUrl } from '../../storageApi';
 import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
 import { MarkdownPreview } from '../../markdownPreview';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from '../../lib/browserFullscreen';
 import { VideoPreview } from '../../videoPreview';
+import { PdfPreview } from '../../pdfPreview';
 import type { StorageFile } from '../../types';
 import { DocxPreview, isDocxFile } from './docxPreview';
 import { useStorageVisibility } from '../../hooks/useStorageVisibility';
 import { schedulePreviewConversion } from '../../lib/previewConversions';
 import './styles.css';
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 type WidgetContext = {
   content?: {
@@ -115,55 +112,6 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
   );
 }
 
-function PdfCanvasPreview({ file, previewUrl, downloadUrl }: { file: StorageFile; previewUrl: string; downloadUrl: string }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!previewUrl) return undefined;
-    let active = true;
-    setError('');
-    const loadingTask = pdfjs.getDocument({ url: previewUrl });
-    loadingTask.promise
-      .then(async (document) => {
-        const page = await document.getPage(1);
-        if (!active) return;
-        const baseViewport = page.getViewport({ scale: 1 });
-        const cssWidth = Math.min(900, Math.max(280, baseViewport.width));
-        const scale = cssWidth / baseViewport.width;
-        const viewport = page.getViewport({ scale });
-        const canvas = canvasRef.current;
-        const context = canvas?.getContext('2d');
-        if (!canvas || !context) throw new Error('PDF canvas is unavailable.');
-        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-        canvas.width = Math.floor(viewport.width * outputScale);
-        canvas.height = Math.floor(viewport.height * outputScale);
-        canvas.style.width = `${Math.floor(viewport.width)}px`;
-        canvas.style.height = `${Math.floor(viewport.height)}px`;
-        await page.render({
-          canvas,
-          canvasContext: context,
-          viewport,
-          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0]
-        }).promise;
-      })
-      .catch((renderError: Error) => {
-        if (active) setError(renderError.message || 'PDF preview failed.');
-      });
-    return () => {
-      active = false;
-      void loadingTask.destroy();
-    };
-  }, [previewUrl]);
-
-  if (error) return <FileFallback file={file} downloadUrl={downloadUrl} reason={error} />;
-  return (
-    <div className="file-widget__pdf-page" aria-label={`PDF preview for ${file.name}`}>
-      <canvas ref={canvasRef} />
-    </div>
-  );
-}
-
 function FileFallback({ file, downloadUrl, reason }: { file: StorageFile; downloadUrl: string; reason?: string }) {
   return (
     <div className="file-widget__fallback">
@@ -215,7 +163,8 @@ function Preview({
   if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
   if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {
-    return <PdfCanvasPreview file={file} previewUrl={previewUrl} downloadUrl={downloadUrl} />;
+    return <PdfPreview previewUrl={previewUrl} fileName={file.name}
+      fallback={(reason) => <FileFallback file={file} downloadUrl={downloadUrl} reason={reason} />} />;
   }
   if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} compact />;
   if (file.preview_kind === 'text') return <pre>{previewText}</pre>;

@@ -43,6 +43,8 @@ def authorized_frame_launch_target(
     )
     if resolved is None:
         raise AppHostingError("Widget frame declaration is unavailable.")
+    if resolved.widget.host == "*":
+        raise AppHostingError("Universal widgets require a parent-bound nested launch.")
     try:
         fragment = parse_qs(parsed.fragment, max_num_fields=2, strict_parsing=True)
     except ValueError as error:

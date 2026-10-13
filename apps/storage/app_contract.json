@@ -309,7 +309,7 @@
     },
     {
       "widget_id": "file-preview",
-      "host": "chat",
+      "host": "*",
       "content_kinds": [
         "storage.file",
         "storage.file.preview",

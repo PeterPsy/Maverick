@@ -117,7 +117,10 @@ def handle_widget_browser_launch(
         )
 
     widget_context = verify_nested_widget_context(context_token)
-    if not nested_widget_context_matches(
+    parent_matches = resolved.widget.host != "*" or (
+        widget_context is not None and widget_context.get("host_app_id") == parent_app_id
+    )
+    if not parent_matches or not nested_widget_context_matches(
         widget_context,
         context=context,
         owner_app_id=owner_app_id,
@@ -179,6 +182,7 @@ def handle_widget_browser_launch(
     except BrowserOriginTlsError:
         return _error(start_response, "app_frame_tls_unavailable", "503 Service Unavailable")
 
+    host_app_id = str(widget_context["host_app_id"])
     binding = SidecarBrowserBinding(
         actor_user_id=context.user.user_id,
         workspace_id=context.workspace_id,
@@ -200,7 +204,7 @@ def handle_widget_browser_launch(
         mount_app_id=resolved.binding.mount_app_id or resolved.binding.app_id,
         parent_origin=parent_origin,
         parent_app_id=parent_app_id,
-        widget_host=resolved.widget.host,
+        widget_host=host_app_id,
         widget_id=widget_id,
     )
     ticket = state.sidecar_browser_sessions.issue_ticket(binding)
@@ -212,7 +216,7 @@ def handle_widget_browser_launch(
         workspace_id=context.workspace_id,
         app_id=owner_app_id,
         payload={
-            "host_app_id": resolved.widget.host,
+            "host_app_id": host_app_id,
             "owner_app_id": owner_app_id,
             "parent_app_id": parent_app_id,
             "widget_id": widget_id,
@@ -225,7 +229,7 @@ def handle_widget_browser_launch(
             "bootstrap_transport": "cors",
             "expires_in_seconds": MAX_TICKET_TTL_SECONDS,
             "frontend_url": f"{origin}{clean_path}",
-            "host_app_id": resolved.widget.host,
+            "host_app_id": host_app_id,
             "method": "POST",
             "origin": origin,
             "owner_app_id": owner_app_id,

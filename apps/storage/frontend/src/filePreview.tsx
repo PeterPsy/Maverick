@@ -6,6 +6,7 @@ import { MarkdownPreview } from './markdownPreview';
 import { loadCardPreview } from './previewCache';
 import { fitPreviewMediaToBox, type PreviewMediaSize } from './previewSizing';
 import { VideoPreview } from './videoPreview';
+import { PdfPreview } from './pdfPreview';
 import type { StorageFile, PreviewTablePayload, TablePreviewSheet } from './types';
 
 const inlineVideoPlaybackProps = {
@@ -179,7 +180,7 @@ export function StoragePreview({ file, loading = false, previewUrl, previewText,
   if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
   if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {
-    return <iframe className="document-render-frame" src={previewUrl} title={file.name} />;
+    return <PdfPreview previewUrl={previewUrl} fileName={file.name} />;
   }
   if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} />;
   if (file.preview_kind === 'text') return <pre>{previewText}</pre>;

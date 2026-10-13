@@ -73,7 +73,7 @@ def parse_widget_declarations(source_root: Path, root: dict, entrypoints: AppEnt
         widgets.append(
             WidgetDeclaration(
                 widget_id=widget_id,
-                host=_expect_slug(widget, "host"),
+                host="*" if widget.get("host") == "*" else _expect_slug(widget, "host"),
                 content_kinds=_expect_content_kind_list(widget, "content_kinds"),
                 frontend=frontend,
                 actions=actions,

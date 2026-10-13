@@ -5,6 +5,7 @@ import {
 } from "./chatThreadDragReferences";
 import { referenceKey } from "./mentions";
 import type { MentionItem } from "./mentions";
+import { SCHEDULED_CHAT_DRAG_TYPE, scheduledChatMentionItems } from "./scheduledChatReferences";
 
 const STORAGE_FILE_DRAG_DATA_TYPE = "application/x-maverick-storage-file";
 const STORAGE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-folder";
@@ -114,6 +115,7 @@ export function hasAppReferenceDragData(dataTransfer: StorageReferenceTypeDataTr
     hasStorageReferenceDragData(dataTransfer) ||
     hasChecklistReferenceDragData(dataTransfer) ||
     hasMailReferenceDragData(dataTransfer) ||
+    dataTransferTypes(dataTransfer).includes(SCHEDULED_CHAT_DRAG_TYPE) ||
     hasChatThreadReferenceDragData(dataTransfer)
   );
 }
@@ -135,7 +137,7 @@ export function appReferenceMentionItemsFromDataTransfer(dataTransfer: StorageRe
     ...checklistReferencesFromDataTransfer(dataTransfer),
     ...mailReferencesFromDataTransfer(dataTransfer),
   ];
-  return uniqueMentionItems(references).concat(chatThreadMentionItemsFromDataTransfer(dataTransfer));
+  return uniqueMentionItems(references).concat(chatThreadMentionItemsFromDataTransfer(dataTransfer), scheduledChatMentionItems(dataTransfer));
 }
 
 export function storageReferenceMentionItemsFromDataTransfer(dataTransfer: StorageReferenceDataTransfer): MentionItem[] {

@@ -11,6 +11,7 @@ import { ChatSidebarSkeleton } from "./ChatSidebarSkeleton";
 import { ProjectSection } from "./ProjectSection";
 import "./styles.css";
 import { useChatSidebarState } from "./useChatSidebarState";
+import { ScheduledSidebar } from "./ScheduledSidebar";
 
 applyInitialMaverickTheme();
 listenForMaverickThemeMessages();
@@ -80,6 +81,7 @@ function ChatSidebarWidget() {
         searchQuery={sidebar.searchQuery}
       >
         <div className="bs-chat-list">
+          <ScheduledSidebar mobile={sidebar.isShellMobileLayout} />
           {sidebar.isInitialLoading ? (
             <ChatSidebarSkeleton />
           ) : sidebar.sections.length ? (

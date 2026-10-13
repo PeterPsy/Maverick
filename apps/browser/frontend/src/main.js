@@ -49,7 +49,7 @@ function render() {
   const ready = active.some(connection => connection.status === "connected");
   $("#agent-heading").textContent = ready ? "Your agent is ready" : active.length ? "Connecting your agent tab…" : current.length ? "Reconnect your agent tab" : "Give your agent a browser tab";
   const interactive=active.some(connection=>connection.status === "connected" && connection.access_mode === "interactive");
-  $("#agent-description").textContent = interactive ? "Ask Maverick to browse, fill a form or interact with a page." : ready ? "Reading is connected. Update Companion to enable browser interactions." : "Open Companion in Chrome and connect your agent tab. Keep it and Maverick open.";
+  $("#agent-description").textContent = interactive ? "Ask Maverick to browse, fill a form or interact with a page." : ready ? "Reading is connected. Update Companion to enable browser interactions." : "Open Companion in Chrome and connect your agent tab. Keep the agent tab open.";
   $("#agent-state").textContent = ready ? "Connected" : active.length ? "Connecting" : current.length ? "Offline" : "Not connected";
   $("#agent-state").className = `badge ${ready ? "state-connected" : ""}`;
   $("#pending-note").hidden = !pending;

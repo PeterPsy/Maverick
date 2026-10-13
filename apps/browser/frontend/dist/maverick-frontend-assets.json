@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "68069aa136481dd389472f3b7a9434f54828c0ed812c546314ad895a22112795",
+  "build_id": "0ac57ae1dfaf3974743d56c6f3d0404c7195955d32ffc818424eb874ebd3f069",
   "entrypoints": [
     "companion/agent-tab.html",
     "companion/offscreen.html",
@@ -14,14 +14,14 @@
       "size_bytes": 8542
     },
     {
-      "path": "assets/index-BFI7i7Yn.js",
-      "sha256": "4380140ce69062aa595b6d6cc4d6bb182c4192ee1d46761809213af341a758df",
-      "size_bytes": 30707
+      "path": "assets/index-Dgp1MjBf.js",
+      "sha256": "9d3803a990c2557dff53070a248d3be9a9fc011d6a657f97bea9ce0a7b6e5ad3",
+      "size_bytes": 31909
     },
     {
-      "path": "assets/maverick-browser-companion-o--tffju.zip",
-      "sha256": "ebdb1ec0e9dcd5b869f1afb37bf2d877bede321019b09b90da97ed90fb9b046d",
-      "size_bytes": 38480
+      "path": "assets/maverick-browser-companion-BcsscSdo.zip",
+      "sha256": "21ebea2df6b362856ac04fd4667e96066d3bbc4abc398bd9d9da4d9baee66f71",
+      "size_bytes": 41083
     }
   ],
   "revalidated": [
@@ -32,13 +32,18 @@
     },
     {
       "path": "companion/agent-tab.html",
-      "sha256": "78807fe3c98a19b0790b02861ed378a853dd940cbfd27b3f9dd0ab012121c144",
-      "size_bytes": 1325
+      "sha256": "909b99e39d604783a44689e0b68c6e3a5233804126d81a54e57a18d7f8c84f2d",
+      "size_bytes": 1400
     },
     {
       "path": "companion/agent-tab.mjs",
       "sha256": "aae761bcd3806276eaedf8718d0484de2dd5ed9e0e4e0894c28bbdf3b158c0ee",
       "size_bytes": 1467
+    },
+    {
+      "path": "companion/background-connector.mjs",
+      "sha256": "2e587599284b20ecf887327d00b863634242b24e97cfa93b50438d8530ccc6b8",
+      "size_bytes": 5018
     },
     {
       "path": "companion/connector-frame.mjs",
@@ -47,8 +52,8 @@
     },
     {
       "path": "companion/connector-session.mjs",
-      "sha256": "e1f0205cda72a13e46be1fb0061e85cd91fc4ded45f7ed32f9965e0ff923fd89",
-      "size_bytes": 2592
+      "sha256": "9b43234d6db1222e6ce98a06a66d933e36f0f8c0afd2d60edccf8fc584c3aa51",
+      "size_bytes": 3020
     },
     {
       "path": "companion/connector-window.mjs",
@@ -57,8 +62,8 @@
     },
     {
       "path": "companion/content.js",
-      "sha256": "be2fea7b6d7c29fc1a89608908349f331cbfc1c91f15787fe9d37bc8f0368c8d",
-      "size_bytes": 1290
+      "sha256": "6a777fde9a6eb3084fc59e94824843fffe1b8ae67fecebdb721dbdb30ca415a2",
+      "size_bytes": 1310
     },
     {
       "path": "companion/dom-actions.mjs",
@@ -82,7 +87,7 @@
     },
     {
       "path": "companion/manifest.json",
-      "sha256": "c27b83f2e88f8b74ae28f756cbd0fc4bdd8e1f75cb5c77ffb99d677e3f06dca6",
+      "sha256": "97717e750295d05c9ccb8d5766423e56af7a1a4bc9c91f9865a77c4f206723b3",
       "size_bytes": 577
     },
     {
@@ -92,8 +97,8 @@
     },
     {
       "path": "companion/offscreen.mjs",
-      "sha256": "fc39fb7e98154508ad0c88c64155a76310216449e0a2cc86d3e411fe1e4fc036",
-      "size_bytes": 5482
+      "sha256": "bb75b19991aeb362a55300804df8fada99784152251b85ee3668161d4d62a2a1",
+      "size_bytes": 5662
     },
     {
       "path": "companion/platforms.json",
@@ -112,13 +117,13 @@
     },
     {
       "path": "companion/popup.html",
-      "sha256": "bd2c657a9c826b781b66c5bda584c34c7d701cda85a19ba87d19c3f753eb3094",
-      "size_bytes": 3277
+      "sha256": "de1a4db504dd6302104519bbd69da82104f4ccc1c9a2c942a3e33d0a327273ed",
+      "size_bytes": 3400
     },
     {
       "path": "companion/popup.mjs",
-      "sha256": "06dddbbaa6f7dc4f4a33fd092d5991ff154c12170057c5c432b81ffc625adf38",
-      "size_bytes": 3465
+      "sha256": "0042f8cc1af72728f9276d3a9e3ce6acf37d671d11915d949dadf7d64be681b2",
+      "size_bytes": 3579
     },
     {
       "path": "companion/reader.js",
@@ -157,8 +162,8 @@
     },
     {
       "path": "companion/worker.mjs",
-      "sha256": "39087b5fa150029e0b2dadc62fff91af88f3c9d325697e5e96fd9ef471a4c934",
-      "size_bytes": 15587
+      "sha256": "1baa399374378e5d5478170e291d1282e82d6a27717701cd60f4d6e21b802338",
+      "size_bytes": 17237
     },
     {
       "path": "companion/workflows.mjs",
@@ -172,7 +177,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "c1d8216c6e447bc4bd03613da27857e90e89fe698512677ed24c96e139d5432e",
+      "sha256": "af8552725835be627e140bab42e08e0ab7f76ba3b05f0b27f51ca8177c911f55",
       "size_bytes": 901
     }
   ]

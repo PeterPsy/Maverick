@@ -40,7 +40,7 @@ share.onclick = async () => {
     // Send before any await. The worker retains the transaction if this popup closes.
     const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: selected.id, url: url.href, agentTab: true, reuseConnector: document.querySelector("#reuse").checked});
     if (result?.error) throw new Error(result.detail || result.error);
-    report("Connecting in Maverick. Sign in there if asked; your agent tab connects automatically. Keep both tabs open.");
+    report(result.background ? "Connected in background. Keep the agent tab open; Maverick can stay closed." : "Connecting in Maverick. Sign in there if asked; once connected, you can close that Maverick tab. Keep the agent tab open.");
     document.querySelector("#stop").hidden = false;
   } catch (error) { report(setupError(error), "error"); }
   finally { share.disabled = false; share.removeAttribute("aria-busy"); }

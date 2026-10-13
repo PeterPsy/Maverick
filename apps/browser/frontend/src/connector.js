@@ -6,7 +6,7 @@ import {acquireConnectorLease,deliverConnectorCompletion,recoverFrameAuthorizati
 // resume it only in the exact actor/workspace app origin; actions never replay.
 export function createConnector(report) {
   let lease=null,command=null,timer=null,stopped=true,ticking=false,failures=0;
-  let starting=null,generation=0,lastRenewed=0,recovery=false;
+  let starting=null,generation=0,lastRenewed=0,recovery=false,background=false;
   const revoke=async(error)=>{
     stopped=true;generation++;clearTimeout(timer);
     const previous=lease;lease=null;command=null;
@@ -44,6 +44,10 @@ export function createConnector(report) {
     try {
       shared=await bridge("status");
       if(attempt!==generation || stopped || !lease)return;
+      if(background) {
+        report(`Connected in background · ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}. You can close this Maverick tab.`,"connected");
+        return;
+      }
       if(recovery && !command && !shared.active_operation) {
         const retained=await bridge("lease.restore");
         if(retained.completion)await deliverConnectorCompletion(fields(),retained.completion);
@@ -111,10 +115,29 @@ export function createConnector(report) {
         const shared=await bridge("status");
         if(attempt!==generation)throw new Error("Sharing was stopped. Connect again to retry.");
         recovery=shared.lease_recovery === true;
-        const result=await acquireConnectorLease(shared);
+        // An authorized background worker owns lease renewal. A reloaded UI
+        // must not race it by replacing an expired connection itself.
+        const result=shared.background_active ? (await bridge("lease.restore")).lease : await acquireConnectorLease(shared);
+        if(!result)throw new Error("Sharing was stopped. Connect again to retry.");
         if(attempt!==generation) {
           await request({action:"companion.disconnect",session_id:result.connection.session_id});
           throw new Error("Sharing was stopped. Connect again to retry.");
+        }
+        if(shared.background_connector === true) {
+          let grant={};
+          if(!shared.background_active) {
+            const response=await fetch("/.well-known/maverick-app-background/grant",{
+              method:"POST",credentials:"same-origin",cache:"no-store",signal:AbortSignal.timeout(10000),
+              headers:{"Content-Type":"application/json"},body:JSON.stringify({client_origin:shared.extension_origin,actions:["companion.poll","companion.progress","companion.complete","companion.disconnect","companion.connect","operation.get"]}),
+            });
+            grant=await response.json();
+            if(!response.ok || grant.error)throw new Error("Maverick could not authorize the background connection. Reconnect from Companion.");
+          }
+          if(attempt!==generation) {
+            await request({action:"companion.disconnect",session_id:result.connection.session_id}).catch(()=>{});
+            throw new Error("Sharing was stopped. Connect again to retry.");
+          }
+          await bridge("background.start",grant,20000);background=true;
         }
         lease=result;stopped=false;failures=0;void tick();
         return lease.connection;

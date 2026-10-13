@@ -92,6 +92,7 @@ def hosted_builtin_app_execution_roots(
                 "companion/interaction-inputs.mjs",
                 "companion/share-setup.mjs",
                 "companion/connector-session.mjs",
+                "companion/background-connector.mjs",
                 "companion/connector-frame.mjs",
                 "companion/connector-window.mjs",
                 "companion/offscreen.mjs",

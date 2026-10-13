@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Maverick Browser Companion",
   "description": "Give Maverick a dedicated agent tab to browse HTTPS websites, interact with pages and edit forms.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "minimum_chrome_version": "120",
   "permissions": ["activeTab", "scripting", "storage", "tabCapture", "offscreen", "alarms", "debugger"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://*.localhost/*"],

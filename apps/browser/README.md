@@ -8,7 +8,7 @@ proxy, hosted-browser or remote transcription service is used.
 
 ## Connect your agent tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.6.1,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.7.0,
 then load its folder with Chrome's “Load unpacked” developer-mode action.
 Use Chrome 120 or later. The official `https://maverick.loopino.ai` address is
 preconfigured; other installations can change Connection settings in Companion.
@@ -28,8 +28,8 @@ separate bridge window. Other browsers/profiles and native desktop applications
 cannot be selected by Chrome; their connection tab remains in Chrome. Sign in if asked; the exact selected Browser
 document connects automatically using the extension's explicit sharing generation.
 There is no second Connect button to press. Automatic setup is attempted once
-per generation; a failed attempt retains the manual retry control. Keep both tabs
-open. The agent navigates the dedicated source tab, not the bridge.
+per generation; a failed attempt retains the manual retry control. Keep the Agent
+tab open. Companion 0.7+ lets the Maverick authorization tab close after connecting. The agent navigates the dedicated source tab, not the bridge.
 It browses normal HTTPS websites using your Chrome session. It can read, scroll,
 click, hover, replace text, press keys, select options, set checkboxes and submit
 forms. Platform collection and image/video/audio analysis remain available.
@@ -90,10 +90,11 @@ other tabs, shell frames and replaced documents cannot execute its fixed command
 Within that selected Maverick shell tab, switching apps or returning to Browser
 from the rail keeps the connection alive while its bound Browser iframe remains
 mounted. The `connector=1` parameter starts setup; dropping it during native
-navigation does not revoke sharing. Leaving the Maverick origin or loading a
-non-shell route still stops the bridge. A full document reload resumes the same lease in the same authenticated app origin.
-Closing either tab, leaving the connection’s permitted URL scope, or revoking sharing stops
-capture. A still-shared tab recovers an expired lease automatically; pending old operations
+navigation does not revoke sharing. Before authorization completes, leaving the Maverick origin or loading a
+non-shell route stops setup. A full document reload resumes the same lease in the same authenticated app origin.
+With Companion 0.7+, closing the Maverick setup tab leaves the background connection
+active: continue from the macOS app with only the Agent tab open in Chrome.
+Closing the Agent tab, leaving its permitted URL scope, or Disconnect stops capture. A still-shared tab recovers an expired lease automatically; pending old operations
 are cancelled and are never replayed. Memory Saver cannot discard the connector
 while sharing; its previous setting is restored on Disconnect.
 Frame captures may bring the shared platform window to the foreground.
@@ -106,7 +107,29 @@ only after authenticated ownership validation; a different account, workspace or
 origin cannot resume it. Lost completion responses are delivered after reload
 without repeating the action. Session data clears on Disconnect and on extension
 or browser restart. Transient frame-loading races retry instead of revoking
-sharing; actual tab closure, scope loss and user revocation still stop it.
+sharing. In 0.6.1, either tab closing stops it; 0.7 moves the operational bridge into the extension.
+
+## Background connection (Companion 0.7)
+
+The Chrome Maverick tab is required only for initial sign-in and authorization.
+The extension then owns heartbeats, command claims, progress and completion delivery.
+An offscreen capture document wakes the worker every three seconds, with an alarm
+as fallback. Closing or navigating the setup tab does not stop sharing or reopen it.
+Connecting an already active source reuses its background connection.
+The native macOS app can keep sending commands through the same backend connection.
+
+Core issues a memory-only grant from the exact authenticated Browser frame to the
+extension origin. It admits only `companion.poll`, `companion.progress`,
+`companion.complete`, `companion.disconnect`, `companion.connect` (expired lease
+replacement) and `operation.get` on that app's backend. Every request revalidates
+login, actor, active workspace, membership, app visibility and generation. No
+platform cookies or broad user token are copied into the extension. The grant has
+a ten-minute idle deadline and a 24-hour absolute deadline; Core or Chrome restart,
+logout, workspace changes or expired authorization require reconnecting. A sleeping
+computer cannot execute commands. Agent-tab closure and Disconnect clear capture and
+local authority first, then revoke the backend connection and transport grant.
+Retained completions are delivered once; uncertain mutating actions never replay.
+Older installed Companions retain their document-driven transport until updated.
 
 ## Interactive Chrome commands
 

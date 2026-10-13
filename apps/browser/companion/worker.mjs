@@ -8,6 +8,7 @@ import {selectedAgentTab} from "./setup.mjs";
 import {interactionActions} from "./interaction-inputs.mjs";
 import {createInteractionController} from "./interaction-controller.mjs";
 import {createConnectorSession} from "./connector-session.mjs";
+import {createBackgroundConnector} from "./background-connector.mjs";
 import {observe} from "./dom-actions.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
 
@@ -55,6 +56,7 @@ async function stopCurrent(reason,expectedSharingId) {
   const shared=await binding();
   if(expectedSharingId && shared?.sharingId !== expectedSharingId)return {status:"obsolete"};
   if(busy)busy.cancelled=true;
+  const retained=shared ? await connectorSession.background(shared).catch(()=>null) : null;
   if(shared)await dom(shared,"video.restore",{},busy?.expected).catch(()=>{});
   if(shared && (await binding())?.sharingId !== shared.sharingId)return {status:"obsolete"};
   await chrome.storage.session.remove("binding");
@@ -66,6 +68,7 @@ async function stopCurrent(reason,expectedSharingId) {
   const contexts=await chrome.runtime.getContexts({contextTypes:["OFFSCREEN_DOCUMENT"]});
   if(contexts.length)await chrome.offscreen.closeDocument().catch(()=>{});
   await chrome.action.setBadgeText({text:""});
+  if(shared && retained)await background.disconnect(shared,reason,retained).catch(()=>{});
   return {status:"revoked",reason};
 }
 async function scope(b) {
@@ -154,11 +157,16 @@ async function share(message) {
   const url=connectorUrl(message.url);const tab=await chrome.tabs.get(message.tabId);
   if (message.agentTab !== true) throw new Error("agent_tab_required");
   selectedAgentTab(tab,chrome.runtime.getURL("agent-tab.html"),await agentTabs.get());
+  const existing=await binding();
+  if(existing?.tabId === tab.id && existing.origin === url.origin && existing.frameDomain === (url.searchParams.get("frame_domain") || url.hostname) && (await connectorSession.background(existing)).backgroundToken) {
+    await background.tick();
+    if((await binding())?.sharingId === existing.sharingId)return {status:"shared",background:true};
+  }
   const approved=Object.keys(platforms);
   if (!await chrome.permissions.contains({origins:[...connectorOrigins(url),"https://*/*"]})) throw new Error("permission_denied");
   await chrome.storage.local.set({connectorUrl:url.href});
   const identity=await agentTabs.remember(tab);
-  await stop();
+  await stop("connection_replaced");
   const epoch=shareEpoch;
   try {
     await chrome.offscreen.createDocument({url:"offscreen.html",reasons:["USER_MEDIA"],justification:"Read-only capture of the single platform tab explicitly shared by the user."});
@@ -180,6 +188,11 @@ async function share(message) {
 }
 const beginShare=createShareSetup(share);
 const connectorSession=createConnectorSession(chrome,binding);
+async function sharedStatus(b) {
+  const tab=await scope(b);
+  return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,agent_tab_id:b.agentTabId,access_mode:b.accessMode,website_scope:b.websiteScope,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null,lease_recovery:true,background_connector:true,extension_origin:chrome.runtime.getURL("").replace(/\/$/u,""),background_active:Boolean((await connectorSession.background(b)).backgroundToken)};
+}
+const background=createBackgroundConnector({binding,session:connectorSession,status:sharedStatus,execute,cancel:id=>{if(busy?.id===id)busy.cancelled=true;},stop});
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(sender.id !== chrome.runtime.id || message.target !== "worker")return;
   (async()=>{
@@ -192,6 +205,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return {tabId:tab.id};
     }
     if(message.action === "stop" && sender.url === chrome.runtime.getURL("popup.html"))return stop();
+    if(message.action === "background.tick" && sender.url === chrome.runtime.getURL("offscreen.html")) {await background.tick();return {awake:true};}
     const b=await binding();
     if(!b || !sender.tab || !sameConnector(sender.tab,b))throw new Error("connector_scope_required");
     if(message.action === "connector.refresh") {
@@ -199,6 +213,10 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return attach(b);
     }
     if(!sameConnectorFrame(sender,b))throw new Error("connector_scope_required");
+    if(message.action === "background.start") {
+      if(!(await connectorSession.background(b)).backgroundToken)await connectorSession.activate(b,message.command?.token);
+      await background.tick();return {started:true};
+    }
     if(message.action === "lease.store")return connectorSession.save(b,message.command);
     if(message.action === "lease.restore")return connectorSession.read(b);
     if(message.action === "completion.ack")return connectorSession.ack(b,message.command?.operation_id);
@@ -208,22 +226,23 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return {cancelled:true};
     }
     if(message.action === "status") {
-      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,agent_tab_id:b.agentTabId,access_mode:b.accessMode,website_scope:b.websiteScope,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null,lease_recovery:true};
+      return sharedStatus(b);
     }
     if(message.action === "execute")return execute(b,message.command);
     throw new Error("bridge_action_unavailable");
   })().then(reply).catch(error=>reply({error:error.message}));return true;
 });
-chrome.tabs.onRemoved.addListener(async id=>{await agentTabs.forget(id);const b=await binding();if(b && [b.tabId,b.connectorTabId].includes(id))await stop("shared_tab_closed",b.sharingId);});
+chrome.tabs.onRemoved.addListener(async id=>{await agentTabs.forget(id);const b=await binding();if(b && (id===b.tabId || id===b.connectorTabId && !(await connectorSession.background(b)).backgroundToken))await stop("shared_tab_closed",b.sharingId);});
 chrome.tabs.onUpdated.addListener(async (id,change,tab)=>{
   const b=await binding();if(!b)return;
   if(id===b.tabId && change.url) {try{sharedUrl(change.url,b);}catch{await stop("tab_left_platform_scope",b.sharingId);}}
-  if(id===b.connectorTabId && change.url && !sameConnector(tab,b))await stop("connector_left_browser",b.sharingId);
+  if(id===b.connectorTabId && change.url && !sameConnector(tab,b) && !(await connectorSession.background(b)).backgroundToken)await stop("connector_left_browser",b.sharingId);
   if(id===b.connectorTabId && change.status === "complete" && sameConnector(tab,b))await chrome.scripting.executeScript({target:{tabId:id,frameIds:[0]},files:["shell-bridge.js"]}).catch(()=>{});
 });
 chrome.alarms.onAlarm.addListener(async alarm=>{
   if(alarm.name !== "connector-wake")return;
   const b=await binding();if(!b){await chrome.alarms.clear(alarm.name);return;}
+  if((await connectorSession.background(b)).backgroundToken){await background.tick();return;}
   try {
     const connector=await chrome.tabs.get(b.connectorTabId);
     if(!sameConnector(connector,b))return stop("connector_left_browser",b.sharingId);

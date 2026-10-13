@@ -1,6 +1,7 @@
 """Loopback-only E2E fixture; never shipped as a Browser app surface."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import asyncio
 import json
 import html
 import mimetypes
@@ -22,12 +23,16 @@ from service import handle_action, mcp_result_for_tool
 from companion_store import database
 from core.api.app_frame_browser import _inject_message_relay
 from core.api.app_frame_launch import content_security_policy
+from core.api.app_frame_background import GRANT_PATH, REQUEST_PATH, handle_background_request
+from core.apps.app_background_grants import AppBackgroundGrantStore
+from core.apps.sidecar_browser_sessions import SidecarBrowserBinding
 
 TEMPORARY = TemporaryDirectory()
 WORKSPACE = Path(TEMPORARY.name)
 DEPENDENCIES = {"dependencies": [{"alias": "storage-file-content-write", "status": "resolved", "selected_provider_app_ids": ["storage"]}]}
 TICKETS = set()
 FRAME_LABEL = "af-0123456789abcdef01234567"
+BACKGROUND_GRANTS = AppBackgroundGrantStore()
 
 
 def storage_request(request):
@@ -95,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         isolated = self.headers.get("Host", "").startswith("af-")
-        if isolated and self.path != "/__test/bootstrap" and "fixture_frame=authorized" not in self.headers.get("Cookie", ""):
+        if isolated and self.path not in {"/__test/bootstrap", REQUEST_PATH} and "fixture_frame=authorized" not in self.headers.get("Cookie", ""):
             self.send_error(401); return
         if self.path == "/.well-known/maverick-app-frame-session":
             self.send_response(204); self.end_headers(); return
@@ -103,6 +108,9 @@ class Handler(BaseHTTPRequestHandler):
         if not 0 < length <= 8 * 1024 * 1024:
             self.send_error(413); return
         raw = self.rfile.read(length)
+        if self.path in {GRANT_PATH, REQUEST_PATH}:
+            self.background_request(raw)
+            return
         if self.path == "/__test/login":
             self.send_response(303); self.send_header("Set-Cookie", "fixture_platform=authorized; Path=/; HttpOnly; SameSite=Strict")
             self.send_header("Location", "/app/browser?connector=1"); self.end_headers(); return
@@ -131,6 +139,41 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404); return
         content = json.dumps(response).encode()
         self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
+
+    def do_DELETE(self):
+        if self.path == REQUEST_PATH:
+            self.background_request(b"")
+        else:
+            self.send_error(404)
+
+    def background_request(self, raw):
+        # Exercise the real Core transport, including the extension's actual
+        # browser Origin header. Only platform identity validation is a fixture.
+        host = self.headers["Host"]
+        binding = SidecarBrowserBinding("fixture-user", "fixture", "browser", "frame", host, f"http://{host}", f"http://maverick.localhost:{self.server.server_port}", "fixture", "login", "/apps/browser/", False, "", platform_session_id="login")
+        scope = {"path": self.path, "method": self.command, "headers": [(key.lower().encode(), value.encode()) for key, value in self.headers.items()]}
+        messages = []
+        async def receive():
+            return {"type": "http.request", "body": raw, "more_body": False}
+        async def send(message):
+            messages.append(message)
+        async def send_json(_send, body, *, status, headers):
+            await send({"type": "http.response.start", "status": status, "headers": [(key.lower().encode(), value.encode()) for key, value in headers] + [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": json.dumps(body).encode()})
+        async def validate(_state, **_kwargs):
+            return ("fixture", SimpleNamespace(binding=binding))
+        async def forward(transformed, _receive, response_send):
+            assert transformed["path"] == "/api/apps/browser/backend"
+            status, response = browser_request(json.loads(raw))
+            await response_send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"application/json")]})
+            await response_send({"type": "http.response.body", "body": json.dumps(response).encode()})
+        asyncio.run(handle_background_request(SimpleNamespace(app_background_grants=BACKGROUND_GRANTS), scope=scope, receive=receive, send=send, host=host, start_path=ROOT, forward=forward, validate_session=validate, current_frame=lambda *_args, **_kwargs: True, platform_scope=lambda selected, _session, **_kwargs: {**selected}, send_json=send_json))
+        started = messages[0]
+        content = b"".join(message.get("body", b"") for message in messages[1:])
+        self.send_response(started["status"])
+        for key, value in started["headers"]:
+            self.send_header(key.decode(), value.decode())
+        self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
 
     def do_GET(self):
         parsed = urlsplit(self.path)

@@ -84,3 +84,4 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(sender.id !== chrome.runtime.id || message.target !== "offscreen") return;
   capture(message.action,message.parameters || {}).then(reply).catch(e=>reply({error:e.message}));return true;
 });
+setInterval(()=>{if(stream?.getTracks().some(track=>track.readyState === "live"))void chrome.runtime.sendMessage({target:"worker",action:"background.tick"}).catch(()=>{});},3000);

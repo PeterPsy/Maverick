@@ -341,6 +341,32 @@ shared; Disconnect restores its prior setting. Auth failures request the native
 Core frame bootstrap before bounded failure/revocation. The extension alarm wakes
 a resumed Chrome document; a sleeping computer cannot execute browser commands.
 
+## Background connection (Companion 0.7)
+
+After the exact selected Browser document authorizes initial sharing, Companion
+moves polling, heartbeats, progress, command execution and cached completion delivery
+to the extension worker. Its existing offscreen capture document wakes it every
+three seconds; a 30-second alarm is fallback. Closing/navigating the Maverick setup
+tab preserves the same sharing and backend lease and does not open another tab.
+Chrome must remain running with the source Agent tab open; users may continue
+from the native macOS app. Pre-0.7 installed extensions keep their existing bridge.
+
+The Browser UI requests Core's generic action-scoped background grant for its exact
+extension origin and six connector actions. The extension stores it only in trusted
+session memory, never status/tool output. Requests use the exact original app-frame
+origin, omit cookies, reject redirects, and carry the grant to Core's dedicated
+background route. Core checks live login, workspace, membership, app visibility
+and generation on every request before forwarding only to that app's backend.
+The grant's idle and absolute limits are ten minutes and 24 hours. Core restart,
+expired authorization, logout or a principal change requires user reconnection.
+
+Only one local command runs. Cancellation drains its cleanup before another claim;
+network retries deliver retained results without repeating interactions. Expired
+connection leases are replaced only while the same explicit sharing remains bound,
+cancelling all old pending work. Disconnect/source closure clears local capture,
+binding and cache before bounded best-effort backend/grant revocation. No setup-tab
+closure or lost frontend response can replay a form submission.
+
 ## Legacy read-only scope and platform collection
 
 Read-only companion leases admit fixed navigate, snapshot, rendered-content, scroll,
@@ -590,3 +616,17 @@ owned by the human actor. Public research reads rendered content rather than
 only an accessibility snapshot and returns bounded text, links and provenance.
 Platform workflows and their verification are documented in
 [`platform_connectors_architecture.md`](platform_connectors_architecture.md).
+
+
+The 0.7.0 pass on 2026-10-13 completed 93 Browser Python tests, 66 Node tests,
+10 focused app-frame/background authority checks plus four sidecar-origin regression
+checks, and both UI suites and the production-manifest popup fixture. Real Chromium
+completed trusted inputs, lost-completion delivery without form replay, lease
+replacement, video frames, audio (29,621 bytes), Storage evidence, cancellation and
+Connectors collection/export workflows. The dedicated background fixture closed
+Maverick, performed snapshot/type/click, kept the same lease connected for more than
+125 seconds, reused a repeated Connect without opening a tab, and verified both
+Disconnect and source closure clear capture, local authority and the backend lease.
+The current workspace Browser guide was updated and read back through Skills.
+The public 0.7.0 ZIP returned HTTP 200 and matched the built archive SHA-256
+`21ebea2df6b362856ac04fd4667e96066d3bbc4abc398bd9d9da4d9baee66f71`.

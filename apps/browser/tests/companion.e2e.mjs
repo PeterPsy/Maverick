@@ -14,6 +14,7 @@ import {analyzeVideo} from "../companion/workflows.mjs";
 import {openActionPopup} from "./extension-popup.mjs";
 import {platforms} from "../companion/platforms.mjs";
 import {verifyInteractiveChrome} from "./interactive-chrome.mjs";
+import {verifyBackgroundChrome} from "./background-chrome.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const temporary=mkdtempSync(path.join(tmpdir(),"browser-companion-e2e-"));
@@ -21,6 +22,7 @@ const server=spawn("python3",[path.join(root,"tests/companion_fixture_server.py"
 let context;
 const connectorsOnly=process.argv.includes('--connectors-only');
 const realConsent=process.argv.includes('--permissions');
+const backgroundOnly=process.argv.includes('--background-only');
 let mediaSummary={};
 const wait=async(predicate,timeout=45000)=>{const end=Date.now()+timeout;while(Date.now()<end){const result=await predicate();if(result)return result;await new Promise(r=>setTimeout(r,150));}throw new Error("fixture_wait_timeout");};
 try {
@@ -118,7 +120,7 @@ try {
     const result=await wait(async()=>{const result=await api({action:"operation.get",operation_id:queued.operation_id});return ["completed","failed","cancelled","expired"].includes(result.status) ? result : null;},60000);
     assert.equal(result.status,"completed",JSON.stringify(result));return {...result.result,operation_id:queued.operation_id};
   };
-  await run('navigate',{url:'https://www.instagram.com/fixture_user/'});
+  if(!backgroundOnly)await run('navigate',{url:'https://www.instagram.com/fixture_user/'});
   assert.equal(connection.access_mode,'interactive');assert.equal(connection.website_scope,'https');
   const runMcp=async(tool_name,arguments_,expected='completed')=>{
     const response=await fixtureFetch(`${origin}/__test/browser/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool_name,arguments:{session_id:connection.session_id,...arguments_}})});
@@ -126,6 +128,8 @@ try {
     const operation=await wait(async()=>{const result=await api({action:'operation.get',operation_id:queued.operation_id});return ['completed','failed','cancelled','expired'].includes(result.status) ? result : null;},60000);
     assert.equal(operation.status,expected,JSON.stringify(operation));return operation.result;
   };
+  if(backgroundOnly)await verifyBackgroundChrome({context,worker,page:instagram,connection,run,runMcp,api,connectorWindow,browser,extensionId,origin,frameOrigin,wait});
+  else {
   const reloadBridge=async()=>{
     await connectorWindow.reload();
     connector=await wait(()=>connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
@@ -353,14 +357,22 @@ try {
   }
   await mcp('connectors_connections_refresh');
   assert((await mcp('connectors_status')).connections.some(c=>c.session_id === agentConnection.session_id && c.sharing_mode === 'agent_tab'));
+  const beforeClose=context.pages().length,backgroundSessionId=agentConnection.session_id;
+  await agentWindow.close();
+  assert.equal(context.pages().length,beforeClose-1);
+  assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
+  const afterClose=(await api({action:'companion.overview'})).connections.find(c=>c.session_id === backgroundSessionId);
+  assert.equal(afterClose.status,'connected');
+  assert.equal(context.pages().length,beforeClose-1,'Closing setup must not open another Maverick tab');
+  console.log(JSON.stringify({phase:'maverick-tab-closed',background_commands:true,same_lease:true,no_reopened_tabs:true}));
   await agent.goto('http://unapproved-fixture.test/');
   await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id)?.status === 'revoked');
   const stopped=(await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id);
   assert(stopped.stop_reason && stopped.stop_reason !== 'user_stopped','Automatic revocation must retain a diagnostic cause.');
-  const stoppedMessage=await agentFrame.locator('#status').textContent();
-  assert.match(stoppedMessage,/Sharing stopped:/u);
-  console.log(JSON.stringify({phase:'scope-stopped',reason:stopped.stop_reason,message:stoppedMessage}));
+  assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
+  console.log(JSON.stringify({phase:'scope-stopped',reason:stopped.stop_reason,background_released:true}));
   console.log(JSON.stringify({status:"passed",real_chromium:true,fresh_chrome_login:true,exact_connector_document:true,anonymous_download_verified:true,...mediaSummary,empty_agent_tab:true,cross_platform_navigation:true,cross_platform_screenshot:true,agent_scope_revocation:true,connectors_read_items:3,connectors_context_pages:2,connectors_collection_saved:true,connectors_storage_export_verified:true,connectors_mcp_workflow:true,connectors_frontend_absent:true,scope_revocation:true,browser_desktop_mobile_layout:true,instagram_access_verified:false}));
+  }
 }finally {
   if(context)await context.close();
   if(server.exitCode === null && server.signalCode === null){const exited=new Promise(resolve=>server.once("exit",resolve));server.kill("SIGTERM");await exited;}

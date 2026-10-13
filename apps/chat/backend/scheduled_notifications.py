@@ -1,4 +1,4 @@
-"""Scheduled-chat notifications in the central Shell inbox."""
+"""Scheduled-task notifications in the central Shell inbox."""
 
 from scheduled_store import iso
 

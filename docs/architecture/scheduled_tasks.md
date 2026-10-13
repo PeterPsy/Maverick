@@ -1,11 +1,11 @@
-# Scheduled chats
+# Scheduled tasks
 
-Chat owns scheduled conversations under `data/chat/scheduled.sqlite`. Core remains
+Chat owns scheduled tasks under `data/chat/scheduled.sqlite`. Core remains
 the owner of runtime sessions, turns, admission and cancellation. The existing
 Chat `background_tick`, `backend_recovery` and `runtime_event` hooks drive work
 without a browser; no client timer executes an agent.
 
-A scheduled chat contains a bounded, acyclic graph of skill blocks and an IANA
+A scheduled task contains a bounded, acyclic graph of skill blocks and an IANA
 timezone schedule. React Flow edits this graph. Edges are prerequisites: a block
 can start only after every incoming block has been confirmed. Independent ready
 blocks run in parallel, with a bounded workspace concurrency. Each successful
@@ -29,15 +29,26 @@ Mounted backend actions can dispatch immediately through the same outbox.
 
 The bottom composer belongs to the schedule's management conversation. It uses
 the normal Chat composer and transcript, and submits app runtime requests with
-a bounded graph context and a stable scheduled-chat reference. AI graph creation
+a bounded graph context and a stable scheduled-task reference. AI graph creation
 and edits use the same validated `chat_scheduled` MCP/CLI operations as manual
 editing. Block instructions are injected into each worker turn; optional stable
 workspace skill ids use explicit runtime skill activation. Worker conversations
 remain inspectable through the authorized Core transcript surface.
 
-Scheduled-chat references use `scheduled_chat`, `/app/chat/scheduled/<id>`, and
+Scheduled-task references use `scheduled_chat`, `/app/chat/scheduled/<id>`, and
 the existing isolated-frame reference drag broker. Reference resolution and all
 scheduled operations are scoped to the trusted actor and the owning workspace.
 Central Shell notifications report checkpoints, failures and completion, with
 Chat-owned deduplication and per-user receipts. The UI is English, uses native
 Chat glass tokens and lazy-loads the graph editor.
+
+The sidebar presents Chats and Scheduled tasks as separate sibling glass blocks.
+Both use the same view selector, search and action toolbar. Task filters and
+search are local to the task block; the chat search shortcut remains scoped to
+Chats. Each list scrolls independently, keeping both toolbars available. Task
+creation opens `/app/chat/scheduled/create/new`, which cannot collide with a
+single-segment task id. A task owns a management chat; the chat is its composer
+and transcript, while the task is the scheduled graph and its checkpoints.
+The existing `scheduled_chat` reference discriminator and `scheduled-chats`
+data resource identify this Chat-owned persisted entity; visible product copy
+and agent instructions call it a Scheduled task.

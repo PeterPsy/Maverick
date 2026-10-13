@@ -29,7 +29,7 @@ def connection(data_root, *, write=False):
     version = db.execute("PRAGMA user_version").fetchone()[0]
     if version > 1:
         db.close()
-        raise ValueError("Unsupported scheduled chat database schema")
+        raise ValueError("Unsupported scheduled task database schema")
     db.execute("PRAGMA foreign_keys=ON")
     if version == 0:
         initialize(db)
@@ -88,7 +88,7 @@ def initialize(db):
 def owned_chat(db, chat_id, actor):
     row = db.execute("SELECT * FROM scheduled_chats WHERE id=? AND owner=? AND deleted=0", (chat_id, actor)).fetchone()
     if not row:
-        raise ValueError("Scheduled chat not found")
+        raise ValueError("Scheduled task not found")
     return row
 
 

@@ -43,92 +43,96 @@ function ChatSidebarWidget() {
         </div>
       ) : null}
 
-      <SidebarNav
-        actions={
-          <>
-            <button
-              aria-label={
-                sidebar.areAllSectionsCollapsed
-                  ? "Expand all projects"
-                  : "Collapse all projects"
-              }
-              className="dashboard-sidebar__icon-button"
-              disabled={!sidebar.sections.length}
-              onClick={sidebar.toggleAllSections}
-              type="button"
-            >
-              {sidebar.areAllSectionsCollapsed ? (
-                <ChevronsUpDown size={15} />
+      <div className="bs-chat-sidebar-sections">
+        <section className="bs-chat-sidebar-block" aria-label="Chats">
+          <SidebarNav
+            actions={
+              <>
+                <button
+                  aria-label={
+                    sidebar.areAllSectionsCollapsed
+                      ? "Expand all projects"
+                      : "Collapse all projects"
+                  }
+                  className="dashboard-sidebar__icon-button"
+                  disabled={!sidebar.sections.length}
+                  onClick={sidebar.toggleAllSections}
+                  type="button"
+                >
+                  {sidebar.areAllSectionsCollapsed ? (
+                    <ChevronsUpDown size={15} />
+                  ) : (
+                    <ChevronsDownUp size={15} />
+                  )}
+                </button>
+                <button
+                  aria-label="New project"
+                  className="dashboard-sidebar__icon-button"
+                  disabled={sidebar.isPending}
+                  onClick={() => void sidebar.addProject()}
+                  type="button"
+                >
+                  <FolderPlus size={16} />
+                </button>
+              </>
+            }
+            activeId={sidebar.threadFilter}
+            groups={chatNavigationGroups(sidebar.threadFilterCounts)}
+            onSearchChange={sidebar.setSearchQuery}
+            onSelect={(id) => sidebar.setThreadFilter(id as ThreadFilter)}
+            searchQuery={sidebar.searchQuery}
+          >
+            <div className="bs-chat-list">
+              {sidebar.isInitialLoading ? (
+                <ChatSidebarSkeleton />
+              ) : sidebar.sections.length ? (
+                sidebar.sections.map((section) => (
+                  <ProjectSection
+                    activeThreadId={sidebar.activeThreadId}
+                    collapsed={sidebar.isSectionCollapsed(section.id)}
+                    editingProject={sidebar.editingProject}
+                    editingProjectRef={sidebar.editingProjectRef}
+                    expandedThreadId={sidebar.expandedThreadId}
+                    expandedThreadTitle={sidebar.expandedThreadTitle}
+                    isPending={sidebar.isPending}
+                    isShellMobileLayout={sidebar.isShellMobileLayout}
+                    key={section.id}
+                    multiAgentThreadIds={sidebar.multiAgentThreadIds}
+                    onCancelProjectDeletion={sidebar.cancelProjectDeletion}
+                    onCancelProjectEdit={sidebar.cancelProjectEdit}
+                    onCloseExpandedThread={sidebar.closeExpandedThread}
+                    onConfirmProjectDeletion={sidebar.confirmProjectDeletion}
+                    onCreateChat={sidebar.createChat}
+                    onMoveThread={sidebar.moveThread}
+                    onRemoveEditingProject={sidebar.removeEditingProject}
+                    onRemoveThread={sidebar.removeThread}
+                    onRenameThread={sidebar.renameThread}
+                    onSaveProjectEdit={sidebar.saveProjectEdit}
+                    onSelectThreadClick={sidebar.selectThreadFromClick}
+                    onSelectThreadPointer={sidebar.selectThreadFromPointer}
+                    onTrackThreadTouchCancel={sidebar.cancelThreadTouch}
+                    onTrackThreadTouchMove={sidebar.trackThreadTouchMove}
+                    onSetEditingProjectName={sidebar.setEditingProjectName}
+                    onSetExpandedThreadTitle={sidebar.setExpandedThreadTitle}
+                    onStartProjectEdit={sidebar.startProjectEdit}
+                    onToggleSection={sidebar.toggleSection}
+                    onToggleThreadEdit={sidebar.toggleThreadEdit}
+                    onToggleThreadSelection={sidebar.toggleThreadSelection}
+                    onTrackThreadTouchStart={sidebar.trackThreadTouchStart}
+                    pendingProjectDeletion={sidebar.pendingProjectDeletion}
+                    projects={sidebar.projects}
+                    section={section}
+                    selectedThreadIds={sidebar.selectedThreadIds}
+                  />
+                ))
               ) : (
-                <ChevronsDownUp size={15} />
+                <p className="bs-chat-folder__empty">No chats match this filter.</p>
               )}
-            </button>
-            <button
-              aria-label="New project"
-              className="dashboard-sidebar__icon-button"
-              disabled={sidebar.isPending}
-              onClick={() => void sidebar.addProject()}
-              type="button"
-            >
-              <FolderPlus size={16} />
-            </button>
-          </>
-        }
-        activeId={sidebar.threadFilter}
-        groups={chatNavigationGroups(sidebar.threadFilterCounts)}
-        onSearchChange={sidebar.setSearchQuery}
-        onSelect={(id) => sidebar.setThreadFilter(id as ThreadFilter)}
-        searchQuery={sidebar.searchQuery}
-      >
-        <div className="bs-chat-list">
-          <ScheduledSidebar mobile={sidebar.isShellMobileLayout} />
-          {sidebar.isInitialLoading ? (
-            <ChatSidebarSkeleton />
-          ) : sidebar.sections.length ? (
-            sidebar.sections.map((section) => (
-              <ProjectSection
-                activeThreadId={sidebar.activeThreadId}
-                collapsed={sidebar.isSectionCollapsed(section.id)}
-                editingProject={sidebar.editingProject}
-                editingProjectRef={sidebar.editingProjectRef}
-                expandedThreadId={sidebar.expandedThreadId}
-                expandedThreadTitle={sidebar.expandedThreadTitle}
-                isPending={sidebar.isPending}
-                isShellMobileLayout={sidebar.isShellMobileLayout}
-                key={section.id}
-                multiAgentThreadIds={sidebar.multiAgentThreadIds}
-                onCancelProjectDeletion={sidebar.cancelProjectDeletion}
-                onCancelProjectEdit={sidebar.cancelProjectEdit}
-                onCloseExpandedThread={sidebar.closeExpandedThread}
-                onConfirmProjectDeletion={sidebar.confirmProjectDeletion}
-                onCreateChat={sidebar.createChat}
-                onMoveThread={sidebar.moveThread}
-                onRemoveEditingProject={sidebar.removeEditingProject}
-                onRemoveThread={sidebar.removeThread}
-                onRenameThread={sidebar.renameThread}
-                onSaveProjectEdit={sidebar.saveProjectEdit}
-                onSelectThreadClick={sidebar.selectThreadFromClick}
-                onSelectThreadPointer={sidebar.selectThreadFromPointer}
-                onTrackThreadTouchCancel={sidebar.cancelThreadTouch}
-                onTrackThreadTouchMove={sidebar.trackThreadTouchMove}
-                onSetEditingProjectName={sidebar.setEditingProjectName}
-                onSetExpandedThreadTitle={sidebar.setExpandedThreadTitle}
-                onStartProjectEdit={sidebar.startProjectEdit}
-                onToggleSection={sidebar.toggleSection}
-                onToggleThreadEdit={sidebar.toggleThreadEdit}
-                onToggleThreadSelection={sidebar.toggleThreadSelection}
-                onTrackThreadTouchStart={sidebar.trackThreadTouchStart}
-                pendingProjectDeletion={sidebar.pendingProjectDeletion}
-                projects={sidebar.projects}
-                section={section}
-                selectedThreadIds={sidebar.selectedThreadIds}
-              />
-            ))
-          ) : (
-            <p className="bs-chat-folder__empty">No chats match this filter.</p>
-          )}
-        </div>
-      </SidebarNav>
+            </div>
+          </SidebarNav>
+        </section>
+        <ScheduledSidebar mobile={sidebar.isShellMobileLayout} />
+      </div>
     </main>
   );
 }

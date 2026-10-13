@@ -24,7 +24,7 @@ export function useScheduledChats(chatId: string | null) {
       else setChats(result.chats || []);
       setError(null);
     } catch (cause) {
-      if (!abort.signal.aborted && version === generation.current) setError(cause instanceof Error ? cause.message : "Unable to load scheduled chats");
+      if (!abort.signal.aborted && version === generation.current) setError(cause instanceof Error ? cause.message : "Unable to load scheduled tasks");
     } finally {
       if (!abort.signal.aborted && version === generation.current) setLoading(false);
     }
@@ -79,7 +79,7 @@ export function useScheduledChats(chatId: string | null) {
       if (result.chat && chatId) setChat(result.chat);
       return result;
     } catch (cause) {
-      if (version === generation.current) setError(cause instanceof Error ? cause.message : "Unable to save scheduled chat");
+      if (version === generation.current) setError(cause instanceof Error ? cause.message : "Unable to save scheduled task");
       return null;
     } finally {
       mutationLock.current = false;

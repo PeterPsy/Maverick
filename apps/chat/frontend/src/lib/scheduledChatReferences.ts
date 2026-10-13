@@ -27,7 +27,7 @@ export function scheduledChatMentionItems(transfer: Pick<DataTransfer, "getData"
     if (item.owner_app_id !== "chat" || typeof item.id !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(item.id)
       || typeof item.title !== "string" || item.title.length > 160) return [];
     const reference = scheduledChatReference({ id: item.id, title: item.title });
-    return [{ id: referenceKey(reference), label: reference.label, description: "chat · Scheduled chat", kind: "entity", reference }];
+    return [{ id: referenceKey(reference), label: reference.label, description: "chat · Scheduled task", kind: "entity", reference }];
   } catch { return []; }
 }
 

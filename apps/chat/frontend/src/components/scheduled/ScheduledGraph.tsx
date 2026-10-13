@@ -68,7 +68,7 @@ export function ScheduledGraph({ graph, schedule, steps, locked, selectedId, onC
       setDragPositions({});
     }
   }, [graph, locked, nodes, onChange, onSelect]);
-  return <div className="scheduled-canvas" aria-label="Scheduled chat skill graph">
+  return <div className="scheduled-canvas" aria-label="Scheduled task skill graph">
     <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={changeNodes} onConnect={connect}
       isValidConnection={valid} nodesDraggable={!locked} nodesConnectable={!locked} deleteKeyCode={null}
       onEdgesDelete={deleted => { if (!locked) onChange({ ...graph, edges: graph.edges.filter(edge => !deleted.some(item => item.id === edge.id)) }); }}

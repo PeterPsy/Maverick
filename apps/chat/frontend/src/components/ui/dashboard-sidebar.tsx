@@ -26,6 +26,8 @@ export function SidebarNav({
   onSearchChange,
   actions,
   children,
+  viewLabel = "Choose chat view",
+  search,
 }: {
   groups: NavGroupData[];
   activeId: string;
@@ -34,6 +36,8 @@ export function SidebarNav({
   onSearchChange: (query: string) => void;
   actions?: ReactNode;
   children: ReactNode;
+  viewLabel?: string;
+  search?: { label: string; placeholder: string; enableShortcut?: boolean };
 }) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const activeItem =
@@ -50,7 +54,7 @@ export function SidebarNav({
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
-              aria-label="Choose chat view"
+              aria-label={viewLabel}
               className="dashboard-sidebar__switcher"
               type="button"
             >
@@ -136,6 +140,7 @@ export function SidebarNav({
           <div className="dashboard-sidebar__toolbar-actions">{actions}</div>
         ) : null}
         <SidebarSearch
+          {...search}
           expanded={isSearchExpanded}
           onExpandedChange={setIsSearchExpanded}
           onSearchChange={onSearchChange}

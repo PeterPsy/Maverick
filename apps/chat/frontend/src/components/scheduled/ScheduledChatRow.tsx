@@ -26,8 +26,7 @@ export function ScheduledChatRow({ chat, busy, onOpen, onAction, allowDelete = t
       <Menu.Portal><Menu.Content className="scheduled-menu" sideOffset={6} align="end" collisionPadding={12}>
         <Menu.Item onSelect={() => onAction("run", chat)} disabled={chat.status !== "active"}><Play size={15} />Run now</Menu.Item>
         <Menu.Item onSelect={() => onAction(chat.status === "paused" ? "resume" : "pause", chat)}><Pause size={15} />{chat.status === "paused" ? "Resume" : "Pause"}</Menu.Item>
-        <Menu.Separator />
-        {allowDelete && <Menu.Item className="is-danger" onSelect={() => onAction("delete", chat)}><Trash2 size={15} />Delete</Menu.Item>}
+        {allowDelete && <><Menu.Separator /><Menu.Item className="is-danger" onSelect={() => onAction("delete", chat)}><Trash2 size={15} />Delete</Menu.Item></>}
       </Menu.Content></Menu.Portal>
     </Menu.Root>
   </article>;

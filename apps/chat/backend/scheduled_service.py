@@ -1,4 +1,4 @@
-"""Actor-scoped Scheduled chats operations shared by backend, CLI and MCP."""
+"""Actor-scoped Scheduled tasks operations shared by backend, CLI and MCP."""
 
 import json
 
@@ -15,7 +15,7 @@ PUBLIC_ACTIONS = {"scheduled." + name for name in (
 
 def management_request(db, chat):
     config = json.loads(chat["config"])
-    prompt = ("This is the management conversation for a Scheduled chat. Initialize it by briefly confirming it is ready. "
+    prompt = ("This is the management conversation for a Scheduled task. Initialize it by briefly confirming it is ready. "
               "Do not execute any blocks now. When the user asks to create or edit blocks, use the chat_scheduled MCP tool "
               "(or maverick app chat cli run scheduled) with action read, then update with expected_revision and the complete graph. "
               "A graph has nodes {id,title,instructions,skill_ids,position:{x,y}} and edges {id,source,target}. "
@@ -43,12 +43,12 @@ def handle_scheduled(payload):
             return started(db, body)
     actor = payload.get("user_id")
     if not isinstance(actor, str) or not actor:
-        raise PermissionError("Scheduled chats require an authenticated actor")
+        raise PermissionError("Scheduled tasks require an authenticated actor")
     with connection(root, write=action not in {"scheduled.list", "scheduled.read", "notifications.list"}) as db:
         if action.startswith("notifications."):
             return notifications(db, body, actor)
         if action not in PUBLIC_ACTIONS:
-            raise ValueError("Unknown scheduled-chat operation")
+            raise ValueError("Unknown scheduled-task operation")
         if action not in {"scheduled.list", "scheduled.read"}:
             worker = db.execute("SELECT 1 FROM scheduled_requests WHERE kind='block' AND session_id=? AND session_id!=''", (payload.get("runtime_session_id", ""),)).fetchone()
             if worker:
@@ -66,7 +66,7 @@ def handle_scheduled(payload):
             if existing:
                 return {"chat": project_chat(db, owned_chat(db, chat_id, actor), detail=True)}
             if db.execute("SELECT COUNT(*) FROM scheduled_chats WHERE owner=? AND deleted=0", (actor,)).fetchone()[0] >= 500:
-                raise ValueError("Scheduled chat limit reached")
+                raise ValueError("Scheduled task limit reached")
             config = validate_config(body)
             due = next_due(config["schedule"], now())
             if config["schedule"]["frequency"] == "once" and due is None:
@@ -82,7 +82,7 @@ def handle_scheduled(payload):
         if action == "scheduled.update":
             expected = body.get("expected_revision")
             if not isinstance(expected, int) or isinstance(expected, bool) or expected != chat["revision"]:
-                raise ValueError("This scheduled chat changed. Reload before saving.")
+                raise ValueError("This scheduled task changed. Reload before saving.")
             if open_run(db, chat["id"]):
                 raise ValueError("Finish or cancel the current run before editing its graph or schedule")
             config = validate_config(body, json.loads(chat["config"]))
@@ -111,7 +111,7 @@ def handle_scheduled(payload):
 def scheduled_references(payload):
     actor, body = payload.get("user_id"), payload.get("body", {})
     if not actor:
-        raise PermissionError("Scheduled chat references require an authenticated actor")
+        raise PermissionError("Scheduled task references require an authenticated actor")
     action = body["action"]
     with connection(payload["data_root"]) as db:
         if action == "references.search":
@@ -131,6 +131,6 @@ def scheduled_references(payload):
 
 def reference_item(row):
     config = json.loads(row["config"])
-    return {**reference(row), "title": config["title"], "subtitle": "Scheduled chat", "confidence": 1.0,
+    return {**reference(row), "title": config["title"], "subtitle": "Scheduled task", "confidence": 1.0,
             "app_page": "scheduled/" + row["id"], "summary": config["instructions"][:500] or "Scheduled skill-block graph. Read and manage it with chat_scheduled.",
             "safe_fields": {"title": config["title"], "revision": row["revision"]}}

@@ -18,7 +18,7 @@ export function notifyShell(thread?: ChatThread, params: Record<string, string |
       app_id: "chat",
       params: thread
         ? { app_page: `threads/${thread.thread_id}` }
-        : { new_chat: true, new_chat_request_id: crypto.randomUUID(), ...params },
+        : params.app_page ? params : { new_chat: true, new_chat_request_id: crypto.randomUUID(), ...params },
     },
     "*",
   );

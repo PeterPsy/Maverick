@@ -20,7 +20,7 @@
           "initialize": "mutating"
         }
       },
-      "description": "Manage actor-owned Scheduled chats with acyclic skill-block graphs. Read before editing; update requires expected_revision. Successful blocks stop at checkpoints; continue requires run_id and explicit node_ids. Never confirm checkpoints or start work without the user asking. Recurrence repeats the whole graph.",
+      "description": "Manage actor-owned Scheduled tasks with acyclic skill-block graphs. Read before editing; update requires expected_revision. Successful blocks stop at checkpoints; continue requires run_id and explicit node_ids. Never confirm checkpoints or start work without the user asking. Recurrence repeats the whole graph.",
       "argument_schema": {
         "type": "object",
         "properties": {

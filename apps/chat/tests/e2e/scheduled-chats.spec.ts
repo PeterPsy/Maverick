@@ -51,6 +51,7 @@ async function installMocks(page: Page) {
         chat.run!.steps = chat.run!.steps.map(step => ({ ...step, status: step.node_id === "brief" ? "running" : "completed" }));
         response = { chat };
       } else if (body.action === "projects.list") response = { projects: [] };
+      else if (body.action === "pwa.read_model") response = { revision: "projects-1", payload: { kind: "projects", data: { projects: [], has_more: false } } };
     } else if (path === "/api/providers") response = { workspace_id: "default", configured: true, active_provider: provider, items: [provider] };
     else if (path === "/api/apps/dependencies") response = { workspace_id: "default", dependencies: [] };
     else if (path === "/api/apps") response = { items: [] };
@@ -119,14 +120,73 @@ test("keeps search, pause filters and settings focus usable in light mode", asyn
   await page.getByRole("menuitem", { name: "Pause", exact: true }).click();
   await page.getByRole("tab", { name: "Paused", exact: true }).click();
   await expect(page.locator(".scheduled-row")).toHaveCount(1);
-  await page.getByRole("textbox", { name: "Search scheduled chats" }).fill("Missing schedule");
-  await expect(page.getByRole("heading", { name: "No matching chats" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Search scheduled tasks" }).fill("Missing schedule");
+  await expect(page.getByRole("heading", { name: "No matching tasks" })).toBeVisible();
   await page.getByRole("button", { name: "Clear search" }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+test("opens task creation directly, cancels to the list and saves to the graph", async ({ page }) => {
+  await installMocks(page);
+  await page.goto("/apps/chat/?app_page=scheduled/create/new");
+  await expect(page.getByRole("dialog", { name: "New scheduled task" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Title", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Scheduled tasks", exact: true })).toBeVisible();
+  await page.evaluate(() => window.postMessage({ type: "maverick.app.navigate", app_id: "chat", params: { app_page: "scheduled/create/new" } }, window.location.origin));
+  await page.getByLabel("Title", { exact: true }).fill("Task from sidebar");
+  await page.getByLabel("What should the agent do?").fill("Review the calendar.");
+  await page.getByRole("button", { name: "Create", exact: true }).last().click();
+  await expect(page.getByRole("heading", { name: "Task from sidebar", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+for (const theme of ["dark", "light"]) {
+  test(`separates chat and task sidebar blocks with independent controls in ${theme} mode`, async ({ page }) => {
+    const state = await installMocks(page);
+    state.chats = Array.from({ length: 18 }, (_, index) => ({ ...fixture(), id: `task-${index}`, title: `Task ${index + 1}`, status: index < 12 ? "active" : "paused" }));
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.route("**/sidebar-test", route => route.fulfill({ contentType: "text/html", body: `<html><body style="margin:0"><iframe title="Chat sidebar" src="/apps/chat/widgets/chat-sidebar/index.html?maverick_theme=${theme}" style="width:100vw;height:100vh;border:0"></iframe><script>window.messages=[];window.addEventListener('message',event=>window.messages.push(event.data));</script></body></html>` }));
+    await page.goto("/sidebar-test");
+    const sidebar = page.frameLocator('iframe[title="Chat sidebar"]');
+    const chats = sidebar.getByRole("region", { name: "Chats", exact: true });
+    const tasks = sidebar.getByRole("region", { name: "Scheduled tasks", exact: true });
+    await expect(chats.getByRole("button", { name: "Choose chat view" })).toBeVisible();
+    await expect(tasks.getByRole("button", { name: "Choose task view" })).toBeVisible();
+    await expect(tasks.locator(".scheduled-row")).toHaveCount(18);
+    expect(await tasks.evaluate(element => element.previousElementSibling?.getAttribute("aria-label"))).toBe("Chats");
+    const first = await chats.boundingBox();
+    const second = await tasks.boundingBox();
+    expect(second!.y).toBeGreaterThan(first!.y + first!.height);
+    const footerClearance = await tasks.evaluate(element => parseFloat(getComputedStyle(element.parentElement!).paddingBottom));
+    expect(second!.y + second!.height).toBeLessThanOrEqual(701 - footerClearance);
+    await tasks.locator(".scheduled-row__open").last().scrollIntoViewIfNeeded();
+    await expect(tasks.getByRole("button", { name: "Choose task view" })).toBeVisible();
+    await tasks.getByRole("button", { name: "Choose task view" }).click();
+    await sidebar.getByRole("menuitemradio", { name: "Paused tasks" }).click();
+    await expect(tasks.locator(".scheduled-row")).toHaveCount(6);
+    await expect(chats.getByRole("button", { name: "Choose chat view" })).toContainText("All conversations");
+    await tasks.getByRole("button", { name: "Search scheduled tasks", exact: true }).click();
+    await tasks.getByRole("textbox", { name: "Search scheduled tasks" }).fill("Task 18");
+    await expect(tasks.locator(".scheduled-row")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await tasks.getByRole("button", { name: "Search scheduled tasks", exact: true }).focus();
+    await page.keyboard.press("Control+k");
+    await expect(chats.getByRole("textbox", { name: "Search chats" })).toBeFocused();
+    await expect(tasks.getByRole("textbox")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await tasks.getByRole("button", { name: "New scheduled task" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { messages: { type: string; params?: { app_page: string; new_chat?: boolean } }[] }).messages.some(message => message.type === "maverick.widget.open-app" && message.params?.app_page === "scheduled/create/new" && !message.params.new_chat))).toBe(true);
+    await tasks.getByRole("button", { name: "Manage scheduled tasks" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { messages: { type: string; params?: { app_page: string } }[] }).messages.some(message => message.type === "maverick.widget.open-app" && message.params?.app_page === "scheduled"))).toBe(true);
+    expect(await tasks.evaluate(element => element.ownerDocument.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    await page.screenshot({ path: `/tmp/scheduled-tasks-sidebar-${theme}.png` });
+  });
+}
 
 for (const width of [1440, 390, 320]) {
   test(`graph, inspector and composer stay usable at ${width}px`, async ({ page }) => {

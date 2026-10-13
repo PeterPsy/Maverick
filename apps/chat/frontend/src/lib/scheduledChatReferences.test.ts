@@ -3,7 +3,7 @@ import { SCHEDULED_CHAT_DRAG_TYPE, scheduledChatDragData } from "./scheduledChat
 import { hasAppReferenceDragData, appReferenceMentionItemsFromDataTransfer } from "./storageDragReferences";
 
 function transfer(data: string) { return { types: [SCHEDULED_CHAT_DRAG_TYPE], getData: (type: string) => type === SCHEDULED_CHAT_DRAG_TYPE ? data : "" }; }
-describe("scheduled chat references", () => {
+describe("scheduled task references", () => {
   it("uses the normal composer reference path with a stable graph identity", () => {
     const data = transfer(scheduledChatDragData({ id: "schedule-1", title: "Daily brief" }));
     expect(hasAppReferenceDragData(data)).toBe(true);

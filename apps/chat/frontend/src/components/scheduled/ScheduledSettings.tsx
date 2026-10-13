@@ -5,7 +5,7 @@ import type { ScheduledConfig } from "../../api/scheduledChats";
 
 export function ScheduledSettings({ initial, creating = false, busy, error, onClose, onSave }: {
   initial: ScheduledConfig; creating?: boolean; busy: boolean; error: string | null;
-  onClose: () => void; onSave: (config: ScheduledConfig) => Promise<boolean>;
+  onClose: (saved?: boolean) => void; onSave: (config: ScheduledConfig) => Promise<boolean>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [config, setConfig] = useState(initial);
@@ -28,9 +28,9 @@ export function ScheduledSettings({ initial, creating = false, busy, error, onCl
     <form onSubmit={event => {
       event.preventDefault();
       const final = creating ? { ...config, graph: { ...config.graph, nodes: config.graph.nodes.map((node, index) => index === 0 ? { ...node, instructions: config.instructions || node.instructions } : node) } } : config;
-      void onSave(final).then(saved => { if (saved) onClose(); });
+      void onSave(final).then(saved => { if (saved) onClose(true); });
     }}>
-      <header><h2 id="scheduled-settings-title">{creating ? "New scheduled chat" : "Schedule settings"}</h2><button className="scheduled-icon-button" aria-label="Close settings" disabled={busy} onClick={onClose} type="button"><X size={18} /></button></header>
+      <header><h2 id="scheduled-settings-title">{creating ? "New scheduled task" : "Schedule settings"}</h2><button className="scheduled-icon-button" aria-label="Close settings" disabled={busy} onClick={() => onClose()} type="button"><X size={18} /></button></header>
       <div className="scheduled-dialog__body">
         <label>Title<input disabled={busy} required maxLength={160} value={config.title} onChange={event => change("title", event.target.value)} /></label>
         <label>What should the agent do?<textarea disabled={busy} required={creating} rows={3} maxLength={8000} placeholder="A morning brief, a weekly review, something to keep an eye on…" value={config.instructions} onChange={event => change("instructions", event.target.value)} /></label>

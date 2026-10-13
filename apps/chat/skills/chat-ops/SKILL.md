@@ -16,13 +16,13 @@ Use these surfaces:
 - `core.runtime.transcript.read` over CLI or MCP to read the safe message projection of an authorized active or completed conversation.
 - `core.runtime.transcript.message.read` to continue a message whose preview reports `content_complete: false`.
 - Core provider APIs to inspect or select the active provider.
-- Chat app surfaces for project, view-filter and scheduled-chat state.
+- Chat app surfaces for project, view-filter and scheduled-task state.
 
-## Scheduled chats
+## Scheduled tasks
 
 Use `chat_scheduled` over MCP or `maverick app chat cli run scheduled --json`.
 Actions are `list`, `read`, `create`, `update`, `run`, `pause`, `resume`, `continue`,
-`retry`, `cancel`, `initialize` and `delete`. A scheduled-chat reference is
+`retry`, `cancel`, `initialize` and `delete`. A scheduled-task reference is
 `app_ref:chat/scheduled_chat/<id>` and opens `/app/chat/scheduled/<id>`.
 
 Read by `chat_id` before editing. `update` requires the returned

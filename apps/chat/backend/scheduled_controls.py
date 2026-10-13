@@ -7,7 +7,7 @@ from scheduled_store import now, open_run
 
 
 def interrupts(db, chat_id, *, blocks_only=True):
-    return [{"turn_id": row[0], "reason": "Scheduled chat paused or cancelled"} for row in db.execute(
+    return [{"turn_id": row[0], "reason": "Scheduled task paused or cancelled"} for row in db.execute(
         "SELECT turn_id FROM scheduled_requests WHERE chat_id=? AND status IN ('launching','running') AND turn_id!=''" +
         (" AND kind='block'" if blocks_only else ""), (chat_id,))]
 
@@ -42,7 +42,7 @@ def control(db, chat, body):
             settle_run(db, chat, run["id"])
         return result
     if chat["paused"]:
-        raise ValueError("Resume this scheduled chat first")
+        raise ValueError("Resume this scheduled task first")
     if action == "scheduled.run":
         run = create_run(db, chat)
         if json.loads(chat["config"])["schedule"]["frequency"] == "once":
@@ -79,7 +79,7 @@ def control(db, chat, body):
         db.execute("UPDATE scheduled_runs SET status='running' WHERE id=?", (run["id"],))
         run = db.execute("SELECT * FROM scheduled_runs WHERE id=?", (run["id"],)).fetchone()
     else:
-        raise ValueError("Unknown scheduled-chat control")
+        raise ValueError("Unknown scheduled-task control")
     if run and run["finished_at"] is None:
         result.setdefault("runtime_session_requests", []).extend(dispatch_ready(db, chat, run))
     return result

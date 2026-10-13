@@ -16,7 +16,7 @@ REFERENCE_MANIFEST = {
     "entity_types": [
         {
             "entity_type": "scheduled_chat",
-            "display_name": "Scheduled Chat",
+            "display_name": "Scheduled Task",
             "id_stability": "stable",
             "searchable": True,
             "resolvable": True,

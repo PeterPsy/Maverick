@@ -45,7 +45,7 @@ def tick(data_root, body):
         for request in db.execute("""SELECT r.turn_id FROM scheduled_requests r JOIN scheduled_chats c ON c.id=r.chat_id
             LEFT JOIN scheduled_runs run ON run.id=r.run_id WHERE r.status IN ('launching','running') AND r.turn_id!=''
             AND (c.deleted=1 OR (r.kind='block' AND (c.paused=1 OR run.finished_at IS NOT NULL)))"""):
-            result.setdefault("runtime_turn_interrupt_requests", []).append({"turn_id": request[0], "reason": "Scheduled chat stopped"})
+            result.setdefault("runtime_turn_interrupt_requests", []).append({"turn_id": request[0], "reason": "Scheduled task stopped"})
         if db.execute("SELECT 1 FROM scheduled_requests WHERE status IN ('queued','launching','running') LIMIT 1").fetchone():
             result["next_due_in_seconds"] = 5
         due = db.execute("""SELECT MIN(next_due) FROM scheduled_chats c WHERE paused=0 AND deleted=0

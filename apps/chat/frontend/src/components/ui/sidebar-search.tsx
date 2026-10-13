@@ -6,11 +6,17 @@ export function SidebarSearch({
   onExpandedChange,
   onSearchChange,
   searchQuery,
+  label = "Search chats",
+  placeholder = "Search chats and messages",
+  enableShortcut = true,
 }: {
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onSearchChange: (query: string) => void;
   searchQuery: string;
+  label?: string;
+  placeholder?: string;
+  enableShortcut?: boolean;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -27,6 +33,7 @@ export function SidebarSearch({
   }, [expanded]);
 
   useEffect(() => {
+    if (!enableShortcut) return;
     function focusSearch(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -37,7 +44,7 @@ export function SidebarSearch({
     }
     document.addEventListener("keydown", focusSearch);
     return () => document.removeEventListener("keydown", focusSearch);
-  }, [onExpandedChange]);
+  }, [enableShortcut, onExpandedChange]);
 
   function closeSearch() {
     restoreFocusRef.current = true;
@@ -47,14 +54,14 @@ export function SidebarSearch({
   if (!expanded) {
     return (
       <button
-        aria-label="Search chats"
+        aria-label={label}
         className={`dashboard-sidebar__search-trigger ${searchQuery ? "has-query" : ""}`}
         onClick={() => onExpandedChange(true)}
         ref={triggerRef}
         title={
           searchQuery
             ? `Search: ${searchQuery}`
-            : "Search chats and messages (⌘/Ctrl K)"
+            : `${placeholder}${enableShortcut ? " (⌘/Ctrl K)" : ""}`
         }
         type="button"
       >
@@ -79,7 +86,7 @@ export function SidebarSearch({
     >
       <Search aria-hidden="true" size={16} />
       <input
-        aria-label="Search chats"
+        aria-label={label}
         className="bs-chat-sidebar-search"
         onChange={(event) => onSearchChange(event.target.value)}
         onKeyDown={(event) => {
@@ -89,12 +96,12 @@ export function SidebarSearch({
             closeSearch();
           }
         }}
-        placeholder="Search chats and messages"
+        placeholder={placeholder}
         ref={searchRef}
         value={searchQuery}
       />
       <button
-        aria-label={searchQuery ? "Clear chat search" : "Close chat search"}
+        aria-label={searchQuery ? `Clear ${label.toLowerCase()}` : `Close ${label.toLowerCase()}`}
         className="dashboard-sidebar__icon-button"
         onClick={() => {
           if (searchQuery) {

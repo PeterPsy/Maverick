@@ -58,7 +58,7 @@ export function scheduledChatAction(action: string, fields: Record<string, unkno
   });
 }
 
-export function newScheduledConfig(title = "New scheduled chat", instructions = "Describe what the agent should do."): ScheduledConfig {
+export function newScheduledConfig(title = "New scheduled task", instructions = "Describe what the agent should do."): ScheduledConfig {
   return {
     title, instructions,
     graph: { nodes: [{ id: crypto.randomUUID(), title: "First checkpoint", instructions, skill_ids: [], position: { x: 120, y: 120 } }], edges: [] },

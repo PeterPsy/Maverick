@@ -83,9 +83,9 @@ function ChatAppRoutes(props: Parameters<typeof ServerChatApp>[0] = {}) {
     window.addEventListener("message", navigate);
     return () => window.removeEventListener("message", navigate);
   }, []);
-  if (page === "scheduled" || /^scheduled\/[A-Za-z0-9_-]{1,80}$/.test(page)) {
-    return <Suspense fallback={<main className="chatapp-root"><p role="status">Loading scheduled chats…</p></main>}>
-      <ScheduledChats chatId={page.split("/")[1] || null} onNavigate={setPage} />
+  if (page === "scheduled" || page === "scheduled/create/new" || /^scheduled\/[A-Za-z0-9_-]{1,80}$/.test(page)) {
+    return <Suspense fallback={<main className="chatapp-root"><p role="status">Loading scheduled tasks…</p></main>}>
+      <ScheduledChats chatId={page === "scheduled/create/new" ? null : page.split("/")[1] || null} createNew={page === "scheduled/create/new"} onNavigate={setPage} />
     </Suspense>;
   }
   const routedThread = typeof route.thread_id === "string" ? route.thread_id : typeof route.runtime_session_id === "string" ? route.runtime_session_id : null;

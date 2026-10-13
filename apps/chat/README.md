@@ -204,14 +204,18 @@ native calls fail closed. Collaborator sessions do not inherit the Mac binding.
 Initial activation still requires the ready native/Core lease, and existing chats
 without a Mac binding cannot acquire one. Isolated Research remains incompatible
 with PC use; native model selection uses admitted Codex/Antigravity profiles.
-# Scheduled chats
+# Scheduled tasks
 
-Open **Scheduled chats** in the Chat sidebar or `/app/chat/scheduled`. Create a
+Open **Scheduled tasks** in the Chat sidebar or `/app/chat/scheduled`. Create a
 timezone-aware daily, weekday, weekly, one-time or on-demand schedule. The block
 editor uses React Flow: add blocks, write their skill instructions, connect
 prerequisites and save. **Build with AI** prepares a request in the same chat's
 bottom composer; the agent edits through the validated `chat_scheduled` tool.
-Drag a scheduled chat from its list, sidebar or canvas title into any Chat
+Chats and Scheduled tasks are separate glass blocks in the sidebar, with matching
+view, search and action bars. The task bar filters by status and opens task
+management or creation directly at `/app/chat/scheduled/create/new`.
+
+Drag a scheduled task from its list, sidebar or canvas title into any Chat
 composer to reference and manage it.
 
 Independent blocks may run in parallel (four workspace slots). Successful blocks
@@ -225,4 +229,4 @@ Schedules, runs, outboxes and notification receipts live in
 `data/chat/scheduled.sqlite`. Background hooks execute schedules while the UI is
 closed. Core owns runtime admission and idempotent session/turn dispatch.
 Checkpoint, failure and completion notifications appear in the central Shell
-inbox. See [Scheduled chats architecture](../../docs/architecture/scheduled_chats.md).
+inbox. See [Scheduled tasks architecture](../../docs/architecture/scheduled_tasks.md).

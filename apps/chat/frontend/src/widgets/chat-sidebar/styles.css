@@ -47,6 +47,11 @@
   --chat-sidebar-source-badge-bg: #ffffff;
   --chat-sidebar-source-badge-text: #0a0a0b;
   --chat-sidebar-source-badge-border: rgba(255, 255, 255, 0.26);
+  --maverick-border: var(--chat-sidebar-soft-border);
+  --maverick-border-strong: rgba(var(--maverick-contrast-rgb), 0.24);
+  --maverick-surface-soft: var(--chat-sidebar-soft-surface);
+  --maverick-surface-hover: var(--chat-sidebar-soft-surface-hover);
+  --maverick-popover-surface: var(--chat-sidebar-solid-surface);
 }
 
 :root[data-maverick-theme="light"],
@@ -185,6 +190,37 @@ input {
 
 .bs-widget-root.is-shell-mobile.has-thread-selection {
   --chat-sidebar-scroll-under-bottom: 6.9rem;
+}
+
+.bs-chat-sidebar-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 4px var(--chat-sidebar-scroll-under-bottom);
+}
+
+.bs-chat-sidebar-block {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 100px;
+  padding: 10px 6px 6px;
+  border-radius: var(--chat-sidebar-cell-radius);
+  background: var(--chat-sidebar-glass-surface);
+  box-shadow: var(--chat-sidebar-glass-edge);
+  background-image: var(--chat-sidebar-glass-highlight);
+}
+
+.bs-chat-sidebar-block--tasks {
+  flex: 0 1 auto;
+  min-height: 128px;
+  max-height: 42%;
+}
+
+.bs-chat-sidebar-block .bs-chat-list {
+  padding-bottom: 4px;
 }
 
 .bs-chat-sidebar-search-frame {

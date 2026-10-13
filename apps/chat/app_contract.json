@@ -23,7 +23,7 @@
     {
       "interface": "notifications.inbox",
       "version": "1",
-      "description": "Scheduled chat checkpoints, failures and completion.",
+      "description": "Scheduled task checkpoints, failures and completion.",
       "surfaces": [
         "backend"
       ]
@@ -133,7 +133,7 @@
       },
       {
         "resource": "notifications",
-        "description": "Scheduled chat inbox notifications and actor receipts changed."
+        "description": "Scheduled task inbox notifications and actor receipts changed."
       }
     ],
     "view_surfaces": [
@@ -189,7 +189,7 @@
       },
       {
         "entity_type": "scheduled_chat",
-        "display_name": "Scheduled Chat",
+        "display_name": "Scheduled Task",
         "searchable": true,
         "resolvable": true,
         "summarizable": true,

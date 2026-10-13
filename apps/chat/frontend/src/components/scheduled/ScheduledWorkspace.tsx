@@ -49,13 +49,13 @@ export function ScheduledWorkspace({ chat, surface, busy, error, mutate, onBack,
   function askAI() {
     if (dirty) { setLocalError("Save your changes before asking the agent to edit this graph."); return; }
     composer.onReferenceAdd?.(scheduledChatReference(chat));
-    composer.onChange(`Create or improve the skill-block graph for this scheduled chat. Read its current state with chat_scheduled and save the graph with expected_revision. Keep the blocks focused, use parallel branches where useful, and stop at every checkpoint. Goal: ${chat.instructions}`);
+    composer.onChange(`Create or improve the skill-block graph for this scheduled task. Read its current state with chat_scheduled and save the graph with expected_revision. Keep the blocks focused, use parallel branches where useful, and stop at every checkpoint. Goal: ${chat.instructions}`);
     setView("chat");
   }
 
   return <section className="scheduled-workspace">
     <header className="scheduled-workspace__header">
-      <button className="scheduled-icon-button" aria-label="Back to scheduled chats" onClick={onBack} type="button"><ArrowLeft size={19} /></button>
+      <button className="scheduled-icon-button" aria-label="Back to scheduled tasks" onClick={onBack} type="button"><ArrowLeft size={19} /></button>
       <div className="scheduled-workspace__identity" draggable
         onPointerDown={event => { dragCleanup.current?.(); dragCleanup.current = startScheduledChatPointerDrag(event, chat) || null; }}
         onDragStart={event => { if (dragCleanup.current) { event.preventDefault(); return; } event.dataTransfer.setData(SCHEDULED_CHAT_DRAG_TYPE, scheduledChatDragData(chat)); event.dataTransfer.effectAllowed = "copy"; }}>
@@ -66,7 +66,7 @@ export function ScheduledWorkspace({ chat, surface, busy, error, mutate, onBack,
       <button className="scheduled-icon-button" aria-label="Schedule settings" disabled={locked || busy} onClick={() => setSettings(true)} type="button"><Settings2 size={18} /></button>
     </header>
     <div className="scheduled-workspace__toolbar">
-      <div className="scheduled-tabs" role="tablist" aria-label="Scheduled chat view"><button role="tab" aria-selected={view === "graph"} onClick={() => setView("graph")} type="button"><LayoutGrid size={14} />Blocks</button><button role="tab" aria-selected={view === "chat"} onClick={() => setView("chat")} type="button"><MessageCircle size={14} />Chat</button></div>
+      <div className="scheduled-tabs" role="tablist" aria-label="Scheduled task view"><button role="tab" aria-selected={view === "graph"} onClick={() => setView("graph")} type="button"><LayoutGrid size={14} />Blocks</button><button role="tab" aria-selected={view === "chat"} onClick={() => setView("chat")} type="button"><MessageCircle size={14} />Chat</button></div>
       <div className="scheduled-toolbar-actions">
         {!locked && <><button className="scheduled-button is-subtle" disabled={busy || draft.graph.nodes.length >= 64} onClick={() => {
           const id = crypto.randomUUID();
@@ -85,7 +85,7 @@ export function ScheduledWorkspace({ chat, surface, busy, error, mutate, onBack,
       <span>{error || localError || (stale ? "The agent changed this graph. Reload to use its latest version, or review your changes before saving." : chat.message_error)}</span>
       {stale && <button className="scheduled-button is-subtle" onClick={() => { setDirty(false); void refresh(); }} type="button">Reload graph</button>}
     </div>}
-    {!chat.chat_session_id && <div className="scheduled-alert" role="status"><span>{chat.message_status === "failed" ? "The chat could not start. Check the model in schedule settings." : "Preparing your scheduled chat…"}</span>{chat.message_status === "failed" && <button className="scheduled-button is-subtle" disabled={busy} onClick={() => void mutate("initialize")} type="button">Retry chat</button>}</div>}
+    {!chat.chat_session_id && <div className="scheduled-alert" role="status"><span>{chat.message_status === "failed" ? "The chat could not start. Check the model in schedule settings." : "Preparing your scheduled task…"}</span>{chat.message_status === "failed" && <button className="scheduled-button is-subtle" disabled={busy} onClick={() => void mutate("initialize")} type="button">Retry chat</button>}</div>}
     {checkpoints.length > 0 && <div className="scheduled-checkpoint"><CircleCheckpoint /><span><strong>{checkpoints.length === 1 ? "Checkpoint ready" : `${checkpoints.length} checkpoints ready`}</strong><small>{running ? "Waiting for the parallel blocks to finish." : "Review the results, then continue to the next blocks."}</small></span><button className="scheduled-button" disabled={busy || running || chat.status === "paused"} onClick={() => void mutate("continue", { run_id: run!.id, node_ids: checkpoints.map(item => item.node_id) })} type="button">Confirm & continue</button></div>}
     <div className="scheduled-workspace__content">
       {view === "graph" ? <><ScheduledGraph graph={graph} schedule={locked ? chat.schedule : draft.schedule} steps={run?.steps || EMPTY_STEPS} selectedId={selectedId} locked={locked || busy} onChange={changeGraph} onSelect={setSelectedId} />

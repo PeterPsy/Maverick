@@ -11,6 +11,7 @@ from core.providers.service import resolve_runtime_backend_for_session
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.message_admission import runtime_message_admission_handoff
 from core.runtime.plain_hosted_text import runtime_session_is_plain_hosted_chat
+from core.runtime.research_runtime import runtime_session_is_research
 from core.runtime.provider_input_context import runtime_provider_input_text
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -94,6 +95,8 @@ def _attempt_runtime_message_steer_locked(
         return persisted_attempt
     if runtime_session_is_plain_hosted_chat(session):
         return RuntimeMessageSteerAttempt(status="fallback", reason="runtime_mode_does_not_support_same_turn_input")
+    if runtime_session_is_research(session) and attachments:
+        return RuntimeMessageSteerAttempt(status="fallback", reason="research_attachments_require_new_turn")
 
     active_turn, has_queued_turn = _active_runtime_turn(state, session.session_id)
     if has_queued_turn:

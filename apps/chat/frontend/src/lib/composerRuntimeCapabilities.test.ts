@@ -47,7 +47,7 @@ function session(overrides: Partial<RuntimeSession> = {}): RuntimeSession {
 }
 
 describe("composerRuntimeCapabilities", () => {
-  it("removes attachments and app references from Research", () => {
+  it("permits images and documents in new and saved Research chats", () => {
     for (const context of [
       {
         activeSession: null,
@@ -63,10 +63,27 @@ describe("composerRuntimeCapabilities", () => {
         ...context,
         selectedProvider: provider(),
       })).toEqual({
-        allowedAttachmentInputModalities: [],
+        allowedAttachmentInputModalities: ["text", "pdf", "document", "spreadsheet", "image"],
         appReferencesAllowed: false,
       });
     }
+  });
+
+  it("respects Research runtime attachment limits and containment", () => {
+    expect(composerRuntimeCapabilities({
+      activeSession: null, activeThread: null, selectedAgentTypeId: "__research__",
+      selectedProvider: provider({ runtime_engine_id: "antigravity-cli" }),
+    }).allowedAttachmentInputModalities).toEqual(["text", "pdf", "document", "spreadsheet"]);
+    expect(composerRuntimeCapabilities({
+      activeSession: session({ runtime_profile: "research", agentic_governance: {
+        effective_capabilities: effectiveCapabilities({ attachment_modalities: ["text"], app_references: false }),
+      } as RuntimeSession["agentic_governance"] }),
+      activeThread: thread({ runtime_profile: "research" }), selectedProvider: provider(),
+    }).allowedAttachmentInputModalities).toEqual(["text"]);
+    expect(composerRuntimeCapabilities({
+      activeSession: null, activeThread: null, selectedAgentTypeId: "__research__",
+      selectedProvider: provider({ agentic_effective_capabilities: effectiveCapabilities({ attachment_modalities: [], app_references: false }, "blocked") }),
+    }).allowedAttachmentInputModalities).toEqual([]);
   });
 
   it("retains local Codex references and attachments during capability-projection rollout skew", () => {

@@ -16,12 +16,20 @@ def codex_turn_input(
     runtime,
     input_text: str,
     invoked_skills,
+    *,
+    input_sources=(),
 ) -> tuple[bool, bool, list[dict[str, object]]]:
     """Add native authority without changing ordinary workspace turn input."""
     device_use = getattr(session, "device_use_binding", None) is not None
     research = runtime_session_is_research(session)
     if research:
-        return False, True, [{"type": "text", "text": input_text}]
+        from core.runtime.research_attachments import research_image_contents
+
+        return False, True, [
+            {"type": "text", "text": input_text},
+            *({"type": "image", "url": f"data:{item['media_type']};base64,{item['data']}"}
+              for item in research_image_contents(input_sources)),
+        ]
     return device_use, False, [
         {
             "type": "text",

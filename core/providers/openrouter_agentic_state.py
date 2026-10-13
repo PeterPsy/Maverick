@@ -175,8 +175,25 @@ def _history_message(value: object) -> dict[str, object]:
         raise ValueError
     role = value.get("role")
     if role in {"system", "user"}:
-        if set(value) != {"role", "content"} or not isinstance(value.get("content"), str):
+        if set(value) != {"role", "content"}:
             raise ValueError
+        content = value.get("content")
+        if not isinstance(content, str):
+            if role != "user" or not isinstance(content, list) or not content:
+                raise ValueError
+            for part in content:
+                if not isinstance(part, dict):
+                    raise ValueError
+                if part.get("type") == "text" and set(part) == {"type", "text"} and isinstance(part["text"], str):
+                    continue
+                image = part.get("image_url")
+                if (
+                    part.get("type") == "image_url" and set(part) == {"type", "image_url"}
+                    and isinstance(image, dict) and set(image) == {"url"}
+                    and isinstance(image["url"], str) and image["url"].startswith("data:image/")
+                ):
+                    continue
+                raise ValueError
     elif role == "tool":
         if set(value) != {"role", "tool_call_id", "content"}:
             raise ValueError

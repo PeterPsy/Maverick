@@ -97,6 +97,7 @@ class ResearchRuntimeTest(unittest.TestCase):
                     filesystem_write=True,
                     shell=True,
                     app_references=True,
+                    attachment_modalities=("file",),
                 ),
             ),
             runtime_kind=RESEARCH_HOSTED_WEB_RUNTIME,
@@ -108,6 +109,7 @@ class ResearchRuntimeTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.filesystem_write)
         self.assertFalse(authority.allowed_capabilities.shell)
         self.assertFalse(authority.allowed_capabilities.app_references)
+        self.assertIn("image", authority.allowed_capabilities.attachment_modalities)
         binding = replace(
             harness.binding,
             runtime_engine_id="maverick-tool-loop",
@@ -312,13 +314,17 @@ class ResearchRuntimeTest(unittest.TestCase):
         )()
 
         assert_research_runtime_input_allowed(session)
+        assert_research_runtime_input_allowed(
+            session,
+            attachments=({"relativePath": "storage/uploaded/file/notes.txt", "type": "text/plain"},),
+        )
         with self.assertRaisesRegex(
             AgenticRuntimeError,
             "research_runtime_blocks_workspace_context",
         ):
             assert_research_runtime_input_allowed(
                 session,
-                attachments=({"name": "workspace.txt"},),
+                app_references=({"app_id": "storage"},),
             )
 
 

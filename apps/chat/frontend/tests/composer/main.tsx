@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { ChatComposer } from "../../src/components/ChatComposer";
 import type { AppReference } from "../../src/api/client";
 import { listenForShellReferenceDrops } from "../../src/lib/shellReferenceDrop";
+import { useComposerAttachments } from "../../src/hooks/useComposerAttachments";
 import "../../src/styles/main.css";
 import "../../src/widgets/chat-floating/styles.css";
 
@@ -10,10 +11,12 @@ const params = new URLSearchParams(location.search);
 const width = Number(params.get("width") || 390);
 const widget = params.get("widget") === "true";
 const count = Number(params.get("count") || 1);
+const research = params.get("research") === "true";
 if (params.has('shell_origin')) Object.defineProperty(window, '__MAVERICK_PLATFORM_ORIGIN__', { value: params.get('shell_origin') });
 listenForShellReferenceDrops();
 
 function ComposerFixture() {
+  const { attachments, addAttachments, removeAttachment } = useComposerAttachments();
   const [value, setValue] = useState("");
   const [references, setReferences] = useState<AppReference[]>([]);
   const [sent, setSent] = useState(0);
@@ -25,7 +28,7 @@ function ComposerFixture() {
         <ChatComposer
           activeProviderId="codex"
           agents={[{ id: "reviewer", name: "Reviewer", description: "Review work", skill_ids: [], enabled: true }]}
-          attachments={[]}
+          attachments={attachments}
           canStopTurn
           disabled={false}
           error={null}
@@ -33,19 +36,21 @@ function ComposerFixture() {
           isSending={false}
           mentionItems={[{ id: "storage", label: "Storage", description: "Workspace files", kind: "app" }]}
           multiAgentMode={multiAgentMode}
-          onAddAttachments={() => undefined}
+          onAddAttachments={addAttachments}
           onChange={setValue}
           onReferenceAdd={(reference) => setReferences((current) => [...current, reference])}
           onSelectAgent={() => undefined}
           onSelectMultiAgentMode={setMultiAgentMode}
           onSelectProvider={() => undefined}
-          onRemoveAttachment={() => undefined}
+          onRemoveAttachment={removeAttachment}
           onStopTurn={() => setStopped((current) => current + 1)}
           onSubmit={() => { setSent((current) => current + 1); setValue(""); }}
           providers={[{ provider_id: "codex", label: "Codex", description: "", status: "active", default_model_family: null }]}
           queuedCount={0}
           queuedPreview={null}
-          selectedAgentTypeId=""
+          selectedAgentTypeId={research ? "__research__" : ""}
+          isolatedResearch={research}
+          researchAvailable={research}
           value={value}
         />
         <output data-testid="sent">{sent}</output>

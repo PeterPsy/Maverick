@@ -8,6 +8,12 @@
   "minimum_core_version": "0.1.0",
   "provides": [
     {
+      "interface": "runtime.attachment-text",
+      "version": "1",
+      "description": "Bounded document text extraction from a platform-owned attachment byte snapshot.",
+      "surfaces": ["backend"]
+    },
+    {
       "interface": "document.generate",
       "version": "1",
       "description": "Document generation for DOCX, PPTX, PDF, XLSX, and related artifacts.",

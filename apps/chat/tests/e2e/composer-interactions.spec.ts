@@ -1,10 +1,31 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-async function openFixture(page: Page, width = 390, widget = false, count = 1) {
+for (const width of [390, 900]) {
+  test(`Research uploads images and files at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width: width + 40, height: 844 });
+    const composer = await openFixture(page, width, false, 1, true);
+    const chooserPromise = page.waitForEvent("filechooser");
+    await composer.getByRole("button", { name: "Add attachments" }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles([
+      { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Research evidence") },
+      { name: "scan.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8K0AAAAASUVORK5CYII=", "base64") },
+    ]);
+    await expect(composer.getByLabel("Selected attachments")).toContainText("notes.txt");
+    await expect(composer.getByLabel("Selected attachments")).toContainText("scan.png");
+    await expect(composer.locator(".chatapp-attachment-card.is-invalid")).toHaveCount(0);
+    await expect(composer.locator(".chatapp-attachment-card__preview")).toBeVisible();
+    await composer.getByRole("button", { name: "Remove notes.txt" }).click();
+    await expect(composer.locator(".chatapp-attachment-card")).toHaveCount(1);
+    await expect(composer.getByRole("button", { name: "Apps and references" })).toHaveCount(0);
+  });
+}
+
+async function openFixture(page: Page, width = 390, widget = false, count = 1, research = false) {
   await page.route("**/material-symbols-rounded.woff2", (route) => route.fulfill({
     path: "../base-shell/frontend/public/material-symbols-rounded.woff2", contentType: "font/woff2",
   }));
-  await page.goto(`/apps/chat/tests/composer/index.html?width=${width}&widget=${widget}&count=${count}`);
+  await page.goto(`/apps/chat/tests/composer/index.html?width=${width}&widget=${widget}&count=${count}&research=${research}`);
   const composer = page.locator(".chatapp-composer").first();
   await expect(composer.getByRole("textbox")).toBeEditable();
   await page.evaluate(() => document.fonts.ready);

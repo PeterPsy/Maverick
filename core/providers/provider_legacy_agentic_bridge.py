@@ -133,6 +133,8 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
                 )
                 if getattr(context.session, "device_use_binding", None) is not None:
                     execute_kwargs["runtime_turn_id"] = context.correlation_id
+                if getattr(context.session, "runtime_profile", "workspace") == "research":
+                    execute_kwargs["input_sources"] = context.input_sources
                 result = self.legacy_adapter.execute_turn(**execute_kwargs)
                 completion_payload: dict[str, object] = {
                     "output_text": result.output_text,

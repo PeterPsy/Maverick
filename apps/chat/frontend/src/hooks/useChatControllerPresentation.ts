@@ -266,9 +266,9 @@ export function useChatControllerPresentation({
     return interAgentComposerBudgetLabel(multiAgentMode);
   }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
-    disabled: isThreadLoading || runtimeAdmissionBlocked || isolatedResearch || Boolean(historicalReadOnlyReason),
+    disabled: isThreadLoading || runtimeAdmissionBlocked || Boolean(historicalReadOnlyReason),
     handleAddAttachments,
-    handleAddReferenceMentions,
+    handleAddReferenceMentions: isolatedResearch ? () => undefined : handleAddReferenceMentions,
   });
   const surfaceProps: ChatSurfaceProps = {
     composerProps: {

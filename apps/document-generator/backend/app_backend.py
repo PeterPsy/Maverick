@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from errors import DocumentValidationError
+from extractors import extract_text_from_attachment_snapshot
 from service import app_events_for_result, handle_action
 
 
@@ -19,6 +20,9 @@ def main() -> None:
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
     action = str(body.get("action") or "generate_document")
     try:
+        if payload.get("surface") == "runtime_attachment_text":
+            _response(200, extract_text_from_attachment_snapshot(body))
+            return
         uploaded_root = Path(payload["uploaded_storage_root"]) if payload.get("uploaded_storage_root") else None
         status_code, result = handle_action(
             Path(payload["data_root"]),

@@ -42,6 +42,7 @@ def execute_codex_app_server_turn(
     session: RuntimeSessionRecord,
     launch_spec: RuntimeBackendLaunchSpec,
     input_text: str,
+    input_sources: tuple[object, ...] = (),
     invoked_skills: list[SkillDefinition] | None = None,
     event_sink: RuntimeExecutionEventSink | None,
     timeout_seconds: int | None,
@@ -94,7 +95,7 @@ def execute_codex_app_server_turn(
                 "provider_thread_id": provider_thread_id,
             },
         )
-    device_use, research, turn_input = codex_turn_input(session, runtime, input_text, invoked_skills)
+    device_use, research, turn_input = codex_turn_input(session, runtime, input_text, invoked_skills, input_sources=input_sources)
     if on_provider_startup_event is not None:
         on_provider_startup_event("event_sink_reset_started", {})
     event_sink_reset_started_at = time.perf_counter()

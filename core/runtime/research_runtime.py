@@ -18,7 +18,8 @@ RESEARCH_WEB_TOOL_HANDLES = (
     "mcp:app.browser.web_open",
 )
 RESEARCH_BOUNDARY_INSTRUCTION = (
-    "You are a web-only researcher. You can search and read public web pages; "
+    "You are a researcher. You can search and read public web pages and analyze "
+    "attachments supplied in the conversation; "
     "you cannot access or modify local files, repositories, or a shell. "
     "Do not claim otherwise."
 )
@@ -136,8 +137,9 @@ def isolate_research_authority(
     authority: RuntimeAuthority,
     *,
     runtime_kind: str | None,
+    runtime_engine_id: str = "",
 ) -> RuntimeAuthority:
-    """Remove every model-facing capability except the fixed web read tools."""
+    """Keep fixed web read tools and supported inline attachment inputs."""
     handles = (
         tuple(
             handle
@@ -165,7 +167,9 @@ def isolate_research_authority(
         filesystem_write=False,
         shell=False,
         confirmation_resume=False,
-        attachment_modalities=(),
+        attachment_modalities=research_attachment_modalities(
+            declared.attachment_modalities, runtime_engine_id=runtime_engine_id,
+        ),
         app_references=False,
         confirmations=False,
     )
@@ -204,11 +208,14 @@ def validate_research_authority(
         and not capabilities.filesystem_write
         and not capabilities.shell
         and not capabilities.confirmation_resume
-        and capabilities.attachment_modalities == ()
         and not capabilities.app_references
         and not capabilities.confirmations
     )
     if authority.execution_mode != "full-access" or not (hosted_ready or native_ready):
+        raise AgenticRuntimeError("research_runtime_unavailable")
+    if not set(capabilities.attachment_modalities).issubset(
+        research_attachment_modalities(("file",), runtime_engine_id=binding.runtime_engine_id)
+    ):
         raise AgenticRuntimeError("research_runtime_unavailable")
 
 
@@ -225,8 +232,20 @@ def assert_research_runtime_input_allowed(
         getattr(session, "system_prompt", None)
         or getattr(session, "skill_ids", ())
         or getattr(session, "skill_catalog_app_id", None)
-        or attachments
         or app_references
         or invoked_skill_ids
     ):
         raise AgenticRuntimeError("research_runtime_blocks_workspace_context")
+    if attachments:
+        from core.runtime.research_attachments import validate_research_attachments
+
+        validate_research_attachments(attachments)
+
+
+def research_attachment_modalities(
+    declared: tuple[str, ...], *, runtime_engine_id: str = "",
+) -> tuple[str, ...]:
+    supported = ("text", "pdf", "document", "spreadsheet", "image")
+    if runtime_engine_id == "antigravity-cli":
+        supported = supported[:-1]
+    return tuple(item for item in supported if item in declared or "file" in declared)

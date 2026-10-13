@@ -1945,12 +1945,27 @@ The core must not default missing runtime ownership metadata to a product app su
 Chat may request the fixed `runtime_profile=research` only for a new agentic
 session in an effectively full-access workspace. This profile is a Core-owned
 runner, not an Agents catalog entity. Its semantic envelope excludes platform,
-workspace, agent, skill, attachment, app-reference, filesystem, shell, and
+workspace, agent, skill, app-reference, filesystem, shell, and
 inter-agent context. Hosted Maverick-agent profiles inherit the exact Browser
 `web_search`/`web_open` surface. A native adapter may opt in only by declaring
 the reviewed `native-web-only-v1` contract and enforcing its provider-native
-equivalent. Every Research transport receives one neutral capability boundary:
-it may search and read the public web, but cannot access or modify local files,
+equivalent. Research accepts user-selected Storage uploads as bounded inline
+snapshots, with their existing resource classification and normal egress checks.
+The platform reads only the submitted files through descriptor-bound, revision
+and digest-fenced reads. Providers receive image bytes or document text, without
+workspace paths or a filesystem read capability. Document decoding is app-owned:
+an enabled provider of `runtime.attachment-text` v1 accepts exact byte snapshots
+through its backend, and Document Generator implements that interface using its
+existing PDF/Office extractors. Ambiguous or missing providers fail explicitly.
+The limits are eight attachments, 25 MiB per file, 50 MiB total, and 200,000 text
+characters per document; provider transport limits also apply. Attachments in
+later messages queue a new turn so text-only steering cannot discard an image.
+Codex and hosted transports receive native inline images; Antigravity's reviewed
+stream-json transport supports only text and extracted documents, so image
+attachments are unavailable for that runtime.
+Every Research transport receives one neutral capability boundary:
+it may search and read the public web and analyze supplied attachments, but
+cannot access or modify local files,
 repositories, or a shell. This is the only platform-owned Research instruction.
 Codex uses a chat-durable, auth-only app-server thread with native live web
 search, an empty sandboxed workdir, and no developer instructions, project

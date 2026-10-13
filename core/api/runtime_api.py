@@ -1363,7 +1363,6 @@ def _validate_research_session_request(
         or str(body.get("project_id") or "").strip()
         or body.get("skill_ids")
         or body.get("invoked_skill_ids")
-        or body.get("attachments")
         or body.get("app_references")
         or body.get("device_use_activation_id")
         or body.get("hosted_provider_id")
@@ -1371,6 +1370,10 @@ def _validate_research_session_request(
         or body.get("routing_profile")
     ):
         raise ProviderError("research_runtime_contract_invalid")
+    if body.get("attachments"):
+        from core.runtime.research_attachments import validate_research_attachments
+
+        validate_research_attachments(body["attachments"])
 
 
 def _reject_client_remote_data_declaration(body: dict) -> None:

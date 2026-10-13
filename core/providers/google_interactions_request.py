@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from core.providers.inline_attachment_input import inline_attachment_content
 
 from core.providers.agentic_protocol import (
     AgenticModelRequest,
@@ -107,6 +108,14 @@ def _new_input_steps(
             continue
         if block.role != "user" or not _textual_content_type(block.content_type):
             raise GoogleInteractionsProtocolError("provider_request_invalid")
+        attachment = inline_attachment_content(block)
+        if attachment is not None:
+            content.append({"type": "text", "text": f"Uploaded attachment: {attachment['name']}"})
+            if "data" in attachment:
+                content.append({"type": "image", "data": attachment["data"], "mime_type": attachment["media_type"]})
+            else:
+                content.append({"type": "text", "text": attachment["text"]})
+            continue
         content.append({"type": "text", "text": _decode_utf8(block.content)})
     if not content:
         raise GoogleInteractionsProtocolError("provider_request_invalid")

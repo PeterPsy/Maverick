@@ -37,6 +37,12 @@ from core.runtime.workspace_content_classification import (
     exact_workspace_resource_classification,
 )
 from core.runtime.research_runtime import runtime_session_is_research
+from core.runtime.research_attachments import (
+    MAX_RESEARCH_ATTACHMENTS_TOTAL_BYTES,
+    materialize_research_attachment,
+    validate_research_attachments,
+)
+from core.providers.errors import AgenticRuntimeError
 
 
 @dataclass(frozen=True)
@@ -134,9 +140,9 @@ def runtime_provider_input_sources(
     """Keep prompt, orchestration, attachment, and app provenance separate."""
     research = runtime_session_is_research(session)
     if research:
+        validate_research_attachments(attachments or ())
         orchestration = None
         app_references = None
-        attachments = None
     sources: list[RuntimeProviderInputSource] = []
     agent_instruction = (
         "" if research else str(getattr(session, "system_prompt", "") or "")
@@ -165,11 +171,7 @@ def runtime_provider_input_sources(
     for index, attachment in enumerate(attachments or ()):
         content, media_type, normalized = _attachment_input_metadata(attachment)
         attachment_entries.append((index, normalized, content, media_type))
-    filesystem = (
-        None
-        if research
-        else _attachment_filesystem(state, session=session)
-    )
+    filesystem = _attachment_filesystem(state, session=session) if attachment_entries else None
     observed_attachment_entries: list[
         tuple[
             int,
@@ -180,6 +182,7 @@ def runtime_provider_input_sources(
             CanonicalSourceClassification,
         ]
     ] = []
+    research_attachment_bytes = 0
     try:
         for index, attachment, content, media_type in attachment_entries:
             observation, file_classification = _attachment_observation(
@@ -197,7 +200,16 @@ def runtime_provider_input_sources(
                     resource_digest=observation.resource_digest,
                 )
             )
-            if fence is not None:
+            if research:
+                content = materialize_research_attachment(
+                    state, session=session, attachment=attachment,
+                    media_type=media_type, filesystem=filesystem, fence=fence,
+                )
+                research_attachment_bytes += int(content["size_bytes"])
+                if research_attachment_bytes > MAX_RESEARCH_ATTACHMENTS_TOTAL_BYTES:
+                    raise AgenticRuntimeError("research_attachment_limit_exceeded")
+                fence = None
+            elif fence is not None:
                 content = {**content, "projection": fence.projection()}
             observed_attachment_entries.append(
                 (
@@ -546,7 +558,7 @@ def _classified_attachment_input_source(
         content=content,
         classification=classification,
         capability_modality=media_type,
-        projection_mode="workspace_reference",
+        projection_mode=str(content["projection"]["mode"]),
         attachment_read_fence=attachment_read_fence,
     )
 

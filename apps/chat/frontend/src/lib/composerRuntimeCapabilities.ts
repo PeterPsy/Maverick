@@ -23,8 +23,20 @@ export function composerRuntimeCapabilities({
     || activeThread?.runtime_profile === "research"
     || (!activeThread && isResearchRunner(selectedAgentTypeId))
   ) {
+    const effective = (activeThread ? activeSession?.agentic_governance?.effective_capabilities : null)
+      ?? selectedProvider?.agentic_effective_capabilities;
+    const engineId = (activeThread ? activeSession?.execution_binding?.runtime_engine_id : null)
+      || selectedProvider?.runtime_engine_id || selectedProvider?.provider_id;
+    const supported = engineId === "antigravity-cli"
+      ? ["text", "pdf", "document", "spreadsheet"]
+      : ["text", "pdf", "document", "spreadsheet", "image"];
+    const declared = effective?.capabilities.attachment_modalities
+      || (engineId === "codex" || engineId === "antigravity-cli" ? ["file"] : []);
     return {
-      allowedAttachmentInputModalities: [],
+      allowedAttachmentInputModalities: (effective && effective.status !== "active")
+        || (selectedProvider && isContainedAgenticComposer(activeSession, selectedProvider))
+        ? []
+        : supported.filter((modality) => declared.includes("file") || declared.includes(modality)),
       appReferencesAllowed: false,
     };
   }
@@ -117,7 +129,7 @@ function isContainedAgenticComposer(
   return selectedProvider.status === "contained"
     || selectedProvider.agentic_containment_status === "NO-GO"
     || activeSession?.agentic_containment?.status === "NO-GO"
-    || activeSession?.agentic_governance?.containment.status === "NO-GO";
+    || activeSession?.agentic_governance?.containment?.status === "NO-GO";
 }
 
 function isPlainHostedComposer({

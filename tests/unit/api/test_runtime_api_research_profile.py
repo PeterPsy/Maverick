@@ -26,7 +26,6 @@ class RuntimeApiResearchProfileTest(unittest.TestCase):
         forbidden_values = {
             "system_prompt": "persona",
             "skill_ids": ["research-skill"],
-            "attachments": [{"name": "workspace.txt"}],
             "app_references": [{"app_id": "storage"}],
             "project_id": "project-1",
             "device_use_activation_id": "activation-1",
@@ -41,6 +40,16 @@ class RuntimeApiResearchProfileTest(unittest.TestCase):
                     runtime_mode="agentic",
                     runtime_profile="research",
                 )
+
+    def test_accepts_uploaded_attachments_with_the_research_contract(self) -> None:
+        _validate_research_session_request(
+            {
+                "agent_id": "research", "source_app_id": "chat",
+                "requested_mode": "full-access", "skill_activation_mode": "explicit",
+                "attachments": [{"relativePath": "storage/uploaded/file/notes.txt", "type": "text/plain"}],
+            },
+            runtime_mode="agentic", runtime_profile="research",
+        )
 
     def test_workspace_profile_is_not_changed(self) -> None:
         _validate_research_session_request(

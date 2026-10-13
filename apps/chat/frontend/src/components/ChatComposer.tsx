@@ -267,14 +267,12 @@ export function ChatComposer({
             </div>
             <div className="chatapp-composer__toolbar" onPointerDownCapture={onToolbarPointerDown}>
               <div className="chatapp-composer__tools">
-                {!isolatedResearch ? (
-                  <AttachmentMenu
-                    attachments={attachments}
-                    disabled={disabled}
-                    onAddAttachments={onAddAttachments}
-                    onCapturePageArea={onCapturePageArea}
-                  />
-                ) : null}
+                <AttachmentMenu
+                  attachments={attachments}
+                  disabled={disabled}
+                  onAddAttachments={onAddAttachments}
+                  onCapturePageArea={isolatedResearch ? undefined : onCapturePageArea}
+                />
                 <ComposerUtilities externalPanelOpen={isAppMentionPickerOpen}>
                   {!isolatedResearch && onCapturePageArea ? (
                     <button

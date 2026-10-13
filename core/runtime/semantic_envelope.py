@@ -90,7 +90,7 @@ class HostedSemanticEnvelopeCompiler:
                     source
                     for source in context.input_sources
                     if str(getattr(source, "provenance", "") or "")
-                    in {"prompt", "user_input"}
+                    in {"prompt", "user_input", "attachment"}
                 ),
             )
         blocks: list[SemanticEnvelopeBlock] = []

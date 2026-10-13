@@ -20,6 +20,14 @@ const MAX_ATTACHMENT_COUNT = 8;
 const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
 const HOSTED_ATTACHMENT_WARNING = "Selected hosted model does not support this attachment type";
 const EXTENSION_CONTENT_TYPES = new Map([
+  [".txt", "text/plain"],
+  [".md", "text/markdown"],
+  [".csv", "text/csv"],
+  [".tsv", "text/tab-separated-values"],
+  [".json", "application/json"],
+  [".pdf", "application/pdf"],
+  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
   [".aac", "audio/aac"],
   [".flac", "audio/flac"],
   [".m4a", "audio/mp4"],

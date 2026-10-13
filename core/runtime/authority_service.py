@@ -120,6 +120,7 @@ def resolve_runtime_authority_snapshot(
         authority = isolate_research_authority(
             authority,
             runtime_kind=runtime_kind,
+            runtime_engine_id=binding.runtime_engine_id,
         )
         validate_research_authority(binding, authority, adapter=adapter)
     return authority
@@ -301,6 +302,7 @@ def preflight_execution_binding_context(
         authority = isolate_research_authority(
             authority,
             runtime_kind=runtime_kind,
+            runtime_engine_id=binding.runtime_engine_id,
         )
         validate_research_authority(binding, authority, adapter=adapter)
     validate_runtime_context_capabilities(

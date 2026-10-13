@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import base64
+import binascii
 import re
+import tempfile
 from typing import Any
 
 from errors import DocumentValidationError
@@ -16,6 +19,30 @@ SUPPORTED_EXTRACT_FORMATS = {"pdf", "docx", "pptx", "xlsx", "odt"}
 DEFAULT_MAX_CHARS = 50000
 MAX_CHARS_LIMIT = 200000
 MAX_EXTRACT_FILE_BYTES = 25 * 1024 * 1024
+
+
+def extract_text_from_attachment_snapshot(body: dict[str, Any]) -> dict[str, Any]:
+    """Parse exact runtime-supplied bytes without resolving any workspace path."""
+    filename = str(body.get("filename") or "")
+    file_format = _format_from_path(Path(filename))
+    encoded = body.get("content_base64")
+    if file_format not in SUPPORTED_EXTRACT_FORMATS or not isinstance(encoded, str):
+        raise DocumentValidationError("Unsupported attachment format.")
+    if len(encoded) > ((MAX_EXTRACT_FILE_BYTES + 2) // 3) * 4:
+        raise DocumentValidationError("Attachment is too large for text extraction.")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise DocumentValidationError("Invalid attachment bytes.") from error
+    if len(raw) > MAX_EXTRACT_FILE_BYTES:
+        raise DocumentValidationError("Attachment is too large for text extraction.")
+    with tempfile.TemporaryDirectory(prefix="maverick-attachment-") as directory:
+        target = Path(directory) / f"attachment.{file_format}"
+        target.write_bytes(raw)
+        extraction = _extract_by_format(target, file_format)
+    text = _normalize_text(str(extraction.get("text") or ""))
+    max_chars = _normalize_max_chars(body.get("max_chars"))
+    return {"text": text[:max_chars], "truncated": len(text) > max_chars}
 
 
 def extract_text_from_workspace_file(uploaded_root: Path | None, generated_root: Path, body: dict[str, Any]) -> dict[str, Any]:

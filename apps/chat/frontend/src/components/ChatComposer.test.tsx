@@ -1290,7 +1290,7 @@ describe("ChatComposer reference search", () => {
     expect(onSelectAgent).toHaveBeenCalledWith("");
   });
 
-  it("removes workspace tools from the Research composer", async () => {
+  it("keeps uploads available while removing workspace tools from Research", async () => {
     const { element } = await renderComposer({
       deviceUseAvailable: true,
       isolatedResearch: true,
@@ -1299,7 +1299,7 @@ describe("ChatComposer reference search", () => {
       selectedAgentTypeId: "__research__",
     });
 
-    expect(element.querySelector('[aria-label="Add attachments"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Add attachments"]')).toBeInstanceOf(HTMLButtonElement);
     expect(element.querySelector('[aria-label="Attiva Device Use"]')).toBeNull();
     expect(element.querySelector('[aria-label="Capture page area"]')).toBeNull();
     expect(element.querySelector('[aria-label="Apps and references"]')).toBeNull();

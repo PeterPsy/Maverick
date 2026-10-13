@@ -3105,6 +3105,15 @@ remove tools from a session but cannot add authority above its pinned ceiling.
 
 The Chat Research runner uses this same path with a stricter fixed contract. It
 is not an app or agent definition and cannot discover arbitrary surfaces. Core
+accepts user-uploaded images and documents as inline input snapshots without
+granting model-facing workspace access. An enabled `runtime.attachment-text` v1
+backend may decode submitted document bytes into bounded text. Document
+Generator implements this interface through `surface=runtime_attachment_text`,
+with `body.filename`, `body.content_base64`, and `body.max_chars`, returning
+`json.text` and `json.truncated`. It receives no runtime API token or tool
+authority; extraction reuses its existing parsers, creates no persistent
+artifact, and cannot request additional files. Resource classification and
+provider egress checks continue to cover the resulting attachment content. Core
 may resolve only Browser's exact `web_search` and `web_open` MCP handles, both
 declared read effects backed by isolated ephemeral Browser sessions. Browser
 egress validation, executable-closure audit, result classification, and live

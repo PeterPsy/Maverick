@@ -10,6 +10,7 @@ from core.egress.classification import (
     CanonicalSourceClassification,
     derive_content_classification,
 )
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.attachment_projection import (
     RuntimeAttachmentReadFence,
     attachment_read_encoding,
@@ -266,6 +267,16 @@ class SemanticContextMaterializer:
 
     @staticmethod
     def _validate_attachment_projection(context, source, content) -> None:
+        from core.runtime.research_runtime import runtime_session_is_research
+
+        if runtime_session_is_research(context.session):
+            from core.runtime.research_attachments import validate_inline_attachment
+
+            try:
+                validate_inline_attachment(source)
+            except AgenticRuntimeError as error:
+                raise HostedAgenticLoopError("attachment_projection_not_supported") from error
+            return
         projection_mode = str(
             getattr(source, "projection_mode", "") or ""
         )

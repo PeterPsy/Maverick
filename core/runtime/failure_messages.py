@@ -206,8 +206,12 @@ _PUBLIC_MESSAGES = {
     "runtime_health_changed": "Runtime health authority changed during execution.",
     "runtime_policy_changed": "Runtime policy changed during execution.",
     "research_runtime_blocks_workspace_context": (
-        "Research accepts only conversation text and its fixed read-only web tools."
+        "Research accepts conversation text and uploaded attachments; app references and skills are unavailable."
     ),
+    "research_attachment_unavailable": "An uploaded attachment is no longer available.",
+    "research_attachment_limit_exceeded": "Research accepts up to 8 attachments, 25 MB per file, 50 MB total, and 200,000 text characters per file.",
+    "research_attachment_extractor_unavailable": "Enable a document text extraction app to analyze this attachment.",
+    "research_attachment_text_invalid": "This document has no readable text or could not be decoded.",
     "research_runtime_contract_invalid": (
         "Research must start as a clean full-access web-only chat."
     ),

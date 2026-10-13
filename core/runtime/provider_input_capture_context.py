@@ -52,15 +52,20 @@ def capture_runtime_provider_input(
         orchestration=orchestration,
         continuation=continuation,
     )
+    provider_text = runtime_provider_input_text(
+        state,
+        session=session,
+        input_text=input_text,
+        app_references=app_references,
+        attachments=attachments,
+        orchestration=orchestration,
+    )
+    if runtime_session_is_research(session):
+        from core.runtime.research_attachments import research_input_text
+
+        provider_text = research_input_text(input_text, sources)
     return CapturedRuntimeProviderInput(
-        input_text=continuation_input_text(continuation, runtime_provider_input_text(
-            state,
-            session=session,
-            input_text=input_text,
-            app_references=app_references,
-            attachments=attachments,
-            orchestration=orchestration,
-        )),
+        input_text=continuation_input_text(continuation, provider_text),
         sources=sources,
     )
 

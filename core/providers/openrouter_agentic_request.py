@@ -1,6 +1,7 @@
 """Translate provider-neutral requests into fail-closed OpenRouter payloads."""
 
 from __future__ import annotations
+from core.providers.inline_attachment_input import inline_attachment_content
 
 from core.providers.agentic_protocol import (
     AgenticModelRequest,
@@ -154,6 +155,15 @@ def _request_content_messages(
             block.content_type
         ):
             raise OpenRouterAgenticProtocolError("provider_request_invalid")
+        attachment = inline_attachment_content(block) if block.role == "user" else None
+        if attachment is not None:
+            parts = [{"type": "text", "text": f"Uploaded attachment: {attachment['name']}"}]
+            if "data" in attachment:
+                parts.append({"type": "image_url", "image_url": {"url": f"data:{attachment['media_type']};base64,{attachment['data']}"}})
+            else:
+                parts.append({"type": "text", "text": attachment["text"]})
+            user_messages.append({"role": "user", "content": parts})
+            continue
         content = _decode_utf8(block.content)
         if block.role in {"system", "developer"}:
             system_values.append(content)

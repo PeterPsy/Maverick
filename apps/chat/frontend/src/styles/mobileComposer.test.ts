@@ -105,15 +105,11 @@ describe("mobile chat composer layout", () => {
     expect(openUtilityMenuBlock).toContain("display: grid;");
   });
 
-  it("uses desktop control sizing and labels inside the mobile utility panel", () => {
+  it("uses full-width labeled controls inside the compact utility panel", () => {
     const responsiveStyles = readStyle("responsive.css");
     const toolButtonBlock = cssBlock(
       responsiveStyles,
       ".chatapp-composer-utilities__menu .chatapp-composer__tool-button",
-    );
-    const multiAgentButtonBlock = cssBlock(
-      responsiveStyles,
-      ".chatapp-composer-utilities__menu .chatapp-multi-agent-control__button",
     );
     const runtimeBadgesBlock = cssBlock(
       responsiveStyles,
@@ -124,16 +120,14 @@ describe("mobile chat composer layout", () => {
       ".chatapp-composer-utilities__menu .chatapp-provider-selector__trigger",
     );
 
-    expect(toolButtonBlock).toContain("width: 2.1rem;");
-    expect(toolButtonBlock).toContain("min-height: 2.1rem;");
-    expect(multiAgentButtonBlock).toContain("width: auto;");
-    expect(multiAgentButtonBlock).toContain("min-width: 4.4rem;");
-    expect(runtimeBadgesBlock).toContain("display: inline-flex;");
-    expect(providerTriggerBlock).toContain("width: fit-content;");
+    expect(toolButtonBlock).toContain("width: 100%;");
+    expect(toolButtonBlock).toContain("min-height: 2.85rem;");
+    expect(runtimeBadgesBlock).toContain("display: flex;");
+    expect(providerTriggerBlock).toContain("width: 100%;");
     expect(responsiveStyles).toContain(
       ".chatapp-composer-utilities__menu .chatapp-multi-agent-control__label",
     );
-    expect(responsiveStyles).toContain("position: static;");
+    expect(responsiveStyles).toContain(".chatapp-composer-utilities__copy");
   });
 
   it("replaces the mobile utility controls with the selected utility panel", () => {

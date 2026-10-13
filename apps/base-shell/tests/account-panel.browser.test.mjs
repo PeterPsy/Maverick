@@ -56,21 +56,38 @@ test("account panel supports desktop, mobile, keyboard and separated Google/logo
     // A fresh mobile session also mounts the account entry and fits short viewports.
     await context.close();
     const mobile = await browser.newContext({ viewport: { width: 390, height: 650 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
-    await mobile.route("**/api/connected-accounts", route => route.fulfill({ json: { workspace_id: "default", items: [], selection: null, apps: [], google: { configured: true, services: [], registration_enabled: true, login_services: [] } } }));
+    await mobile.route("**/api/connected-accounts", route => route.fulfill({ json: {
+      workspace_id: "default", items: [{ account_id: "long-address", email: "very.long.account.address.for.mobile@example.com", display_name: "Personal Google account", status: "connected", services: ["gmail"] }],
+      selection: null, apps: [], google: { configured: true, services: [], registration_enabled: true, login_services: [] },
+    } }));
     const phone = await mobile.newPage();
     await phone.goto(`${origin}/app/chat`);
     await phone.getByRole("button", { name: "Apri sidebar", exact: true }).click();
     await phone.getByRole("button", { name: "Account and servers", exact: true }).click();
     const mobilePanel = phone.getByRole("dialog", { name: "Account and servers" });
     await mobilePanel.waitFor({ state: "visible" });
+    await phone.addStyleTag({ content: ".bs-shell { --bs-mobile-shell-status-bar-height: 47px; }" });
     const mobileBox = await mobilePanel.boundingBox();
     assert.ok(mobileBox.x >= 0 && mobileBox.x + mobileBox.width <= 390);
-    assert.ok(mobileBox.y >= 0 && mobileBox.y + mobileBox.height <= 650);
-    await mobilePanel.getByRole("button", { name: "Servers", exact: true }).click();
+    assert.ok(mobileBox.y >= 59 && mobileBox.y + mobileBox.height <= 638);
+    const sectionPicker = mobilePanel.getByRole("combobox", { name: "Account section" });
+    assert.equal(await sectionPicker.locator("option").count(), 6);
+    const pickerBox = await sectionPicker.boundingBox();
+    assert.ok(pickerBox.height >= 44 && pickerBox.x + pickerBox.width <= 390);
+    if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await phone.screenshot({ path: "/tmp/maverick-account-panel-profile-mobile.png" });
+    await sectionPicker.selectOption("servers");
     const overflow = await mobilePanel.evaluate(element => element.scrollWidth > element.clientWidth);
     assert.equal(overflow, false);
     if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) {
       await phone.screenshot({ path: "/tmp/maverick-account-panel-mobile.png" });
+    }
+    await phone.setViewportSize({ width: 320, height: 568 });
+    for (const section of ["profile", "google", "access", "servers", "logout"]) {
+      await sectionPicker.selectOption(section);
+      assert.equal(await mobilePanel.evaluate(element => Array.from(element.querySelectorAll(".bs-connected-accounts__body, .bs-connected-accounts__account")).some(node => node.scrollWidth > node.clientWidth)), false);
+      const closeBox = await mobilePanel.getByRole("button", { name: "Close account panel" }).boundingBox();
+      assert.ok(closeBox.y >= 59 && closeBox.x + closeBox.width <= 320);
+      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS && section === "google") await phone.screenshot({ path: "/tmp/maverick-account-panel-accounts-narrow.png" });
     }
     assert.deepEqual(errors, []);
     await mobile.close();

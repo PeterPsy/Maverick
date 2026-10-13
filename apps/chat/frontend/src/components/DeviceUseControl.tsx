@@ -1,4 +1,5 @@
 import type { DeviceUseMode } from "../lib/deviceUse";
+import { ComposerUtilityLabel } from "./ComposerUtilityLabel";
 
 export function DeviceUseControl({
   busy,
@@ -30,6 +31,7 @@ export function DeviceUseControl({
     >
       <span aria-hidden="true" className="material-symbols-rounded">desktop_windows</span>
       {active ? <span className="chatapp-device-use-control__label">PC use</span> : null}
+      <ComposerUtilityLabel label="PC use" detail={active ? "On" : "Off"} />
     </button>
   );
 }

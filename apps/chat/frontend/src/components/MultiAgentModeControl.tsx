@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { MultiAgentComposerMode } from "../api/client";
 import { usePopupFocusReturn } from "../hooks/usePopupFocusReturn";
+import { ComposerUtilityLabel } from "./ComposerUtilityLabel";
 
 export function MultiAgentModeControl({
   budgetLabel,
@@ -68,6 +69,7 @@ export function MultiAgentModeControl({
           account_tree
         </span>
         <span className="chatapp-multi-agent-control__label">{label}</span>
+        <ComposerUtilityLabel label="Multi-agent" detail={label} chevron />
       </button>
       {menuOpen ? (
         <div

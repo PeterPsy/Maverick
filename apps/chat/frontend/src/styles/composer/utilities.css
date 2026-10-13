@@ -9,6 +9,13 @@
   display: none;
 }
 
+.chatapp-composer-utilities__header,
+.chatapp-composer-utilities__copy,
+.chatapp-composer-utilities__chevron,
+.chatapp-composer-utilities__runtime-label {
+  display: none;
+}
+
 .chatapp-composer-utilities__menu {
   display: flex;
   align-items: center;

@@ -119,6 +119,7 @@ export function ComposerRuntimeBadges({
           title={executionBadge.title}
         >
           <span aria-hidden="true" className="material-symbols-rounded">{executionBadge.icon}</span>
+          <span aria-hidden="true" className="chatapp-composer-utilities__runtime-label">{executionBadge.ariaLabel}</span>
         </span>
       ) : null}
     </div>

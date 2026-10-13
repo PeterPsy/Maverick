@@ -4,6 +4,7 @@ import { ChatComposer } from "../../src/components/ChatComposer";
 import type { AppReference } from "../../src/api/client";
 import { listenForShellReferenceDrops } from "../../src/lib/shellReferenceDrop";
 import { useComposerAttachments } from "../../src/hooks/useComposerAttachments";
+import { fixtureUsage } from "./usage";
 import "../../src/styles/main.css";
 import "../../src/widgets/chat-floating/styles.css";
 
@@ -23,7 +24,7 @@ function ComposerFixture() {
   const [stopped, setStopped] = useState(0);
   const [multiAgentMode, setMultiAgentMode] = useState<"off" | "auto" | "multi" | "group_chat">("off");
   return (
-    <div className={widget ? "chatapp-root chat-floating-widget-shell__body" : "chatapp-root"} style={{ width, alignItems: "center" }}>
+    <div className={widget ? "chatapp-root chat-floating-widget-shell__body" : "chatapp-root"} style={{ width, display: "flex", alignItems: "center" }}>
       <div style={{ width: "100%" }}>
         <ChatComposer
           activeProviderId="codex"
@@ -52,6 +53,7 @@ function ComposerFixture() {
           isolatedResearch={research}
           researchAvailable={research}
           value={value}
+          usage={params.has("usage") ? fixtureUsage : null}
         />
         <output data-testid="sent">{sent}</output>
         <output data-testid="stopped">{stopped}</output>
@@ -63,7 +65,7 @@ function ComposerFixture() {
 
 createRoot(document.getElementById("root")!).render(
   <main style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, height: "100dvh" }}>
-    <button data-testid="outside" style={{ position: "absolute", top: 8, left: 8 }} type="button">Outside composer</button>
+    <button data-testid="outside" style={{ position: "absolute", bottom: 8, left: 8 }} type="button">Outside composer</button>
     {Array.from({ length: count }, (_, index) => <ComposerFixture key={index} />)}
   </main>,
 );

@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { AgentTypeSummary } from "../api/client";
 import { usePopupFocusReturn } from "../hooks/usePopupFocusReturn";
+import { ComposerUtilityLabel } from "./ComposerUtilityLabel";
 
 type AgentMenuOption = {
   agentTypeId: string;
@@ -252,6 +253,7 @@ export function AgentSelector({
         <span aria-hidden="true" className="material-symbols-rounded">
           smart_toy
         </span>
+        <ComposerUtilityLabel label="Agent" detail={label} chevron />
       </button>
       {isOpen ? (
         <div

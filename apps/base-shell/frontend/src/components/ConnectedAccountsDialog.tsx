@@ -113,6 +113,17 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
         {onOpenSettings && <button type="button" onClick={() => { close(); onOpenSettings(); }}><span className="material-symbols-rounded" aria-hidden="true">settings</span>Settings<span className="material-symbols-rounded bs-account-nav__arrow" aria-hidden="true">arrow_outward</span></button>}
         {onLogout && <button type="button" className="bs-account-nav__logout" aria-current={section === "logout" ? "page" : undefined} onClick={() => navigate("logout")}><span className="material-symbols-rounded" aria-hidden="true">logout</span>Log out</button>}
       </nav>
+      <label className="bs-account-mobile-nav">
+        <span>Account settings</span>
+        <select aria-label="Account section" value={section} onChange={event => {
+          if (event.target.value === "settings") { close(); onOpenSettings?.(); }
+          else navigate(event.target.value as Section);
+        }}>
+          {sections.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+          {onOpenSettings && <option value="settings">Settings</option>}
+          {onLogout && <option value="logout">Log out</option>}
+        </select>
+      </label>
     <div className="bs-connected-accounts__body">
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}

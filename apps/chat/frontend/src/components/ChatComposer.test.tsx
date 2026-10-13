@@ -1231,10 +1231,11 @@ describe("ChatComposer reference search", () => {
       changeInputValue(searchInput as HTMLInputElement, "Operations");
     });
 
-    expect(element.textContent).not.toContain("Free Agent");
-    expect(element.textContent).toContain("Operations Reviewer");
-    expect(element.textContent).not.toContain("Social Video Content Strategist");
-    expect(element.textContent).not.toContain("No agent catalog available");
+    const menu = element.querySelector(".chatapp-agent-menu");
+    expect(menu?.textContent).not.toContain("Free Agent");
+    expect(menu?.textContent).toContain("Operations Reviewer");
+    expect(menu?.textContent).not.toContain("Social Video Content Strategist");
+    expect(menu?.textContent).not.toContain("No agent catalog available");
   });
 
   it("shows a filtered empty state", async () => {
@@ -1253,10 +1254,11 @@ describe("ChatComposer reference search", () => {
       changeInputValue(searchInput as HTMLInputElement, "finance");
     });
 
-    expect(element.textContent).not.toContain("Free Agent");
-    expect(element.textContent).toContain("No matching runners");
-    expect(element.textContent).not.toContain("No agent catalog available");
-    expect(element.textContent).not.toContain("Operations Reviewer");
+    const menu = element.querySelector(".chatapp-agent-menu");
+    expect(menu?.textContent).not.toContain("Free Agent");
+    expect(menu?.textContent).toContain("No matching runners");
+    expect(menu?.textContent).not.toContain("No agent catalog available");
+    expect(menu?.textContent).not.toContain("Operations Reviewer");
   });
 
   it("offers Research as a dedicated composer control", async () => {

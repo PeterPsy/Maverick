@@ -1,20 +1,29 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ChatUsageSummary, TokenUsageBreakdown } from "../api/client";
+import { usePopupFocusReturn } from "../hooks/usePopupFocusReturn";
 
 const tokenNumber = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 
 export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
   const titleId = useId();
+  const dialogId = `${titleId}-dialog`;
+  const returnFocus = usePopupFocusReturn(open, buttonRef);
+
+  function closeModal() {
+    returnFocus();
+    setOpen(false);
+  }
 
   useEffect(() => {
     if (!open) return;
+    closeRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpen(false);
-        buttonRef.current?.focus();
+        closeModal();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -29,6 +38,8 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
   return (
     <>
       <button
+        aria-controls={open ? dialogId : undefined}
+        aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={`Chat token usage: ${contextLabel} context used, ${tokenLabel} non-cached`}
         className="chatapp-usage-badge"
@@ -43,92 +54,102 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
         <span>{tokenLabel}</span>
       </button>
       {open ? createPortal(
-        <div className="chatapp-usage-modal-backdrop" onMouseDown={() => setOpen(false)}>
+        <div className="chatapp-usage-modal-backdrop" onPointerDown={(event) => {
+          event.preventDefault();
+          closeModal();
+        }}>
           <section
             aria-labelledby={titleId}
             aria-modal="true"
             className="chatapp-usage-modal"
-            onMouseDown={(event) => event.stopPropagation()}
+            id={dialogId}
+            onPointerDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Tab") {
+                event.preventDefault();
+                closeRef.current?.focus({ preventScroll: true });
+              }
+            }}
             role="dialog"
           >
             <header className="chatapp-usage-modal__header">
-              <div>
+              <span aria-hidden="true" className="chatapp-usage-modal__icon material-symbols-rounded">data_usage</span>
+              <div className="chatapp-usage-modal__heading">
                 <p className="chatapp-usage-modal__eyebrow">Current chat</p>
                 <h2 id={titleId}>Token usage</h2>
               </div>
               <button
                 aria-label="Close token usage statistics"
                 className="chatapp-usage-modal__close"
-                onClick={() => {
-                  setOpen(false);
-                  buttonRef.current?.focus();
-                }}
+                onClick={closeModal}
+                ref={closeRef}
                 type="button"
               >
                 <span aria-hidden="true" className="material-symbols-rounded">close</span>
               </button>
             </header>
-
-            <section className="chatapp-usage-modal__context" aria-label="Active context usage">
-              <div className="chatapp-usage-modal__context-heading">
-                <span>Active context</span>
-                <strong>{usage.context_used_percent === null ? "Unavailable" : formatPercent(usage.context_used_percent)}</strong>
-              </div>
-              {usage.context_used_percent !== null ? (
-                <div
-                  aria-label={`${formatPercent(usage.context_used_percent)} of the context window used`}
-                  aria-valuemax={100}
-                  aria-valuemin={0}
-                  aria-valuenow={usage.context_used_percent}
-                  className="chatapp-usage-modal__progress"
-                  role="progressbar"
-                >
-                  <span style={{ width: `${Math.max(0, Math.min(100, usage.context_used_percent))}%` }} />
+            <div className="chatapp-usage-modal__body">
+              <section className="chatapp-usage-modal__context" aria-label="Active context usage">
+                <div className="chatapp-usage-modal__context-heading">
+                  <span>Active context</span>
+                  <strong>{usage.context_used_percent === null ? "Unavailable" : formatPercent(usage.context_used_percent)}</strong>
                 </div>
-              ) : null}
-              <p>
-                {usage.context_tokens === null ? "The provider did not report the active context." : `${formatTokens(usage.context_tokens)} used`}
-                {usage.context_window_tokens === null ? "" : ` of ${formatTokens(usage.context_window_tokens)} tokens`}
-                {` · ${accuracyLabel(usage.context_accuracy)}`}
+                {usage.context_used_percent !== null ? (
+                  <div
+                    aria-label={`${formatPercent(usage.context_used_percent)} of the context window used`}
+                    aria-valuemax={100}
+                    aria-valuemin={0}
+                    aria-valuenow={usage.context_used_percent}
+                    className="chatapp-usage-modal__progress"
+                    role="progressbar"
+                  >
+                    <span style={{ width: `${Math.max(0, Math.min(100, usage.context_used_percent))}%` }} />
+                  </div>
+                ) : null}
+                <p>
+                  {usage.context_tokens === null ? "The provider did not report the active context." : `${formatTokens(usage.context_tokens)} used`}
+                  {usage.context_window_tokens === null ? "" : ` of ${formatTokens(usage.context_window_tokens)} tokens`}
+                  {` · ${accuracyLabel(usage.context_accuracy)}`}
+                </p>
+              </section>
+
+              <div className="chatapp-usage-modal__summary">
+                <UsageMetric label="Non-cached" value={formatTokens(nonCachedTokens)} />
+                <UsageMetric label="Cached input" value={formatTokens(usage.tokens.cached_input_tokens)} />
+                <UsageMetric label="Processed total" value={formatTokens(usage.tokens.total_tokens)} />
+                {hasDelegatedUsage ? (
+                  <>
+                    <UsageMetric label="Root runtime" value={formatTokens(usage.direct_tokens.total_tokens)} />
+                    <UsageMetric label="Delegated" value={formatTokens(usage.delegated_tokens.total_tokens)} />
+                  </>
+                ) : null}
+                <UsageMetric
+                  label="Estimated cost"
+                  value={usage.estimated_cost_microusd === null ? "Unavailable" : formatCost(usage.estimated_cost_microusd)}
+                />
+              </div>
+
+              <section className="chatapp-usage-modal__section">
+                <h3>Token breakdown</h3>
+                <UsageBreakdownTable tokens={usage.tokens} />
+              </section>
+
+              <section className="chatapp-usage-modal__section chatapp-usage-modal__metadata">
+                <h3>Coverage and source</h3>
+                <dl>
+                  <UsageDetail label="Providers" value={usage.provider_ids.join(", ") || "Unavailable"} />
+                  <UsageDetail label="Models" value={usage.model_ids.join(", ") || "Unavailable"} />
+                  <UsageDetail label="Token quality" value={accuracyLabel(usage.token_accuracy)} />
+                  <UsageDetail label="Samples" value={formatTokens(usage.sample_count)} />
+                  <UsageDetail label="Coverage since" value={formatTimestamp(usage.coverage_since)} />
+                  <UsageDetail label="Last update" value={formatTimestamp(usage.updated_at)} />
+                </dl>
+              </section>
+
+              <p className="chatapp-usage-modal__note">
+                Active context may shrink after compaction. The badge shows non-cached tokens; processed total also includes cached input. Both exclude provider usage that predates the first local baseline and include delegated runtimes when present. Token counts are not a bill, and provider plan limits are reported separately.
               </p>
-            </section>
-
-            <div className="chatapp-usage-modal__summary">
-              <UsageMetric label="Non-cached" value={formatTokens(nonCachedTokens)} />
-              <UsageMetric label="Cached input" value={formatTokens(usage.tokens.cached_input_tokens)} />
-              <UsageMetric label="Processed total" value={formatTokens(usage.tokens.total_tokens)} />
-              {hasDelegatedUsage ? (
-                <>
-                  <UsageMetric label="Root runtime" value={formatTokens(usage.direct_tokens.total_tokens)} />
-                  <UsageMetric label="Delegated" value={formatTokens(usage.delegated_tokens.total_tokens)} />
-                </>
-              ) : null}
-              <UsageMetric
-                label="Estimated cost"
-                value={usage.estimated_cost_microusd === null ? "Unavailable" : formatCost(usage.estimated_cost_microusd)}
-              />
             </div>
-
-            <section className="chatapp-usage-modal__section">
-              <h3>Token breakdown</h3>
-              <UsageBreakdownTable tokens={usage.tokens} />
-            </section>
-
-            <section className="chatapp-usage-modal__section chatapp-usage-modal__metadata">
-              <h3>Coverage and source</h3>
-              <dl>
-                <UsageDetail label="Providers" value={usage.provider_ids.join(", ") || "Unavailable"} />
-                <UsageDetail label="Models" value={usage.model_ids.join(", ") || "Unavailable"} />
-                <UsageDetail label="Token quality" value={accuracyLabel(usage.token_accuracy)} />
-                <UsageDetail label="Samples" value={formatTokens(usage.sample_count)} />
-                <UsageDetail label="Coverage since" value={formatTimestamp(usage.coverage_since)} />
-                <UsageDetail label="Last update" value={formatTimestamp(usage.updated_at)} />
-              </dl>
-            </section>
-
-            <p className="chatapp-usage-modal__note">
-              Active context may shrink after compaction. The badge shows non-cached tokens; processed total also includes cached input. Both exclude provider usage that predates the first local baseline and include delegated runtimes when present. Token counts are not a bill, and provider plan limits are reported separately.
-            </p>
           </section>
         </div>,
         document.body,

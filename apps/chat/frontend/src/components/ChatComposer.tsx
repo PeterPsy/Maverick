@@ -17,6 +17,7 @@ import { ComposerActions } from "./ComposerActions";
 import { ComposerDictationButton } from "./ComposerDictationButton";
 import { ComposerRuntimeBadges } from "./ComposerRuntimeBadges";
 import { ComposerUtilities } from "./ComposerUtilities";
+import { ComposerUtilityLabel } from "./ComposerUtilityLabel";
 import { DeviceUseControl } from "./DeviceUseControl";
 import { MentionPanel } from "./MentionPanel";
 import { MultiAgentModeControl } from "./MultiAgentModeControl";
@@ -286,6 +287,7 @@ export function ChatComposer({
                       <span aria-hidden="true" className="material-symbols-rounded">
                         crop_free
                       </span>
+                      <ComposerUtilityLabel label="Capture page area" />
                     </button>
                   ) : null}
                   {!isolatedResearch ? (
@@ -302,6 +304,7 @@ export function ChatComposer({
                       <span aria-hidden="true" className="material-symbols-rounded">
                         apps
                       </span>
+                      <ComposerUtilityLabel label="Apps and references" chevron />
                     </button>
                   ) : null}
                   {!isolatedResearch ? (
@@ -343,6 +346,7 @@ export function ChatComposer({
                         travel_explore
                       </span>
                       {researchEnabled ? <span className="chatapp-research-control__label">Research</span> : null}
+                      <ComposerUtilityLabel label="Research" detail={researchEnabled ? "On" : "Off"} />
                     </button>
                   ) : null}
                   {!researchEnabled ? (

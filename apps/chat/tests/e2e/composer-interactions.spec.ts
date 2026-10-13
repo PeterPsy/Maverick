@@ -21,11 +21,11 @@ for (const width of [390, 900]) {
   });
 }
 
-async function openFixture(page: Page, width = 390, widget = false, count = 1, research = false) {
+async function openFixture(page: Page, width = 390, widget = false, count = 1, research = false, usage = false) {
   await page.route("**/material-symbols-rounded.woff2", (route) => route.fulfill({
     path: "../base-shell/frontend/public/material-symbols-rounded.woff2", contentType: "font/woff2",
   }));
-  await page.goto(`/apps/chat/tests/composer/index.html?width=${width}&widget=${widget}&count=${count}&research=${research}`);
+  await page.goto(`/apps/chat/tests/composer/index.html?width=${width}&widget=${widget}&count=${count}&research=${research}${usage ? "&usage=true" : ""}`);
   const composer = page.locator(".chatapp-composer").first();
   await expect(composer.getByRole("textbox")).toBeEditable();
   await page.evaluate(() => document.fonts.ready);
@@ -138,7 +138,101 @@ for (const { label, width, touch, widget } of [
       await page.keyboard.press("Escape");
       await expect(apps).toBeFocused();
     });
+
+    test("returns from utility pickers and closes the panel with focus restored", async ({ page }) => {
+      const composer = await openFixture(page, width, widget);
+      const utility = composer.getByRole("button", { name: "Composer utilities" });
+      await activate(page, utility, touch);
+      for (const name of ["Agent runner: Free Agent", "Model: Codex", "Multi-agent mode: Off"]) {
+        const trigger = composer.getByRole("button", { name });
+        await activate(page, trigger, touch);
+        await activate(page, composer.getByRole("button", { name: "Back to utilities" }), touch);
+        await expect(trigger).toBeVisible();
+        await expect(trigger).toBeFocused();
+        await expect(utility).toHaveAttribute("aria-expanded", "true");
+      }
+      await activate(page, composer.getByRole("button", { name: "Multi-agent mode: Off" }), touch);
+      await composer.getByRole("button", { name: "Close utilities" }).focus();
+      await page.keyboard.press("Escape");
+      await expect(composer.getByRole("button", { name: "Multi-agent mode: Off" })).toBeFocused();
+      await activate(page, composer.getByRole("button", { name: "Model: Codex" }), touch);
+      await activate(page, composer.getByRole("button", { name: "Close utilities" }), touch);
+      await expect(utility).toHaveAttribute("aria-expanded", "false");
+      await expect(utility).toBeFocused();
+      await activate(page, utility, touch);
+      await expect(composer.getByRole("button", { name: "Model: Codex" })).toBeVisible();
+      await expect(composer.getByRole("listbox")).toHaveCount(0);
+    });
   });
+}
+
+for (const theme of ["dark", "light"]) {
+  test(`utility rows stay readable and within a narrow ${theme} viewport`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    const composer = await openFixture(page, 320);
+    await page.evaluate((value) => { document.documentElement.dataset.maverickTheme = value; }, theme);
+    await composer.getByRole("button", { name: "Composer utilities" }).click();
+    const panel = composer.getByRole("group", { name: "Composer utility controls" });
+    const bounds = (await panel.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.y).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
+    for (const name of ["Apps and references", "Multi-agent mode: Off", "Agent runner: Free Agent", "Model: Codex"]) {
+      const row = panel.getByRole("button", { name });
+      await row.scrollIntoViewIfNeeded();
+      const rowBounds = (await row.boundingBox())!;
+      expect(rowBounds.height).toBeGreaterThanOrEqual(44);
+      expect(rowBounds.width).toBeGreaterThan(bounds.width - 40);
+      await expect(row.locator(".chatapp-composer-utilities__copy")).toBeVisible();
+    }
+    await expect(panel.getByRole("button", { name: "Close utilities" })).toBeInViewport();
+    if (process.env.MAVERICK_CHAT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-chat-utilities-${theme}.png` });
+  });
+}
+
+for (const width of [320, 390, 900]) {
+  for (const theme of ["dark", "light"]) {
+    test(`token usage fits ${width}px in ${theme} mode and returns to its trigger`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 700 });
+      const composer = await openFixture(page, width, false, 1, false, true);
+      await page.evaluate((value) => { document.documentElement.dataset.maverickTheme = value; }, theme);
+      const utilities = composer.getByRole("button", { name: "Composer utilities" });
+      if (width <= 720) await utilities.click();
+      const usage = composer.getByRole("button", { name: /Chat token usage/ });
+      await usage.click();
+      const dialog = page.getByRole("dialog", { name: "Token usage" });
+      const close = dialog.getByRole("button", { name: "Close token usage statistics" });
+      await expect(close).toBeFocused();
+      await expect(dialog.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "45");
+      const bounds = (await dialog.boundingBox())!;
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.y).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(700);
+      expect(await dialog.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
+      await dialog.locator(".chatapp-usage-modal__note").scrollIntoViewIfNeeded();
+      await expect(close).toBeInViewport();
+      await page.keyboard.press("Tab");
+      await expect(close).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(close).toBeFocused();
+      if (process.env.MAVERICK_CHAT_PANEL_SCREENSHOTS && width !== 320) {
+        await dialog.locator(".chatapp-usage-modal__context").scrollIntoViewIfNeeded();
+        await page.screenshot({ path: `/tmp/maverick-chat-token-usage-${width}-${theme}.png` });
+      }
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await expect(usage).toBeFocused();
+      if (width <= 720) await expect(utilities).toHaveAttribute("aria-expanded", "true");
+      await usage.click();
+      await close.click();
+      await expect(usage).toBeFocused();
+      await usage.click();
+      await page.mouse.click(2, 2);
+      await expect(dialog).toBeHidden();
+      await expect(usage).toBeFocused();
+    });
+  }
 }
 
 test("groups controls by each composer width and changes layout at the container boundary", async ({ page }) => {

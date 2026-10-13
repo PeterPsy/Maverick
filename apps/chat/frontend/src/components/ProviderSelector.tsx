@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { ProviderItem } from "../api/client";
 import { usePopupFocusReturn } from "../hooks/usePopupFocusReturn";
+import { ComposerUtilityLabel } from "./ComposerUtilityLabel";
 import {
   orderedExecutionFamilies,
   safeProviderExecutionFamily,
@@ -209,6 +210,7 @@ export function ProviderSelector({
           hub
         </span>
         <span className="chatapp-provider-selector__label">{selectedDisplayLabel}</span>
+        <ComposerUtilityLabel label="Model" detail={selectedDisplayLabel} chevron />
       </button>
       {isOpen ? (
         <div

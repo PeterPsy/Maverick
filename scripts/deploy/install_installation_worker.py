@@ -4,6 +4,8 @@
 import argparse
 import json
 import os
+import pwd
+import grp
 from pathlib import Path
 import sys
 
@@ -12,6 +14,13 @@ sys.path.insert(0, str(ROOT))
 
 
 from core.installation.host_units import render_service, TIMER
+
+
+def service_account_ids(user: str, group: str) -> tuple[int, int]:
+    user = user or 'root'
+    account = pwd.getpwuid(int(user)) if user.isdecimal() else pwd.getpwnam(user)
+    group_id = (int(group) if group.isdecimal() else grp.getgrnam(group).gr_gid) if group else account.pw_gid
+    return account.pw_uid, group_id
 
 
 def install(core_unit):
@@ -28,8 +37,9 @@ def install(core_unit):
         root = Path(str(ROOT)[len(directory):])
     metadata = ROOT / ".maverick/installation"
     metadata.mkdir(parents=True, exist_ok=True, mode=0o700)
-    owner = (ROOT / ".env").stat()
-    os.chown(metadata, owner.st_uid, owner.st_gid)
+    owner = service_account_ids(str(properties.Get("org.freedesktop.systemd1.Service", "User")),
+                               str(properties.Get("org.freedesktop.systemd1.Service", "Group")))
+    os.chown(metadata, *owner)
     for name, content in [("maverick-installation.service", render_service(root, root_directory=directory, core_unit=core_unit)),
                           ("maverick-installation.timer", TIMER)]:
         path = host / "etc/systemd/system" / name

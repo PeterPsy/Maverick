@@ -1,5 +1,7 @@
 """Endpoint ownership and admin policies are shared across installation clients."""
 
+import json
+from urllib.parse import parse_qs, urlsplit
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -14,6 +16,7 @@ from core.apps.contract_parser_impl import parse_app_contract_file
 from core.apps.contract_serializer import write_app_contract_file
 from core.apps.errors import AppContractValidationError
 from core.cli.installation_commands import installation_command_specs
+from core.installation.cloudflare import token_template
 from core.installation.errors import InstallationError
 from core.installation.operations import invoke, OPERATIONS
 from core.mcp.installation_tools import installation_tool_specs
@@ -57,3 +60,9 @@ class ContractAndSurfacesTests(unittest.TestCase):
         self.assertEqual(responses, ['403 Forbidden'])
         factory.assert_not_called()
         self.assertIn(b'admin_required', b''.join(result))
+
+    def test_token_template_limits_the_zone_and_covers_zone_discovery(self):
+        query = parse_qs(urlsplit(token_template({"id": "a" * 32})).query)
+        self.assertEqual(query["zoneId"], ["a" * 32])
+        self.assertEqual(json.loads(query["permissionGroupKeys"][0]),
+                         [{"key": "dns", "type": "edit"}, {"key": "zone", "type": "read"}])

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.installation.service import InstallationService
+from core.installation.service import InstallationService, timestamp
 from core.installation.worker import InstallationWorker
 from tests.unit.installation.test_service import FakeDns
 
@@ -23,7 +23,7 @@ class InstallationWorkerTests(unittest.TestCase):
         self.folder.cleanup()
 
     def worker(self, **overrides):
-        values = dict(propagation=lambda *args: True, dns=lambda *args: {"waiting": False},
+        values = dict(delegation=lambda *args: {"waiting": False}, propagation=lambda *args: True, dns=lambda *args: {"waiting": False},
             certificates=lambda *args: {"waiting": False, "certificates": {}, "renewal_verified": True},
             stage=lambda *args: {}, commit=lambda *args: self.commits.append(True),
             probe=lambda *args: {"proof": {"nonce": self.job["probe_nonce"], "hostname": self.plan["hostname"]}},
@@ -38,6 +38,16 @@ class InstallationWorkerTests(unittest.TestCase):
         with patch("core.installation.worker.discover_public_ip", return_value="8.8.8.8"):
             resumed = self.worker(dns=lambda *args: self.fail("Must honor CA cooldown")).tick()
         self.assertEqual(resumed["status"], "waiting_ca")
+
+    def test_a_new_host_refreshes_restored_public_ip_without_repeated_discovery(self):
+        self.service.store.write('worker', {'host_boot': 'previous-host',
+            'public_ip': '8.8.8.8', 'public_ip_checked_at': timestamp()})
+        worker = self.worker(certificates=lambda *args: {'waiting': True})
+        with patch('core.installation.worker.discover_public_ip', return_value='1.1.1.1') as discover:
+            worker.tick()
+            self.assertEqual(self.service.store.read('worker')['public_ip'], '1.1.1.1')
+            worker.tick()
+            discover.assert_called_once()
 
     def test_wrong_server_never_commits_or_changes_the_generation(self):
         with self.assertRaisesRegex(ValueError, "wrong_server_at_target_address"):
@@ -98,3 +108,21 @@ class InstallationWorkerTests(unittest.TestCase):
         self.assertEqual(resumed['status'], 'rolling_back')
         (self.service.store.root / 'private/restart-required').unlink()
         self.assertEqual(worker.rollback(resumed)['status'], 'rolled_back')
+
+    def test_destination_and_certificates_are_ready_before_public_dns_moves(self):
+        calls = []
+        worker = self.worker(
+            certificates=lambda *a: (calls.append('certificates') or {'waiting': False, 'certificates': {}}),
+            stage=lambda *a: calls.append('nginx'),
+            probe=lambda *a: (calls.append('proof') or {'proof': {'nonce': self.job['probe_nonce']}}),
+            dns=lambda *a: (calls.append('dns') or {'waiting': False}),
+            commit=lambda *a: calls.append('commit'))
+        worker.advance(self.job)
+        self.assertEqual(calls, ['certificates', 'nginx', 'proof', 'dns', 'commit'])
+
+    def test_ca_wait_and_wrong_destination_never_move_public_dns(self):
+        dns = lambda *args: self.fail('Public traffic must stay on the old server')
+        waiting = self.worker(dns=dns, certificates=lambda *a: {'waiting': True}).advance(self.job)
+        self.assertEqual(waiting['status'], 'waiting_ca')
+        with self.assertRaisesRegex(ValueError, 'wrong_server_at_target_address'):
+            self.worker(dns=dns, probe=lambda *a: {'proof': {'nonce': 'wrong'}}).advance(self.job)

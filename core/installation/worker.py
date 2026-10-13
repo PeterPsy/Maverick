@@ -11,7 +11,7 @@ from core.installation.certificates import prepare_certificates, certificate_nam
 from core.installation.cloudflare import NoRedirect
 from core.installation.dns_propagation import dns_ready
 from core.installation.private_state import write_private
-from core.installation.dns_transaction import apply_dns, restore_dns
+from core.installation.dns_transaction import apply_dns, restore_dns, delegation_ready
 from core.installation.errors import InstallationError
 from core.installation.host_configuration import stage_host, commit_environment, restore_host
 from core.installation.probes import https_probe, verify_web
@@ -32,11 +32,11 @@ def discover_public_ip() -> str:
 class InstallationWorker:
     def __init__(self, service, *, dns=apply_dns, certificates=prepare_certificates,
                  stage=stage_host, commit=commit_environment, verify=verify_web, probe=https_probe,
-                 restore=restore_host, dns_restore=restore_dns, propagation=dns_ready):
+                 restore=restore_host, dns_restore=restore_dns, propagation=dns_ready, delegation=delegation_ready):
         self.service, self.store = service, service.store
         self.dns, self.certificates, self.stage, self.commit = dns, certificates, stage, commit
         self.verify, self.probe, self.restore, self.dns_restore = verify, probe, restore, dns_restore
-        self.propagation = propagation
+        self.propagation, self.delegation = propagation, delegation
 
     def tick(self) -> dict:
         with self.store.locked():
@@ -45,8 +45,16 @@ class InstallationWorker:
                 configuration.update(installation_id=uuid4().hex, generation=0)
                 self.store.write("configuration", configuration)
         previous = self.store.read("worker") or {}
+        boot_path = Path("/proc/sys/kernel/random/boot_id")
+        boot = boot_path.read_text().strip() if boot_path.exists() else ""
+        checked = previous.get("public_ip_checked_at")
+        refresh_ip = (not checked or previous.get("host_boot") != boot
+                      or datetime.now(timezone.utc) - datetime.fromisoformat(checked) >= timedelta(hours=6))
+        detected_ip = discover_public_ip() if refresh_ip else ""
         worker = {**previous, "state": "online", "checked_at": timestamp(),
-                  "public_ip": previous.get("public_ip") or discover_public_ip()}
+                  "host_boot": boot, "public_ip": detected_ip or previous.get("public_ip", "")}
+        if detected_ip:
+            worker["public_ip_checked_at"] = timestamp()
         self.store.write("worker", worker)
         jobs = [job for job in reversed(self.store.list_jobs()) if job["status"] in ACTIVE_STATES]
         if jobs:
@@ -113,16 +121,14 @@ class InstallationWorker:
             result = self.verify(plan["hostname"], plan["target_ip"])
             if not result["healthy"]:
                 return self.wait(job, "verifying", seconds=30)
+            job.pop("retry_at", None)
             job.update(status="ready", step="ready", verification=result, finished_at=timestamp(), updated_at=timestamp())
             return self.store.write("jobs", job, job["job_id"])
         intent = private / "activation.json"
         if intent.exists():
             return self.activate(job, plan, private, json.loads(intent.read_text()))
         self.save_step(job, "preparing")
-        dns = self.dns(self.service, job, plan, private)
-        if dns["waiting"]:
-            return self.wait(job, "waiting_dns", seconds=60)
-        if not self.propagation(plan["hostname"], plan["target_ip"]):
+        if self.delegation(self.service, job, plan)["waiting"]:
             return self.wait(job, "waiting_dns", seconds=60)
         certificate = self.certificates(self.service, job, plan, private)
         if certificate["waiting"]:
@@ -131,6 +137,10 @@ class InstallationWorker:
         proof = self.probe(plan["hostname"], plan["target_ip"], "/api/installation/probe/" + job["job_id"])
         if proof.get("proof", {}).get("nonce") != job["probe_nonce"]:
             raise InstallationError("wrong_server_at_target_address", status=409)
+        # TLS and the destination are already proven before public traffic moves.
+        dns = self.dns(self.service, job, plan, private)
+        if dns["waiting"] or not self.propagation(plan["hostname"], plan["target_ip"]):
+            return self.wait(job, "waiting_dns", seconds=60)
         required = {item["id"] for item in plan["external_actions"]}
         if required - set(job["confirmed_actions"]):
             return self.wait(job, "waiting_external_actions", seconds=60)
@@ -185,6 +195,7 @@ class InstallationWorker:
                 if not result["healthy"]:
                     return self.wait(job, "rolling_back", seconds=30)
                 job["verification"] = result
+            job.pop("retry_at", None)
             job.update(status="rolled_back", step="rolled_back", updated_at=timestamp())
             return self.store.write("jobs", job, job["job_id"])
         rollback_private = self.store.root / "private" / job["job_id"]
@@ -212,6 +223,7 @@ class InstallationWorker:
             return self.store.write("jobs", job, job["job_id"])
 
     def save_step(self, job, step):
+        job.pop("retry_at", None)
         job.update(status=step, step=step, updated_at=timestamp())
         job["events"] = (job.get("events", []) + [{"step": step, "at": job["updated_at"]}])[-100:]
         self.store.write("jobs", job, job["job_id"])

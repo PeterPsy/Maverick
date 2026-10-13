@@ -1,11 +1,12 @@
 """Root-owned nginx staging and selective environment commit/rollback."""
 
 import json
+from hashlib import sha256
 from pathlib import Path
 
 from core.installation.environment import ADDRESS_KEYS, address_environment, target_environment
 from core.installation.errors import InstallationError
-from core.installation.validation import record_id
+from core.installation.validation import record_id, hostname
 from core.installation.private_state import write_private
 from core.shared.env_file import read_env_file
 from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
@@ -48,18 +49,24 @@ server {{
     return "\n".join(blocks)
 
 
+def managed_nginx_path(service, host: str) -> Path:
+    identifier = record_id(service.configuration()["installation_id"])
+    suffix = sha256(hostname(host).encode()).hexdigest()[:16]
+    return Path(f"/etc/nginx/conf.d/maverick-installation-{identifier}-{suffix}.conf")
+
+
 def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
     configuration = service.configuration()
     identifier = configuration["installation_id"]
     if identifier == "uninitialized":
         raise InstallationError("installation_worker_not_initialized", status=409)
-    path = Path("/etc/nginx/conf.d/maverick-installation-" + record_id(identifier) + ".conf")
+    path = managed_nginx_path(service, plan["hostname"])
     backup = private / "nginx-before"
     existed = path.exists()
-    if not backup.exists():
+    if not (private / "nginx-backup.json").exists():
         backup.write_bytes(path.read_bytes() if existed else b"")
         backup.chmod(0o600)
-        write_private(private / "nginx-backup.json", {"existed": existed})
+        write_private(private / "nginx-backup.json", {"existed": existed, "hostname": plan["hostname"]})
     content = render_nginx(plan["hostname"], certificates, int(service.environment.get("MAVERICK_PORT", "8014")))
     if not path.exists():
         path.touch(mode=0o644)
@@ -95,8 +102,7 @@ def restore_host(service, private: Path) -> None:
     metadata = private / "nginx-backup.json"
     if metadata.exists():
         snapshot = json.loads(metadata.read_text())
-        identifier = service.configuration()["installation_id"]
-        path = Path("/etc/nginx/conf.d/maverick-installation-" + record_id(identifier) + ".conf")
+        path = managed_nginx_path(service, snapshot["hostname"])
         if snapshot["existed"]:
             atomic_replace(path, (private / "nginx-before").read_bytes())
         else:

@@ -17,11 +17,13 @@ projections remain private. Core Secrets owns credential values; consumers use
 platform delivery to the fixed DNS-provider API and Certbot, never tool results.
 
 An operator-managed host worker handles queued jobs and resumes them after
-backend restarts. It validates DNS delegation, writes only installation-owned
-records, issues the main and `*.sidecars.<hostname>` certificates, tests renewal,
-prepares Nginx, verifies HTTPS against the intended server, and atomically commits
-the canonical address. Existing valid certificates are adopted. CA retry dates
-and DNS propagation are persisted waiting states, not busy retry loops.
+backend restarts. It validates DNS delegation, issues the main and `*.sidecars.<hostname>`
+certificates, tests renewal, prepares Nginx and proves the intended server before
+changing public DNS. It then writes only installation-owned records, waits for
+public propagation, and atomically commits the canonical address. CA waits and
+wrong-target failures leave public traffic on the original server. Existing valid
+certificates are adopted. CA retry dates and DNS propagation are persisted waiting
+states, not busy retry loops.
 
 Cloudflare is the first executable DNS adapter. It supports zone-scoped tokens,
 discovers the zone ID, preserves unrelated records and exposes a prefilled token
@@ -115,3 +117,19 @@ redirect, preserving app routes. `/setup`, APIs, app frames and localhost access
 remain direct. Installed/native clients with a saved server URL must use the new
 address; the UI reports this after an address change. Source-server writes should
 be drained during a server move to avoid divergence while DNS caches expire.
+
+Managed Nginx files include an installation id and hostname digest. Staging a
+second hostname creates a distinct file and preserves active virtual hosts,
+including while waiting for provider registrations. Rollback removes/restores
+only its target hostname’s file. The initial live preview’s single-file Nginx
+backup was migrated to this format before publishing the feature.
+
+The legacy TLS timer handoff journals its enabled/active state privately and
+restores it if the first adoption is rolled back to an unmanaged configuration.
+The operator installer assigns metadata ownership to the Core unit’s service
+account rather than assuming the environment file owner is that account.
+
+Public IP discovery refreshes after a host boot change and at most every six
+hours. Fresh/unmanaged setup defaults to that detected IP, including when an old
+`.env` was restored on a destination. Installation infrastructure metadata is
+host-local and should not be copied as tenant data to a new server.

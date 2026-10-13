@@ -10,6 +10,14 @@ from core.installation.errors import InstallationError
 FIELDS = {"type", "name", "content", "ttl", "proxied", "priority", "data", "comment", "tags"}
 
 
+def delegation_ready(service, job: dict, plan: dict) -> dict:
+    provider = service.dns_factory(service.secret_store, plan["dns_secret_ref"], actor_user_id=job["actor_user_id"])
+    zone = provider.zone(plan["hostname"])
+    if zone["id"] != plan["zone"]["id"]:
+        raise InstallationError("dns_zone_changed", status=409)
+    return {"waiting": zone["status"] != "active", "nameservers": zone.get("name_servers", [])}
+
+
 def apply_dns(service, job: dict, plan: dict, private: Path) -> dict:
     provider = service.dns_factory(service.secret_store, plan["dns_secret_ref"], actor_user_id=job["actor_user_id"])
     zone = provider.zone(plan["hostname"])

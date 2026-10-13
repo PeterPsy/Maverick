@@ -84,7 +84,7 @@ class CloudflareDns:
 
 def token_template(zone: dict) -> str:
     return "https://dash.cloudflare.com/profile/api-tokens?" + urlencode({
-        "permissionGroupKeys": json.dumps([{"key": "dns", "type": "edit"}], separators=(",", ":")),
+        "permissionGroupKeys": json.dumps([{"key": "dns", "type": "edit"}, {"key": "zone", "type": "read"}], separators=(",", ":")),
         "accountId": "*", "zoneId": zone["id"], "name": "Maverick DNS"})
 
 

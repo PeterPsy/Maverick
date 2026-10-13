@@ -108,6 +108,29 @@ This deliberately avoids blind full-Drive indexing. Agents index only relevant f
 
 ## Request lifecycle and performance
 
+The preview keeps its toolbar above the media in both browser fullscreen and
+the in-frame fallback. Portrait images fit the available height, including on
+narrow screens below the shell header. Close receives initial focus; Tab stays
+inside the preview, Escape leaves fullscreen first and then closes the preview,
+and closing restores focus to the opener. Download is a labelled desktop action;
+destructive actions remain in file details and the file list.
+
+Downloads stay in the authenticated app frame and use attached download links.
+Drive export blobs remain available during asynchronous WebKit handoff; export
+preparation and failures are visible inside the preview. The native Mac host
+(MaverickMac 0.4.3 / build 77) handles download actions and attachment responses
+with its Save panel, preserving the Storage page and its session. It streams to
+temporary storage on the selected volume, publishes completed files only, and
+cancels pending transfers during server switching or teardown. The web frontend
+alone cannot add missing download support to an older native host.
+
+`node --test apps/storage/tests/preview-workflow.browser.test.mjs` exercises the
+built frontend in a sandboxed cross-origin frame, browser fullscreen and denied
+fullscreen, portrait sizing, Escape/Close, focus restoration and exact downloaded
+bytes at desktop, 390px and 320px widths. It uses the installed Browser development
+Playwright harness; set `PLAYWRIGHT_BROWSERS_PATH` to the installed browser cache
+when the runtime home differs. Native WebKit coverage lives with MaverickMac.
+
 Catalog, pagination and deep-link reads are fenced by the current view and
 cancelled on navigation or suspension. An old response or `finally` cannot
 change the next view. Local cancellation is silent; current network failures

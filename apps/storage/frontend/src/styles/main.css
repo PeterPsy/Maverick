@@ -1379,6 +1379,7 @@ h3 {
 .preview-modal-backdrop.is-fullscreen-preview {
   background: var(--storage-bg);
   padding: 0;
+  display: block;
 }
 
 .delete-confirmation-backdrop {
@@ -1492,16 +1493,18 @@ h3 {
 
 .preview-modal.image-preview {
   grid-template-rows: auto auto;
+  min-width: min(480px, calc(100vw - 44px));
   height: auto;
   max-width: calc(100vw - 44px);
   max-height: calc(100dvh - 44px);
 }
 
 .preview-modal.is-fullscreen,
-.preview-modal:fullscreen,
-.preview-modal:-webkit-full-screen {
-  width: 100vw;
-  height: 100dvh;
+.preview-modal:is(:fullscreen, :-webkit-full-screen) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   max-width: none;
   max-height: none;
   border: 0;
@@ -1511,17 +1514,19 @@ h3 {
 }
 
 .preview-modal.image-preview.is-fullscreen,
-.preview-modal.image-preview:fullscreen,
-.preview-modal.image-preview:-webkit-full-screen {
+.preview-modal.image-preview:is(:fullscreen, :-webkit-full-screen) {
   grid-template-rows: auto minmax(0, 1fr);
-  height: 100dvh;
+  height: 100%;
 }
 
 .preview-modal-header {
+  position: relative;
+  z-index: 1;
+  background: var(--storage-bg);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: start;
+  align-items: center;
   border-bottom: 1px solid var(--storage-border);
   padding: 14px 16px;
 }
@@ -1545,6 +1550,26 @@ h3 {
   min-width: 0;
 }
 
+.preview-modal-actions .preview-download-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.preview-modal-actions .preview-close-action {
+  border: 1px solid var(--storage-border-strong);
+}
+
+.preview-modal-error {
+  color: var(--storage-danger);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  margin-top: 6px;
+}
+
 .preview-modal-body {
   display: grid;
   place-items: center;
@@ -1560,16 +1585,17 @@ h3 {
 }
 
 .preview-modal.image-preview.is-fullscreen .preview-modal-body,
-.preview-modal.image-preview:fullscreen .preview-modal-body,
-.preview-modal.image-preview:-webkit-full-screen .preview-modal-body {
+.preview-modal.image-preview:is(:fullscreen, :-webkit-full-screen) .preview-modal-body {
   height: auto;
 }
 
 .preview-modal-body > img,
 .preview-modal-body > video {
   display: block;
-  width: auto;
-  height: auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
   border: 0;
@@ -2140,6 +2166,15 @@ h3 {
   }
 
   .preview-modal-actions .preview-fullscreen-action {
+    display: none;
+  }
+
+  .preview-modal-actions .preview-download-action {
+    width: 36px;
+    padding: 0;
+  }
+
+  .preview-download-action span {
     display: none;
   }
 

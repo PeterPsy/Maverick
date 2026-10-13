@@ -36,6 +36,8 @@ import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFo
 import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
 import { loadFullPreview } from './previewCache';
 import { useStorageVisibility } from './hooks/useStorageVisibility';
+import { usePreviewDialogFocus } from './hooks/usePreviewDialogFocus';
+import { downloadStorageBlob, startStorageDownload } from './lib/storageDownload';
 import type { CatalogPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, PreviewKind, PreviewTablePayload } from './types';
 import './styles/main.css';
 
@@ -500,6 +502,8 @@ function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewFullscreenMode, setPreviewFullscreenMode] = useState<PreviewFullscreenMode>('none');
+  const [downloadError, setDownloadError] = useState('');
+  const [downloadPreparing, setDownloadPreparing] = useState(false);
   const [previewImageSize, setPreviewImageSize] = useState<PreviewImageSize | null>(null);
   const [previewViewportSize, setPreviewViewportSize] = useState<PreviewImageSize>(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [previewHeaderHeight, setPreviewHeaderHeight] = useState(72);
@@ -522,6 +526,7 @@ function App() {
   const markdownCopyTimerRef = useRef<number | null>(null);
   const dropFeedbackTimerRef = useRef<number | null>(null);
   const previewModalRef = useRef<HTMLElement | null>(null);
+  usePreviewDialogFocus(previewModalOpen, previewModalRef);
   const previewHeaderRef = useRef<HTMLElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const filesRef = useRef<StorageFile[]>([]);
@@ -1560,6 +1565,7 @@ function App() {
   function closePreviewModal() {
     exitPreviewFullscreenIfNeeded();
     setPreviewModalOpen(false);
+    setDownloadError('');
   }
 
   async function togglePreviewFullscreen() {
@@ -1572,7 +1578,7 @@ function App() {
     if (canRequestFullscreen(previewModal)) {
       try {
         await requestElementFullscreen(previewModal);
-        setPreviewFullscreenMode('native');
+        setPreviewFullscreenMode(elementIsFullscreen(previewModal) ? 'native' : 'expanded');
         return;
       } catch {
         // Fall through to an in-app fullscreen layout when iframe policy blocks native fullscreen.
@@ -1951,22 +1957,21 @@ function App() {
   const previewBackdropClassName = previewFullscreenActive ? 'preview-modal-backdrop is-fullscreen-preview' : 'preview-modal-backdrop';
 
   async function download(file: StorageFile) {
+    setDownloadError('');
     if (!isDriveItem(file) || isDriveBinaryDownloadFile(file)) {
-      const anchor = document.createElement('a');
-      anchor.href = storageMediaStreamUrl(file, { download: true });
-      anchor.download = file.name;
-      anchor.click();
+      startStorageDownload(storageMediaStreamUrl(file, { download: true }), file.name);
       return;
     }
-    const payload = isDriveItem(file)
-      ? await readDriveFile(file, DOWNLOAD_BYTES)
-      : await readFile(file, DOWNLOAD_BYTES);
-    const url = URL.createObjectURL(decodeBase64(payload.content_base64, payload.content_type || payload.file.content_type));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = payload.file_name || payload.file.name;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    setDownloadPreparing(true);
+    try {
+      const payload = await readDriveFile(file, DOWNLOAD_BYTES);
+      downloadStorageBlob(decodeBase64(payload.content_base64, payload.content_type || payload.file.content_type), payload.file_name || payload.file.name);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : 'Unable to prepare this download. Try again.');
+      throw err;
+    } finally {
+      setDownloadPreparing(false);
+    }
   }
 
   function openDriveFile(file: StorageFile) {
@@ -1977,10 +1982,7 @@ function App() {
   }
 
   async function downloadFolderArchive(folder: StorageFolder) {
-    const anchor = document.createElement('a');
-    anchor.href = folderMediaDownloadUrl(folder);
-    anchor.download = `${folder.name || folder.role || 'folder'}.zip`;
-    anchor.click();
+    startStorageDownload(folderMediaDownloadUrl(folder), `${folder.name || folder.role || 'folder'}.zip`);
   }
 
   async function saveRename() {
@@ -2966,8 +2968,9 @@ function App() {
           <section className={previewModalClassName} ref={previewModalRef} style={previewModalStyle} role="dialog" aria-modal="true" aria-labelledby="preview-modal-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="preview-modal-header" ref={previewHeaderRef}>
               <div>
-                <p className="storage-eyebrow">{isDriveItem(selectedFile) ? 'Google Drive' : roleLabels[selectedFile.role as FileRole]} · {kindLabels[selectedFile.preview_kind]}</p>
+                <p className="storage-eyebrow">{kindLabels[selectedFile.preview_kind]} · {formatBytes(selectedFile.size_bytes)}</p>
                 <h2 id="preview-modal-title">{selectedFile.name}</h2>
+                {downloadError ? <p className="preview-modal-error" role="alert">{downloadError}</p> : null}
               </div>
               <div className="preview-modal-actions">
                 {pickerContext && storagePickerAcceptsFile(pickerContext, selectedFile) ? (
@@ -2987,18 +2990,16 @@ function App() {
                 <button className="icon-button" type="button" onClick={() => showFileDetails(selectedFile)} aria-label="Show file details" title="Details">
                   <Icon name="info" />
                 </button>
-                <button className="icon-button" disabled={isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_read', false)} type="button" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))} aria-label="Download file" title="Download">
+                <button className="icon-button preview-download-action" disabled={downloadPreparing || (isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_read', false))} type="button" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))} aria-label={downloadPreparing ? 'Preparing download' : 'Download file'} title="Download" aria-busy={downloadPreparing}>
                   <Icon name="download" />
+                  <span>{downloadPreparing ? 'Preparing…' : 'Download'}</span>
                 </button>
                 {isDriveItem(selectedFile) && selectedFile.web_url ? (
                   <button className="icon-button" type="button" onClick={() => openDriveFile(selectedFile)} aria-label="Open in Drive" title="Open in Drive">
                     <Icon name="open_in_new" />
                   </button>
                 ) : null}
-                <button className="icon-button danger" disabled={isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_delete', false)} type="button" onClick={() => { exitPreviewFullscreenIfNeeded(); requestFileDelete(selectedFile); }} aria-label="Delete file" title="Delete">
-                  <Icon name="delete" />
-                </button>
-                <button className="icon-button" type="button" onClick={closePreviewModal} aria-label="Close preview" title="Close">
+                <button className="icon-button preview-close-action" type="button" onClick={closePreviewModal} aria-label="Close preview" title="Close preview (Esc)">
                   <Icon name="close" />
                 </button>
               </div>

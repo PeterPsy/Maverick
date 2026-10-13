@@ -160,6 +160,15 @@ popup is a temporary native URL receiver with no native bridge, released after
 handoff or cancellation. OAuth completes in the browser's session using the
 existing authenticated callback; native cookies are not transferred.
 
+The native macOS host also owns WebKit download delivery. A user download action
+from the platform or an exact registered app frame stays in the authenticated
+WebKit session, including same-origin blob exports. Attachment responses become
+downloads rather than replacing the embedded document. The host presents a Save
+panel, streams into temporary storage on the selected volume, and publishes the
+destination only after completion. Cancellation, renderer teardown and server
+switching release sheets and transfers; failures remain visible. This host
+capability is independent of Device Use and adds no app-specific Core behavior.
+
 The public app id declared by the app artifact and the local app id used for one workspace binding are separate identities:
 
 - `public_app_id` is the catalog or source identity declared by the app contract and used for distribution, upgrade lineage, compatibility, and publisher ownership.

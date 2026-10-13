@@ -10,8 +10,13 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
   let browser;
   try {
     browser = await chromium.launch({ headless: true, executablePath: browserExecutable() || undefined, args: ["--no-sandbox"] });
-    for (const viewport of [{ width: 1440, height: 950 }, { width: 390, height: 650 }]) {
-      const context = await browser.newContext({ viewport, serviceWorkers: "block", reducedMotion: "reduce", colorScheme: "light" });
+    for (const { viewport, reducedMotion } of [
+      { viewport: { width: 1440, height: 950 }, reducedMotion: "reduce" },
+      { viewport: { width: 390, height: 650 }, reducedMotion: "reduce" },
+      { viewport: { width: 320, height: 480 }, reducedMotion: "reduce" },
+      { viewport: { width: 1440, height: 950 }, reducedMotion: "no-preference" },
+    ]) {
+      const context = await browser.newContext({ viewport, serviceWorkers: "block", reducedMotion, colorScheme: "light" });
       await context.addInitScript(() => {
         window.webkit = { messageHandlers: {
           maverickExternalURL: { postMessage: async () => true },
@@ -30,17 +35,40 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       });
       await context.route("**/api/auth/google/result", route => route.fulfill({ json: { status: "pending" } }));
       await context.route("**/api/auth/google/cancel", route => { cancelled++; return route.fulfill({ json: { status: "cancelled" } }); });
+      let passwordLogin;
+      await context.route("**/api/auth/login", route => {
+        passwordLogin = route.request().postDataJSON();
+        return route.fulfill({ status: 401, json: { error: "invalid_credentials" } });
+      });
       const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
       const errors = [];
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(origin);
-      await page.getByRole("heading", { name: "Welcome back." }).waitFor();
+      await page.getByRole("heading", { name: "Maverick was waiting for you." }).waitFor();
       const google = page.getByRole("button", { name: "Continue with Google", exact: true });
       await google.waitFor({ state: "visible" });
       assert.equal(await page.getByRole("list", { name: "Google services requested at sign-in" }).getByRole("listitem").count(), 3);
       assert.equal(await page.getByRole("checkbox").count(), 0);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-login-${viewport.width}.png`, fullPage: true });
+      const fields = await page.locator(".bs-login__fields").boundingBox();
+      const googleBox = await google.boundingBox();
+      assert.ok(googleBox.y >= fields.y + fields.height, "Google panel must sit below the standard login");
+      assert.deepEqual(await page.locator(".bs-login__content").evaluate(element => {
+        const style = getComputedStyle(element);
+        return [style.backgroundColor, style.borderTopWidth, style.boxShadow];
+      }), ["rgba(0, 0, 0, 0)", "0px", "none"], "Login must remain open on the background");
+      const mark = await page.locator(".bs-login__brand-mark").boundingBox();
+      assert.ok(Math.abs(mark.x + mark.width / 2 - viewport.width / 2) < 1, "Brand mark must stay centered");
+      if (reducedMotion === "no-preference") await page.locator(".bs-login-paper-bg canvas").waitFor({ state: "visible" });
+      else assert.equal(await page.locator(".bs-login-paper-bg canvas").count(), 0);
+      const screenshotSuffix = `${viewport.width}${reducedMotion === "no-preference" ? "-animated" : ""}`;
+      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-login-${screenshotSuffix}.png`, fullPage: true });
+      // Verify the animated shader, then keep software rendering out of interaction timings.
+      if (reducedMotion === "no-preference") {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.locator(".bs-login-paper-bg canvas").waitFor({ state: "hidden" });
+      }
       await google.click();
       await page.getByRole("button", { name: "Cancel Google sign-in", exact: true }).waitFor();
       assert.deepEqual(start, { mode: "login", services: ["calendar", "gmail", "drive"], transport: "system-browser" });
@@ -68,6 +96,19 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       await page.getByLabel("Email or username", { exact: true }).fill("admin");
       await page.getByRole("button", { name: "Continue", exact: true }).click();
       assert.equal(await page.getByLabel("Password", { exact: true }).evaluate(element => element === document.activeElement), true);
+      await page.getByLabel("Password", { exact: true }).fill("fixture-password");
+      await page.getByRole("button", { name: "Show password", exact: true }).click();
+      assert.equal(await page.getByLabel("Password", { exact: true }).getAttribute("type"), "text");
+      await page.getByRole("button", { name: "Hide password", exact: true }).click();
+      assert.equal(await page.getByLabel("Password", { exact: true }).getAttribute("type"), "password");
+      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-login-password-${screenshotSuffix}.png`, fullPage: true });
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: "Invalid credentials" }).waitFor();
+      assert.deepEqual(passwordLogin, { username: "admin", password: "fixture-password" });
+      assert.equal(await page.getByLabel("Password", { exact: true }).getAttribute("aria-invalid"), "true");
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      assert.equal(await page.getByLabel("Email or username", { exact: true }).inputValue(), "admin");
+      await google.waitFor({ state: "visible" });
       assert.deepEqual(errors, []);
       await context.close();
     }

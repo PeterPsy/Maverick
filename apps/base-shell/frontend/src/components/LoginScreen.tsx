@@ -101,51 +101,66 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
     <ServerProfilesLauncher beforeSwitch={cancelGoogle} />
     <section className="bs-login__stage" aria-label="Maverick sign-in">
       <div className="bs-login__content">
-        <div className="bs-login__welcome">
-          <BrandMark className="bs-login__headline-logotype" variant="logotype" />
-          <h1>Welcome back.</h1><p>Your apps. Your workspace. One connection.</p>
-        </div>
         <form className="bs-login__form" onSubmit={submit} aria-busy={isSubmitting}>
-          {step === "email" ? <div className="bs-login__google">
-            <button className="bs-google-button" type="button" disabled={isSubmitting || !google?.configured} onClick={() => void signInGoogle()}>
-              <GoogleMark /><span>{googlePending ? "Connecting…" : "Continue with Google"}</span>
-            </button>
-            {google?.configured && <div className="bs-login__services">
-              {requestedServices.length > 0 && <><p>Connect the services your apps use</p>
-                <ul aria-label="Google services requested at sign-in">{requestedServices.map(service => <li key={service.id}>
-                  <span className="material-symbols-rounded" aria-hidden="true">{service.id === "calendar" ? "calendar_month" : service.id === "gmail" ? "mail" : "folder"}</span>{service.label}
-                </li>)}</ul>
-                <small>Approve access once with Google. Manage accounts and app permissions in your profile anytime.</small>
-              </>}
-            </div>}
-            {google && !google.configured && <small>Google sign-in is not configured on this installation.</small>}
-          </div> : <div className="bs-login__password-heading"><h2>Sign in with your password</h2><p>{credential.trim()}</p></div>}
-          {step === "email" && <div className="bs-login__divider"><span>or use your Maverick account</span></div>}
-          <div className="bs-login__fields">
-            <label htmlFor={step === "email" ? "maverick-login-credential" : "maverick-login-password"}>{step === "email" ? "Email or username" : "Password"}</label>
-            <div className="bs-login__input-wrap">
-              <span className="material-symbols-rounded" aria-hidden="true">{step === "email" ? "person" : "lock"}</span>
-              {step === "email" ? <input id="maverick-login-credential" autoComplete="username" type="text" value={credential}
-                aria-describedby={errorId} aria-invalid={!!error} disabled={isSubmitting} placeholder="you@example.com" spellCheck={false}
-                onChange={event => { setCredential(event.target.value); setError(null); }} />
-                : <><input id="maverick-login-password" autoComplete="current-password" type={showPassword ? "text" : "password"}
-                  value={password} ref={passwordInput} aria-describedby={errorId} aria-invalid={!!error} disabled={isSubmitting} placeholder="Enter your password"
-                  onChange={event => { setPassword(event.target.value); setError(null); }} />
-                <button type="button" className="bs-login__visibility" aria-label={showPassword ? "Hide password" : "Show password"}
-                  onClick={() => setShowPassword(value => !value)}><span className="material-symbols-rounded" aria-hidden="true">{showPassword ? "visibility_off" : "visibility"}</span></button></>}
+          <div className="bs-login__step" key={step}>
+            <div className="bs-login__headline" aria-live="polite">
+              <h1>{step === "email" ? <>
+                <BrandMark className="bs-login__headline-logotype" variant="logotype" />
+                <span>was waiting for you.</span>
+              </> : "Enter your password"}</h1>
+              {step === "password" && <span className="bs-login__credential">{credential.trim()}</span>}
             </div>
-            <button className="bs-login__submit" type="submit" disabled={isSubmitting || (step === "email" ? !canContinue : !canSubmit)}>
-              <span>{step === "email" ? "Continue" : isSubmitting ? "Signing in…" : "Sign in"}</span>
-              <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
-            </button>
+            <div className="bs-login__fields">
+              <div className="bs-glass-field">
+                <label className={`bs-glass-field__floating ${step === "password" && password ? "is-visible" : ""}`}
+                  htmlFor={step === "email" ? "maverick-login-credential" : "maverick-login-password"}>
+                  {step === "email" ? "Email or username" : "Password"}
+                </label>
+                <span className="bs-glass-field__control">
+                  {step === "email" ? <span className={`bs-glass-field__icon ${credential.length > 20 ? "is-compressed" : ""}`}>
+                    <span className="material-symbols-rounded" aria-hidden="true">mail</span>
+                  </span> : <button type="button" className="bs-glass-field__icon bs-glass-field__toggle" disabled={isSubmitting}
+                    aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(value => !value)}>
+                    <span className="material-symbols-rounded" aria-hidden="true">{showPassword ? "visibility_off" : "visibility"}</span>
+                  </button>}
+                  {step === "email" ? <input id="maverick-login-credential" autoComplete="username" type="text" value={credential}
+                    aria-describedby={errorId} aria-invalid={!!error} disabled={isSubmitting} placeholder="Email or username" spellCheck={false}
+                    onChange={event => { setCredential(event.target.value); setError(null); }} />
+                    : <input id="maverick-login-password" autoComplete="current-password" type={showPassword ? "text" : "password"}
+                      value={password} ref={passwordInput} aria-describedby={errorId} aria-invalid={!!error} disabled={isSubmitting} placeholder="Password"
+                      onChange={event => { setPassword(event.target.value); setError(null); }} />}
+                  <button className={`bs-glass-field__action ${(step === "email" ? canContinue : canSubmit) ? "is-visible" : ""}`}
+                    aria-label={step === "email" ? "Continue" : "Sign in"} type="submit"
+                    disabled={isSubmitting || (step === "email" ? !canContinue : !canSubmit)}>
+                    {step === "password" && isSubmitting ? <span className="bs-login__spinner" aria-hidden="true" />
+                      : <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>}
+                    <span>{step === "email" ? "Continue" : isSubmitting ? "Signing in…" : "Sign in"}</span>
+                  </button>
+                </span>
+                {step === "password" && <button className="bs-login__back" type="button" disabled={isSubmitting} onClick={() => {
+                  setStep("email"); setPassword(""); setShowPassword(false); setError(null);
+                }}><span className="material-symbols-rounded" aria-hidden="true">arrow_back</span>Back</button>}
+              </div>
+            </div>
           </div>
-          {step === "password" && <button className="bs-login__back" type="button" disabled={isSubmitting} onClick={() => {
-            setStep("email"); setPassword(""); setShowPassword(false); setError(null);
-          }}><span className="material-symbols-rounded" aria-hidden="true">arrow_back</span>Back to sign-in options</button>}
-          {googlePending && <div className="bs-login__pending"><span className="bs-login__spinner" aria-hidden="true" /><p role="status">Continue in your browser. Maverick will update automatically.</p>
-            <button type="button" onClick={cancelGoogle}>Cancel Google sign-in</button></div>}
           {error && <p className="bs-form-error" id="maverick-login-error" role="alert">{error}</p>}
         </form>
+        {step === "email" && <div className="bs-login__google">
+          <button className="bs-google-button" type="button" disabled={isSubmitting || !google?.configured} onClick={() => void signInGoogle()}>
+            <GoogleMark /><span>{googlePending ? "Connecting…" : "Continue with Google"}</span>
+          </button>
+          {google?.configured && <div className="bs-login__services">
+            {requestedServices.length > 0 && <><p>Connect the services your apps use</p>
+              <ul aria-label="Google services requested at sign-in">{requestedServices.map(service => <li key={service.id}>
+                <span className="material-symbols-rounded" aria-hidden="true">{service.id === "calendar" ? "calendar_month" : service.id === "gmail" ? "mail" : "folder"}</span>{service.label}
+              </li>)}</ul>
+              <small>Approve access once with Google. Manage accounts and app permissions in your profile anytime.</small>
+            </>}
+          </div>}
+          {google && !google.configured && <small>Google sign-in is not configured on this installation.</small>}
+          {googlePending && <div className="bs-login__pending"><span className="bs-login__spinner" aria-hidden="true" /><p role="status">Continue in your browser. Maverick will update automatically.</p>
+            <button type="button" onClick={cancelGoogle}>Cancel Google sign-in</button></div>}
+        </div>}
         <p className="bs-login__server"><span className="material-symbols-rounded" aria-hidden="true">dns</span>{window.location.host}</p>
       </div>
     </section>

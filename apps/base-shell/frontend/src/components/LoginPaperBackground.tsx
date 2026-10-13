@@ -23,9 +23,9 @@ export function LoginPaperBackground() {
     <div className="bs-login-paper-bg" aria-hidden="true">
       <MeshGradient
         className="bs-login-paper-bg__shader"
-        colors={["#090a0c", "#161719", "#303438", "#4a4e52"]}
-        speed={0.25}
-        maxPixelCount={400000}
+        colors={["#000000", "#1a1a1a", "#333333", "#ffffff"]}
+        speed={1}
+        maxPixelCount={1600000}
       />
     </div>
   );

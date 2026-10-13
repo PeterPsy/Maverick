@@ -1,0 +1,28 @@
+.bs-login__google {
+  display: grid; gap: 16px; width: min(24rem, 100%); min-width: 0; text-align: center;
+}
+.bs-login .bs-google-button {
+  width: 100%; min-height: 48px; padding: 12px 16px; border: 1px solid transparent;
+  border-radius: 18px; font-size: 14px; font-weight: 550;
+}
+.bs-login__services { display: grid; gap: 10px; text-align: center; }
+.bs-login__services p { margin: 0; font-size: 12px; color: var(--bs-login-muted); }
+.bs-login__services ul {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; list-style: none; margin: 0; padding: 0;
+}
+.bs-login__services li {
+  display: flex; gap: 5px; align-items: center; border: 1px solid var(--maverick-border);
+  border-radius: 10px; padding: 6px 8px; font-size: 11px;
+}
+.bs-login__services .material-symbols-rounded { font-size: 15px; }
+.bs-login__services small, .bs-login__google > small { color: var(--bs-login-muted); font-size: 11px; line-height: 1.6; }
+.bs-login__pending {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 10px;
+  padding: 14px; border-radius: 18px; background: rgba(23, 24, 27, .8); text-align: left;
+}
+.bs-login__pending p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--bs-login-muted); }
+.bs-login__pending button {
+  grid-column: 2; justify-self: start; border: 0; background: transparent; color: var(--bs-login-foreground);
+  padding: 4px 0; font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.bs-login__pending button:focus-visible { outline: 2px solid var(--maverick-focus); outline-offset: 3px; }

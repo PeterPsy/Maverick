@@ -18,6 +18,14 @@ equality alone never links an existing account. New Google registrations create
 ordinary members without workspace membership; an administrator assigns access.
 No Google flow grants platform administration or workspace membership.
 
+Base Shell keeps the original open login composition: centered brand, animated
+monochrome background, large welcome headline and two-step glass password field.
+The Google button and required-service summary sit directly on that background
+below the password-login form, without an enclosing card. Native browser handoff,
+consent cancellation and the Servers launcher remain available. On short mobile
+viewports the composition scrolls vertically; reduced-motion preferences use a
+static background and disable field and step animations.
+
 OAuth uses server-side authorization-code exchange, PKCE, a browser-bound,
 single-use, expiring state, and verified OpenID claims. Only actually granted
 scopes are stored. Login sessions retain the existing platform cookie lifecycle.

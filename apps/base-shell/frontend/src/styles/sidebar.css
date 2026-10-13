@@ -815,33 +815,32 @@
 }
 
 .bs-sidebar__shell-controls {
+  --bs-sidebar-control-gap: 0.42rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
+  justify-content: flex-start;
+  gap: var(--bs-sidebar-control-gap);
   flex: none;
   min-width: 0;
 }
 
 .bs-sidebar__desktop-logo {
   display: block;
-  flex: 1 1 0;
-  width: 100%;
+  flex: 0 1 auto;
+  width: auto;
   max-width: none;
   height: auto;
-  max-height: 1.45rem;
+  max-height: 1.16rem;
   min-width: 0;
   object-fit: contain;
   object-position: left center;
-  transform: scale(0.8);
-  transform-origin: left center;
 }
 
 .bs-sidebar__control-cluster {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.42rem;
+  gap: var(--bs-sidebar-control-gap);
   flex: none;
 }
 

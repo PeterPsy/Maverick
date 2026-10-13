@@ -1,5 +1,236 @@
 {
   "tools": {
+    "chat_scheduled": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "list": "read",
+          "read": "read",
+          "create": "mutating",
+          "update": "mutating",
+          "delete": "destructive",
+          "pause": "mutating",
+          "resume": "mutating",
+          "run": "mutating",
+          "continue": "mutating",
+          "retry": "mutating",
+          "cancel": "mutating",
+          "initialize": "mutating"
+        }
+      },
+      "description": "Manage actor-owned Scheduled chats with acyclic skill-block graphs. Read before editing; update requires expected_revision. Successful blocks stop at checkpoints; continue requires run_id and explicit node_ids. Never confirm checkpoints or start work without the user asking. Recurrence repeats the whole graph.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "read",
+              "create",
+              "update",
+              "delete",
+              "pause",
+              "resume",
+              "run",
+              "continue",
+              "retry",
+              "cancel",
+              "initialize"
+            ],
+            "default": "list"
+          },
+          "chat_id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "creation_id": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "workspace_profile_binding_id": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "enum": [
+              "",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "conversation_mode": {
+            "type": "string",
+            "enum": [
+              "new",
+              "reuse"
+            ]
+          },
+          "notifications": {
+            "type": "boolean"
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "frequency": {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "once",
+                  "daily",
+                  "weekdays",
+                  "weekly"
+                ]
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "time": {
+                "type": "string"
+              },
+              "weekday": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "date": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "frequency"
+            ],
+            "additionalProperties": false
+          },
+          "graph": {
+            "type": "object",
+            "description": "DAG: nodes {id,title,instructions,skill_ids?:string[],position?:{x,y}}; edges {id?,source,target}. All predecessors must reach confirmed checkpoints.",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 64,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "instructions": {
+                      "type": "string"
+                    },
+                    "skill_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 8
+                    },
+                    "position": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "instructions"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "edges": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "nodes",
+              "edges"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
     "chat_learning_memory": {
       "effect_class": "mutating",
       "effect_class_by_argument": {"argument_name": "command", "omitted_effect_class": "mutating", "value_effect_classes": {"inspect": "read", "commit": "mutating"}},
@@ -58,8 +289,8 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project"]},
-          "type": {"type": "string", "enum": ["project"], "description": "Alias for entity_type."},
+          "entity_type": {"type": "string", "enum": ["project", "scheduled_chat"]},
+          "type": {"type": "string", "enum": ["project", "scheduled_chat"], "description": "Alias for entity_type."},
           "query": {"type": "string"},
           "q": {"type": "string", "description": "Alias for query."},
           "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
@@ -82,8 +313,8 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project", "thread"]},
-          "type": {"type": "string", "enum": ["project", "thread"], "description": "Alias for entity_type."},
+          "entity_type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"]},
+          "type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"], "description": "Alias for entity_type."},
           "entity_id": {"type": "string"},
           "project_id": {"type": "string", "description": "Alias for entity_id."},
           "thread_id": {"type": "string", "description": "Alias for entity_id for runtime-thread references."},
@@ -118,8 +349,8 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project", "thread"]},
-          "type": {"type": "string", "enum": ["project", "thread"], "description": "Alias for entity_type."},
+          "entity_type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"]},
+          "type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"], "description": "Alias for entity_type."},
           "entity_id": {"type": "string"},
           "project_id": {"type": "string", "description": "Alias for entity_id."},
           "thread_id": {"type": "string", "description": "Alias for entity_id for runtime-thread references."},

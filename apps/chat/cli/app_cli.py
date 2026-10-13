@@ -35,6 +35,21 @@ def _unexpected_cli_fields(arguments: dict) -> list[str]:
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
+command_name = str(payload.get("command_id", "")).rsplit(".", 1)[-1]
+if command_name == "scheduled" or (arguments.get("entity_type") or arguments.get("type")) == "scheduled_chat":
+    from scheduled_service import handle_scheduled, scheduled_references
+    from scheduled_response import envelope
+    try:
+        action = "scheduled." + str(arguments.get("action", "list")) if command_name == "scheduled" else arguments.get("action", "references.search")
+        request = {**payload, "body": {**arguments, "action": action}}
+        result = handle_scheduled(request) if command_name == "scheduled" else scheduled_references(request)
+        response = envelope(result, flattened=True, data_root=payload["data_root"])
+    except PermissionError as error:
+        response = {"status_code": 403, "error": str(error)}
+    except (ValueError, KeyError, TypeError) as error:
+        response = {"status_code": 400, "error": str(error)}
+    print(json.dumps(response, ensure_ascii=False))
+    raise SystemExit(0)
 action = str(arguments.get("action") or "operations.manifest").strip()
 body = {"action": action, **arguments}
 unexpected_fields = _unexpected_cli_fields(arguments)

@@ -14,6 +14,20 @@ from service import ChatValidationError, app_events_for_result, handle_action, u
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
 tool_name = str(payload.get("tool_name") or "")
+if tool_name == "chat_scheduled" or tool_name in {"chat_reference_search", "chat_reference_resolve", "chat_reference_summarize"} and (arguments.get("entity_type") or arguments.get("type")) == "scheduled_chat":
+    from scheduled_service import handle_scheduled, scheduled_references
+    from scheduled_response import envelope
+    try:
+        action = "scheduled." + str(arguments.get("action", "list")) if tool_name == "chat_scheduled" else "references." + tool_name.rsplit("_", 1)[-1]
+        request = {**payload, "body": {**arguments, "action": action}}
+        result = handle_scheduled(request) if tool_name == "chat_scheduled" else scheduled_references(request)
+        response = envelope(result, flattened=True, data_root=payload["data_root"])
+    except PermissionError as error:
+        response = {"status_code": 403, "error": str(error)}
+    except (ValueError, KeyError, TypeError) as error:
+        response = {"status_code": 400, "error": str(error)}
+    print(json.dumps(response, ensure_ascii=False))
+    raise SystemExit(0)
 if tool_name == "chat_learning_memory":
     from learning_service import handle_learning
     try:

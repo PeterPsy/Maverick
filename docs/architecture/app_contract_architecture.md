@@ -711,7 +711,7 @@ Some apps own business objects that other apps may need to reference without tak
 Examples:
 
 - Storage owns uploaded files and generated artifacts.
-- Chat owns projects and chat-specific UI state; core runtime owns chat thread records and transcript events.
+- Chat owns projects, chat-specific UI state and [scheduled-chat graphs, recurrence and checkpoints](scheduled_chats.md); core runtime owns chat thread records and transcript events.
 - Agents owns only intentional workspace agent definitions; Free Agent and Research are fixed Chat runners rather than catalog records.
 - Each Agents record is self-contained: identity, instructions, enabled state,
   and explicit skill ids. Roles, common prompts, trace settings, implicit skill

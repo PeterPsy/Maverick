@@ -19,6 +19,14 @@
         "view",
         "widget"
       ]
+    },
+    {
+      "interface": "notifications.inbox",
+      "version": "1",
+      "description": "Scheduled chat checkpoints, failures and completion.",
+      "surfaces": [
+        "backend"
+      ]
     }
   ],
   "requires": [
@@ -93,10 +101,12 @@
       "chat_reference_search",
       "chat_reference_resolve",
       "chat_reference_summarize",
-      "chat_learning_memory"
+      "chat_learning_memory",
+      "chat_scheduled"
     ],
     "cli_commands": [
-      "chat"
+      "chat",
+      "scheduled"
     ],
     "skills": [
       "chat-ops"
@@ -116,6 +126,14 @@
       {
         "resource": "learning",
         "description": "Conversation learning queue, candidates, proposals and review state changed."
+      },
+      {
+        "resource": "scheduled-chats",
+        "description": "Scheduled graphs, runs and checkpoints changed."
+      },
+      {
+        "resource": "notifications",
+        "description": "Scheduled chat inbox notifications and actor receipts changed."
       }
     ],
     "view_surfaces": [
@@ -165,6 +183,14 @@
         "entity_type": "thread",
         "display_name": "Chat Conversation",
         "searchable": false,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "scheduled_chat",
+        "display_name": "Scheduled Chat",
+        "searchable": true,
         "resolvable": true,
         "summarizable": true,
         "deep_link_supported": true
@@ -279,7 +305,8 @@
     "data_schema_version": "2",
     "primary_paths": [
       "data/chat/state.json",
-      "data/chat/learning.sqlite"
+      "data/chat/learning.sqlite",
+      "data/chat/scheduled.sqlite"
     ],
     "indices": null,
     "supports_export": true,

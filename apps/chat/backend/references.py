@@ -8,12 +8,21 @@ from urllib.parse import quote
 from chat_state import list_projects
 from errors import ChatValidationError
 
-REFERENCE_ENTITY_TYPES = {"project", "thread"}
+REFERENCE_ENTITY_TYPES = {"project", "thread", "scheduled_chat"}
 
 REFERENCE_MANIFEST = {
     "app_id": "chat",
     "schema_version": "1",
     "entity_types": [
+        {
+            "entity_type": "scheduled_chat",
+            "display_name": "Scheduled Chat",
+            "id_stability": "stable",
+            "searchable": True,
+            "resolvable": True,
+            "summarizable": True,
+            "deep_link_supported": True,
+        },
         {
             "entity_type": "project",
             "display_name": "Chat Project",

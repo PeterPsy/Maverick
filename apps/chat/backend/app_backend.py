@@ -32,10 +32,36 @@ def main() -> None:
     action = str(body.get("action") or "projects.list")
     data_root = Path(payload["data_root"])
 
+    from scheduled_service import handle_scheduled, scheduled_references
+    from scheduled_response import envelope as scheduled_envelope
+    scheduled_result = None
+    is_scheduled_reference = action.startswith("references.") and (body.get("entity_type") or body.get("type")) == "scheduled_chat"
+    is_scheduled_action = action.startswith(("scheduled.", "notifications.")) or is_scheduled_reference
+    lifecycle = payload.get("surface") in {"runtime_event", "background_tick", "backend_recovery"}
+    if action == "runtime.cleanup_sessions" and payload.get("effective_mode") == "full-access" and not payload.get("user_id"):
+        from scheduled_cleanup import cleanup
+        scheduled_result = cleanup(data_root, body.get("runtime_session_ids", []))
+    if is_scheduled_action or lifecycle:
+        try:
+            scheduled_result = scheduled_references(payload) if is_scheduled_reference else handle_scheduled(payload)
+        except PermissionError as error:
+            print(json.dumps({"status_code": 403, "json": {"error": str(error)}}))
+            return
+        except (ValueError, KeyError, TypeError) as error:
+            print(json.dumps({"status_code": 400, "json": {"error": str(error)}}))
+            return
+        if is_scheduled_action or payload.get("surface") == "runtime_event" and scheduled_result is not None:
+            print(json.dumps(scheduled_envelope(scheduled_result), ensure_ascii=False))
+            return
+
     if action.startswith("learning.") or action == "runtime.cleanup_sessions" or payload.get("surface") in {"runtime_event", "background_tick", "backend_recovery"}:
         from learning_service import handle_learning
         try:
             result = handle_learning(payload)
+            if scheduled_result:
+                from scheduled_tick import merge
+                result = merge(result, scheduled_result)
+            scheduled_changed = result.pop("_scheduled_changed", False)
             changed = result.pop("_changed", False)
             projects_changed = result.pop("_projects_changed", False)
             mutating_action = action.startswith("learning.") and action not in {"learning.read", "learning.analysis_admit"} and body.get("command") != "inspect"
@@ -44,6 +70,11 @@ def main() -> None:
                 envelope["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
             if projects_changed:
                 envelope.setdefault("app_events", []).append({"type": "maverick.app.data-changed", "resource": "projects"})
+            if scheduled_changed:
+                envelope.setdefault("app_events", []).extend([
+                    {"type": "maverick.app.data-changed", "resource": "scheduled-chats"},
+                    {"type": "maverick.app.data-changed", "resource": "notifications"},
+                ])
             for key in ("background_generation_requests", "background_generation_cancel_requests", "dependency_backend_requests", "runtime_session_requests", "runtime_turn_interrupt_requests"):
                 if key in result:
                     envelope[key] = result.pop(key)

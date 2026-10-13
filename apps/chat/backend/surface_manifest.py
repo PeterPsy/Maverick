@@ -8,6 +8,11 @@ OPERATIONS_MANIFEST = {
     "default_action": "operations.manifest",
     "recommended": [
         {
+            "task": "manage_scheduled_chat_graphs",
+            "operation": "chat_scheduled / scheduled CLI",
+            "calls_required": 1,
+        },
+        {
             "task": "discover_chat_operations",
             "operation": "operations.manifest",
             "calls_required": 1,
@@ -110,6 +115,7 @@ OPERATIONS_MANIFEST = {
     },
     "notes": [
         "Runtime threads, messages, turns, and cleanup are core runtime concerns.",
+        "Chat owns scheduled graphs, recurrence and checkpoints. Use chat_scheduled (MCP) or the scheduled CLI command. Read before editing and save with expected_revision. Only explicitly confirmed checkpoints satisfy graph dependencies.",
         "Chat CLI also exposes administrator-only learning inspection and backlog dismissal.",
     ],
 }

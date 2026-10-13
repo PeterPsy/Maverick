@@ -190,12 +190,30 @@ for (const theme of ["dark", "light"]) {
   });
 }
 
-for (const width of [320, 390, 900]) {
+async function installMobileShellChrome(page: Page) {
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--maverick-shell-mobile-content-top-offset", "91px");
+    const header = document.createElement("header");
+    header.dataset.testid = "shell-chrome";
+    header.setAttribute("aria-hidden", "true");
+    header.textContent = "☰  Maverick                       +";
+    Object.assign(header.style, {
+      position: "fixed", top: "47px", left: "0", right: "0", height: "44px",
+      zIndex: "1001", display: "flex", alignItems: "center", justifyContent: "center",
+      background: "var(--maverick-bg)", color: "var(--maverick-text)",
+    });
+    document.body.appendChild(header);
+  });
+  await page.addStyleTag({ content: ".chatapp-usage-modal-backdrop { --chatapp-usage-bottom-clearance: 34px; }" });
+}
+
+for (const width of [320, 390, 1280]) {
   for (const theme of ["dark", "light"]) {
     test(`token usage fits ${width}px in ${theme} mode and returns to its trigger`, async ({ page }) => {
       await page.setViewportSize({ width, height: 700 });
       const composer = await openFixture(page, width, false, 1, false, true);
       await page.evaluate((value) => { document.documentElement.dataset.maverickTheme = value; }, theme);
+      if (width <= 979) await installMobileShellChrome(page);
       const utilities = composer.getByRole("button", { name: "Composer utilities" });
       if (width <= 720) await utilities.click();
       const usage = composer.getByRole("button", { name: /Chat token usage/ });
@@ -209,9 +227,17 @@ for (const width of [320, 390, 900]) {
       expect(bounds.y).toBeGreaterThanOrEqual(0);
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       expect(bounds.y + bounds.height).toBeLessThanOrEqual(700);
+      if (width <= 979) {
+        expect(bounds.y).toBeGreaterThanOrEqual(103);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(654);
+        const closeBounds = (await close.boundingBox())!;
+        expect(closeBounds.width).toBeGreaterThanOrEqual(44);
+        expect(closeBounds.height).toBeGreaterThanOrEqual(44);
+      }
       expect(await dialog.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
       await dialog.locator(".chatapp-usage-modal__note").scrollIntoViewIfNeeded();
       await expect(close).toBeInViewport();
+      if (width <= 979) expect((await close.boundingBox())!.y).toBeGreaterThanOrEqual(103);
       await page.keyboard.press("Tab");
       await expect(close).toBeFocused();
       await page.keyboard.press("Shift+Tab");
@@ -234,6 +260,22 @@ for (const width of [320, 390, 900]) {
     });
   }
 }
+
+test("token usage clears shell navigation in a short landscape viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 480 });
+  const composer = await openFixture(page, 900, false, 1, false, true);
+  await installMobileShellChrome(page);
+  await composer.getByRole("button", { name: /Chat token usage/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Token usage" });
+  const bounds = (await dialog.boundingBox())!;
+  expect(bounds.y).toBeGreaterThanOrEqual(103);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(434);
+  await dialog.locator(".chatapp-usage-modal__note").scrollIntoViewIfNeeded();
+  const close = dialog.getByRole("button", { name: "Close token usage statistics" });
+  await expect(close).toBeInViewport();
+  await close.click();
+  await expect(dialog).toBeHidden();
+});
 
 test("groups controls by each composer width and changes layout at the container boundary", async ({ page }) => {
   await page.setViewportSize({ width: 1700, height: 900 });

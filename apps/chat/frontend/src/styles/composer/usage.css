@@ -37,12 +37,18 @@
 }
 
 .chatapp-usage-modal-backdrop {
+  --chatapp-usage-top-clearance: var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px));
+  --chatapp-usage-bottom-clearance: env(safe-area-inset-bottom, 0px);
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding:
+    calc(var(--chatapp-usage-top-clearance) + 1rem)
+    max(1rem, env(safe-area-inset-right, 0px))
+    calc(var(--chatapp-usage-bottom-clearance) + 1rem)
+    max(1rem, env(safe-area-inset-left, 0px));
   background: var(--chatapp-usage-backdrop);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -52,7 +58,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: min(34rem, 100%);
-  max-height: min(48rem, calc(100dvh - 2rem));
+  max-height: min(48rem, calc(100dvh - var(--chatapp-usage-top-clearance) - var(--chatapp-usage-bottom-clearance) - 2rem));
   overflow: hidden;
   border: 1px solid var(--maverick-border-strong);
   border-radius: var(--chatapp-cell-radius);
@@ -256,16 +262,38 @@
   border-top: 1px solid var(--maverick-border);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 979px) {
   .chatapp-usage-modal-backdrop {
-    padding: 0.6rem;
+    align-items: start;
+    padding:
+      calc(var(--chatapp-usage-top-clearance) + 0.75rem)
+      calc(env(safe-area-inset-right, 0px) + 0.6rem)
+      calc(var(--chatapp-usage-bottom-clearance) + 0.75rem)
+      calc(env(safe-area-inset-left, 0px) + 0.6rem);
   }
 
   .chatapp-usage-modal {
-    max-height: calc(100dvh - 1.2rem);
+    max-height: calc(100dvh - var(--chatapp-usage-top-clearance) - var(--chatapp-usage-bottom-clearance) - 1.5rem);
+  }
+
+  .chatapp-usage-modal__header {
+    gap: 0.6rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .chatapp-usage-modal__close {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
   }
 
   .chatapp-usage-modal__body {
+    gap: 1rem;
+    padding: 0.75rem;
+  }
+
+  .chatapp-usage-modal__context,
+  .chatapp-usage-modal__summary article {
     padding: 0.75rem;
   }
 }

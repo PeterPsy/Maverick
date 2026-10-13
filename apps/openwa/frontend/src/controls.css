@@ -42,11 +42,17 @@ button:disabled {
   cursor: default;
 }
 button:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: 1px solid var(--muted);
+  outline-offset: -1px;
+}
+button.primary:focus-visible {
+  outline-color: var(--primary-text);
+}
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--border-strong);
 }
 button.primary {
   background: var(--accent);

@@ -283,11 +283,7 @@
   overflow: auto;
 }
 .search:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.search input:focus-visible {
-  outline: none;
+  border-color: var(--border-strong);
 }
 .resource-error {
   margin: 10px 8px;

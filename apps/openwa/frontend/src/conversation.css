@@ -85,10 +85,6 @@
   max-height: 140px;
   font-size: 13px;
 }
-.composer textarea:focus {
-  outline: none;
-  border-color: var(--border-strong);
-}
 .send-button {
   height: 42px;
 }

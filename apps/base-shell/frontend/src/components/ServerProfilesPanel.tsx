@@ -55,7 +55,7 @@ export function ServerProfilesPanel({ beforeSwitch }: { beforeSwitch?: () => voi
   </section>;
 }
 
-export function ServerProfilesLauncher({ beforeSwitch }: { beforeSwitch?: () => void }) {
+export function ServerProfilesLauncher({ beforeSwitch, inline = false }: { beforeSwitch?: () => void; inline?: boolean }) {
   const [open, setOpen] = useState(false);
   const launcher = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
@@ -63,15 +63,22 @@ export function ServerProfilesLauncher({ beforeSwitch }: { beforeSwitch?: () => 
     if (wasOpen.current && !open) launcher.current?.focus();
     wasOpen.current = open;
   }, [open]);
-  return <><button ref={launcher} type="button" className="bs-server-launcher" onClick={() => setOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">dns</span> Servers</button>
+  return <><button ref={launcher} type="button" className={inline ? "bs-login__server" : "bs-server-launcher"}
+    aria-label={inline ? `Change server (${window.location.host})` : undefined} aria-haspopup="dialog" aria-expanded={open}
+    onClick={() => setOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">dns</span>{inline ? window.location.host : " Servers"}</button>
     {open && <ServerProfilesDialog onClose={() => setOpen(false)} beforeSwitch={beforeSwitch} />}</>;
 }
 
 function ServerProfilesDialog({ onClose, beforeSwitch }: { onClose: () => void; beforeSwitch?: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { dialog.current?.showModal(); return () => dialog.current?.close(); }, []);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    heading.current?.focus();
+    return () => dialog.current?.close();
+  }, []);
   return <dialog ref={dialog} className="bs-connected-accounts bs-connected-accounts--servers" aria-label="Servers" onCancel={event => { event.preventDefault(); onClose(); }}>
-    <header><div className="bs-server-dialog-heading"><span className="material-symbols-rounded" aria-hidden="true">dns</span><div><h2>Servers</h2><p>Choose where you connect.</p></div></div><button className="bs-connected-accounts__close" aria-label="Close servers" onClick={onClose}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
+    <header><div className="bs-server-dialog-heading"><span className="material-symbols-rounded" aria-hidden="true">dns</span><div><h2 ref={heading} tabIndex={-1}>Servers</h2><p>Choose where you connect.</p></div></div><button className="bs-connected-accounts__close" aria-label="Close servers" onClick={onClose}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
     <div className="bs-connected-accounts__body"><ServerProfilesPanel beforeSwitch={beforeSwitch} /></div>
   </dialog>;
 }

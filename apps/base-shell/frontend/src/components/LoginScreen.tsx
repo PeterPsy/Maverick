@@ -98,7 +98,6 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
   return <main className="bs-login">
     <Suspense fallback={<div className="bs-login-paper-bg is-static" aria-hidden="true" />}><LoginPaperBackground /></Suspense>
     <div className="bs-login__brand-strip"><BrandMark className="bs-login__brand-mark" variant="mark" /></div>
-    <ServerProfilesLauncher beforeSwitch={cancelGoogle} />
     <section className="bs-login__stage" aria-label="Maverick sign-in">
       <div className="bs-login__content">
         <form className="bs-login__form" onSubmit={submit} aria-busy={isSubmitting}>
@@ -161,7 +160,7 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
           {googlePending && <div className="bs-login__pending"><span className="bs-login__spinner" aria-hidden="true" /><p role="status">Continue in your browser. Maverick will update automatically.</p>
             <button type="button" onClick={cancelGoogle}>Cancel Google sign-in</button></div>}
         </div>}
-        <p className="bs-login__server"><span className="material-symbols-rounded" aria-hidden="true">dns</span>{window.location.host}</p>
+        <ServerProfilesLauncher inline beforeSwitch={cancelGoogle} />
       </div>
     </section>
   </main>;

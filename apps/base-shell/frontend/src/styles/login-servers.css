@@ -1,0 +1,138 @@
+.bs-login__server:hover {
+  background: rgba(255, 255, 255, .06);
+  color: var(--bs-login-foreground);
+}
+
+.bs-login .bs-connected-accounts--servers {
+  width: min(34rem, calc(100vw - 32px));
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .065), transparent 55%), rgba(12, 12, 12, .72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 24px 80px rgba(0, 0, 0, .3);
+  backdrop-filter: blur(28px);
+  color: var(--bs-login-foreground);
+}
+
+.bs-login .bs-connected-accounts--servers::backdrop {
+  background: rgba(0, 0, 0, .2);
+  backdrop-filter: blur(6px);
+}
+
+.bs-login .bs-connected-accounts--servers > header {
+  padding: 24px 24px 18px;
+  border-bottom: 0;
+  align-items: start;
+}
+
+.bs-login .bs-server-dialog-heading { gap: 12px; }
+.bs-login .bs-server-dialog-heading > .material-symbols-rounded {
+  flex: 0 0 auto;
+  height: auto;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 24px;
+  color: var(--bs-login-muted);
+}
+
+.bs-login .bs-connected-accounts--servers h2 {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: -.5px;
+}
+.bs-login .bs-connected-accounts--servers h3 {
+  font-size: 13px;
+  font-weight: 500;
+}
+.bs-login .bs-connected-accounts--servers p,
+.bs-login .bs-connected-accounts--servers small { color: var(--bs-login-muted); }
+.bs-login .bs-connected-accounts--servers .bs-connected-accounts__body { padding: 0 24px 24px; }
+.bs-login .bs-connected-accounts--servers .bs-account-section { gap: 16px; }
+.bs-login .bs-connected-accounts--servers .bs-account-section p { font-size: 12px; }
+
+.bs-login .bs-server-card {
+  gap: 12px;
+  padding: 16px;
+  border-color: rgba(255, 255, 255, .12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .035);
+}
+.bs-login .bs-server-card.is-current {
+  background: linear-gradient(120deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .02));
+}
+.bs-login .bs-server-card__heading { gap: 10px; }
+.bs-login .bs-server-card__heading > .material-symbols-rounded {
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--bs-login-muted);
+}
+.bs-login .bs-server-card strong { font-size: 13px; font-weight: 500; }
+.bs-login .bs-server-card__badge { border: 0; padding: 0; color: var(--bs-login-muted); }
+.bs-login .bs-server-card > .bs-connected-accounts__actions:empty { display: none; }
+
+.bs-login .bs-server-form { gap: 12px; padding-top: 16px; }
+.bs-login .bs-server-form label { gap: 7px; font-size: 11px; }
+.bs-login .bs-server-form input {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 999px;
+  background: var(--bs-login-glass-background);
+  box-shadow: var(--bs-login-glass-shadow);
+  font-size: 13px;
+}
+.bs-login .bs-server-form input::placeholder { color: var(--bs-login-muted); }
+
+.bs-login .bs-connected-accounts--servers button {
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 999px;
+  background: var(--bs-login-glass-background);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+  color: var(--bs-login-foreground);
+}
+.bs-login .bs-connected-accounts--servers button:hover { border-color: rgba(255, 255, 255, .3); }
+.bs-login .bs-connected-accounts--servers .bs-server-form button[type="submit"] {
+  background: var(--bs-login-glass-background);
+  box-shadow: var(--bs-login-glass-shadow);
+  color: var(--bs-login-foreground);
+}
+.bs-login .bs-connected-accounts--servers button.bs-connected-accounts__close {
+  flex-basis: 36px;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--bs-login-muted);
+}
+.bs-login .bs-connected-accounts--servers button.bs-connected-accounts__close:hover {
+  background: rgba(255, 255, 255, .06);
+  color: var(--bs-login-foreground);
+}
+
+.bs-login__server:focus-visible,
+.bs-login .bs-connected-accounts--servers button:focus-visible,
+.bs-login .bs-server-form input:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, .55);
+  outline-offset: 2px;
+}
+
+.bs-login .bs-connected-accounts--servers .bs-account-note { font-size: 11px; }
+.bs-login .bs-connected-accounts--servers [role="alert"] {
+  border-color: rgba(255, 160, 170, .3);
+  color: #ffdce2;
+}
+
+@media (max-width: 680px) {
+  .bs-login .bs-connected-accounts--servers { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); border-radius: 24px; }
+  .bs-login .bs-connected-accounts--servers > header { padding: 20px 20px 16px; }
+  .bs-login .bs-connected-accounts--servers .bs-connected-accounts__body { padding: 0 20px 20px; }
+}

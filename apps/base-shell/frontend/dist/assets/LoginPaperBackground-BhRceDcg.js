@@ -1,4 +1,4 @@
-import{r as f,j as R}from"./index-CVQdyBLc.js";import"./modulepreload-polyfill-B5Qt9EMX.js";const P=`#version 300 es
+import{r as f,j as R}from"./index-BcRkCAO0.js";import"./modulepreload-polyfill-B5Qt9EMX.js";const P=`#version 300 es
 precision mediump float;
 
 layout(location = 0) in vec4 a_position;

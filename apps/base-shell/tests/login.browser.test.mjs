@@ -76,9 +76,13 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       assert.equal(await google.isEnabled(), true);
       await page.waitForFunction(() => !document.querySelector(".bs-login__pending"));
       assert.equal(cancelled, 1);
-      await page.getByRole("button", { name: "Servers", exact: true }).click();
+      const serverLauncher = page.getByRole("button", { name: /^Change server / });
+      assert.equal(await page.locator(".bs-server-launcher").count(), 0);
+      assert.ok((await serverLauncher.boundingBox()).y >= googleBox.y + googleBox.height, "Change server belongs below the login options");
+      await serverLauncher.click();
       const panel = page.getByRole("dialog", { name: "Servers", exact: true });
       await panel.getByRole("heading", { name: "Saved connections" }).waitFor();
+      assert.equal(await panel.getByRole("heading", { name: "Servers", exact: true }).evaluate(element => element === document.activeElement), true);
       const box = await panel.boundingBox();
       assert.ok(box.x >= 0 && box.x + box.width <= viewport.width);
       assert.ok(box.y >= 0 && box.y + box.height <= viewport.height);
@@ -91,7 +95,7 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-servers-${viewport.width}.png` });
       await page.keyboard.press("Escape");
       await panel.waitFor({ state: "hidden" });
-      await page.waitForFunction(() => document.activeElement?.matches(".bs-server-launcher"));
+      await page.waitForFunction(() => document.activeElement?.matches(".bs-login__server"));
       // Password login remains available, with keyboard focus moving to the password.
       await page.getByLabel("Email or username", { exact: true }).fill("admin");
       await page.getByRole("button", { name: "Continue", exact: true }).click();

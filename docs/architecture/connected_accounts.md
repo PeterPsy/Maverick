@@ -25,6 +25,11 @@ below the password-login form, without an enclosing card. Native browser handoff
 consent cancellation and the Servers launcher remain available. On short mobile
 viewports the composition scrolls vertically; reduced-motion preferences use a
 static background and disable field and step animations.
+The current-server label below the login options opens the server selector;
+login has no separate corner launcher. Its standalone dialog uses a compact
+translucent surface, glass inputs and pill actions over the login background.
+Opening it focuses the heading; keyboard focus remains visible on controls,
+and closing returns focus to the current-server button.
 
 OAuth uses server-side authorization-code exchange, PKCE, a browser-bound,
 single-use, expiring state, and verified OpenID claims. Only actually granted

@@ -97,7 +97,7 @@ describe("Google login and connected accounts", () => {
     api.startGoogle.mockImplementation(() => new Promise(() => {}));
     await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
     await act(async () => button("Continue with Google").click());
-    await act(async () => button("dns Servers").click());
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!.click());
     await act(async () => button("Switch server").click());
     expect(container.textContent).toContain("Server unavailable");
     expect(api.startGoogle.mock.calls[0][2].aborted).toBe(true);

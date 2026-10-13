@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from core.api.app_frame_assets import rewrite_public_app_asset_urls
+from core.api.app_frame_background import GRANT_PATH, REQUEST_PATH, handle_background_request
 from core.api.app_frame_launch import (
     APP_FRAME_BOOTSTRAP_PATH,
     APP_FRAME_SIDECAR_ID,
@@ -240,6 +241,13 @@ async def handle_app_frame_browser_origin(
     host = hosts[0].lower()
     path = str(scope.get("path") or "/")
     method = str(scope.get("method") or "GET").upper()
+    if path in {GRANT_PATH, REQUEST_PATH}:
+        await handle_background_request(
+            state, scope=scope, receive=receive, send=send, host=host, start_path=start_path, forward=forward,
+            validate_session=_validated_request_session, current_frame=_current_app_frame,
+            platform_scope=_platform_scope, send_json=_send_json,
+        )
+        return
     if path == APP_FRAME_BOOTSTRAP_PATH:
         await _handle_bootstrap(
             state,

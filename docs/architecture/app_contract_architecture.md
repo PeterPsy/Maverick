@@ -1895,6 +1895,21 @@ binding. Apps may use this host-attested context to reject a legacy cache value
 from another scope; URL query parameters are not workspace attestation and the
 context itself does not authorize an app action.
 
+An authenticated app frame may delegate its own backend to a Chrome extension
+through `POST /.well-known/maverick-app-background/grant`. The issuer must provide
+same-origin CSRF proof, an exact `chrome-extension://` client origin and a bounded
+explicit action list. Widget documents cannot issue grants. Core retains only a
+hashed, memory-only capability bound to the issuing actor, login, workspace, app
+generation, host and client origin. The client sends its bearer exclusively to
+`/.well-known/maverick-app-background/request`; only POST bodies whose explicit
+`action` is admitted reach the issuing app's backend. DELETE revokes the grant.
+Every call revalidates live login, active workspace, membership, visibility and app
+generation; no platform cookie or general user token is delivered to the client.
+The transport strips its bearer before invoking the app and never forwards
+response cookies. Idle expiry is ten minutes, absolute expiry 24 hours, and Core
+restart clears grants. This authority intentionally outlives the setup document;
+app-specific sharing scope, operation claims and completion policy stay app-owned.
+
 There is no same-platform-origin compatibility mode for executable app or
 widget documents. If the isolated browser origin cannot be created or reached,
 Core fails launch closed and keeps direct platform-origin documents blocked.

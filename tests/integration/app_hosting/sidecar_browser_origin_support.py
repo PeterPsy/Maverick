@@ -176,7 +176,9 @@ class SidecarBrowserOriginTestSupport:
         async def receive() -> dict:
             nonlocal delivered
             if delivered:
-                return {"type": "http.request", "body": b"", "more_body": False}
+                # A real ASGI connection waits for disconnect after its body.
+                # Repeating empty requests starves the backend's disconnect watcher.
+                return await asyncio.Future()
             delivered = True
             return {"type": "http.request", "body": body, "more_body": False}
 

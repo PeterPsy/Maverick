@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import os
 from pathlib import Path
@@ -19,6 +19,7 @@ from core.egress.agentic_policy import AgenticEgressEvaluator
 from core.apps.store import AppDocumentStore
 from core.apps.runtime_root_capabilities import RuntimeRootCapabilityStore
 from core.apps.sidecar_browser_sessions import SidecarBrowserSessionStore
+from core.apps.app_background_grants import AppBackgroundGrantStore
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
 from core.connected_accounts.store import AccountDocumentStore
@@ -99,6 +100,7 @@ class PlatformState:
     runtime_root_capabilities: RuntimeRootCapabilityStore
     device_use_service: DeviceUseService
     root_shell_app_id: str
+    app_background_grants: AppBackgroundGrantStore = field(default_factory=AppBackgroundGrantStore)
     account_store: AccountDocumentStore | None = None
     background_generation_shutdown_controller: EntrypointShutdownController | None = None
     runtime_tool_ledger: RuntimeToolLedger | None = None

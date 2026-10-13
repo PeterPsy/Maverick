@@ -699,11 +699,17 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             self.assertEqual(stale_status, 401)
 
     @staticmethod
-    def _state_with_frontend(repo_root: Path, *, include_other_app: bool = False):
+    def _state_with_frontend(repo_root: Path, *, include_other_app: bool = False, include_backend: bool = False):
         from core.api.platform_state import bootstrap_platform_state
 
         state = bootstrap_platform_state(start_path=repo_root)
         app_root = repo_root / "apps" / "frame-demo"
+        if include_backend:
+            app_root.mkdir(parents=True)
+            (app_root / "backend.py").write_text(
+                'import json,sys\np=json.load(sys.stdin)\nprint(json.dumps({"status_code":200,"json":{"app_id":p["app_id"],"workspace_id":p["workspace_id"],"user_id":p["user_id"],"body":p["body"],"headers":p.get("headers",{})}}))\n',
+                encoding="utf-8",
+            )
         frontend_root = app_root / "frontend" / "dist"
         frontend_root.mkdir(parents=True)
         widget_root = frontend_root / "widgets" / "frame-widget"
@@ -762,7 +768,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             description="Isolated app-frame integration fixture.",
             publisher="maverick",
             contract=build_app_contract(
-                entrypoints=build_app_entrypoints(frontend="frontend/dist"),
+                entrypoints=build_app_entrypoints(frontend="frontend/dist", backend="backend.py" if include_backend else None),
                 widgets=[
                     build_widget_declaration(
                         widget_id="frame-widget",

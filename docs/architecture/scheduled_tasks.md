@@ -42,7 +42,8 @@ Central Shell notifications report checkpoints, failures and completion, with
 Chat-owned deduplication and per-user receipts. The UI is English, uses native
 Chat glass tokens and lazy-loads the graph editor.
 
-The sidebar presents Chats and Scheduled tasks as separate sibling glass blocks.
+The sidebar presents Chats and Scheduled tasks as separate sibling sections,
+without container backgrounds, borders or shadows; spacing separates the lists.
 Both use the same view selector, search and action toolbar. Task filters and
 search are local to the task block; the chat search shortcut remains scoped to
 Chats. Each list scrolls independently, keeping both toolbars available. Task

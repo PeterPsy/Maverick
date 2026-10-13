@@ -211,7 +211,7 @@ timezone-aware daily, weekday, weekly, one-time or on-demand schedule. The block
 editor uses React Flow: add blocks, write their skill instructions, connect
 prerequisites and save. **Build with AI** prepares a request in the same chat's
 bottom composer; the agent edits through the validated `chat_scheduled` tool.
-Chats and Scheduled tasks are separate glass blocks in the sidebar, with matching
+Chats and Scheduled tasks are separate sections in the sidebar, with matching
 view, search and action bars. The task bar filters by status and opens task
 management or creation directly at `/app/chat/scheduled/create/new`.
 

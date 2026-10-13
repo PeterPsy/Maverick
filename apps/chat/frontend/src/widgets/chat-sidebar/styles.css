@@ -207,10 +207,6 @@ input {
   flex: 1;
   min-height: 100px;
   padding: 10px 6px 6px;
-  border-radius: var(--chat-sidebar-cell-radius);
-  background: var(--chat-sidebar-glass-surface);
-  box-shadow: var(--chat-sidebar-glass-edge);
-  background-image: var(--chat-sidebar-glass-highlight);
 }
 
 .bs-chat-sidebar-block--tasks {

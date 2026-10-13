@@ -486,9 +486,9 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v52`;
+- executor `macos-v53`;
 - tool digest
-  `dd3fe3dec9fb12c1d97aee1eced31754fcc3d77cc8e3f0c30bc701ef4b7d1ca8`;
+  `1fae7ddd33dabce4111e3360226d2ba4252e616bb99f1d1762cd4edad12d2947`;
 - mode `full`;
 - initial app and the running-app discovery snapshot.
 
@@ -945,8 +945,14 @@ No model-provided JavaScript or personal browser profile is exposed.
 
 Native screenshots can carry supplemental `native_` AX targets from the exact
 window. Those retain process birth, window and field geometry, value and selection
-state. Editing revalidates those identities before direct AXValue/AXSelectedText
-writes or process-local focus and PID events. `select_text` uses unique UTF-16
+state. Process-local AXFocusedWindow/AXMainWindow supplement AXWindows when
+AppKit omits an inactive-Space document; unique matching process/window geometry
+still binds every field to the captured window. Editing revalidates those
+identities before direct AXValue/AXSelectedText writes or process-local focus
+and PID events. AppKit delivery prepares the verified window activation point
+and field, then posts process and exact-window key/main notifications only to
+that PID. Cleanup checks process birth and never undoes a later human activation.
+`select_text` uses unique UTF-16
 ranges with optional context; RTF paste validates matching plain text and restores
 the clipboard only while its own change count remains current. This is an
 independent implementation, not a claim that ChatGPT's proprietary focus enforcer
@@ -959,7 +965,26 @@ remain in place. Semantic/control operations remain controls; only `locate` is
 a read. Reconnection accepts the exact reviewed v52 digest and retires its tool
 context without broadening the existing Full authority.
 
-Acceptance covers an isolated cross-process AppKit editor and a local HTTP form
-with same-origin and cross-origin frames. Release verification must still measure
-real TextEdit/Electron and inactive-Space cases; these fixtures do not prove
-universal ChatGPT parity or an A/B performance advantage.
+Native revision `eacab06e211a1b811af35608a5b22e87cb2f1ec3` passed signed acceptance
+with 21 cases, including an isolated cross-process AppKit editor and a local HTTP
+form with same-origin and cross-origin frames. The explicit installation run
+[`38427541637`](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38427541637)
+also verified the previously observed disposable TextEdit document on an inactive
+Space. Contextual selection, typing and RTF paste retained bold, preserved system
+keyboard focus and restored the original text. The measured native sequence took
+381.723 ms; this is not relay/model timing or a comparative performance result.
+The same run installed and opened 0.5.0 (78) at the existing app path.
+Post-install diagnostics
+[`38428039852`](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38428039852)
+verified the installed revision, deep/strict signatures, bundled command host
+and one process running that installed copy. The update closed the previous
+Device Use socket; a fresh user connection is needed for live relay acceptance.
+
+Core source and the native contract both use v53 and digest
+`1fae7ddd33dabce4111e3360226d2ba4252e616bb99f1d1762cd4edad12d2947`.
+The official `core.recovery.restart_backend` attempt returned `restarted=false`
+because systemd is unavailable in this environment, with `healthy=true`.
+The running backend therefore still requires a managed reload before the new
+contract can be claimed active. No unmanaged replacement server was started.
+Real Electron editing and ChatGPT A/B acceptance remain unmeasured; the successful
+TextEdit and browser cases do not establish universal application parity.

@@ -1,8 +1,0 @@
-node_modules/
-__pycache__/
-*.pyc
-.env
-runtime/upstream/node_modules/
-runtime/upstream/dist/
-runtime/upstream/dashboard/node_modules/
-runtime/upstream/

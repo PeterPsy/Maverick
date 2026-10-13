@@ -380,11 +380,12 @@ class DeviceUseService:
                 ("mac_browser", "observe"),
             } or (tool == "mac_peekaboo" and action in {
                 "click", "double_click", "right_click", "type", "replace", "click_point",
-                "type_at_point", "replace_at_point", "press", "scroll",
+                "type_at_point", "replace_at_point", "press", "scroll", "set_value", "select_text", "paste",
             } and arguments.get("observe_after") is True) or (
                 tool == "mac_browser" and action in {
                     "navigate", "click", "double_click", "right_click", "hover",
-                    "type_text", "replace_text", "keypress", "scroll",
+                    "type_text", "replace_text", "keypress", "scroll", "click_element", "fill",
+                    "set_checked", "select_option", "select_text", "paste", "upload_files",
                 } and arguments.get("observe_after") is True
             )
         ))

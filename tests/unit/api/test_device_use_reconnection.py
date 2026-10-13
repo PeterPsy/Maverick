@@ -37,6 +37,17 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual((status, payload["error"]), (403, "device_use_session_forbidden"))
 
+    def test_reviewed_v52_upgrade_preserves_full_authority(self):
+        old = replace(self.before.device_use_binding, executor_contract="macos-v52",
+                      tool_contract_digest="dd3fe3dec9fb12c1d97aee1eced31754fcc3d77cc8e3f0c30bc701ef4b7d1ca8")
+        self.state.runtime_store.save_session(replace(self.before, device_use_binding=old))
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual(status, 200, payload)
+        current = self.state.runtime_store.get_session(self.session_id)
+        self.assertEqual(current.device_use_binding.executor_contract, DEVICE_USE_EXECUTOR_CONTRACT)
+        self.assertEqual(current.execution_binding, self.before.execution_binding)
+        self.assertEqual(current.device_use_binding.mode, "full")
+
     def test_reviewed_v51_full_only_upgrade_retires_old_context(self):
         old = replace(self.before.device_use_binding, executor_contract="macos-v51",
                       tool_contract_digest="de5800e0240474b5108e40f3d35c0aa78532743949d9d8696a6ac43505762c76")

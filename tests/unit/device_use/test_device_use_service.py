@@ -21,15 +21,20 @@ from core.device_use.service import DeviceUseService, encode_image_frame
 
 class DeviceUseServiceTestCase(unittest.TestCase):
     def test_companion_observation_and_declared_input_image_use_the_existing_binary_route(self):
-        for action, extra in [("observe", {}), ("click", {"observe_after": True})]:
-            with self.subTest(action=action):
+        cases = [("mac_browser", "observe", {})]
+        cases += [("mac_browser", action, {"observe_after": True}) for action in
+                  ["click", "click_element", "fill", "set_checked", "select_option", "select_text", "paste", "upload_files"]]
+        cases += [("mac_peekaboo", action, {"observe_after": True, "bundle_id": "com.apple.TextEdit"})
+                  for action in ["set_value", "select_text", "paste"]]
+        for tool, action, extra in cases:
+            with self.subTest(tool=tool, action=action):
                 service, binding, outbound = self.connected()
                 results, errors = [], []
                 args = {"action": action, "tab_id": "companion-tab", **extra}
                 worker = threading.Thread(target=lambda: self._capture_error(errors, lambda: results.append(service.invoke(
                     binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
                     provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="browser-call",
-                    tool_name="mac_browser", arguments=args, task_text="browse in companion", timeout_seconds=1))))
+                    tool_name=tool, arguments=args, task_text="verify exact native surface", timeout_seconds=1))))
                 worker.start()
                 frame = outbound.get(timeout=1)
                 jpeg = b"\xff\xd8companion\xff\xd9"
@@ -78,10 +83,10 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertIn("launch_app", tools["mac_peekaboo"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertIn("plain metadata", DEVICE_USE_COMPANION_GUIDANCE)
 
-    def test_contract_digest_is_the_frozen_macos_v52_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v53_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "dd3fe3dec9fb12c1d97aee1eced31754fcc3d77cc8e3f0c30bc701ef4b7d1ca8",
+            "1fae7ddd33dabce4111e3360226d2ba4252e616bb99f1d1762cd4edad12d2947",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):

@@ -930,3 +930,36 @@ verified native `10d1fc1` and installed/launched 0.4.2 (76). The Swift suite and
 all 18 signed physical cases passed; the download and three real application
 captures retained their byte/image evidence. The app restart disconnected this
 chat's native session, so final installation confirmation is runner evidence.
+
+## Semantic browser and native editing (v53, 13 October 2026)
+
+The paired v53 contract adds frame-bound role/label/text queries, match diagnostics,
+semantic click and fill, checkboxes, options, contextual text selection, typed HTML
+paste and local file-input upload to the private Mac companion. Each mutation
+consumes the exact tab receipt; frames come from the observed frame tree and
+are resolved in a product-owned isolated world. OOPIF sessions are attached
+explicitly, local points are mapped through verified frame-owner content quads,
+and occlusion or unsupported transforms fail before pointer input. The executor
+requires two equal consecutive rectangle comparisons within ten animation frames.
+No model-provided JavaScript or personal browser profile is exposed.
+
+Native screenshots can carry supplemental `native_` AX targets from the exact
+window. Those retain process birth, window and field geometry, value and selection
+state. Editing revalidates those identities before direct AXValue/AXSelectedText
+writes or process-local focus and PID events. `select_text` uses unique UTF-16
+ranges with optional context; RTF paste validates matching plain text and restores
+the clipboard only while its own change count remains current. This is an
+independent implementation, not a claim that ChatGPT's proprietary focus enforcer
+has been reproduced. Missing AX targets remain a technical inability to type.
+
+ScreenCaptureKit reads can recover once with fresh owner/window/bounds validation;
+input is never retried. Closed/terminated windows fail recovery. Persistent
+companion login, per-tab single-use receipts and byte/hash download certification
+remain in place. Semantic/control operations remain controls; only `locate` is
+a read. Reconnection accepts the exact reviewed v52 digest and retires its tool
+context without broadening the existing Full authority.
+
+Acceptance covers an isolated cross-process AppKit editor and a local HTTP form
+with same-origin and cross-origin frames. Release verification must still measure
+real TextEdit/Electron and inactive-Space cases; these fixtures do not prove
+universal ChatGPT parity or an A/B performance advantage.

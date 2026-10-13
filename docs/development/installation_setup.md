@@ -34,9 +34,12 @@ UI tests cover stable drafts/focus and credential clearing without browser stora
 The final focused runs passed 33 installation checks, 20 installer/contract/asset
 checks and 15 Settings UI checks. Both frontend manifests were rebuilt through
 the official operator CLI with the host's deployed SQLite runtime environment.
-Authenticated desktop/mobile inspection preceded the final wordmark and diagnostic
-label polish; a fresh authenticated browser inspection of that polish was unavailable
-after the runtime session expired. Its build and UI tests passed.
+After the final backend restart, fresh authenticated inspection verified the final
+wordmark and diagnostic labels at both desktop and mobile sizes. The Settings
+page also loaded inside its isolated app frame on mobile. Its inspection/status
+requests and standalone setup's Check connection request returned HTTP 200.
+The final CLI inspection still reports Ready and fresh main/app HTTPS checks pass.
+All temporary Browser sessions created for this verification were closed.
 
 The broader fast run exposed five provider-profile tests using an unavailable
 native model and a Storage migration test loading SQLite 3.46.1 instead of the

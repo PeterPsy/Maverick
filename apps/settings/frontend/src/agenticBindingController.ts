@@ -98,7 +98,7 @@ export function createAgenticBindingController(context: AgenticBindingController
       context.state.agenticBindingErrors[key] = '';
       context.render();
       try {
-        await configureAgenticWorkspaceBinding({
+        const result = await configureAgenticWorkspaceBinding({
           definition_id: definitionId,
           binding_id: item.binding?.binding_id || null,
           credential_binding_id: field<HTMLSelectElement>('credential_binding_id')?.value || null,
@@ -116,8 +116,10 @@ export function createAgenticBindingController(context: AgenticBindingController
             require_confirmation_for_destructive: checked('require_confirmation_for_destructive')
           }
         });
-        const settings = await getPlatformSettings('models');
-        if (request !== generation || context.getSettings()?.workspace.workspace_id !== workspaceId || settings.workspace.workspace_id !== workspaceId) return;
+        const currentSettings = context.getSettings();
+        if (request !== generation || !currentSettings || currentSettings.workspace.workspace_id !== workspaceId
+          || result.agentic_admin.workspace_id !== workspaceId) return;
+        const settings = { ...currentSettings, agentic_admin: result.agentic_admin };
         syncSettingsPanelDraft(context.state, settings);
         clearSettingsDrafts(form);
         context.setSettings(settings, `${item.display_name} binding updated for new sessions.`);

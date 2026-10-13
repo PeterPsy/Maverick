@@ -28,8 +28,8 @@ function settings(enabled = false): PlatformSettings {
   } as unknown as PlatformSettings;
 }
 
-function mount() {
-  let current = settings();
+function mount(initial = settings()) {
+  let current = initial;
   let saving: Promise<void>;
   const state = createSettingsPanelState();
   const render = () => {
@@ -71,6 +71,23 @@ it('uses the acknowledged server switch state after a successful save', async ()
   const toggle = document.querySelector<HTMLInputElement>('[data-agentic-model-toggle]')!;
   expect(toggle.checked).toBe(true); expect(toggle.disabled).toBe(false);
   expect(flow.state.pendingAgenticEnabled).toEqual({});
+});
+
+it.each([true, false])('keeps the acknowledged enabled=%s state when catalog refresh is unavailable', async enabled => {
+  vi.mocked(configureAgenticWorkspaceBinding).mockResolvedValue({
+    binding_id: 'binding', agentic_admin: settings(enabled).agentic_admin!
+  });
+  vi.mocked(getPlatformSettings).mockRejectedValue(new Error('Catalog refresh unavailable'));
+  const flow = mount(settings(!enabled));
+  document.querySelector<HTMLInputElement>('[data-agentic-model-toggle]')!.click();
+  await flow.saving();
+  const toggle = document.querySelector<HTMLInputElement>('[data-agentic-model-toggle]')!;
+  expect(toggle.checked).toBe(enabled);
+  expect(toggle.disabled).toBe(false);
+  expect(toggle.closest('label')!.textContent).toContain(enabled ? 'On' : 'Off');
+  expect(flow.state.agenticBindingErrors.model).toBe('');
+  expect(flow.state.pendingAgenticEnabled).toEqual({});
+  expect(getPlatformSettings).not.toHaveBeenCalled();
 });
 
 it('ignores a late model save after the workspace state has reset', async () => {

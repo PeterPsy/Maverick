@@ -44,6 +44,12 @@ User mutations consume their authoritative response instead of rereading all
 settings. Form actions capture values before disabling controls, communicate
 saving/success/error locally, and reject duplicate submissions.
 
+Model binding saves apply Core's returned `agentic_admin` projection to the latest
+workspace snapshot as soon as the write is acknowledged. They do not require a
+second catalog GET to report success, so an unavailable catalog refresh cannot
+roll back an acknowledged switch. Workspace identity and controller generations
+still fence late acknowledgements.
+
 Navigation selectors and immediate-save controls declare
 `data-settings-controlled`: their value follows controller state on every render.
 Model enablement, workspace app enablement and app provider choices show explicit

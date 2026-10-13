@@ -62,6 +62,37 @@ afterEach(async () => {
 });
 
 describe("durable send attempts", () => {
+  it("keeps a refused send's text and key without presenting uncertain-delivery recovery", async () => {
+    request.mockImplementation(async (action) => {
+      if (action === "messages.send") throw new BackendError("Send allowance reached", 429, "SEND_PACING_LIMITED");
+      return [];
+    });
+    await render(); await compose("Not dispatched"); await submit();
+    const saved = JSON.parse(localStorage.getItem(key)!);
+    expect(saved).toMatchObject({ text: "Not dispatched", status: 429, code: "SEND_PACING_LIMITED" });
+    await reopen();
+    expect(container.textContent).toContain("Your text is saved");
+    expect(container.textContent).not.toContain("I found the message");
+    expect(container.textContent).not.toContain("Prepare a new send");
+    request.mockResolvedValue({ id: "sent" });
+    await submit();
+    expect(sends()[1][1]).toEqual(sends()[0][1]);
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it("recognises an existing rate-limit warning while retaining its original retry key", async () => {
+    localStorage.setItem(key, JSON.stringify({ text: "Existing draft", key: "request-abcdefghijkl", createdAt: Date.now(),
+      state: "retryable", error: "OpenWA is rate limiting requests. Try again later." }));
+    await render();
+    expect(container.textContent).toContain("Your text is saved");
+    expect(container.textContent).not.toContain("I found the message");
+    expect(container.textContent).not.toContain("Prepare a new send");
+    expect(sends()).toHaveLength(0);
+    expect(JSON.parse(localStorage.getItem(key)!).key).toBe("request-abcdefghijkl");
+    await submit();
+    expect(sends()[0][1]?.idempotency_key).toBe("request-abcdefghijkl");
+  });
+
   it("saves before dispatch and restores the exact text and key after timeout and remount", async () => {
     request.mockImplementation(async (action, body) => {
       if (action === "messages.send") {

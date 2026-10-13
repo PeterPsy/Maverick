@@ -17,7 +17,7 @@ def environment():
         'PLUGIN_STATE_DIR': '/data/plugins', 'PLUGINS_DIR': '/data/plugins/packages',
         'ENGINE_TYPE': 'whatsapp-web.js', 'PUPPETEER_EXECUTABLE_PATH': '/opt/google/chrome/chrome',
         'QUEUE_ENABLED': 'false', 'REDIS_ENABLED': 'false', 'CACHE_ENABLED': 'false',
-        'SEND_PACING_ENABLED': 'true', 'MAX_CONCURRENT_SESSIONS': '2', 'WEBHOOK_SSRF_PROTECT': 'true'}
+        'SEND_PACING_ENABLED': 'false', 'MAX_CONCURRENT_SESSIONS': '2', 'WEBHOOK_SSRF_PROTECT': 'true'}
 
 def command():
     if not shutil.which('bwrap') or not (SOURCE_ROOT / 'dist/main.js').is_file():

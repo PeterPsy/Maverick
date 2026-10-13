@@ -89,7 +89,7 @@ def _request(origin, method, path, headers, body=None):
             code = "gateway_error"
             # Upstream messages and arbitrary codes may contain sensitive payloads.
             try:
-                data = json.loads(content) if response.status == 409 else None
+                data = json.loads(content) if response.status in (409, 429) else None
             except (ValueError, UnicodeError):
                 data = None
             if response.status == 409 and isinstance(data, dict) and data.get("code") in (
@@ -98,6 +98,9 @@ def _request(origin, method, path, headers, body=None):
                 code = data["code"]
                 if code == "IDEMPOTENCY_KEY_IN_PROGRESS":
                     messages[409] = "This send is still running. Wait, then retry with the same message."
+            if response.status == 429 and isinstance(data, dict) and data.get("code") == "SEND_PACING_LIMITED":
+                code = "SEND_PACING_LIMITED"
+                messages[429] = "OpenWA's configured send allowance blocked this request before sending."
             raise GatewayError(messages.get(response.status, "OpenWA could not complete this request."), response.status, code)
         if response.status in (204, 205) and not content:
             return None

@@ -12,6 +12,24 @@ from state import database, notify, notifications
 
 
 class ReviewTests(unittest.TestCase):
+    def test_send_pacing_refusal_is_distinct_from_request_throttling(self):
+        for code in ('SEND_PACING_LIMITED', 'private-unrecognised-code'):
+            with self.subTest(code=code):
+                response = MagicMock(status=429)
+                response.read.return_value = json.dumps({'code': code, 'message': 'private-provider-payload'}).encode()
+                connection = MagicMock()
+                connection.getresponse.return_value = response
+                with patch('gateway._connection', return_value=connection), self.assertRaises(GatewayError) as error:
+                    Gateway('https://example.com', 'test-key').request('POST', '/sessions/one/messages/send-text')
+                self.assertEqual(error.exception.status, 429)
+                self.assertEqual(error.exception.code, code if code == 'SEND_PACING_LIMITED' else 'gateway_error')
+                self.assertNotIn('private-provider-payload', str(error.exception))
+                self.assertNotIn('private-unrecognised-code', str(error.exception))
+                self.assertFalse(error.exception.uncertain_send)
+                if code == 'SEND_PACING_LIMITED':
+                    self.assertIn('send allowance', str(error.exception))
+                    self.assertNotIn('rate limiting requests', str(error.exception))
+
     def test_non_json_errors_preserve_http_status_without_echoing_the_body(self):
         for status in (401, 403, 409, 429, 503):
             with self.subTest(status=status):

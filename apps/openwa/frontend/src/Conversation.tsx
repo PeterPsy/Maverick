@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BackendError, operation, type Chat, type Session, type Message } from "./api";
 import { Icon } from "./Icons";
 import { Dialog } from "./Dialog";
-import { retryBlocked, sendAttemptKey, useSendAttempt, type SendAttempt } from "./sendAttempts";
+import { isRateLimited, retryBlocked, sendAttemptKey, useSendAttempt, type SendAttempt } from "./sendAttempts";
 import { useMessages } from "./useMessages";
 
 export function Conversation({
@@ -33,6 +33,7 @@ export function Conversation({
   const [quote, setQuote] = useState<Message | undefined>(attempt?.quote);
   const [confirmNew, setConfirmNew] = useState(false);
   const blocked = retryBlocked(attempt);
+  const limited = isRateLimited(attempt) && !blocked;
   useEffect(() => {
     if (page === 0 && followLatest.current && messages.current)
       messages.current.scrollTop = messages.current.scrollHeight;
@@ -58,7 +59,9 @@ export function Conversation({
       const error = e as Error;
       const state = error instanceof BackendError && error.code === "IDEMPOTENCY_KEY_IN_PROGRESS" ? "in_progress"
         : error instanceof BackendError && error.status === 409 ? "unknown" : "retryable";
-      save({ ...current, state, error: error.message });
+      save({ ...current, state, error: error.message,
+        status: error instanceof BackendError ? error.status : undefined,
+        code: error instanceof BackendError ? error.code : undefined });
       sending.current = false;
       if (mounted.current) setBusy(false);
       return;
@@ -163,8 +166,9 @@ export function Conversation({
         <div className="error-banner send-warning" role="alert">
           <p>{storageError || (blocked
             ? "The send outcome is uncertain. Check the conversation before preparing another send."
+            : limited ? "The gateway refused the last request because a limit was reached. Your text is saved; retry the same send."
             : attempt?.error)}</p>
-          {attempt && !busy && (blocked || attempt.state !== "in_progress") && !storageError && <div className="send-recovery-actions">
+          {attempt && !busy && !limited && (blocked || attempt.state !== "in_progress") && !storageError && <div className="send-recovery-actions">
             <button type="button" onClick={() => resolve(true)}>I found the message</button>
             <button type="button" onClick={() => setConfirmNew(true)}>Prepare a new send</button>
           </div>}

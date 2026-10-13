@@ -29,6 +29,13 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(local_gateway.DATA_ROOT, APP_ROOT.parents[1] / 'workspaces/default/data/openwa/gateway')
         self.assertEqual(local_gateway.SOURCE_ROOT, APP_ROOT / 'provider/upstream')
 
+    def test_linking_an_existing_account_does_not_enable_new_account_send_caps(self):
+        environment = local_gateway.environment()
+        self.assertEqual(environment['SEND_PACING_ENABLED'], 'false')
+        self.assertNotIn('RATE_LIMIT_SHORT_LIMIT', environment)
+        self.assertNotIn('RATE_LIMIT_MEDIUM_LIMIT', environment)
+        self.assertNotIn('RATE_LIMIT_LONG_LIMIT', environment)
+
     def test_only_trusted_default_workspace_admin_can_manage_provider(self):
         payload = SimpleNamespace(user_id='admin', platform_role='admin', workspace_id='default',
                                   data_root=str(APP_ROOT.parents[1] / 'workspaces/default/data/openwa'),

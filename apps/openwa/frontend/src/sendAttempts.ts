@@ -8,11 +8,18 @@ export interface SendAttempt {
   createdAt: number;
   state: "retryable" | "in_progress" | "unknown";
   error: string;
+  status?: number;
+  code?: string;
 }
 
 // The provider expires keys after 24 hours. Leave a margin for a retry in flight.
 export function retryBlocked(attempt: SendAttempt | null): boolean {
   return !!attempt && (attempt.state === "unknown" || Date.now() - attempt.createdAt >= 23 * 60 * 60 * 1000);
+}
+
+export function isRateLimited(attempt: SendAttempt | null): boolean {
+  return !!attempt && attempt.state === "retryable" && (attempt.status === 429 ||
+    (attempt.status === undefined && attempt.error === "OpenWA is rate limiting requests. Try again later."));
 }
 
 export function sendAttemptKey(scope: string, session: string, chat: string): string {
@@ -28,6 +35,8 @@ function load(key: string): { attempt: SendAttempt | null; storageError: string 
       typeof attempt.key !== "string" || !/^[A-Za-z0-9_-]{12,100}$/.test(attempt.key) ||
       !Number.isFinite(attempt.createdAt) || attempt.createdAt <= 0 ||
       !["retryable", "in_progress", "unknown"].includes(attempt.state) || typeof attempt.error !== "string" ||
+      (attempt.status !== undefined && (!Number.isInteger(attempt.status) || attempt.status < 400 || attempt.status > 599)) ||
+      (attempt.code !== undefined && (typeof attempt.code !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(attempt.code))) ||
       (attempt.quote && typeof attempt.quote.waMessageId !== "string")) {
       throw new Error("Invalid saved send attempt");
     }

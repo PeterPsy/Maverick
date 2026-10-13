@@ -38,6 +38,11 @@ Validation:
   The local interpreter also loads SQLite 3.46.1, below Storage WAL's 3.51.3
   prerequisite. Those fixtures and backend modules were not modified here.
 
-The native workflow above builds and tests without installing. Download support
-requires updating the running Mac host to 0.4.3 (77); web changes alone cannot
-add the missing native delegate to the existing app.
+After explicit user approval, installation run
+[38399443815](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38399443815)
+passed on `MacBook-Pro-6` and updated the existing app in place. At
+2026-10-13 12:45:49 UTC the installer confirmed `Installed and running: 0.4.3 (77)`.
+The source revision was `ca8fa4f`, whose native/build/install files are unchanged
+from the verified `b9de56a` repair. Signature and code identity continuity checks
+passed before replacement and launch. Web and native download repairs are now
+installed; the earlier build-only run above remains the initial validation.

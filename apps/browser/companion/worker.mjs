@@ -7,6 +7,7 @@ import {createAgentTabRegistry} from "./agent-tab.mjs";
 import {selectedAgentTab} from "./setup.mjs";
 import {interactionActions} from "./interaction-inputs.mjs";
 import {createInteractionController} from "./interaction-controller.mjs";
+import {createConnectorSession} from "./connector-session.mjs";
 import {observe} from "./dom-actions.mjs";
 import {collectContent,analyzeVideo} from "./workflows.mjs";
 
@@ -44,12 +45,22 @@ async function screenshot(b,parameters) {
   if(after[0]?.id !== b.tabId || observed.windowId !== tab.windowId || activationGenerations.get(tab.windowId) !== generation)throw new Error("active_tab_changed_during_capture");
   return capture("frame",{...parameters,image_data_url});
 }
-async function stop(reason="sharing_stopped") {
-  if(busy)busy.cancelled=true;
+let stopQueue=Promise.resolve(),shareEpoch=0;
+function stop(reason="sharing_stopped",expectedSharingId) {
+  if(!expectedSharingId)shareEpoch++;
+  const pending=stopQueue.catch(()=>{}).then(()=>stopCurrent(reason,expectedSharingId));
+  stopQueue=pending;return pending;
+}
+async function stopCurrent(reason,expectedSharingId) {
   const shared=await binding();
+  if(expectedSharingId && shared?.sharingId !== expectedSharingId)return {status:"obsolete"};
+  if(busy)busy.cancelled=true;
   if(shared)await dom(shared,"video.restore",{},busy?.expected).catch(()=>{});
+  if(shared && (await binding())?.sharingId !== shared.sharingId)return {status:"obsolete"};
   await chrome.storage.session.remove("binding");
+  await connectorSession.clear();
   await chrome.storage.session.remove("interactionSnapshot");
+  if(shared)await chrome.tabs.update(shared.connectorTabId,{autoDiscardable:shared.connectorAutoDiscardable ?? true}).catch(()=>{});
   await chrome.alarms.clear("connector-wake");
   await capture("stop").catch(()=>{});
   const contexts=await chrome.runtime.getContexts({contextTypes:["OFFSCREEN_DOCUMENT"]});
@@ -95,6 +106,7 @@ async function execute(b,command) {
   const initial=await scope(b);
   if(busy)throw new Error("operation_already_running");
   const task={id:command.operation_id,cancelled:false};busy=task;
+  let retained={};
   const expected={url:sharedUrl(initial.url,b),documentId:null};
   task.expected=expected;
   const check=()=>{if(task.cancelled)throw new Error("operation_cancelled");if(Date.now()/1000>command.expires_at)throw new Error("operation_expired");};
@@ -111,6 +123,11 @@ async function execute(b,command) {
     capture:async(a,p)=>{check();await fixedDom("wait_for",{});const result=a === "frame" ? await screenshot(b,p) : await capture(a,p);await fixedDom("wait_for",{});return result;},
     cleanup:async(a,p)=>{await scope(b);return a === "video.restore" ? dom(b,a,p,expected) : capture(a,p);}};
   try {
+    retained=await connectorSession.read(b);
+    if(retained.completion) {
+      if(retained.completion.operation_id === command.operation_id && retained.completion.lease_id === command.lease_id)return retained.completion.result;
+      throw new Error("previous_completion_pending");
+    }
     check();const p=command.parameters || {};let result;
     const controls=createInteractionController(chrome,{scope,check,delay});
     if(command.action === "navigate")result=await adapter.navigate(p.url);
@@ -125,7 +142,12 @@ async function execute(b,command) {
     } else if(command.action === "tabs") {const tab=await scope(b);result={tabs:[{url:sharedUrl(tab.url,b),title:tab.title,shared:true}]};}
     else result=await adapter.dom(command.action,p);
     check();const tab=await scope(b);
-    return {...result,source_url:sharedUrl(tab.url,b),observed_at:new Date().toISOString()};
+    const completed={...result,source_url:sharedUrl(tab.url,b),observed_at:new Date().toISOString()};
+    await connectorSession.finish(b,command,completed,retained.lease?.connection.session_id);
+    return completed;
+  } catch(error) {
+    if(!retained.completion)await connectorSession.finish(b,command,{error:"chrome_observation_failed",detail:error.message},retained.lease?.connection.session_id).catch(()=>{});
+    throw error;
   } finally {if(busy===task)busy=null;}
 }
 async function share(message) {
@@ -137,13 +159,17 @@ async function share(message) {
   await chrome.storage.local.set({connectorUrl:url.href});
   const identity=await agentTabs.remember(tab);
   await stop();
+  const epoch=shareEpoch;
   try {
     await chrome.offscreen.createDocument({url:"offscreen.html",reasons:["USER_MEDIA"],justification:"Read-only capture of the single platform tab explicitly shared by the user."});
     // Chrome 116+ permits worker-issued stream IDs in the offscreen document.
     const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:tab.id});
     await capture("start",{streamId});
     const connector=await openConnectorWindow(url,{sourceTabId:tab.id,reuse:message.reuseConnector !== false});
-    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),agentTabId:identity.id,accessMode:"interactive",websiteScope:"https",autoConnect:true,tabId:tab.id,connectorTabId:connector.id,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:null,allowedPlatforms:approved}});
+    if(epoch!==shareEpoch)throw new Error("sharing_revoked");
+    await chrome.tabs.update(connector.id,{autoDiscardable:false});
+    await chrome.storage.session.set({binding:{sharingId:crypto.randomUUID(),agentTabId:identity.id,accessMode:"interactive",websiteScope:"https",autoConnect:true,tabId:tab.id,connectorTabId:connector.id,connectorAutoDiscardable:connector.autoDiscardable ?? true,origin:url.origin,path:url.pathname,frameDomain:url.searchParams.get("frame_domain") || url.hostname,platform:null,allowedPlatforms:approved}});
+    if(epoch!==shareEpoch)throw new Error("sharing_revoked");
     await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});
     await chrome.action.setBadgeText({text:"AGENT"});await chrome.action.setBadgeBackgroundColor({color:"#171717"});
     // A tab may finish loading before onUpdated observes the stored binding.
@@ -153,6 +179,7 @@ async function share(message) {
   } catch(error) {await stop();throw error;}
 }
 const beginShare=createShareSetup(share);
+const connectorSession=createConnectorSession(chrome,binding);
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(sender.id !== chrome.runtime.id || message.target !== "worker")return;
   (async()=>{
@@ -172,34 +199,43 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       return attach(b);
     }
     if(!sameConnectorFrame(sender,b))throw new Error("connector_scope_required");
-    if(message.action === "stop")return stop();
+    if(message.action === "lease.store")return connectorSession.save(b,message.command);
+    if(message.action === "lease.restore")return connectorSession.read(b);
+    if(message.action === "completion.ack")return connectorSession.ack(b,message.command?.operation_id);
+    if(message.action === "stop")return stop("sharing_stopped",b.sharingId);
     if(message.action === "cancel") {
       if(busy?.id === message.command?.operation_id)busy.cancelled=true;
       return {cancelled:true};
     }
     if(message.action === "status") {
-      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,agent_tab_id:b.agentTabId,access_mode:b.accessMode,website_scope:b.websiteScope,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null};
+      const tab=await scope(b);return {status:"shared",url:sharedUrl(tab.url,b),title:tab.title,companion_version:chrome.runtime.getManifest().version,auto_connect:b.autoConnect === true,sharing_id:b.sharingId,agent_tab_id:b.agentTabId,access_mode:b.accessMode,website_scope:b.websiteScope,allowed_platforms:b.allowedPlatforms || [],active_operation:busy?.id || null,lease_recovery:true};
     }
     if(message.action === "execute")return execute(b,message.command);
     throw new Error("bridge_action_unavailable");
   })().then(reply).catch(error=>reply({error:error.message}));return true;
 });
-chrome.tabs.onRemoved.addListener(async id=>{await agentTabs.forget(id);const b=await binding();if(b && [b.tabId,b.connectorTabId].includes(id))await stop("shared_tab_closed");});
+chrome.tabs.onRemoved.addListener(async id=>{await agentTabs.forget(id);const b=await binding();if(b && [b.tabId,b.connectorTabId].includes(id))await stop("shared_tab_closed",b.sharingId);});
 chrome.tabs.onUpdated.addListener(async (id,change,tab)=>{
   const b=await binding();if(!b)return;
-  if(id===b.tabId && change.url) {try{sharedUrl(change.url,b);}catch{await stop("tab_left_platform_scope");}}
-  if(id===b.connectorTabId && change.url && !sameConnector(tab,b))await stop("connector_left_browser");
-  if(id===b.connectorTabId && change.status === "complete" && sameConnector(tab,b))await chrome.scripting.executeScript({target:{tabId:id,frameIds:[0]},files:["shell-bridge.js"]}).catch(()=>stop("connector_injection_failed"));
+  if(id===b.tabId && change.url) {try{sharedUrl(change.url,b);}catch{await stop("tab_left_platform_scope",b.sharingId);}}
+  if(id===b.connectorTabId && change.url && !sameConnector(tab,b))await stop("connector_left_browser",b.sharingId);
+  if(id===b.connectorTabId && change.status === "complete" && sameConnector(tab,b))await chrome.scripting.executeScript({target:{tabId:id,frameIds:[0]},files:["shell-bridge.js"]}).catch(()=>{});
 });
 chrome.alarms.onAlarm.addListener(async alarm=>{
   if(alarm.name !== "connector-wake")return;
   const b=await binding();if(!b){await chrome.alarms.clear(alarm.name);return;}
   try {
     const connector=await chrome.tabs.get(b.connectorTabId);
-    if(!sameConnector(connector,b))return stop("connector_left_browser");
+    if(!sameConnector(connector,b))return stop("connector_left_browser",b.sharingId);
     const result=await attach(b);
     if(result.status === "attached")await chrome.tabs.sendMessage(b.connectorTabId,{target:"connector",action:"wake"},{documentId:result.binding.connectorDocumentId});
-  } catch {await stop("connector_unavailable");}
+  } catch(error) {
+    if(["connector_principal_changed","sharing_revoked"].includes(error.message))return stop(error.message,b.sharingId);
+    // App-frame authorization/reloads briefly remove the document. Retry the
+    // still-bound shell rather than discard explicit sharing on a transient race.
+    const current=await chrome.tabs.get(b.connectorTabId).catch(()=>null);
+    if(!current || !sameConnector(current,b))await stop("connector_unavailable",b.sharingId);
+  }
 });
 // Alarm persistence is not assumed across worker suspension or extension reload.
 void binding().then(async b=>{if(b && !await chrome.alarms.get("connector-wake"))await chrome.alarms.create("connector-wake",{periodInMinutes:0.5});});

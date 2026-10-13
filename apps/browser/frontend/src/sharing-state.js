@@ -11,6 +11,7 @@ export const stopReasons = {
   connection_unavailable: "The connection is unavailable for this Maverick account or workspace",
   connector_unauthorized: "The Browser bridge lease is invalid; reconnect from Companion",
   authentication_failed: "Maverick authentication expired; sign in in the Browser bridge and reconnect",
+  connector_principal_changed: "The connected Maverick account or workspace changed; reconnect from Companion",
   heartbeat_failed: "The Browser bridge could not maintain its connection; reconnect from Companion",
 };
 

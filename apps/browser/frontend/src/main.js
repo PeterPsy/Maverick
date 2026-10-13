@@ -121,7 +121,7 @@ $("#copy").onclick = async () => {
 };
 let connectionState = "stopped", checking, checkAgain = false;
 function checkSelectedTab(retry = false) {
-  if (["connecting", "connected"].includes(connectionState)) return;
+  if (["connecting", "connected", "recovering"].includes(connectionState)) return;
   if (checking) { checkAgain ||= retry; return checking; }
   $("#connect").disabled = true;
   checking = bridge("status", undefined, 2500).then(async shared => {

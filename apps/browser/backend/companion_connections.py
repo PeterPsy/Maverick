@@ -17,7 +17,7 @@ from website_scope import website_url
 
 STOP_REASONS = frozenset({
     "user_stopped", "connector_scope_required", "sharing_revoked", "extension_unavailable",
-    "companion_unavailable", "platform_route_unavailable", "connection_expired", "connection_revoked",
+    "companion_unavailable", "connector_principal_changed", "platform_route_unavailable", "connection_expired", "connection_revoked",
     "connection_unavailable", "connector_unauthorized", "authentication_failed", "heartbeat_failed", "connection_replaced",
 })
 

@@ -1,6 +1,6 @@
 # Browser Reading and Shared Platform Transport
 
-Date: 2026-10-12
+Date: 2026-10-13
 
 ## Implemented architecture
 
@@ -38,8 +38,11 @@ recent Maverick shell tab at the exact chosen origin in the same Chrome profile,
 with a fresh document for the new binding. It rechecks the candidate before
 navigation, excludes the source tab, private/API routes and other origins. The
 user's Connect action can move an existing Chat or other app tab to Browser. The popup
-can disable reuse. A dedicated connector window remains the fallback when no
-matching Maverick tab exists; desktop applications and other browser profiles
+can disable reuse. Discovery includes pending shell URLs, mounted shell entry
+points and Chrome PWA windows; normal windows precede old connector popups.
+When no shell matches, a new connection tab uses the existing Chrome window.
+An explicit separate-window request, or the absence of a normal Chrome window,
+retains the popup fallback. Native applications and other browser profiles
 cannot be selected through Chrome's tabs API. The shared agent/platform tab is
 the navigation target; Browser is the authenticated bridge. Chrome 120
 or later is required. The connector uses ordinary Core-hosted backend calls and a
@@ -48,7 +51,7 @@ selectors and arbitrary caller scripts are never exposed to agent tools.
 
 The connector window must remain open. A 30-second extension alarm wakes its
 poller when possible; alarms do not wake a sleeping computer and cannot guarantee
-uninterrupted execution. Reloading requires fresh user setup. Closing either tab,
+uninterrupted execution. Maverick document reloads resume the lease in the same app origin. Closing either tab,
 revoking sharing or leaving approved platform routes stops capture. Late connector
 submissions cannot renew expired connections or complete expired operations.
 
@@ -80,7 +83,7 @@ bound Browser document. Removing the launch parameter `connector=1` is also
 allowed. That parameter enables setup UI; authority comes from the selected
 tab, exact Browser origin/frame/document and sharing generation. Other shell
 documents and non-shell/API routes remain outside the bridge. Full document
-reload still requires a fresh user connection. A shell observer retries after
+reload resumes a retained lease after authenticated ownership validation. A shell observer retries after
 sign-in and iframe replacement, with the 30-second alarm as a wake-up fallback.
 Other tabs, app frames, shell documents
 and replaced connector documents cannot issue commands. Installations whose
@@ -313,6 +316,31 @@ workspace copy requires the Skills app. The initial 2026-10-12 update was blocke
 by `authentication_required`; after authentication recovered, the update and
 readback succeeded with enablement and Maverick origin preserved.
 
+## Reload and idle recovery (Companion 0.6.1)
+
+Chrome's trusted `storage.session` retains the connection id/secret and one pending
+completion, bound to the sharing id and exact Core app-frame origin. The origin
+label includes actor, workspace, app and platform session, so a different principal
+cannot retrieve a cached lease. Public status and agent commands omit credentials.
+Reloading the same Browser document restores a live lease after an authenticated
+overview confirms ownership. If it expired, the still-bound sharing generation
+authorizes a replacement lease; old queued/running work is cancelled, never replayed.
+Explicit revocation, missing ownership or a changed origin stops recovery.
+
+The worker caches a completion before replying to the document. After reload, the
+new document delivers that same operation/claim/result and acknowledges the cache.
+An already-terminal backend operation is confirmed before acknowledging; clicks,
+submissions and other inputs are never retried. A result which cannot fit Chrome's
+session quota retains a small uncertain-result error instructing callers not to
+replay. Disconnect, extension reload and browser restart clear the cache.
+
+Transient frame-probing/injection failures during reload wait for another alarm
+while the selected shell remains in scope. Old alarms cannot revoke a replacement
+sharing generation. The selected connector tab is not auto-discardable while
+shared; Disconnect restores its prior setting. Auth failures request the native
+Core frame bootstrap before bounded failure/revocation. The extension alarm wakes
+a resumed Chrome document; a sleeping computer cannot execute browser commands.
+
 ## Legacy read-only scope and platform collection
 
 Read-only companion leases admit fixed navigate, snapshot, rendered-content, scroll,
@@ -528,6 +556,24 @@ frontend wrapper returned `authentication_required`; no refresh event was emitte
 by that fallback build. The anonymous public ZIP returned 200 with bytes matching
 the built artifact. Users must update the unpacked extension, accept Chrome's new
 permissions and reconnect their Agent tab before the new capability is available.
+
+The 0.6.1 pass on 2026-10-13 completed 93 Browser Python tests, 61 Node tests,
+both UI suites, the production-manifest popup fixture and the full Chromium
+media/Connectors fixture. A further focused Node regression verified that
+Disconnect revokes a replacement lease whose acknowledgement arrives late.
+Reload tests preserve the live session id, deliver an interrupted completion
+without repeating a form submission, and replace an expired lease without new
+tabs/windows. Scoped import and execution-closure checks passed; the global import
+check reports four unused imports in the unrelated OpenWA vendor SDK.
+
+The user's real Chrome completed navigation to `https://httpbin.org/forms/post`,
+snapshot, text replacement, key-driven text editing, checkbox, radio click and
+hover. A subsequent snapshot confirmed the edited value and checked states; the
+form was never submitted and the test page was reloaded. This verifies the live
+0.6.0 transport. Recovery behavior was tested separately with the 0.6.1 package;
+the user's extension must be updated to receive those fixes. The workspace Browser
+guide was updated and read back through Skills. The public 0.6.1 ZIP returned 200
+with bytes matching the compiled source package.
 
 A full profile/media acceptance still requires verifying profile identity,
 bounded feed collection, opening collected posts/Reels,

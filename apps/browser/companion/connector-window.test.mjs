@@ -15,11 +15,12 @@ test("reuse selects the existing Maverick shell at the exact origin, excluding p
   ];
   globalThis.chrome = {
     tabs: {
-      async query(query) { assert.equal(query.url, "https://maverick.test/*"); return tabs; },
+      async query(query) { assert.deepEqual(query, {}); return tabs; },
       async get(id) { if (id === 4) throw new Error("Tab closed"); return tabs.find(tab => tab.id === id); },
       async update(id, options) { calls.push({id, options}); return {id, windowId: 20}; },
     },
     windows: {
+      async getAll(){return [];},
       async update(id, options) { calls.push({windowId: id, options}); },
       async create(options) { calls.push({create: options}); return {tabs: [{id: 30}]}; },
     },
@@ -41,7 +42,20 @@ test("a tab that leaves the Maverick shell during selection is not redirected", 
     tabs: {async query() {return [{id: 1, url: "https://maverick.test/app/browser"}];},
       async get() {return {id: 1, url: "https://maverick.test/login"};},
       async update() {assert.fail("Another app must not be redirected");}},
-    windows: {async create() {return {tabs: [{id: 2}]};}},
+    windows: {async getAll(){return [];},async create() {return {tabs: [{id: 2}]};}},
   };
   assert.equal((await openConnectorWindow(new URL("https://maverick.test/app/browser?connector=1"))).id, 2);
+});
+
+test("a loading shell in another window is reused and a fresh setup adds a tab without a popup",async t=>{
+  const original=globalThis.chrome,calls=[];
+  t.after(()=>{if(original === undefined)delete globalThis.chrome;else globalThis.chrome=original;});
+  let tabs=[{id:5,windowId:2,url:"about:blank",pendingUrl:"https://maverick.test/app/chat"}];
+  globalThis.chrome={tabs:{async query(){return tabs;},async get(){return tabs[0];},async update(id,p){calls.push({id,p});return {id,windowId:2};},async create(p){calls.push({create:p});return {id:6,windowId:p.windowId};}},
+    windows:{async getAll(){return [{id:2,type:"normal",focused:true}];},async update(){},async create(){assert.fail("No duplicate window");}}};
+  const url=new URL("https://maverick.test/app/browser?connector=1");
+  assert.equal((await openConnectorWindow(url,{sourceTabId:1})).id,5);
+  tabs=[];
+  assert.equal((await openConnectorWindow(url,{sourceTabId:1})).id,6);
+  assert.equal(calls.at(-1).create.windowId,2);
 });

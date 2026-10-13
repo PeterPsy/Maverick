@@ -14,6 +14,8 @@ export async function attachConnectorFrame(b, currentBinding) {
   if (selected.length !== 1) return {status: "waiting_for_browser"};
   const frame = selected[0], current = await currentBinding();
   if (current?.sharingId !== b.sharingId || !sameConnector(await chrome.tabs.get(b.connectorTabId), b)) throw new Error("sharing_revoked");
+  const {connectorSession}=await chrome.storage.session.get("connectorSession");
+  if(connectorSession?.sharingId === b.sharingId && connectorSession.lease && connectorSession.origin !== new URL(frame.result.url).origin)throw new Error("connector_principal_changed");
   if (!frame.documentId) throw new Error("connector_document_unavailable");
   const binding = {...current, connectorFrameId: frame.frameId, connectorDocumentId: frame.documentId,
     connectorFrameOrigin: new URL(frame.result.url).origin};

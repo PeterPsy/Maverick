@@ -32,7 +32,9 @@ export async function openActionPopup(browser, extensionId, tabUrl) {
   };
   await wait(()=>evaluate("typeof document.querySelector('#share')?.onclick === 'function'"));
   return {evaluate,send,
-    async detach(){await browser.send("Target.detachFromTarget",{sessionId});},
+    async detach(){await browser.send("Target.detachFromTarget",{sessionId}).catch(error=>{
+      if(!error.message.includes("No session with given id"))throw error;
+    });},
     async close(){await browser.send("Target.closeTarget",{targetId:popup.targetId}).catch(error=>{
       // Chrome destroys the popup when Open agent tab moves focus.
       if(!error.message.includes("No target with given id"))throw error;

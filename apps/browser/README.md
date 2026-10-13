@@ -8,7 +8,7 @@ proxy, hosted-browser or remote transcription service is used.
 
 ## Connect your agent tab
 
-Open Browser in the workspace shell. Download and extract Browser Companion 0.6.0,
+Open Browser in the workspace shell. Download and extract Browser Companion 0.6.1,
 then load its folder with Chrome's “Load unpacked” developer-mode action.
 Use Chrome 120 or later. The official `https://maverick.loopino.ai` address is
 preconfigured; other installations can change Connection settings in Companion.
@@ -21,10 +21,11 @@ invocation grants Chrome's tab-capture permission for that tab. The popup asks
 for HTTPS website access; the manifest also declares Chrome debugger control. By default
 it reuses the most recently used Maverick shell tab at the chosen origin in the
 same Chrome profile, including Chat or other apps, and opens Browser there.
-Private/API routes, other origins and the source tab are excluded. Uncheck
-the reuse option to open a separate bridge window. A new window is also necessary
-when no matching Maverick tab exists, including Maverick in another profile,
-browser or desktop application. Sign in if asked; the exact selected Browser
+Private/API routes, other origins and the source tab are excluded. Loading tabs, other Chrome windows and Chrome PWAs are included. Normal Maverick
+windows are preferred to old connector popups. If none matches, setup opens a
+connection tab in the existing Chrome window. Uncheck the reuse option for a
+separate bridge window. Other browsers/profiles and native desktop applications
+cannot be selected by Chrome; their connection tab remains in Chrome. Sign in if asked; the exact selected Browser
 document connects automatically using the extension's explicit sharing generation.
 There is no second Connect button to press. Automatic setup is attempted once
 per generation; a failed attempt retains the manual retry control. Keep both tabs
@@ -90,10 +91,22 @@ Within that selected Maverick shell tab, switching apps or returning to Browser
 from the rail keeps the connection alive while its bound Browser iframe remains
 mounted. The `connector=1` parameter starts setup; dropping it during native
 navigation does not revoke sharing. Leaving the Maverick origin or loading a
-non-shell route still stops the bridge. A full document reload requires reconnecting.
+non-shell route still stops the bridge. A full document reload resumes the same lease in the same authenticated app origin.
 Closing either tab, leaving the connection’s permitted URL scope, or revoking sharing stops
-capture. Reloading the connector requires a fresh user-owned connection.
+capture. A still-shared tab recovers an expired lease automatically; pending old operations
+are cancelled and are never replayed. Memory Saver cannot discard the connector
+while sharing; its previous setting is restored on Disconnect.
 Frame captures may bring the shared platform window to the foreground.
+
+
+Companion 0.6.1 retains the lease and one completed result in trusted, memory-only
+Chrome session storage, bound to the sharing generation and exact app origin.
+Agent status/tools never receive the secret. A replaced Browser document resumes
+only after authenticated ownership validation; a different account, workspace or
+origin cannot resume it. Lost completion responses are delivered after reload
+without repeating the action. Session data clears on Disconnect and on extension
+or browser restart. Transient frame-loading races retry instead of revoking
+sharing; actual tab closure, scope loss and user revocation still stop it.
 
 ## Interactive Chrome commands
 

@@ -24,7 +24,7 @@ export function mountShell(connectorMode) {
         <summary><span><strong>Set up your agent tab</strong><small>Install once, then connect from Chrome</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
         <div class="setup-body">
           <ol class="setup-steps">
-            <li><strong>Install Companion 0.6.0</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. To update, replace the extracted files and reload the extension.</p></li>
+            <li><strong>Install Companion 0.6.1</strong><p><a id="download" download="maverick-browser-companion.zip">Download the extension</a> and extract it. In <code>chrome://extensions</code>, enable Developer mode and choose Load unpacked. To update, replace the extracted files and reload the extension.</p></li>
             <li><strong>Open your agent tab</strong><p>Open Companion in Chrome and choose Open agent tab. On that tab, click Companion in the toolbar and choose Connect agent tab. Allow access if Chrome asks.</p></li>
             <li><strong>Ask Maverick</strong><p>Maverick connects automatically. Tell your agent what to browse or change. Keep the agent tab and Maverick open in the same Chrome profile. Sign in directly in Chrome.</p></li>
           </ol>

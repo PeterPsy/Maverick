@@ -7,7 +7,7 @@ if (!globalThis.maverickBrowserBridgeInstalled) {
   window.addEventListener("message", async event => {
     if (event.source !== window || event.origin !== location.origin || event.data?.type !== "maverick.browser.request") return;
     const {id, action, command} = event.data;
-    if (typeof id !== "string" || id.length > 80 || !["status", "execute", "stop", "cancel"].includes(action)) return;
+    if (typeof id !== "string" || id.length > 80 || !["status", "execute", "stop", "cancel", "lease.store", "lease.restore", "completion.ack"].includes(action)) return;
     try {
       const result = await chrome.runtime.sendMessage({target: "worker", action, command});
       window.postMessage({type: "maverick.browser.response", id, result}, location.origin);

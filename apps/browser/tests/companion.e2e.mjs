@@ -103,7 +103,7 @@ try {
   const connectorWindow=context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));
   await connectorWindow.getByRole("button",{name:"Sign in as fixture user"}).click();
   await wait(()=>connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
-  const connector=connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`));
+  let connector=connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`));
   await connector.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
   await wait(async()=> (await worker.evaluate(()=>chrome.storage.session.get("binding"))).binding?.connectorDocumentId);
   assert.equal(await connector.locator("#url").inputValue(),connectorAddress);
@@ -126,7 +126,12 @@ try {
     const operation=await wait(async()=>{const result=await api({action:'operation.get',operation_id:queued.operation_id});return ['completed','failed','cancelled','expired'].includes(result.status) ? result : null;},60000);
     assert.equal(operation.status,expected,JSON.stringify(operation));return operation.result;
   };
-  await verifyInteractiveChrome({context,worker,page:instagram,connection,run,runMcp});
+  const reloadBridge=async()=>{
+    await connectorWindow.reload();
+    connector=await wait(()=>connectorWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
+    await connector.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
+  };
+  await verifyInteractiveChrome({context,worker,page:instagram,connection,run,runMcp,api,reloadBridge});
   if(!connectorsOnly) {
   const content=await run("content.read");assert(content.text.includes("Bio visibile"));assert(!content.text.includes("must-not-be-read"));assert(!content.text.includes("hidden-secret"));assert.equal(content.videos[0].duration_seconds,5);
   const scrolling=await run("scroll",{pixels:600});assert.equal(scrolling.target,"rendered_container");assert(scrolling.moved);
@@ -324,6 +329,20 @@ try {
   assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
   assert.equal(context.pages().length,pageCount);
   console.log(JSON.stringify({phase:'agent-tab-reused-and-reconnected',source_preserved:true,no_duplicate_tabs:true}));
+  const retainedSessionId=agentConnection.session_id,retainedPages=context.pages().length;
+  assert.equal((await worker.evaluate(async()=>{const {binding}=await chrome.storage.session.get('binding');return chrome.tabs.get(binding.connectorTabId);})).autoDiscardable,false);
+  await agentWindow.reload();
+  agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
+  await agentFrame.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
+  agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected'));
+  assert.equal(agentConnection.session_id,retainedSessionId,'A live lease survives a Maverick reload');
+  const expired=await fixtureFetch(`${origin}/__test/browser/expire`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:retainedSessionId})});
+  assert(expired.ok);
+  await worker.evaluate(async()=>{const {binding}=await chrome.storage.session.get('binding');await chrome.tabs.sendMessage(binding.connectorTabId,{target:'connector',action:'wake'},{documentId:binding.connectorDocumentId});});
+  agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected' && c.session_id !== retainedSessionId));
+  assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
+  assert.equal(context.pages().length,retainedPages,'Expiry recovery does not create tabs or windows');
+  console.log(JSON.stringify({phase:'connector-recovery',live_reload_same_lease:true,expired_lease_replaced:true,no_duplicate_windows:true,discard_protection:true}));
   if(!connectorsOnly) {
     const a=await run('video.frame',{time_seconds:0.5},agentConnection),b=await run('video.frame',{time_seconds:3},agentConnection);
     assert.notEqual(a.base64,b.base64,'Agent-tab capture must reflect the presented seek, not a stale captured frame.');

@@ -17,7 +17,7 @@ document.querySelector('#form').onsubmit=e=>{e.preventDefault();window.saved.pus
 document.querySelector('#shadow').attachShadow({mode:'open'}).innerHTML='<label>Shadow note <input></label>';
 </script></body></html>`;
 
-export async function verifyInteractiveChrome({context,worker,page,connection,run,runMcp}) {
+export async function verifyInteractiveChrome({context,worker,page,connection,run,runMcp,api,reloadBridge}) {
   const url="https://owned-browser.example/settings?section=profile#edit";
   await context.route("https://owned-browser.example/**",route=>route.fulfill({contentType:"text/html",body:html}));
   await run("navigate",{url},connection);
@@ -41,6 +41,28 @@ export async function verifyInteractiveChrome({context,worker,page,connection,ru
   assert.deepEqual(await page.evaluate(()=>window.saved),[{name:"Updated from agent",preference:"new",enabled:true}]);
   await runMcp("browser_click",{ref:ref("Save")});
   assert.equal(await page.evaluate(()=>window.saved.length),2);
+  // Lose the old page's completion response after the click actually happened.
+  // Reload resumes the retained result, rather than clicking Save a fourth time.
+  let recoveryOperation,suppressed=false;
+  const intercept=async route=>{
+    const body=route.request().postDataJSON();
+    if(body?.action === "companion.complete" && body.operation_id === recoveryOperation && !suppressed){suppressed=true;await route.abort();}
+    else await route.continue();
+  };
+  await context.route("**/api/apps/browser/backend",intercept);
+  const queued=await api({action:"click",session_id:connection.session_id,ref:ref("Save")});recoveryOperation=queued.operation_id;
+  for(let i=0;i<300 && !suppressed;i++)await new Promise(resolve=>setTimeout(resolve,100));
+  assert(suppressed,"The completed click's response must be interrupted");
+  await reloadBridge();
+  let recovered;
+  for(let i=0;i<300;i++){
+    recovered=await api({action:"operation.get",operation_id:recoveryOperation});
+    if(recovered.status === "completed")break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(recovered.status,"completed",JSON.stringify(recovered));
+  assert.equal(await page.evaluate(()=>window.saved.length),3,"Reload must not replay a completed form submission");
+  await context.unroute("**/api/apps/browser/backend",intercept);
   const events=await page.evaluate(()=>window.events);
   assert(events.some(e=>e.type === "input" && e.trusted));
   assert(events.some(e=>e.type === "keydown" && e.key === "Enter" && e.trusted));

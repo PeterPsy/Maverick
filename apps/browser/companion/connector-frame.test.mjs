@@ -9,7 +9,7 @@ test("fresh connector waits for login, selects one Browser document and fences s
   const originalChrome=globalThis.chrome;
   t.after(()=>{if(originalChrome === undefined)delete globalThis.chrome;else globalThis.chrome=originalChrome;});
   globalThis.chrome={tabs:{async get(){return {id:10,url:`${origin}/app/browser?connector=1`};}},
-    storage:{session:{async set({binding}){current=binding;writes++;}}},
+    storage:{session:{async get(){return {};},async set({binding}){current=binding;writes++;}}},
     scripting:{async executeScript(options){injections.push(options);return options.func ? frames : [];}}};
   assert.equal((await attachConnectorFrame(b,async()=>current)).status,"waiting_for_browser");
   assert.equal(writes,0);

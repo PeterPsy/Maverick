@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from tempfile import TemporaryDirectory
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
@@ -18,6 +19,7 @@ APP = ROOT / "apps/browser"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(APP / "backend"))
 from service import handle_action, mcp_result_for_tool
+from companion_store import database
 from core.api.app_frame_browser import _inject_message_relay
 from core.api.app_frame_launch import content_security_policy
 
@@ -121,6 +123,10 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/__test/browser/mcp":
             status,response = mcp_result_for_tool(WORKSPACE / "data/browser", body["tool_name"], body.get("arguments",{}),
                                                   workspace_id="fixture", user_id="fixture-user", surface="mcp", dependencies=DEPENDENCIES)
+        elif self.path == "/__test/browser/expire":
+            with database(WORKSPACE / "data/browser") as db:
+                db.execute("UPDATE connections SET expires_at=? WHERE session_id=?", (time.time()-1,body["session_id"]))
+            status,response = 200,{"expired":True}
         else:
             self.send_error(404); return
         content = json.dumps(response).encode()

@@ -1,10 +1,12 @@
 import {request,bridge} from "./api.js";
 import {stopReason} from "./sharing-state.js";
+import {acquireConnectorLease,deliverConnectorCompletion,recoverFrameAuthorization} from "./connector-recovery.js";
 
-// Secrets stay in this authenticated page's memory. Reloading requires a fresh lease.
+// Chrome retains the lease in its trusted memory-only session store. Reloads
+// resume it only in the exact actor/workspace app origin; actions never replay.
 export function createConnector(report) {
   let lease=null,command=null,timer=null,stopped=true,ticking=false,failures=0;
-  let starting=null,generation=0,lastRenewed=0;
+  let starting=null,generation=0,lastRenewed=0,recovery=false;
   const revoke=async(error)=>{
     stopped=true;generation++;clearTimeout(timer);
     const previous=lease;lease=null;command=null;
@@ -16,7 +18,9 @@ export function createConnector(report) {
   const deliver=async(next,result,attempt)=>{
     while(attempt===generation && !stopped && lease && Date.now()<next.expires_at*1000) {
       try {
-        await request({action:"companion.complete",...fields(),operation_id:next.operation_id,lease_id:next.lease_id,result});return;
+        if(recovery)await deliverConnectorCompletion(fields(),{operation_id:next.operation_id,lease_id:next.lease_id,result});
+        else await request({action:"companion.complete",...fields(),operation_id:next.operation_id,lease_id:next.lease_id,result});
+        return;
       } catch(error) {
         if(error.status && error.status<500)throw error;
         await new Promise(resolve=>setTimeout(resolve,2000));
@@ -36,9 +40,14 @@ export function createConnector(report) {
   const tick=async()=>{
     if(stopped || ticking || !lease)return;clearTimeout(timer);ticking=true;
     const attempt=generation;
+    let shared;
     try {
-      const shared=await bridge("status");
+      shared=await bridge("status");
       if(attempt!==generation || stopped || !lease)return;
+      if(recovery && !command && !shared.active_operation) {
+        const retained=await bridge("lease.restore");
+        if(retained.completion)await deliverConnectorCompletion(fields(),retained.completion);
+      }
       const active=command;
       if(active) {
         const operation=await request({action:"operation.get",operation_id:active.operation_id});
@@ -73,7 +82,19 @@ export function createConnector(report) {
     } catch(error) {
       if(attempt!==generation || stopped)return;
       report(error.message);failures++;
-      if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|sharing_revoked|platform_route_unavailable|shared_platform_scope_required|invalid_platform_url|website_scope_required|invalid_website_url|extension_unavailable)/u.test(error.code || error.message) || failures>=10)await revoke(error);
+      if(error.code === "connection_expired" && recovery && shared) {
+        try {
+          report("Restoring the agent connection…","recovering");
+          const restored=await acquireConnectorLease(shared);
+          if(attempt!==generation || stopped) {
+            await request({action:"companion.disconnect",session_id:restored.connection.session_id}).catch(()=>{});
+            return;
+          }
+          lease=restored;failures=0;
+        } catch(failure){await revoke(failure);}
+      } else if([401,403].includes(error.status) && !["connector_unauthorized","actor_required","user_connector_required"].includes(error.code) && failures<10 && recoverFrameAuthorization()) {
+        report("Restoring Maverick sign-in…","recovering");
+      } else if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|connector_principal_changed|sharing_revoked|platform_route_unavailable|shared_platform_scope_required|invalid_platform_url|website_scope_required|invalid_website_url|extension_unavailable)/u.test(error.code || error.message) || failures>=10)await revoke(error);
     }
     finally {ticking=false;if(!stopped)timer=setTimeout(tick,3000);}
   };
@@ -89,7 +110,8 @@ export function createConnector(report) {
       starting=(async()=>{
         const shared=await bridge("status");
         if(attempt!==generation)throw new Error("Sharing was stopped. Connect again to retry.");
-        const result=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Shared Chrome tab",allowed_platforms:shared.allowed_platforms || [],agent_tab_id:shared.agent_tab_id,access_mode:shared.access_mode,website_scope:shared.website_scope});
+        recovery=shared.lease_recovery === true;
+        const result=await acquireConnectorLease(shared);
         if(attempt!==generation) {
           await request({action:"companion.disconnect",session_id:result.connection.session_id});
           throw new Error("Sharing was stopped. Connect again to retry.");

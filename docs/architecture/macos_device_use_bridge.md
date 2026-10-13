@@ -897,3 +897,30 @@ does not invalidate A. Navigation invalidates the affected tab, while transport
 reconnection and turn completion invalidate all tab receipts. Its existing
 persistent browser profile remains the primary path for account continuity;
 Browser Lab's ephemeral development/research sessions are a separate capability.
+
+### Agent capture acceptance and terminal recovery
+
+Native revision `26b16f7` was installed as 0.4.1 (75) by Actions run
+[38377630676](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38377630676).
+All 18 signed physical acceptance cases passed with empty failure diagnostics,
+including a real download with byte-count/SHA-256 evidence and actual Calculator,
+ChatGPT and Maverick capture through `PeekabooTools.execute`. The reconnected
+chat also captured all three applications through the public native tools.
+This verifies observation recovery, not ChatGPT model or task-performance parity.
+
+Closing an observed window can succeed while its follow-up capture fails; a
+retained WindowServer ID does not make that window observable again. A global
+pending-outcome latch therefore cannot condition all future native work on a
+successful screenshot of the closed window. Native 0.4.2 (76) removes that latch
+while invalidating uncertain action receipts and retaining fresh exact-target
+checks. Same-app verification precedes dependent input, with no automatic replay;
+independent work, read-only file/process diagnosis and later turns remain
+available under the existing Full lease. Stop, lock and companion refusal of
+global inputs are unchanged. The new integrated regression reads real file
+bytes after an uncertain GUI result and again after turn completion.
+
+TextEdit exposed a writable AX area on the active desktop, but an additional
+replacement probe coincided with its move to an inactive Space. The returned
+result was indeterminate and the fresh pixel image retained the original text.
+Permissions stayed granted. Cross-desktop capture does not certify writable AX
+focus or typing; that acceptance remains open and is not inferred from OCR.

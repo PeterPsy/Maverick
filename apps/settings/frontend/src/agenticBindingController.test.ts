@@ -43,6 +43,29 @@ function mount(initial = settings()) {
   return { controller, state, render, saving: () => saving! };
 }
 
+it('shows one enabled Gemini 4 Argon model for its Antigravity effort aliases', () => {
+  const initial = settings(true);
+  const template = initial.agentic_admin!.items[0];
+  initial.agentic_admin!.items = ['low', 'medium', 'high'].map(effort => ({
+    ...template,
+    definition_id: `argon-${effort}`,
+    display_name: `Antigravity · gemini-4-argon-${effort}`,
+    runtime_engine_id: 'antigravity-cli',
+    model_id: `gemini-4-argon-${effort}`,
+    default_reasoning_effort: effort,
+    selectable: true,
+  }));
+  document.body.innerHTML = settingsPanelHtml(initial, createSettingsPanelState());
+
+  const toggles = document.querySelectorAll<HTMLInputElement>('[data-agentic-model-toggle]');
+  expect(toggles).toHaveLength(1);
+  expect(toggles[0].dataset.agenticDefinitionId).toBe('argon-high');
+  expect(toggles[0].disabled).toBe(false);
+  expect(toggles[0].checked).toBe(true);
+  expect(document.body.textContent).toContain('gemini-4-argon-high');
+  expect(document.body.textContent).not.toContain('Unavailable');
+});
+
 it('shows an optimistic switch and rolls back checked state and label after rejection', async () => {
   let reject!: (error: Error) => void;
   vi.mocked(configureAgenticWorkspaceBinding).mockReturnValue(new Promise((_, fail) => { reject = fail; }));

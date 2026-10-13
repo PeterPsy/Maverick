@@ -12,6 +12,7 @@ from core.providers.antigravity_cli_runtime_home import (
     prepare_antigravity_runtime_home,
 )
 from core.providers.models import RuntimeBackendLaunchSpec
+from core.providers.native_runtime_artifact import ANTIGRAVITY_CLI_RUNTIME_ARTIFACT
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
 from core.runtime.research_runtime import RESEARCH_BOUNDARY_INSTRUCTION
 from core.runtime.workspace_sandbox import build_bwrap_command
@@ -19,7 +20,7 @@ from core.runtime.workspace_sandbox import build_bwrap_command
 
 ANTIGRAVITY_RESEARCH_AGENT = "research-web-only"
 ANTIGRAVITY_RESEARCH_TOOLS = frozenset({"search_web", "read_url_content"})
-ANTIGRAVITY_RESEARCH_REVIEWED_VERSIONS = frozenset({"1.1.27"})
+ANTIGRAVITY_RESEARCH_REVIEWED_VERSIONS = frozenset({ANTIGRAVITY_CLI_RUNTIME_ARTIFACT.version})
 
 
 def antigravity_research_runtime_available(command: str) -> bool:

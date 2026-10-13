@@ -9,7 +9,7 @@ import time
 
 
 if "--version" in sys.argv:
-    print("1.1.27")
+    print("1.3.4")
     raise SystemExit(0)
 
 

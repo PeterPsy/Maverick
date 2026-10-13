@@ -129,6 +129,26 @@ printf 'claude-sonnet-4-6\\tClaude Sonnet 4.6 (Thinking)\\n'
                 discover_antigravity_native_catalog(self.adapter, force=True)
             )
 
+    def test_argon_live_aliases_publish_one_model_with_all_reasoning_efforts(self) -> None:
+        self.command.write_text(
+            self.command.read_text(encoding="utf-8")
+            + "printf 'gemini-4-argon-low\\tGemini 4 Argon (Low)\\n'\n"
+            + "printf 'gemini-4-argon-medium\\tGemini 4 Argon (Medium)\\n'\n"
+            + "printf 'gemini-4-argon-high\\tGemini 4 Argon (High)\\n'\n",
+            encoding="utf-8",
+        )
+
+        snapshot = self.discover()
+
+        self.assertIsNotNone(snapshot)
+        argon = [model for model in snapshot.models if model.model_id.startswith("gemini-4-argon")]
+        self.assertEqual(len(argon), 1)
+        self.assertEqual(argon[0].model_id, "gemini-4-argon-high")
+        self.assertEqual(argon[0].reasoning_efforts, ("high", "medium", "low"))
+        option = next(model for model in snapshot.model_options if model.model_id == argon[0].model_id)
+        self.assertEqual(option.label, "Gemini 4 Argon")
+        self.assertEqual(option.default_reasoning_effort, "high")
+
     def test_refresh_updates_diagnostics_but_keeps_candidate_disabled(self) -> None:
         snapshot = self.discover()
         self.assertIsNotNone(snapshot)

@@ -78,39 +78,31 @@ class AntigravityCliLaunchTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         )
 
     async def test_launch_maps_the_selected_effort_to_the_catalog_variant(self):
-        binding = SimpleNamespace(
-            **{
-                **vars(self.binding),
-                "model_id": "gemini-3.8-flash-high",
-                "reasoning_effort": "low",
-            }
-        )
-        with patch(
-            "core.providers.antigravity_cli_sandbox.build_bwrap_command",
-            side_effect=lambda **kwargs: [
-                "fake-bwrap",
-                "--bind",
-                str(kwargs["workspace_root"]),
-                str(kwargs["workspace_root"]),
-                "--",
-                *kwargs["command"],
-            ],
-        ):
-            spec = antigravity_stream_launch_spec(
-                SimpleNamespace(
-                    session=self.session,
-                    binding=binding,
-                    secret_env={},
-                ),
-                command=self.engine.command,
-                dependency_roots=self.engine.dependency_roots,
-                auth_home=self.auth_home,
-            )
+        for base_model in ("gemini-3.8-flash", "gemini-4-argon"):
+            for effort in ("high", "medium", "low"):
+                with self.subTest(model=base_model, effort=effort):
+                    binding = SimpleNamespace(**{
+                        **vars(self.binding),
+                        "model_id": f"{base_model}-high",
+                        "reasoning_effort": effort,
+                    })
+                    with patch(
+                        "core.providers.antigravity_cli_sandbox.build_bwrap_command",
+                        side_effect=lambda **kwargs: [
+                            "fake-bwrap", "--bind",
+                            str(kwargs["workspace_root"]), str(kwargs["workspace_root"]),
+                            "--", *kwargs["command"],
+                        ],
+                    ):
+                        spec = antigravity_stream_launch_spec(
+                            SimpleNamespace(session=self.session, binding=binding, secret_env={}),
+                            command=self.engine.command,
+                            dependency_roots=self.engine.dependency_roots,
+                            auth_home=self.auth_home,
+                        )
 
-        model_index = spec.command.index("--model")
-        effort_index = spec.command.index("--effort")
-        self.assertEqual(spec.command[model_index + 1], "gemini-3.8-flash-low")
-        self.assertEqual(spec.command[effort_index + 1], "low")
+                    self.assertEqual(spec.command[spec.command.index("--model") + 1], f"{base_model}-{effort}")
+                    self.assertEqual(spec.command[spec.command.index("--effort") + 1], effort)
 
     async def test_full_access_launch_uses_native_cli_permission_bypass(self):
         session = SimpleNamespace(

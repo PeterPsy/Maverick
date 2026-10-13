@@ -21,8 +21,8 @@ class NativeRuntimeArtifact:
 
 
 ANTIGRAVITY_CLI_RUNTIME_ARTIFACT = NativeRuntimeArtifact(
-    "93eb2118b778a4005700b54cdd7e08b896fbe665d5ff338e38e9e53da9a091ea",
-    "1.1.27",
+    "5b93565c5f04ea4f7b79d49d5c3237449bf6ce47b6779e8cf46c1fae97957c98",
+    "1.3.4",
 )
 _CACHE = {}
 _LOCK = RLock()

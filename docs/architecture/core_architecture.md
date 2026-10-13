@@ -1989,7 +1989,7 @@ this profile and is never represented as removable.
 
 Research compatibility belongs to the runtime contract, not a model-name
 allowlist. The reviewed Codex releases are `0.153.4` and `0.159.2`. Antigravity
-CLI `1.1.27` also implements the native web-only contract with the selected
+CLI `1.3.4` also implements the native web-only contract with the selected
 model and effort. Core supplies a private `research-web-only` primary-agent
 definition whose only tools are `search_web` and `read_url_content`, with
 ambient customizations disabled and no skills, rules, plugins, subagents or

@@ -196,8 +196,10 @@ describe("remote agentic provider runtime options", () => {
     expect(providers[0]?.label).toBe("Gemini 3.6 Flash");
   });
 
-  it("uses the native runtime catalog label for Antigravity models", () => {
-    const modelId = "gemini-3.8-flash-high";
+  it.each([
+    ["gemini-3.8-flash-high", "Gemini 3.8 Flash"],
+    ["gemini-4-argon-high", "Gemini 4 Argon"],
+  ])("uses the native runtime catalog label and efforts for %s", (modelId, modelLabel) => {
     const antigravityReasoningOptions: ProviderReasoningOption[] = [
       { effort: "high", label: "High", description: null },
       { effort: "medium", label: "Medium", description: null },
@@ -226,7 +228,7 @@ describe("remote agentic provider runtime options", () => {
       default_model_family: modelId,
       model_options: [{
         model_id: modelId,
-        label: "Gemini 3.8 Flash",
+        label: modelLabel,
         description: null,
         default_reasoning_effort: "high",
         supported_reasoning_efforts: antigravityReasoningOptions,
@@ -246,7 +248,7 @@ describe("remote agentic provider runtime options", () => {
           availability: "installed",
           installed: true,
           executable_name: "agy",
-          runtime_version: "1.1.27",
+          runtime_version: "1.3.4",
           health: "healthy",
           health_reason_codes: [],
           update: { status: "current", detail: null },
@@ -275,7 +277,7 @@ describe("remote agentic provider runtime options", () => {
       agentic_profiles: { default_binding_id: null, items: [profile] },
     });
 
-    expect(providers[0]?.label).toBe("Gemini 3.8 Flash");
+    expect(providers[0]?.label).toBe(modelLabel);
     expect(providers[0]?.default_reasoning_effort).toBe("high");
     expect(providers[0]?.supported_reasoning_efforts).toEqual(antigravityReasoningOptions);
   });

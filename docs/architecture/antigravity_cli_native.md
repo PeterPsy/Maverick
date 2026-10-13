@@ -20,6 +20,11 @@ material.
 
 Catalog discovery uses another ephemeral confined home. Failed authentication,
 binary drift or malformed catalog output grants no model availability.
+The reviewed Linux CLI is `1.3.4`, pinned by its executable SHA-256. Model
+choices in Settings and Chat come from the same authenticated live catalog,
+including Gemini 4 Argon when the connected account advertises it. Its
+`high`, `medium` and `low` aliases become one model with reasoning choices;
+an unavailable account model must not be added as a selectable fallback.
 Discovery and runtime-health failures only disable the live registry projection;
 they must not overwrite the operator's persisted activation. A later successful
 refresh restores availability for an already enabled provider. An explicitly

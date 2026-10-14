@@ -54,8 +54,17 @@ restoration; text is never submitted automatically. The store expires entries
 after 24 hours and retains at most 20 drafts of 64 Ki characters each. Shared
 platform-origin documents cannot use this store.
 
-The conversation picker composes Chat's sidebar search, thread rows and editor
-with their shared stylesheets. The editor retains project choices, mutation errors,
+The conversation picker renders the sidebar's complete `ChatConversationPanel`
+with `useChatSidebarState`, shared styles and `ChatSelectionActions`: view filters,
+project groups/actions, message search, thread editing and confirmed bulk deletion.
+The embedded host routes chat selection/creation to retained windows and resets
+only controllers included in successful thread, project or batch deletions.
+Search and selection stay local to that picker, without activating the shell's
+sidebar selection channel or sidebar-close swipe. Nested menu portals belong to
+the same picker scope. Selected search/backfill metadata stays in RAM per window
+so results outside the current catalog page can open normally; layout persistence
+excludes it. Authoritative deletion events also reset those retained windows.
+The editor retains project choices, mutation errors,
 keyboard dismissal and explicit deletion confirmation. Working status remains
 available to assistive technology while the animated frame supplies its visual
 indicator. Selecting a conversation moves focus to the revealed window.

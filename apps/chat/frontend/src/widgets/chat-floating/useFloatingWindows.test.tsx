@@ -2,13 +2,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deleteThread } from "../../api/client";
 import type { ChatThread } from "../../api/client";
 import { persistWindows, readPersistedWindows, widgetStateStorageKey } from "./floatingState";
 import { useFloatingWindows } from "./useFloatingWindows";
 
-vi.mock("../../api/client", () => ({
-  deleteThread: vi.fn(), updateThread: vi.fn(), markThreadRead: vi.fn(), applyThreadCatalogPayload: vi.fn(),
+vi.mock("../../api/client", async (original) => ({
+  ...await original<typeof import("../../api/client")>(), markThreadRead: vi.fn(),
 }));
 vi.mock("../../hooks/useRuntimeThreads", async () => {
   const { useEffect } = await import("react");
@@ -34,7 +33,6 @@ describe("contextual window ownership", () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     localStorage.clear();
     persistWindows(key, seed);
-    vi.mocked(deleteThread).mockReset();
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(0);
     container = document.createElement("div");
     root = createRoot(container);
@@ -73,16 +71,12 @@ describe("contextual window ownership", () => {
     expect(state.windows.at(-1)?.threadId).toBe("thread-new");
   });
 
-  it("keeps the selected window when deleting another thread and preserves it on failure", async () => {
+  it("resets only the windows included in a confirmed deletion", async () => {
     await act(async () => state.selectThread("a", "thread-a"));
     const before = state.windows;
-    vi.mocked(deleteThread).mockRejectedValueOnce(new Error("offline"));
-    await expect(state.removeThread("a", { thread_id: "thread-a" } as ChatThread)).rejects.toThrow("offline");
-    expect(state.windows).toBe(before);
-    vi.mocked(deleteThread).mockResolvedValueOnce({} as Awaited<ReturnType<typeof deleteThread>>);
-    await act(async () => state.removeThread("a", { thread_id: "thread-b" } as ChatThread));
+    await act(async () => state.resetDeletedThreads(["thread-b"]));
     expect(state.windows).toEqual(before);
-    await act(async () => state.removeThread("a", { thread_id: "thread-a" } as ChatThread));
+    await act(async () => state.resetDeletedThreads(["thread-a"]));
     expect(state.windows.at(-1)).toMatchObject({ threadId: "", isDraft: true });
     expect(state.windows.at(-1)?.draftRequestId).toEqual(expect.any(String));
   });
@@ -95,11 +89,19 @@ describe("contextual window ownership", () => {
       data: { type: "maverick.chat.active-thread-changed", owner_app_id: "chat", navigation_scope: windowId, active_thread_id: "thread-a" },
     })));
     expect(state.windows.at(-1)).toMatchObject({ id: windowId, isDraft: false, threadId: "thread-a" });
-    vi.mocked(deleteThread).mockResolvedValueOnce({} as Awaited<ReturnType<typeof deleteThread>>);
-    await act(async () => state.removeThread(windowId, { thread_id: "thread-a" } as ChatThread));
+    await act(async () => state.resetDeletedThreads(["thread-a"]));
     expect(state.windows.at(-1)).toMatchObject({ id: windowId, isDraft: true, threadId: "" });
     expect(state.windows.at(-1)?.draftRequestId).not.toBe(windowId);
     expect(state.windows.at(-1)?.draftRequestId).toEqual(expect.any(String));
     expect(readPersistedWindows(key)?.at(-1)).not.toHaveProperty("draftRequestId");
+  });
+
+  it("resets a selected result when its project is deleted", async () => {
+    const item = { thread_id: "older", title: "Older chat", project_id: "project-x" } as ChatThread;
+    await act(async () => state.selectThread("a", item.thread_id, item));
+    expect(state.windows.at(-1)?.selectedThread).toEqual(item);
+    await act(async () => state.resetDeletedThreads([], "project-x"));
+    expect(state.windows.at(-1)).toMatchObject({ threadId: "", isDraft: true });
+    expect(state.windows.at(-1)?.selectedThread).toBeUndefined();
   });
 });

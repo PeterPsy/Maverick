@@ -150,6 +150,10 @@ test("uses the sidebar row/editor and preserves project changes", async ({ page 
   await page.goto("/apps/chat/widgets/chat-floating/index.html?context=steering-fixture");
   await page.getByRole("button", { name: "Choose chat", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Choose chat", exact: true });
+  await dialog.getByRole("button", { name: "Choose chat view", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: /^Recent/ }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Choose chat view", exact: true })).toContainText("Recent");
   const row = dialog.locator(".bs-chat-list__item");
   await expect(row).toHaveCount(1);
   await row.hover();
@@ -177,6 +181,7 @@ test("resets the real controller after deleting a promoted draft", async ({ page
   await expect(slot.getByRole("button", { name: "Choose chat", exact: true })).toContainText("Active work");
   await slot.getByRole("button", { name: "Choose chat", exact: true }).click();
   const dialog = slot.getByRole("dialog", { name: "Choose chat", exact: true });
+  await dialog.getByRole("button", { name: "Expand all projects", exact: true }).click();
   await dialog.locator(".bs-chat-list__item").hover();
   await dialog.getByRole("button", { name: "Edit Active work", exact: true }).click();
   await dialog.getByRole("button", { name: "Delete Active work", exact: true }).click();
@@ -202,6 +207,7 @@ test.describe("mobile shared chat picker", () => {
     await expect(trigger).not.toContainText("Working");
     await trigger.tap();
     const dialog = page.getByRole("dialog", { name: "Choose chat", exact: true });
+    await dialog.getByRole("button", { name: "Expand all projects", exact: true }).tap();
     const rowButton = dialog.locator(".bs-chat-list__select-button");
     await rowButton.dispatchEvent("pointerdown", { pointerId: 1, pointerType: "touch", clientX: 30, clientY: 100 });
     await expect(dialog.locator(".chat-floating-thread-picker")).toHaveClass(/has-thread-actions-revealed/);

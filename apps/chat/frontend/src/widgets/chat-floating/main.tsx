@@ -49,10 +49,8 @@ function ChatFloatingMount() {
           onDock={floating.dockWindow}
           onMarkThreadRead={floating.markThreadReadIfNeeded}
           onOverlay={floating.closeDock}
-          onRemoveThread={floating.removeThread}
-          onRenameThread={floating.renameThread}
           onSelectThread={floating.selectThread}
-          onOpenAnotherThread={(windowId, threadId) => floating.selectThread(windowId, threadId, true)}
+          onThreadsDeleted={floating.resetDeletedThreads}
           runtimeThreadsError={floating.runtimeThreadsError}
           runtimeThreadsLoaded={floating.runtimeThreadsLoaded}
           showCollapse={isOverlayMode}

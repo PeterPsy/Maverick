@@ -29,6 +29,7 @@ export function ProjectSectionHeader({
   onToggleSection,
   projects,
   section,
+  popupScope,
 }: {
   collapsed: boolean;
   disclosureId: string;
@@ -44,6 +45,7 @@ export function ProjectSectionHeader({
   onToggleSection: (sectionId: string) => void;
   projects: ChatProject[];
   section: FolderSection;
+  popupScope?: string;
 }) {
   const hasBusyChats = section.items.some(isThreadBusy);
   const hasUnreadChats = section.items.some(isThreadUnread);
@@ -149,6 +151,7 @@ export function ProjectSectionHeader({
               <Plus size={15} />
             </button>
             <SidebarActionMenu
+              popupScope={popupScope}
               disabled={isPending}
               icon={MoreHorizontal}
               label={`Project actions for ${section.title}`}

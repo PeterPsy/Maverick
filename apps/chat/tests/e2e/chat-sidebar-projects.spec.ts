@@ -23,6 +23,7 @@ for (const width of [390, 1280]) {
       const url = new URL(request.url());
       const body = request.method() === "POST" ? request.postDataJSON() : {};
       const json = (payload: unknown, status = 200) => route.fulfill({ status, json: payload });
+      if (url.pathname === "/api/apps/chat/backend" && body.action === "scheduled.list") return json({ chats: [] });
       if (url.pathname === "/api/apps/chat/backend" && body.action === "pwa.read_model") {
         expect(body.kind).toBe("projects");
         projectReads += 1;
@@ -97,6 +98,7 @@ test.describe("mobile filtered chat scrolling", () => {
       const url = new URL(request.url());
       const body = request.method() === "POST" ? request.postDataJSON() : {};
       const json = (payload: unknown) => route.fulfill({ json: payload });
+      if (url.pathname === "/api/apps/chat/backend" && body.action === "scheduled.list") return json({ chats: [] });
       if (url.pathname === "/api/apps/chat/backend" && body.action === "pwa.read_model") {
         return json({ revision: "projects-empty", payload: { kind: "projects", data: { projects: [], has_more: false } } });
       }

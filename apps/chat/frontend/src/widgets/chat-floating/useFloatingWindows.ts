@@ -1,7 +1,7 @@
 import { activeAppContextFromWidgetContext, type ActiveAppContext } from "../../lib/activeAppContext";
 import { useEffect, useRef, useState } from "react";
 import type { ChatThread } from "../../api/client";
-import { applyThreadCatalogPayload, deleteThread, markThreadRead, updateThread } from "../../api/client";
+import { applyThreadCatalogPayload, markThreadRead } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { isThreadUnread } from "../chat-sidebar/sections";
 import {
@@ -31,11 +31,14 @@ export function useFloatingWindows() {
   threadsRef.current = threads;
   windowsRef.current = windows;
 
-  useRuntimeThreads({ onSnapshot: () => setRuntimeThreadsLoaded(true), setError: setRuntimeThreadsError, setThreads });
+  useRuntimeThreads({ onSnapshot: () => setRuntimeThreadsLoaded(true), onThreadsDeleted: resetDeletedThreads, setError: setRuntimeThreadsError, setThreads });
 
   useEffect(() => {
     if (isWindowStateReady && runtimeThreadsLoaded) {
-      setWindows((current) => reconcileWindowsWithThreads(current, threads));
+      setWindows((current) => reconcileWindowsWithThreads(current.map((item) => {
+        const latest = threads.find((thread) => thread.thread_id === item.threadId);
+        return latest ? { ...item, selectedThread: latest } : item;
+      }), threads));
     }
   }, [isWindowStateReady, runtimeThreadsLoaded, threads]);
 
@@ -120,6 +123,7 @@ export function useFloatingWindows() {
     const next = createWindow("", true, projectId);
     setWindows((current) => [...current, next]);
     setHostNavigationScope(next.id);
+    focusWindow(next.id);
   }
 
   function dockWindow(windowId: string) {
@@ -132,13 +136,14 @@ export function useFloatingWindows() {
     }, "*");
   }
 
-  function selectThread(windowId: string, threadId: string, anotherWindow = false) {
+  function selectThread(windowId: string, threadId: string, selectedThread?: ChatThread) {
     if (!threadId) return;
     const existing = windowsRef.current.find((item) => item.threadId === threadId && !item.isDraft);
-    const next = existing || createWindow(threadId);
+    const next = existing || { ...createWindow(threadId), selectedThread: selectedThread || threadsRef.current.find((thread) => thread.thread_id === threadId) };
+    if (selectedThread) setThreads((current) => applyThreadCatalogPayload(current, { changed_thread: selectedThread }));
     setWindows((current) => (existing ? current : [...current, next]).map((item) =>
       item.id === next.id ? { ...item, isCollapsed: false }
-        : !anotherWindow && item.id === windowId ? { ...item, isCollapsed: true } : item));
+        : item.id === windowId ? { ...item, isCollapsed: true } : item));
     setHostNavigationScope(next.id);
     focusWindow(next.id);
   }
@@ -154,20 +159,17 @@ export function useFloatingWindows() {
     } finally { readReceiptInFlightRef.current.delete(thread.thread_id); }
   }
 
-  async function removeThread(_windowId: string, thread: ChatThread) {
-    await deleteThread(thread.thread_id);
-    setThreads((current) => current.filter((item) => item.thread_id !== thread.thread_id));
-    setWindows((current) => current.map((item) => item.threadId === thread.thread_id
-      ? { ...item, draftProjectId: null, draftRequestId: crypto.randomUUID(), isDraft: true, threadId: "" } : item));
+  function resetDeletedThreads(threadIds: string[], projectId?: string) {
+    const deleted = new Set(threadIds);
+    setThreads((current) => current.filter((item) => !deleted.has(item.thread_id) && (!projectId || item.project_id !== projectId)));
+    setWindows((current) => current.map((item) => deleted.has(item.threadId) || (projectId && item.selectedThread?.thread_id === item.threadId && item.selectedThread.project_id === projectId)
+      ? { ...item, draftProjectId: null, draftRequestId: crypto.randomUUID(), isDraft: true, threadId: "", selectedThread: undefined } : item));
   }
 
   return {
     closeWindow: (windowId: string) => setWindowCollapsed(windowId, true),
     closeDock: () => postDockClose(), activeAppContext, createDraftChat, dockWindow, hostMode, hostNavigationScope,
-    isWindowStateReady, markThreadReadIfNeeded, removeThread,
-    renameThread: async (threadId: string, title: string, projectId?: string | null) => {
-      await updateThread({ thread_id: threadId, title, ...(projectId !== undefined ? { project_id: projectId } : {}) });
-    },
+    isWindowStateReady, markThreadReadIfNeeded, resetDeletedThreads,
     runtimeThreadsError, runtimeThreadsLoaded, selectThread, setWindowCollapsed, stackRef, threads, windows,
   };
 }

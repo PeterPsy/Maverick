@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ChatThread } from "../../api/client";
 import {
   FALLBACK_WIDGET_STATE_STORAGE_KEY,
   type FloatingChatWindow,
@@ -32,6 +33,14 @@ function fakeStorage(): FakeStorage & { entries: Map<string, string> } {
 }
 
 describe("floating chat widget state", () => {
+  it("retains selected search metadata outside the current page without persisting it", () => {
+    const storage = fakeStorage();
+    const selectedThread = { thread_id: "older-thread", title: "An older conversation" } as ChatThread;
+    const item = windowItem({ threadId: "older-thread", selectedThread });
+    expect(reconcileWindowsWithThreads([item], [{ thread_id: "latest-thread" }])).toEqual([item]);
+    persistWindows("test", [item], storage);
+    expect(readPersistedWindows("test", storage)?.[0]).not.toHaveProperty("selectedThread");
+  });
   it("round-trips persisted floating windows", () => {
     const storage = fakeStorage();
     const storageKey = widgetStateStorageKey("default");

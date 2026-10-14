@@ -44,6 +44,7 @@ import {
 import { useSidebarProjectActions } from "./useSidebarProjectActions";
 import { useSidebarProjects } from "./useSidebarProjects";
 import { useThreadTouchSelection } from "./useThreadTouchSelection";
+import type { ChatSidebarHost } from "./chatSidebarHost";
 
 const CHAT_APP_ID = "chat";
 const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
@@ -61,12 +62,15 @@ const THREAD_FILTERS: ThreadFilter[] = [
   "multi_agent",
 ];
 
-export function useChatSidebarState() {
+export function useChatSidebarState(host?: ChatSidebarHost) {
+  const hostRef = useRef(host);
+  hostRef.current = host;
+  const isEmbedded = Boolean(host);
   const {
     projects, error: projectsError, isLoading: isProjectsLoading,
     refresh: refreshProjects, replaceProjects: applyProjects,
   } = useSidebarProjects();
-  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [threads, setThreads] = useState<ChatThread[]>(() => host?.initialThreads || []);
   const [multiAgentThreadIds, setMultiAgentThreadIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
@@ -77,13 +81,13 @@ export function useChatSidebarState() {
   const [threadPageCursor, setThreadPageCursor] = useState<string | null>(null);
   const [hasMoreThreadPages, setHasMoreThreadPages] = useState(false);
   const [isThreadBackfillLoading, setIsThreadBackfillLoading] = useState(false);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(host?.activeThreadId || null);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [expandedThreadTitle, setExpandedThreadTitle] = useState("");
-  const [isShellMobileLayout, setIsShellMobileLayout] = useState(isMobileLayoutViewport);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isShellMobileLayout, setIsShellMobileLayout] = useState(() => host?.isMobileLayout ?? isMobileLayoutViewport());
+  const [isInitialLoading, setIsInitialLoading] = useState(!host);
   const [isPending, setIsPending] = useState(false);
   const [isBulkDeletePending, setIsBulkDeletePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,9 +160,16 @@ export function useChatSidebarState() {
     setProjects: applyProjects,
     setThreads,
     threads,
+    onThreadsDeleted: (threadIds, projectId) => hostRef.current?.onThreadsDeleted(threadIds, projectId),
   });
 
-  useShellSidebarCloseSwipe(isShellMobileLayout);
+  useEffect(() => {
+    if (!host) return;
+    setActiveThreadId(host.activeThreadId || null);
+    setIsShellMobileLayout(host.isMobileLayout);
+  }, [host?.activeThreadId, host?.isMobileLayout]);
+
+  useShellSidebarCloseSwipe(!isEmbedded && isShellMobileLayout);
   useRuntimeThreads({
     onDisplayReady: () => setIsInitialLoading(false),
     onSnapshot: (frame) => {
@@ -238,8 +249,8 @@ export function useChatSidebarState() {
   }, [isBulkDeletePending, selectedThreadIds, threads, workspaceId]);
 
   useEffect(() => {
-    void refreshViewFilter();
-  }, []);
+    if (!isEmbedded) void refreshViewFilter();
+  }, [isEmbedded]);
 
   useEffect(() => {
     if (!workspaceId) {
@@ -264,7 +275,7 @@ export function useChatSidebarState() {
   }, [threadCatalogIdentityKey, workspaceId]);
 
   useEffect(() => {
-    if (!hasLoadedViewFilter) {
+    if (isEmbedded || !hasLoadedViewFilter) {
       return;
     }
     const nextQuery = searchQuery.trim();
@@ -284,7 +295,7 @@ export function useChatSidebarState() {
         .catch((saveError: Error) => setError(saveError.message));
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [hasLoadedViewFilter, searchQuery]);
+  }, [hasLoadedViewFilter, isEmbedded, searchQuery]);
 
   useEffect(() => {
     if (!searchTerm) {
@@ -408,6 +419,7 @@ export function useChatSidebarState() {
   }, [hasMoreThreadPages, isThreadBackfillLoading, searchTerm, threadPageCursor]);
 
   useEffect(() => {
+    if (isEmbedded) return;
     const channel = createChatSidebarSelectionChannel((message) => {
       if (!isMessageForChatSidebar(message, CHAT_APP_ID, workspaceIdRef.current)) {
         return;
@@ -428,7 +440,7 @@ export function useChatSidebarState() {
         selectionChannelRef.current = null;
       }
     };
-  }, []);
+  }, [isEmbedded]);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
@@ -446,17 +458,17 @@ export function useChatSidebarState() {
         (payload.type === "maverick.chat.active-thread-changed" || payload.type === "maverick.widget.data-changed") &&
         payload.owner_app_id === "chat"
       ) {
-        if (payload.active_thread_id) {
+        if (payload.active_thread_id && !hostRef.current) {
           setActiveThreadId(payload.active_thread_id);
         }
         if (payload.resource === "projects") {
           void refreshProjects();
         }
       }
-      if (payload.type === "maverick.widget.context-changed") {
+      if (payload.type === "maverick.widget.context-changed" && !hostRef.current) {
         setIsShellMobileLayout(isMobileLayoutContext(payload.context));
       }
-      if (payload.type === "maverick.widget.data-changed" && payload.owner_app_id === "chat" && payload.resource === "view-state") {
+      if (!hostRef.current && payload.type === "maverick.widget.data-changed" && payload.owner_app_id === "chat" && payload.resource === "view-state") {
         void refreshViewFilter();
       }
     }
@@ -473,7 +485,8 @@ export function useChatSidebarState() {
     setExpandedThreadTitle("");
     projectActions.clearProjectEditing();
     setError(null);
-    notifyShell(undefined, { project_id: projectId });
+    if (hostRef.current) hostRef.current.onCreateChat(projectId);
+    else notifyShell(undefined, { project_id: projectId });
     setIsPending(false);
   }
 
@@ -501,7 +514,8 @@ export function useChatSidebarState() {
     setExpandedThreadTitle("");
     projectActions.cancelProjectDeletion();
     void markThreadReadIfNeeded(thread);
-    notifyShell(thread);
+    if (hostRef.current) hostRef.current.onSelectThread(thread);
+    else notifyShell(thread);
   }
 
   function selectedThreadIdsInCurrentCatalog(): string[] {
@@ -581,6 +595,7 @@ export function useChatSidebarState() {
         (current) => new Set(Array.from(current).filter((threadId) => !completedThreadIds.has(threadId))),
       );
       clearDeletedThreadState(completedThreadIds);
+      hostRef.current?.onThreadsDeleted(Array.from(completedThreadIds));
     };
     try {
       await deleteThreads(threadIds, applyCompletedBatch);
@@ -649,6 +664,7 @@ export function useChatSidebarState() {
     setThreads((current) => applyThreadCatalogPayload(current, payload));
     updateFromSidebarPayload(payload, applyProjects);
     clearDeletedThreadState(new Set([threadId]));
+    hostRef.current?.onThreadsDeleted([threadId]);
     projectActions.clearProjectEditing();
   }
 
@@ -708,6 +724,8 @@ export function useChatSidebarState() {
     expandedThreadId,
     expandedThreadTitle,
     hasThreadSelection: selectedThreadIds.size > 0,
+    confirmSelectedThreadDeletion,
+    isBulkDeletePending,
     isInitialLoading,
     isPending,
     isProjectsLoading,

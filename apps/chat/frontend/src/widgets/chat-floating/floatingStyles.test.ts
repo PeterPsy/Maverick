@@ -47,8 +47,10 @@ describe("floating chat widget styles", () => {
     const styles = readStyle("styles.css");
     const dropdownBlock = cssBlock(styles, ".chat-floating-thread-menu__panel");
 
-    expect(dropdownBlock).toContain("max-height: min(20rem, calc(100dvh - 7rem));");
-    expect(dropdownBlock).toContain("overflow-y: auto;");
+    expect(dropdownBlock).toContain("max-height: min(30rem, calc(100dvh - 7rem));");
+    expect(dropdownBlock).toContain("overflow-y: hidden;");
+    const listStyles = readStyle("../chat-sidebar/conversation-panel.css");
+    expect(listStyles).toMatch(/(?:^|\n)\.bs-chat-list\s*{[^}]*overflow-y:\s*auto;/);
     expect(dropdownBlock).toContain("scrollbar-width: none;");
     expect(dropdownBlock).toContain("-ms-overflow-style: none;");
     expect(styles).toMatch(/\.chat-floating-thread-menu__panel::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);

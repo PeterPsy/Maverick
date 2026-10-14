@@ -12,6 +12,7 @@ type RuntimeThreadsArgs = {
   enabled?: boolean;
   onDisplayReady?: (() => void) | null;
   onSnapshot?: ((frame: RuntimeThreadSnapshotFrame) => void) | null;
+  onThreadsDeleted?: (threadIds: string[]) => void;
   setError: Dispatch<SetStateAction<string | null>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
 };
@@ -20,12 +21,14 @@ function isRuntimeThreadStreamError(message: string): boolean {
   return message.startsWith("Runtime thread ");
 }
 
-export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, setError, setThreads }: RuntimeThreadsArgs) {
+export function useRuntimeThreads({ enabled = true, onSnapshot, onThreadsDeleted, onDisplayReady, setError, setThreads }: RuntimeThreadsArgs) {
   const visible = useChatVisibility();
   const hasAuthoritativeSnapshotRef = useRef(false);
   const onDisplayReadyRef = useRef(onDisplayReady);
   onDisplayReadyRef.current = onDisplayReady;
   const onSnapshotRef = useRef<typeof onSnapshot>(onSnapshot);
+  const onThreadsDeletedRef = useRef(onThreadsDeleted);
+  onThreadsDeletedRef.current = onThreadsDeleted;
   useEffect(() => {
     onSnapshotRef.current = onSnapshot;
   }, [onSnapshot]);
@@ -67,6 +70,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, 
     }
 
     function applyThreadDelta(frame: Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.changed" }>) {
+      if (frame.deleted_thread_ids?.length) onThreadsDeletedRef.current?.(frame.deleted_thread_ids);
       invalidateChatDisplay('runtime-threads');
       if (Array.isArray(frame.threads)) {
         applyThreads(frame.threads);

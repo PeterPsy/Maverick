@@ -14,6 +14,7 @@ import {
   type ChatSidebarSelectionChannel,
 } from "../chatSidebarSelectionChannel";
 import "./styles.css";
+import { ChatSelectionActions } from "./ChatSelectionActions";
 
 applyInitialMaverickTheme();
 listenForMaverickThemeMessages();
@@ -187,36 +188,22 @@ function ChatSidebarFooterWidget() {
     });
   }
 
-  function handlePrimaryButtonClick() {
-    if (hasSelectedThreads) {
-      requestDeleteConfirmation();
-      return;
-    }
-    createChatInCurrentContext();
-  }
-
   return (
     <main className={`bs-chat-sidebar-footer-widget ${isConfirmingDeletion ? "is-confirming-delete" : ""}`}>
-      {isConfirmingDeletion ? (
-        <div className="bs-chat-sidebar-footer__confirm-actions" role="group" aria-label="Confirm chat deletion">
-          <button className="bs-chat-sidebar-footer__confirm-button is-danger" disabled={deleteDisabled} onClick={confirmDeleteSelection} type="button">
-            Conferma
-          </button>
-          <button className="bs-chat-sidebar-footer__confirm-button" disabled={isSelectionDeleting} onClick={cancelDeleteConfirmation} type="button">
-            Annulla
-          </button>
-        </div>
-      ) : null}
-      <button
-        aria-label={hasSelectedThreads ? `Delete ${selectedThreadCount} selected chat${selectedThreadCount === 1 ? "" : "s"}` : "New chat"}
-        className={`bs-chat-sidebar-footer__new-chat ${hasSelectedThreads ? "is-delete" : ""}`}
-        disabled={hasSelectedThreads ? deleteDisabled : isInitialLoading}
-        onClick={handlePrimaryButtonClick}
-        type="button"
-      >
-        {hasSelectedThreads ? <TrashIcon /> : <span aria-hidden="true" className="bs-chat-sidebar-footer__plus" />}
-        <span>{primaryActionLabel}</span>
-      </button>
+      {hasSelectedThreads ? <ChatSelectionActions
+        count={selectedThreadCount}
+        isDeleting={isSelectionDeleting || isInitialLoading}
+        isConfirming={isConfirmingDeletion}
+        onRequest={requestDeleteConfirmation}
+        onConfirm={confirmDeleteSelection}
+        onCancel={cancelDeleteConfirmation}
+      /> : (
+        <button aria-label="New chat" className="bs-chat-sidebar-footer__new-chat"
+          disabled={isInitialLoading} onClick={createChatInCurrentContext} type="button">
+          <span aria-hidden="true" className="bs-chat-sidebar-footer__plus" />
+          <span>{PRIMARY_ACTION_LABEL}</span>
+        </button>
+      )}
     </main>
   );
 }
@@ -243,23 +230,6 @@ function postWidgetHeight(appId: string, height: string) {
       height,
     },
     "*",
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="bs-chat-sidebar-footer__trash"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.9"
-      viewBox="0 0 24 24"
-    >
-      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" />
-    </svg>
   );
 }
 

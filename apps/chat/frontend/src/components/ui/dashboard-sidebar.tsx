@@ -28,6 +28,7 @@ export function SidebarNav({
   children,
   viewLabel = "Choose chat view",
   search,
+  popupScope,
 }: {
   groups: NavGroupData[];
   activeId: string;
@@ -37,7 +38,8 @@ export function SidebarNav({
   actions?: ReactNode;
   children: ReactNode;
   viewLabel?: string;
-  search?: { label: string; placeholder: string; enableShortcut?: boolean };
+  search?: { label?: string; placeholder?: string; enableShortcut?: boolean };
+  popupScope?: string;
 }) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const activeItem =
@@ -84,6 +86,7 @@ export function SidebarNav({
             <DropdownMenu.Content
               align="start"
               className="dashboard-sidebar__menu"
+              data-chat-picker-scope={popupScope}
               collisionPadding={8}
               sideOffset={6}
             >
@@ -157,9 +160,11 @@ export function SidebarActionMenu({
   items,
   disabled = false,
   icon: Icon,
+  popupScope,
 }: {
   label: string;
   icon: LucideIcon;
+  popupScope?: string;
   disabled?: boolean;
   items: Array<{
     title: string;
@@ -184,6 +189,7 @@ export function SidebarActionMenu({
         <DropdownMenu.Content
           align="end"
           className="dashboard-sidebar__menu dashboard-sidebar__menu--actions"
+          data-chat-picker-scope={popupScope}
           collisionPadding={8}
           sideOffset={4}
         >

@@ -51,7 +51,8 @@ for (const width of [280, 390]) {
             : {};
         const json = (payload: unknown, status = 200) =>
           route.fulfill({ json: payload, status });
-        if (url.pathname === "/api/apps/chat/backend") {
+        if (url.pathname === "/api/apps/chat/backend" && body.action === "scheduled.list") return json({ chats: [] });
+      if (url.pathname === "/api/apps/chat/backend") {
           if (body.action === "pwa.read_model")
             return json({
               revision: "projects",

@@ -24,10 +24,8 @@ export function FloatingChatFrame({
   onDock,
   onMarkThreadRead,
   onOverlay,
-  onRemoveThread,
-  onRenameThread,
   onSelectThread,
-  onOpenAnotherThread,
+  onThreadsDeleted,
   runtimeThreadsError,
   runtimeThreadsLoaded,
   showCollapse = true,
@@ -47,10 +45,8 @@ export function FloatingChatFrame({
   onDock?: (windowId: string) => void;
   onMarkThreadRead: (thread: ChatThread) => Promise<void>;
   onOverlay?: (windowId: string) => void;
-  onRemoveThread: (windowId: string, thread: ChatThread) => Promise<void>;
-  onRenameThread: (threadId: string, title: string, projectId?: string | null) => Promise<void>;
-  onSelectThread: (windowId: string, threadId: string) => void;
-  onOpenAnotherThread?: (windowId: string, threadId: string) => void;
+  onSelectThread: (windowId: string, threadId: string, thread?: ChatThread) => void;
+  onThreadsDeleted: (threadIds: string[], projectId?: string) => void;
   runtimeThreadsError: string | null;
   runtimeThreadsLoaded: boolean;
   showCollapse?: boolean;
@@ -72,7 +68,8 @@ export function FloatingChatFrame({
   const [externalMentionDrop, setExternalMentionDrop] = useState<ExternalMentionDrop | null>(null);
   const [hasOpened, setHasOpened] = useState(isActive && !windowItem.isCollapsed);
   useEffect(() => { if (isActive && !windowItem.isCollapsed) setHasOpened(true); }, [isActive, windowItem.isCollapsed]);
-  const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || null;
+  const retainedThread = windowItem.selectedThread?.thread_id === windowItem.threadId ? windowItem.selectedThread : null;
+  const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || retainedThread || null;
   const isActiveThreadBusy = Boolean(activeThread && isThreadBusy(activeThread));
   const isActiveThreadUnread = Boolean(activeThread && isThreadUnread(activeThread));
   const [pinnedContext, setPinnedContext] = useState<ActiveAppContext | null>(null);
@@ -148,11 +145,9 @@ export function FloatingChatFrame({
             activeThread={activeThread}
             isActiveThreadBusy={isActiveThreadBusy}
             isActiveThreadUnread={isActiveThreadUnread}
-            onMarkThreadRead={onMarkThreadRead}
-            onRemoveThread={onRemoveThread}
-            onRenameThread={onRenameThread}
             onSelectThread={onSelectThread}
-            onOpenAnotherThread={onOpenAnotherThread}
+            onThreadsDeleted={onThreadsDeleted}
+            onCreateDraftChat={onCreateDraftChat}
             threads={threads}
             windowItem={windowItem}
           />

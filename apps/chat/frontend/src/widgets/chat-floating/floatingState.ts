@@ -1,3 +1,5 @@
+import type { ChatThread } from "../../api/client";
+
 export const WIDGET_STATE_STORAGE_KEY_PREFIX = "maverick.chat.floating-widget.state.v1";
 export const FALLBACK_WIDGET_STATE_STORAGE_KEY = `${WIDGET_STATE_STORAGE_KEY_PREFIX}:global`;
 
@@ -9,6 +11,8 @@ export type FloatingChatWindow = {
   isDraft: boolean;
   isCollapsed: boolean;
   threadId: string;
+  /** Last known metadata for a selected result outside the first catalog page. */
+  selectedThread?: ChatThread;
 };
 
 export type PersistedFloatingChatWindow = {
@@ -133,7 +137,7 @@ export function reconcileWindowsWithThreads(
     return reconcileUnscopedSelectedThread(windows, selectedThreadId);
   }
   return windows.map((windowItem) => {
-    const hasValidThread = Boolean(windowItem.threadId && threadIds.has(windowItem.threadId));
+    const hasValidThread = Boolean(windowItem.threadId && (threadIds.has(windowItem.threadId) || windowItem.selectedThread?.thread_id === windowItem.threadId));
     if (hasValidThread && (windowItem.isDraft || windowItem.draftProjectId)) {
       return { ...windowItem, draftProjectId: null, isDraft: false };
     }
@@ -147,18 +151,18 @@ export function reconcileWindowsWithThreads(
       if (!windowItem.threadId && firstThreadId) {
         return { ...windowItem, threadId: firstThreadId };
       }
-      return !windowItem.threadId || threadIds.has(windowItem.threadId) ? windowItem : { ...windowItem, isDraft: true };
+      return !windowItem.threadId || hasValidThread ? windowItem : { ...windowItem, isDraft: true };
     }
     if (selectedNavigationScope && windowItem.id !== selectedNavigationScope) {
       if (!windowItem.threadId && firstThreadId) {
         return { ...windowItem, threadId: firstThreadId };
       }
-      return !windowItem.threadId || threadIds.has(windowItem.threadId) ? windowItem : { ...windowItem, isDraft: true };
+      return !windowItem.threadId || hasValidThread ? windowItem : { ...windowItem, isDraft: true };
     }
     const nextThreadId =
       selectedThreadId
         ? selectedThreadId
-        : windowItem.threadId && threadIds.has(windowItem.threadId)
+        : hasValidThread
           ? windowItem.threadId
           : firstThreadId;
     return nextThreadId ? { ...windowItem, draftProjectId: null, isDraft: false, threadId: nextThreadId } : { ...windowItem, isDraft: true };

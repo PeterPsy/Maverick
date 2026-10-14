@@ -7,7 +7,7 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 
 describe("chat sidebar footer confirmation buttons", () => {
   it("uses the same glass blur treatment as the primary footer action", () => {
-    const styles = readFileSync(resolve(currentDir, "styles.css"), "utf8");
+    const styles = readFileSync(resolve(currentDir, "selection-actions.css"), "utf8");
     const block = styles.match(/\.bs-chat-sidebar-footer__confirm-button\s*{(?<body>[^}]*)}/)?.groups?.body ?? "";
 
     expect(block).toContain("-webkit-backdrop-filter: blur(18px) saturate(1.15);");

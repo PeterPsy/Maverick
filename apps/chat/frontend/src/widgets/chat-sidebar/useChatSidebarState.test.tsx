@@ -132,6 +132,28 @@ describe("useChatSidebarState search persistence", () => {
     vi.useRealTimers();
   });
 
+  it("routes embedded chat actions to its host and reports only successful deletions", async () => {
+    const item = thread({});
+    const host = {
+      activeThreadId: item.thread_id, initialThreads: [item], isMobileLayout: false,
+      onCreateChat: vi.fn(), onSelectThread: vi.fn(), onThreadsDeleted: vi.fn(),
+    };
+    let sidebar!: ReturnType<typeof useChatSidebarState>;
+    function Probe() { sidebar = useChatSidebarState(host); return null; }
+    await act(async () => root.render(<Probe />));
+    expect(mocks.getChatViewFilter).not.toHaveBeenCalled();
+    await act(async () => sidebar.selectThreadFromClick(item));
+    expect(host.onSelectThread).toHaveBeenCalledWith(item);
+    await act(async () => sidebar.createChat("project-1"));
+    expect(host.onCreateChat).toHaveBeenCalledWith("project-1");
+    mocks.deleteThread.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => { await expect(sidebar.removeThread(item.thread_id)).rejects.toThrow("offline"); });
+    expect(host.onThreadsDeleted).not.toHaveBeenCalled();
+    mocks.deleteThread.mockResolvedValueOnce({ deleted_thread_ids: [item.thread_id] });
+    await act(async () => sidebar.removeThread(item.thread_id));
+    expect(host.onThreadsDeleted).toHaveBeenCalledWith([item.thread_id]);
+  });
+
   it("starts compact, retains manual openings across runtime updates and reveals filtered results", async () => {
     let sidebar!: ReturnType<typeof useChatSidebarState>;
     let publishThreads!: Dispatch<SetStateAction<ChatThread[]>>;

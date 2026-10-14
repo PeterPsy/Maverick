@@ -17,8 +17,9 @@ vi.mock("../../App", async () => {
 });
 
 vi.mock("../chat-sidebar/useSidebarProjects", () => ({
-  useSidebarProjects: () => ({ projects: [], error: null, isLoading: false, refresh: vi.fn() }),
+  useSidebarProjects: () => ({ projects: [], error: null, isLoading: false, refresh: vi.fn(), replaceProjects: vi.fn() }),
 }));
+vi.mock("../../hooks/useRuntimeThreads", () => ({ useRuntimeThreads: vi.fn() }));
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -83,8 +84,7 @@ describe("FloatingWindow", () => {
           onCreateDraftChat={vi.fn()}
           onDock={vi.fn()}
           onMarkThreadRead={vi.fn()}
-          onRemoveThread={vi.fn()}
-          onRenameThread={vi.fn()}
+          onThreadsDeleted={vi.fn()}
           onSelectThread={vi.fn()}
           runtimeThreadsError={null}
           runtimeThreadsLoaded
@@ -136,6 +136,13 @@ describe("FloatingWindow", () => {
     expect(vi.mocked(App).mock.calls.at(-1)?.[0]).toMatchObject({ activeAppContextOverride: crm });
   });
 
+  it("opens selected metadata outside the current catalog page", async () => {
+    const selectedThread = thread({ thread_id: "older-thread", title: "Older conversation" });
+    await renderFloatingWindow(floatingWindow({ threadId: selectedThread.thread_id, selectedThread }));
+    expect(container!.querySelector('[aria-label="Choose chat"]')?.textContent).toContain("Older conversation");
+    expect(vi.mocked(App).mock.calls.at(-1)?.[0]).toMatchObject({ threadId: "older-thread", newChatRequestId: null });
+  });
+
   it("defers controllers for retained windows until they become active", async () => {
     await renderFloatingWindow(floatingWindow(), null, false);
     expect(App).not.toHaveBeenCalled();
@@ -150,6 +157,8 @@ describe("FloatingWindow", () => {
     await renderFloatingWindow(floatingWindow());
     const trigger = container!.querySelector<HTMLButtonElement>('[aria-label="Choose chat"]')!;
     await act(async () => trigger.click());
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Show chats in project No project"]')!.click());
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Search chats"]')!.click());
     const search = container!.querySelector<HTMLInputElement>('[aria-label="Search chats"]')!;
     search.focus();
     await act(async () => search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })));
@@ -163,6 +172,7 @@ describe("FloatingWindow", () => {
   it("reuses the sidebar editor and requires confirmation before deleting", async () => {
     await renderFloatingWindow(floatingWindow());
     await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Choose chat"]')!.click());
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Show chats in project No project"]')!.click());
     expect(container!.querySelector(".bs-chat-list__item")).not.toBeNull();
     expect(container!.querySelector(".chat-floating-thread-menu__item")).toBeNull();
     await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Edit Selected thread"]')!.click());

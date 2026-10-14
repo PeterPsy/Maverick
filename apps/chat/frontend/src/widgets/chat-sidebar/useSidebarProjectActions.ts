@@ -15,6 +15,7 @@ type UseSidebarProjectActionsParams = {
   setProjects: (projects: ChatProject[]) => void;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
   threads: ChatThread[];
+  onThreadsDeleted?: (threadIds: string[], projectId?: string) => void;
 };
 
 export function useSidebarProjectActions({
@@ -28,6 +29,7 @@ export function useSidebarProjectActions({
   setProjects,
   setThreads,
   threads,
+  onThreadsDeleted,
 }: UseSidebarProjectActionsParams) {
   const [editingProject, setEditingProject] = useState<{ projectId: string; name: string } | null>(null);
   const [pendingProjectDeletion, setPendingProjectDeletion] = useState<PendingProjectDeletion | null>(null);
@@ -80,6 +82,7 @@ export function useSidebarProjectActions({
   async function removeProject(projectId: string) {
     const payload = await deleteProject(projectId);
     updateFromSidebarPayload(payload, setProjects);
+    onThreadsDeleted?.(threads.filter((thread) => thread.project_id === projectId).map((thread) => thread.thread_id), projectId);
     setThreads((current) => current.filter((thread) => thread.project_id !== projectId));
     if (threads.some((thread) => thread.thread_id === activeThreadId && thread.project_id === projectId)) {
       setActiveThreadId(null);

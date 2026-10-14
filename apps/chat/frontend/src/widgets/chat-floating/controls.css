@@ -53,8 +53,18 @@
 
 .chat-floating-thread-picker {
   --chat-sidebar-search-height: 2.4rem;
-  display: grid;
+  --chat-sidebar-scroll-under-bottom: 0rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
   gap: .35rem;
+}
+
+.chat-floating-selection-actions {
+  display: grid;
+  flex: none;
+  gap: .4rem;
 }
 
 .chat-floating-thread-menu__accessible-state {
@@ -68,17 +78,8 @@
   white-space: nowrap;
 }
 
-.chat-floating-thread-menu .bs-chat-list__select-button {
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  min-height: 2.2rem;
-}
-
-.chat-floating-thread-menu button:focus-visible {
-  outline: 2px solid var(--maverick-text);
-  outline-offset: -2px;
+.chat-floating-thread-picker button {
+  font-family: inherit;
 }
 
 .chat-floating-loading {
@@ -88,7 +89,7 @@
   color: var(--maverick-text-muted);
 }
 
-.chat-floating-thread-menu button:focus-visible, .chat-floating-widget-shell__button:focus-visible, .chat-floating-widget-launcher:focus-visible, .chat-floating-widget-shell__source-badge:focus-visible {
+.chat-floating-thread-menu__trigger:focus-visible, .chat-floating-widget-shell__button:focus-visible, .chat-floating-widget-launcher:focus-visible, .chat-floating-widget-shell__source-badge:focus-visible {
   outline: 2px solid var(--maverick-text);
   outline-offset: -2px;
 }
@@ -116,10 +117,4 @@
   overflow: hidden;
   font-size: 1.15rem;
   pointer-events: none;
-}
-
-
-.chat-floating-thread-picker.is-shell-mobile .bs-instance-menu__trigger {
-  min-width: 44px;
-  min-height: 44px;
 }

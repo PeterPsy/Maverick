@@ -52,6 +52,7 @@ type RuntimeThreadsProbeProps = {
   onError: (error: string | null) => void;
   onSnapshot?: (frame: Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.snapshot" }>) => void;
   onThreads?: (threads: ChatThread[]) => void;
+  onThreadsDeleted?: (threadIds: string[]) => void;
   surfaceVisible?: boolean;
 };
 
@@ -67,11 +68,12 @@ function RuntimeThreadsConsumer({
   onError,
   onSnapshot,
   onThreads,
+  onThreadsDeleted,
 }: Omit<RuntimeThreadsProbeProps, "surfaceVisible">) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useRuntimeThreads({ onSnapshot, setError, setThreads });
+  useRuntimeThreads({ onSnapshot, onThreadsDeleted, setError, setThreads });
 
   useEffect(() => {
     onError(error);
@@ -125,6 +127,16 @@ describe("useRuntimeThreads", () => {
     vi.unstubAllGlobals();
     resetRuntimeThreadSourceForTests();
     vi.useRealTimers();
+  });
+
+  it("reports authoritative deletions even for threads outside the current page", async () => {
+    const onThreadsDeleted = vi.fn();
+    await act(async () => root.render(<RuntimeThreadsProbe onError={vi.fn()} onThreadsDeleted={onThreadsDeleted} />));
+    await act(async () => MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({
+      type: "runtime.thread.changed", action: "deleted", workspace_id: "default", deleted_thread_ids: ["older-thread"],
+      threads: [], at: "2026-10-14T00:00:00Z",
+    }) } as MessageEvent));
+    expect(onThreadsDeleted).toHaveBeenCalledWith(["older-thread"]);
   });
 
   it("loads the initial thread catalog through the shared REST fallback before a WebSocket snapshot arrives", async () => {

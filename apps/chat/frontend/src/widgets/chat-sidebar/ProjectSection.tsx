@@ -46,6 +46,7 @@ export function ProjectSection({
   projects,
   section,
   selectedThreadIds,
+  popupScope,
 }: {
   activeThreadId: string | null;
   collapsed: boolean;
@@ -97,6 +98,7 @@ export function ProjectSection({
   projects: ChatProject[];
   section: FolderSection;
   selectedThreadIds: ReadonlySet<string>;
+  popupScope?: string;
 }) {
   const disclosureId = useId();
   const isEditingProject = editingProject?.projectId === section.projectId;
@@ -131,6 +133,7 @@ export function ProjectSection({
         onToggleSection={onToggleSection}
         projects={projects}
         section={section}
+        popupScope={popupScope}
       />
       {pendingProjectDeletion?.projectId === section.projectId ? (
         <ProjectDeleteConfirm

@@ -70,6 +70,7 @@ for (const width of [280, 390]) {
       const url = new URL(request.url());
       const body = request.method() === "POST" ? request.postDataJSON() : {};
       const json = (payload: unknown) => route.fulfill({ json: payload });
+      if (url.pathname === "/api/apps/chat/backend" && body.action === "scheduled.list") return json({ chats: [] });
       if (url.pathname === "/api/apps/chat/backend") {
         if (body.action === "pwa.read_model")
           return json({
@@ -197,7 +198,7 @@ for (const width of [280, 390]) {
     await expect(expandedSearch).toBeFocused();
     await expect(viewSwitcher).toBeHidden();
     await expect(
-      page.locator(".dashboard-sidebar__toolbar-actions"),
+      page.getByRole("region", { name: "Chats", exact: true }).locator(".dashboard-sidebar__toolbar-actions"),
     ).toBeHidden();
     const searchFrame = page.locator(".bs-chat-sidebar-search-frame");
     expect((await searchFrame.boundingBox())!.width).toBeGreaterThan(
@@ -322,7 +323,7 @@ for (const width of [280, 390]) {
       page.getByRole("button", { name: "Build the new sidebar", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".bs-chat-list__item")).toHaveCount(1);
-    await page.getByRole("button", { name: "Clear chat search" }).click();
+    await page.getByRole("button", { name: "Clear search chats" }).click();
     await expect(search).toBeFocused();
     await expect(page.locator(".bs-chat-list__item")).toHaveCount(6);
 

@@ -16,7 +16,6 @@ describe("floating chat unread indicator", () => {
     const hookSource = readWidgetFile("useFloatingWindows.ts");
     const frameSource = readWidgetFile("FloatingChatFrame.tsx");
     const launcherSource = readWidgetFile("FloatingLauncher.tsx");
-    const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
     const rowSource = readWidgetFile("../chat-sidebar/ThreadRow.tsx");
     const styles = readWidgetFile("styles.css");
 
@@ -36,10 +35,10 @@ describe("floating chat unread indicator", () => {
   it("marks floating chats read only from explicit floating selections", () => {
     const hookSource = readWidgetFile("useFloatingWindows.ts");
     const frameSource = readWidgetFile("FloatingChatFrame.tsx");
-    const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
+    const sidebarSource = readWidgetFile("../chat-sidebar/useChatSidebarState.ts");
 
     expect(hookSource).toContain("markThreadReadIfNeeded");
-    expect(menuSource).toContain("void props.onMarkThreadRead(thread);");
+    expect(sidebarSource).toContain("void markThreadReadIfNeeded(thread);");
     expect(frameSource).toContain("void onMarkThreadRead(activeThread);");
     expect(hookSource).toMatch(/markThreadRead\s*\(thread\.thread_id\)/);
   });

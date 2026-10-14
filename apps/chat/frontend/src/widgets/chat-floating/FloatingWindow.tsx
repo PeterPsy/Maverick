@@ -13,10 +13,8 @@ export function FloatingWindow({
   onDock,
   onMarkThreadRead,
   onOverlay,
-  onRemoveThread,
-  onRenameThread,
   onSelectThread,
-  onOpenAnotherThread,
+  onThreadsDeleted,
   runtimeThreadsError,
   runtimeThreadsLoaded,
   showCollapse = true,
@@ -36,10 +34,8 @@ export function FloatingWindow({
   onDock: (windowId: string) => void;
   onMarkThreadRead: (thread: ChatThread) => Promise<void>;
   onOverlay?: (windowId: string) => void;
-  onRemoveThread: (windowId: string, thread: ChatThread) => Promise<void>;
-  onRenameThread: (threadId: string, title: string, projectId?: string | null) => Promise<void>;
-  onSelectThread: (windowId: string, threadId: string) => void;
-  onOpenAnotherThread?: (windowId: string, threadId: string) => void;
+  onSelectThread: (windowId: string, threadId: string, thread?: ChatThread) => void;
+  onThreadsDeleted: (threadIds: string[], projectId?: string) => void;
   runtimeThreadsError: string | null;
   runtimeThreadsLoaded: boolean;
   showCollapse?: boolean;
@@ -61,10 +57,8 @@ export function FloatingWindow({
       onDock={onDock}
       onMarkThreadRead={onMarkThreadRead}
       onOverlay={onOverlay}
-      onRemoveThread={onRemoveThread}
-      onRenameThread={onRenameThread}
       onSelectThread={onSelectThread}
-      onOpenAnotherThread={onOpenAnotherThread}
+      onThreadsDeleted={onThreadsDeleted}
       runtimeThreadsError={runtimeThreadsError}
       runtimeThreadsLoaded={runtimeThreadsLoaded}
       showCollapse={showCollapse}

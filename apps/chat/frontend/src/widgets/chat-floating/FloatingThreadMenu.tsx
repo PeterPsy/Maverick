@@ -9,11 +9,9 @@ type Props = {
   activeThread: ChatThread | null;
   isActiveThreadBusy: boolean;
   isActiveThreadUnread: boolean;
-  onMarkThreadRead: (thread: ChatThread) => Promise<void>;
-  onRemoveThread: (windowId: string, thread: ChatThread) => Promise<void>;
-  onRenameThread: (threadId: string, title: string, projectId?: string | null) => Promise<void>;
-  onSelectThread: (windowId: string, threadId: string) => void;
-  onOpenAnotherThread?: (windowId: string, threadId: string) => void;
+  onCreateDraftChat: (windowId: string, projectId: string | null) => void;
+  onThreadsDeleted: (threadIds: string[], projectId?: string) => void;
+  onSelectThread: (windowId: string, threadId: string, thread?: ChatThread) => void;
   threads: ChatThread[];
   windowItem: FloatingChatWindow;
 };
@@ -33,22 +31,22 @@ export function FloatingThreadMenu(props: Props) {
   useEffect(() => {
     if (!open) return;
     function outside(event: PointerEvent) {
-      if (event.target instanceof Node && !menuRef.current?.contains(event.target)
-        && !menuRef.current?.querySelector('form[aria-busy="true"]')) setOpen(false);
+      const target = event.target;
+      const insidePortal = target instanceof Element && target.closest("[data-chat-picker-scope]")?.getAttribute("data-chat-picker-scope") === id;
+      if (target instanceof Node && !menuRef.current?.contains(target) && !insidePortal
+        && !menuRef.current?.querySelector('[aria-busy="true"]')) setOpen(false);
     }
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
-  }, [open]);
+  }, [id, open]);
 
-  function select(thread: ChatThread, another = false) {
-    if (another) props.onOpenAnotherThread?.(windowItem.id, thread.thread_id);
-    else props.onSelectThread(windowItem.id, thread.thread_id);
-    void props.onMarkThreadRead(thread);
+  function select(thread: ChatThread) {
+    props.onSelectThread(windowItem.id, thread.thread_id, thread);
     close(false);
   }
 
   return <div className="chat-floating-thread-menu" ref={menuRef} onKeyDown={(event) => {
-    if (open && event.key === "Escape" && !event.defaultPrevented && !menuRef.current?.querySelector('form[aria-busy="true"]')) {
+    if (open && event.key === "Escape" && !event.defaultPrevented && !menuRef.current?.querySelector('[aria-busy="true"]')) {
       event.preventDefault(); event.stopPropagation(); close();
     }
   }}>
@@ -56,7 +54,7 @@ export function FloatingThreadMenu(props: Props) {
       aria-controls={open ? `${id}-picker` : undefined} aria-describedby={`${id}-state`}
       title={activeThread?.title || "New chat"}
       className={`chat-floating-thread-menu__trigger ${isActiveThreadBusy ? "is-busy" : ""} ${isActiveThreadUnread ? "is-unread" : ""}`}
-      onClick={() => setOpen((value) => !value)}>
+      onClick={() => { if (!menuRef.current?.querySelector('[aria-busy="true"]')) setOpen((value) => !value); }}>
       {isActiveThreadBusy ? <BusyChatGlow /> : null}
       {isThreadTitlePending(activeThread)
         ? <span aria-label="Generating chat title" className="chat-floating-thread-menu__title-skeleton" role="status" />
@@ -70,10 +68,10 @@ export function FloatingThreadMenu(props: Props) {
       <FloatingThreadPicker
         activeThreadId={windowItem.threadId}
         onClose={close}
-        onRemoveThread={(thread) => props.onRemoveThread(windowItem.id, thread)}
-        onRenameThread={(threadId, title, projectId) => props.onRenameThread(threadId, title, projectId)}
+        onCreateChat={(projectId) => { props.onCreateDraftChat(windowItem.id, projectId); close(false); }}
+        onThreadsDeleted={props.onThreadsDeleted}
         onSelectThread={select}
-        canOpenAnotherWindow={Boolean(props.onOpenAnotherThread)}
+        popupScope={id}
         threads={threads}
       />
     </div> : null}

@@ -5,7 +5,7 @@ export const SESSION_ID = "session-steering-browser";
 export const TURN_ID = "turn-still-working";
 const NOW = "2026-09-06T00:00:00.000Z";
 
-export async function installActiveTurn(page: Page, widgetMode = "overlay", mutations: Record<string, unknown>[] = []) {
+export async function installActiveTurn(page: Page, widgetMode = "overlay", mutations: Record<string, unknown>[] = [], threadProjectId: string | null = null) {
   await page.route("**/material-symbols-rounded.woff2", (route) => route.fulfill({
     path: fileURLToPath(new URL("../../../../base-shell/frontend/public/material-symbols-rounded.woff2", import.meta.url)),
     contentType: "font/woff2",
@@ -18,7 +18,7 @@ export async function installActiveTurn(page: Page, widgetMode = "overlay", muta
   const thread = {
     thread_id: SESSION_ID, runtime_session_id: SESSION_ID, title: "Active work",
     source_app_id: "chat", agent_label: "Chat", agent_type_id: "", agent_role_id: "",
-    system_prompt: "", project_id: null, archived: false, availability: "active",
+    system_prompt: "", project_id: threadProjectId, archived: false, availability: "active",
     created_at: NOW, updated_at: NOW, last_user_message_at: NOW,
   };
   const turn = {
@@ -35,6 +35,7 @@ export async function installActiveTurn(page: Page, widgetMode = "overlay", muta
     event("runtime.provider.accepted", { provider_turn_id: "native-turn" }),
     event("runtime.output.delta", { text: "I am still working." }),
   ];
+  const projects = [{ project_id: "project-demo", name: "Demo", created_at: NOW, updated_at: NOW }];
 
   await page.route(/^http:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request();
@@ -55,14 +56,32 @@ export async function installActiveTurn(page: Page, widgetMode = "overlay", muta
     }
     if (url.pathname === "/api/apps/dependencies") return json({ dependencies: [] });
     if (url.pathname === "/api/apps/chat/backend" && body.action === "pwa.read_model") {
-      return json({ revision: "projects-v1", payload: { kind: "projects", data: { projects: [
-        { project_id: "project-demo", name: "Demo", created_at: NOW, updated_at: NOW },
-      ], has_more: false } } });
+      return json({ revision: "projects-v1", payload: { kind: "projects", data: { projects, has_more: false } } });
     }
-    if (url.pathname === "/api/apps/chat/backend" && body.action === "projects.list") return json({ projects: [] });
+    if (url.pathname === "/api/apps/chat/backend" && body.action === "projects.list") return json({ projects });
+    if (url.pathname === "/api/apps/chat/backend" && body.action === "projects.create") {
+      const project = { project_id: "new-project", name: String(body.name), created_at: NOW, updated_at: NOW };
+      projects.push(project);
+      mutations.push({ ...body, action: "project-create" });
+      return json({ project, projects });
+    }
+    if (url.pathname === "/api/apps/chat/backend" && body.action === "projects.update") {
+      const project = projects.find((item) => item.project_id === body.project_id)!;
+      project.name = String(body.name);
+      mutations.push({ ...body, action: "project-rename" });
+      return json({ project, projects });
+    }
+    if (url.pathname === "/api/apps/chat/backend" && body.action === "projects.delete") {
+      const index = projects.findIndex((item) => item.project_id === body.project_id);
+      if (index >= 0) projects.splice(index, 1);
+      const deleted = thread.project_id === body.project_id ? [SESSION_ID] : [];
+      mutations.push({ ...body, action: "project-delete" });
+      return json({ projects, threads: deleted.length ? [] : [thread], deleted_thread_ids: deleted });
+    }
+    if (url.pathname === "/api/apps/chat/backend" && body.action === "scheduled.list") return json({ chats: [] });
     if (url.pathname === "/api/apps") return json({ items: [] });
-    if (url.pathname === "/api/apps/chat/backend" && body.action === "view_filter") {
-      return json({ state: { view_filter: { query: "", mode: "thread" } } });
+    if (url.pathname === "/api/apps/chat/backend" && ["view_filter", "set_view_filter"].includes(String(body.action))) {
+      return json({ state: { view_filter: { query: body.query || "", mode: "thread" } } });
     }
     if (url.pathname === "/api/apps/skills/backend" && body.action === "catalog") return json({ skills: [] });
     if (url.pathname === "/api/inter-agent/runs") return json({ items: [] });
@@ -76,6 +95,12 @@ export async function installActiveTurn(page: Page, widgetMode = "overlay", muta
       }, 202);
     }
     if (url.pathname === `/api/runtime/threads/${SESSION_ID}/read`) return json({ thread, threads: [thread] });
+    if (url.pathname === "/api/runtime/threads/delete-batch") {
+      const ids = body.thread_ids as string[];
+      mutations.push({ action: "delete-batch", thread_ids: ids });
+      return json({ deleted_thread_ids: ids, deleted_runtime_session_ids: [SESSION_ID],
+        results: ids.map((thread_id) => ({ thread_id, status: "deleted" })) });
+    }
     if (url.pathname === `/api/runtime/threads/${SESSION_ID}`) {
       if (request.method() === "PATCH") {
         mutations.push({ action: "rename", ...body });

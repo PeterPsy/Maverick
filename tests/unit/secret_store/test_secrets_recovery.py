@@ -164,7 +164,7 @@ class SecretsRecoveryTestCase(unittest.TestCase):
         assert stored_value is not None
         self.assertNotIn("raw_value", stored_value)
         self.assertNotEqual(stored_value["value_ciphertext"], "sk-test-secret")
-        self.assertEqual(stored_value["value_format"], "mvr3secret2-aesgcm")
+        self.assertEqual(stored_value["value_format"], "loopino.secret-value.v1-aesgcm")
         self.assertIn("value_key_id", stored_value)
 
     def test_create_secret_rejects_id_and_alias_collisions(self) -> None:

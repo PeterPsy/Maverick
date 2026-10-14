@@ -1,4 +1,4 @@
-"""Tests for Core Secrets value envelope compatibility."""
+"""Exact clean-install AES-GCM envelopes and predecessor rejection."""
 
 from __future__ import annotations
 
@@ -10,11 +10,13 @@ import unittest
 from core.secrets.errors import SecretNotFoundError
 from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
+from core.secrets.store import SECRET_VALUE_FORMAT
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from tests.support.collections import FakeCollection
 
 
 class SecretValueEnvelopeTestCase(unittest.TestCase):
-    """Verify encrypted value envelope keying and legacy read behavior."""
+    """Verify authenticated keyring recovery and fail-closed envelope identity."""
 
     def make_collections(self) -> SecretCollections:
         return SecretCollections(
@@ -51,7 +53,7 @@ class SecretValueEnvelopeTestCase(unittest.TestCase):
         with self.assertRaises(SecretNotFoundError):
             store.get_secret_value(secret_id="sec-copied")
 
-    def test_secret_store_can_read_legacy_hmac_xor_values(self) -> None:
+    def test_secret_store_rejects_valid_predecessor_hmac_xor_values(self) -> None:
         collections = self.make_collections()
         store = SecretDocumentStore(collections, key_loader=lambda: b"legacy-key")
         collections.values.update_one(
@@ -60,7 +62,64 @@ class SecretValueEnvelopeTestCase(unittest.TestCase):
             upsert=True,
         )
 
-        self.assertEqual(store.get_secret_value(secret_id="sec-legacy"), "legacy-secret")
+        with self.assertRaises(SecretNotFoundError):
+            store.get_secret_value(secret_id="sec-legacy")
+
+    def test_new_format_round_trip_uses_exact_format_secret_and_key_aad(self) -> None:
+        collections = self.make_collections()
+        key = b"test-key"
+        store = SecretDocumentStore(collections, key_loader=lambda:key)
+        for value in ("", "Unicode secret \u00e8\u2603"):
+            store.save_secret_value(secret_id="sec-format", raw_value=value)
+            document = collections.values.find_one({"secret_id":"sec-format"})
+            self.assertEqual(document["value_format"], "loopino.secret-value.v1-aesgcm")
+            aad = f"{SECRET_VALUE_FORMAT}|sec-format|{document['value_key_id']}".encode()
+            plaintext = AESGCM(hashlib.sha256(key).digest()).decrypt(
+                _decode(document["value_nonce"]), _decode(document["value_ciphertext"]), aad)
+            self.assertEqual(plaintext.decode(), value)
+            self.assertEqual(store.get_secret_value(secret_id="sec-format"), value)
+
+    def test_predecessor_aead_is_rejected_and_metadata_relabel_cannot_decrypt(self) -> None:
+        collections = self.make_collections()
+        key = b"test-key"; key_id = hashlib.sha256(key).hexdigest()[:16]
+        nonce = b"123456789012"
+        old_aad = f"mvr3secret2-aesgcm|sec-old|{key_id}".encode()
+        ciphertext = AESGCM(hashlib.sha256(key).digest()).encrypt(nonce, b"original", old_aad)
+        store = SecretDocumentStore(collections, key_loader=lambda:key)
+        for identity in ("mvr3secret2-aesgcm", SECRET_VALUE_FORMAT):
+            collections.values.update_one({"secret_id":"sec-old"}, {"$set":{
+                "secret_id":"sec-old", "value_format":identity, "value_key_id":key_id,
+                "value_nonce":_base64_url(nonce), "value_ciphertext":_base64_url(ciphertext),
+                "raw_value":"must not bypass rejection",
+            }}, upsert=True)
+            with self.subTest(identity=identity), self.assertRaises(SecretNotFoundError):
+                store.get_secret_value(secret_id="sec-old")
+
+    def test_clean_runtime_rejects_plaintext_and_unknown_formats(self) -> None:
+        collections = self.make_collections()
+        store = SecretDocumentStore(collections, key_loader=lambda:b"key")
+        for identity in (None, "unknown"):
+            collections.values.update_one({"secret_id":"sec-invalid"}, {"$set":{
+                "secret_id":"sec-invalid", "value_format":identity, "raw_value":"plaintext",
+            }}, upsert=True)
+            with self.subTest(identity=identity), self.assertRaises(SecretNotFoundError):
+                store.get_secret_value(secret_id="sec-invalid")
+
+    def test_missing_key_and_ciphertext_tamper_fail_closed(self) -> None:
+        collections = self.make_collections()
+        writer = SecretDocumentStore(collections, key_loader=lambda:b"key")
+        writer.save_secret_value(secret_id="sec-tamper",raw_value="secret")
+        reader = SecretDocumentStore(collections, key_loader=lambda:b"other", keyring_loader=lambda:{})
+        with self.assertRaisesRegex(SecretNotFoundError,"key id"):
+            reader.get_secret_value(secret_id="sec-tamper")
+        document = collections.values.find_one({"secret_id":"sec-tamper"})
+        ciphertext = bytearray(_decode(document["value_ciphertext"])); ciphertext[0] ^= 1
+        collections.values.update_one({"secret_id":"sec-tamper"}, {"$set":{"value_ciphertext":_base64_url(bytes(ciphertext))}})
+        with self.assertRaisesRegex(SecretNotFoundError,"decrypted"):
+            writer.get_secret_value(secret_id="sec-tamper")
+        collections.values.update_one({"secret_id":"sec-tamper"}, {"$set":{"value_nonce":"not-valid-base64"}})
+        with self.assertRaisesRegex(SecretNotFoundError,"decrypted"):
+            writer.get_secret_value(secret_id="sec-tamper")
 
 
 def _legacy_value_document(*, raw_value: str, key: bytes) -> dict[str, str]:
@@ -88,3 +147,7 @@ def _legacy_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
 
 def _base64_url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))

@@ -225,6 +225,10 @@ class NativeDelegationTests(unittest.TestCase):
 
             self.assertEqual(len(client.put_calls), 1)
             self.assertEqual(len(client.run_calls), 1)
+            self.assertTrue(client.put_calls[0]["message_id"].startswith("loopino_user_"))
+            self.assertTrue(client.run_calls[0]["assistantMessageId"].startswith("loopino_assistant_"))
+            self.assertTrue(client.run_calls[0]["clientRequestId"].startswith("loopino_delegate_"))
+            self.assertTrue(client.run_calls[0]["projectId"].startswith("od_loopino_"))
             self.assertTrue(replay["idempotent_replay"])
             visible = "Brief delegated by Loopino\n\nCreate a calm portfolio landing page."
             self.assertEqual(client.put_calls[0]["body"]["content"], visible)

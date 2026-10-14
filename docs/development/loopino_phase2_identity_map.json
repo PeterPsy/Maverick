@@ -16594,6 +16594,87 @@
         "clients/apple/.github/workflows/ios-install-device.yml",
         "clients/apple/.github/workflows/ios-install-maverickdev-dat-entitlement-probe.yml"
       ]
+    },
+    {
+      "category": "runtime_bearer_version",
+      "before": "mvr3rt2",
+      "after": "loopino.runtime-api-token.v2",
+      "source_paths": [
+        "core/runtime/workspace_api_token.py"
+      ],
+      "phase2_migration": "Revoke predecessor bearer records and reissue fresh turn/session-scoped tokens after typed session restoration; never relabel signatures or accept predecessor tokens in the new verifier."
+    },
+    {
+      "category": "encrypted_secret_aad_format",
+      "before": "mvr3secret2-aesgcm",
+      "after": "loopino.secret-value.v1-aesgcm",
+      "source_paths": [
+        "core/secrets/store.py"
+      ],
+      "phase2_migration": "Verify the existing keyring/key IDs first. Decrypt using original AES-GCM AAD mvr3secret2-aesgcm|secret_id|key_id; re-encrypt with a fresh nonce and new AAD loopino.secret-value.v1-aesgcm|secret_id|key_id. Preserve secret/binding/grant IDs, verify plaintext equality and keyring/restart recovery before atomic publication. Metadata-only replacement destroys decryption. Phase 1 performs no production migration; predecessor source remains unchanged."
+    },
+    {
+      "category": "predecessor_secret_envelope",
+      "before": "mvr3secret1",
+      "after": "loopino.secret-value.v1-aesgcm",
+      "source_paths": [
+        "core/secrets/store.py"
+      ],
+      "phase2_migration": "Only a separately reviewed phase 2 migration may decrypt the original HMAC/XOR envelope with its verified existing key material and re-encrypt as new AES-GCM/AAD, preserving secret/grant IDs and verifying recovery. Clean phase 1 runtime has no legacy decrypt branch or alias."
+    },
+    {
+      "category": "provider_tool_alias_prefix",
+      "before": "mav_",
+      "after": "loopino_",
+      "source_paths": [
+        "core/runtime/tool_schema.py"
+      ],
+      "phase2_migration": "Rebuild tool catalogs, alias-to-handle readers and provider instructions together; retain 64-character name cap, 42-character slug truncation and 12-hex handle digest uniqueness. Restore interrupted provider conversations only through a reviewed typed mapping of call/result identities; do not accept predecessor aliases in fresh calls."
+    },
+    {
+      "category": "delegation_user_message_prefix",
+      "before": "mav_user_",
+      "after": "loopino_user_",
+      "source_paths": [
+        "apps/design-studio/backend/delegation_inputs.py"
+      ],
+      "phase2_migration": "Map persisted user-message IDs and every native conversation/project/receipt link together using the unchanged typed request digest suffix. Preserve retry identity and semantic message attribution; never create duplicate native messages during restoration."
+    },
+    {
+      "category": "delegation_assistant_message_prefix",
+      "before": "mav_assistant_",
+      "after": "loopino_assistant_",
+      "source_paths": [
+        "apps/design-studio/backend/delegation_inputs.py"
+      ],
+      "phase2_migration": "Map persisted assistant-message IDs and every native run/conversation/result link together using the unchanged typed request digest suffix; verify paired messages and recovery receipts."
+    },
+    {
+      "category": "delegation_request_prefix",
+      "before": "mav_delegate_",
+      "after": "loopino_delegate_",
+      "source_paths": [
+        "apps/design-studio/backend/delegation_inputs.py"
+      ],
+      "phase2_migration": "Map client request IDs and native run/delegation retry/recovery links together, preserving the 32-hex digest suffix and verified idempotency."
+    },
+    {
+      "category": "delegation_project_prefix",
+      "before": "od_mav_",
+      "after": "od_loopino_",
+      "source_paths": [
+        "apps/design-studio/backend/delegation_inputs.py"
+      ],
+      "phase2_migration": "Map deterministic project IDs and all conversation/run/delegation/attachment/result links together, preserving the 24-hex digest suffix; verify native project identity before write."
+    },
+    {
+      "category": "mutation_idempotency_prefix",
+      "before": "mvr",
+      "after": "loopino",
+      "source_paths": [
+        "packages/pwa-cache/src/mutationRetry.ts"
+      ],
+      "phase2_migration": "Fresh default/fallback mutation keys use loopino:. Pending predecessor requests require their exact original server idempotency identity until reconciled; never relabel a submitted key or replay it as a new mutation. No persisted replay queue is introduced."
     }
   ]
 }

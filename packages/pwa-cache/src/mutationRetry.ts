@@ -39,8 +39,8 @@ export const APPROVED_MUTATION_RETRY_AUDIT_IDS = Object.freeze([
 ]);
 const ISSUED_MUTATION_RETRY_EXECUTORS = new WeakMap<object, MutationRetryExecutorState>();
 
-export function createIdempotencyKey(prefix = "mvr"): string {
-  const normalizedPrefix = prefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 16) || "mvr";
+export function createIdempotencyKey(prefix = "loopino"): string {
+  const normalizedPrefix = prefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 16) || "loopino";
   const random = globalThis.crypto?.randomUUID?.()
     ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   return `${normalizedPrefix}:${random}`;

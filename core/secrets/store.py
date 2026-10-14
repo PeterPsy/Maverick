@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import base64
 import hashlib
-import hmac
 import secrets
 from typing import Any, Callable, Protocol
 
@@ -16,8 +15,7 @@ from core.secrets.key_material import load_secret_store_key, load_secret_store_k
 from core.secrets.models import SecretBindingRecord, SecretGrantRecord, SecretRecord
 
 
-SECRET_VALUE_FORMAT = "mvr3secret2-aesgcm"
-LEGACY_SECRET_VALUE_FORMAT = "mvr3secret1"
+SECRET_VALUE_FORMAT = "loopino.secret-value.v1-aesgcm"
 
 
 class DocumentCollection(Protocol):
@@ -160,10 +158,6 @@ class SecretDocumentStore:
             raise SecretNotFoundError(f"Secret value for `{secret_id}` was not found.")
         if document.get("value_format") == SECRET_VALUE_FORMAT:
             return _decrypt_secret_value(document, secret_id=secret_id, keyring=self._keyring_loader())
-        if document.get("value_format") == LEGACY_SECRET_VALUE_FORMAT:
-            return _decrypt_legacy_secret_value(document, key=self._key_loader())
-        if "raw_value" in document:
-            return str(document["raw_value"])
         raise SecretNotFoundError(f"Secret value for `{secret_id}` was not found.")
 
     def delete_secret_value(self, *, secret_id: str) -> None:
@@ -285,13 +279,13 @@ def _decrypt_secret_value(document: dict[str, Any], *, secret_id: str, keyring: 
     key = keyring.get(key_id)
     if key is None:
         raise SecretNotFoundError("Secret value key id is not available.")
-    nonce = _base64_url_decode(str(document.get("value_nonce") or ""))
-    ciphertext = _base64_url_decode(str(document.get("value_ciphertext") or ""))
     try:
+        nonce = _base64_url_decode(str(document.get("value_nonce") or ""))
+        ciphertext = _base64_url_decode(str(document.get("value_ciphertext") or ""))
         plaintext = AESGCM(_aead_key(key)).decrypt(nonce, ciphertext, _value_aad(secret_id=secret_id, key_id=key_id))
+        return plaintext.decode("utf-8")
     except Exception as exc:
         raise SecretNotFoundError("Secret value could not be decrypted.") from exc
-    return plaintext.decode("utf-8")
 
 
 def _aead_key(key: bytes) -> bytes:
@@ -300,27 +294,6 @@ def _aead_key(key: bytes) -> bytes:
 
 def _value_aad(*, secret_id: str, key_id: str) -> bytes:
     return f"{SECRET_VALUE_FORMAT}|{secret_id}|{key_id}".encode("utf-8")
-
-
-def _decrypt_legacy_secret_value(document: dict[str, Any], *, key: bytes) -> str:
-    nonce = _base64_url_decode(str(document.get("value_nonce") or ""))
-    ciphertext = _base64_url_decode(str(document.get("value_ciphertext") or ""))
-    expected_tag = hmac.new(key, nonce + ciphertext, hashlib.sha256).digest()
-    tag = _base64_url_decode(str(document.get("value_tag") or ""))
-    if not hmac.compare_digest(tag, expected_tag):
-        raise SecretNotFoundError("Secret value could not be decrypted.")
-    keystream = _legacy_keystream(key=key, nonce=nonce, length=len(ciphertext))
-    plaintext = bytes(left ^ right for left, right in zip(ciphertext, keystream))
-    return plaintext.decode("utf-8")
-
-
-def _legacy_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
-    chunks: list[bytes] = []
-    counter = 0
-    while sum(len(chunk) for chunk in chunks) < length:
-        chunks.append(hmac.new(key, nonce + counter.to_bytes(8, "big"), hashlib.sha256).digest())
-        counter += 1
-    return b"".join(chunks)[:length]
 
 
 def _base64_url(raw: bytes) -> str:

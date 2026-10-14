@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from core.runtime.store import RuntimeStore
 
 
-TOKEN_VERSION = "mvr3rt2"
+TOKEN_VERSION = "loopino.runtime-api-token.v2"
 DEFAULT_TOKEN_TTL_SECONDS = 60 * 60
 RuntimeApiTokenClaims = dict[str, str | int]
 

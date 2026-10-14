@@ -46,6 +46,13 @@ function jsonResponse(value: unknown, status = 200, headers: HeadersInit = {}): 
 }
 
 describe("RAM retry coordinator", () => {
+  it("issues unique Loopino keys with a bounded sanitized prefix and exact empty fallback", () => {
+    const first = createIdempotencyKey();
+    expect(first).toMatch(/^loopino:[A-Za-z0-9-]+$/);
+    expect(createIdempotencyKey()).not.toBe(first);
+    expect(createIdempotencyKey("!@#")).toMatch(/^loopino:/);
+    expect(createIdempotencyKey("custom-prefix-longer-than-sixteen").split(":")[0]).toBe("customprefixlong");
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

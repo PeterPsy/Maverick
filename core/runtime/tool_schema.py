@@ -39,7 +39,7 @@ def provider_tool_name(handle: str) -> str:
     """Map an internal handle to one stable provider-safe identifier."""
     slug = re.sub(r"[^a-zA-Z0-9_]+", "_", handle).strip("_").lower() or "tool"
     digest = hashlib.sha256(handle.encode("utf-8")).hexdigest()[:12]
-    return f"mav_{slug[:42]}_{digest}"
+    return f"loopino_{slug[:42]}_{digest}"
 
 
 def provider_safe_tool_schema(schema: dict[str, Any]) -> dict[str, Any]:

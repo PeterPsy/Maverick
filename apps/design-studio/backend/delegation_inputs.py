@@ -50,19 +50,19 @@ class DelegationRequest:
 
     @property
     def message_id(self) -> str:
-        return f"mav_user_{self.digest[:24]}"
+        return f"loopino_user_{self.digest[:24]}"
 
     @property
     def assistant_message_id(self) -> str:
-        return f"mav_assistant_{self.digest[:24]}"
+        return f"loopino_assistant_{self.digest[:24]}"
 
     @property
     def client_request_id(self) -> str:
-        return f"mav_delegate_{self.digest[:32]}"
+        return f"loopino_delegate_{self.digest[:32]}"
 
     @property
     def deterministic_project_id(self) -> str:
-        return f"od_mav_{self.digest[:24]}"
+        return f"od_loopino_{self.digest[:24]}"
 
     @property
     def conversation_title(self) -> str:

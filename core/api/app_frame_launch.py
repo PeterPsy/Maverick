@@ -137,6 +137,7 @@ def ensure_app_frame_tls(
     ensure_browser_origin_tls(
         sorted(hosts),
         group_key=f"app-frame-session:{context.session.session_id}",
+        required_hosts=[requested_host],
         repository_root=state.repository_root,
     )
 

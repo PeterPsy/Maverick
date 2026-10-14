@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -56,7 +57,7 @@ class ManagedBrowserOriginTlsIntegrationTests(
                 "origin": origin,
             }
             with patch.dict(os.environ, environment, clear=False), patch(
-                "core.api.app_frame_browser.ensure_browser_origin_tls"
+                "core.api.app_frame_launch.ensure_browser_origin_tls"
             ) as ensure_tls:
                 status, body, _headers = await self._invoke(
                     app,
@@ -71,14 +72,15 @@ class ManagedBrowserOriginTlsIntegrationTests(
             self.assertEqual(status, 200)
             exact_host = launch["origin"].removeprefix("https://")
             self.assertIn(exact_host, ensure_tls.call_args.args[0])
+            self.assertEqual(ensure_tls.call_args.kwargs["required_hosts"], [exact_host])
             self.assertTrue(
                 ensure_tls.call_args.kwargs["group_key"].startswith("app-frame-session:")
             )
 
             with patch.dict(os.environ, environment, clear=False), patch(
-                "core.api.app_frame_browser.ensure_browser_origin_tls",
+                "core.api.app_frame_launch.ensure_browser_origin_tls",
                 side_effect=BrowserOriginTlsError("certificate unavailable"),
-            ):
+            ), patch.object(state.sidecar_browser_sessions, "issue_ticket") as issue_ticket:
                 failed_status, failed_body, _failed_headers = await self._invoke(
                     app,
                     host=host,
@@ -90,6 +92,7 @@ class ManagedBrowserOriginTlsIntegrationTests(
                 )
             self.assertEqual(failed_status, 503)
             self.assertEqual(json.loads(failed_body), {"error": "app_frame_tls_unavailable"})
+            issue_ticket.assert_not_called()
 
     async def _assert_sidecar_certificate_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -108,7 +111,12 @@ class ManagedBrowserOriginTlsIntegrationTests(
             }
             with patch.dict(os.environ, environment, clear=False), patch(
                 "core.api.sidecar_browser.ensure_browser_origin_tls"
-            ) as ensure_tls:
+            ) as ensure_tls, patch(
+                "core.api.sidecar_browser.ensure_authorized_sidecar_running",
+                return_value=SimpleNamespace(instance_id="tls-sidecar-fixture"),
+            ) as start_sidecar:
+                # Service artifacts/startup have separate integration coverage.
+                ensure_tls.side_effect = lambda *_args, **_kwargs: start_sidecar.assert_not_called()
                 status, launch, _headers = await self._launch(
                     app,
                     platform_cookie=cookie,
@@ -117,6 +125,7 @@ class ManagedBrowserOriginTlsIntegrationTests(
                     scheme="https",
                 )
             self.assertEqual(status, 200)
+            start_sidecar.assert_called_once()
             exact_host = launch["origin"].removeprefix("https://")
             ensure_tls.assert_called_once_with(
                 [exact_host],
@@ -127,7 +136,9 @@ class ManagedBrowserOriginTlsIntegrationTests(
             with patch.dict(os.environ, environment, clear=False), patch(
                 "core.api.sidecar_browser.ensure_browser_origin_tls",
                 side_effect=BrowserOriginTlsError("certificate unavailable"),
-            ):
+            ), patch(
+                "core.api.sidecar_browser.ensure_authorized_sidecar_running",
+            ) as start_sidecar, patch.object(state.sidecar_browser_sessions, "issue_ticket") as issue_ticket:
                 failed_status, failed, _failed_headers = await self._launch(
                     app,
                     platform_cookie=cookie,
@@ -138,6 +149,8 @@ class ManagedBrowserOriginTlsIntegrationTests(
             self.assertEqual(failed_status, 503)
             self.assertEqual(failed["error"], "sidecar_origin_unavailable")
             self.assertNotIn("detail", failed)
+            start_sidecar.assert_not_called()
+            issue_ticket.assert_not_called()
 
 
 if __name__ == "__main__":

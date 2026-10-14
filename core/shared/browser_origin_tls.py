@@ -126,11 +126,12 @@ def ensure_browser_origin_tls(
     hosts: Sequence[str],
     *,
     group_key: str,
+    required_hosts: Sequence[str] | None = None,
     repository_root: Path | None = None,
     settings: BrowserOriginTlsSettings | None = None,
     run_command: Callable[[list[str]], object] | None = None,
 ) -> None:
-    """Ensure every exact reserved host has a currently valid published certificate."""
+    """Ensure required hosts have valid certificates, batching new issuance."""
     resolved = settings or BrowserOriginTlsSettings.from_environment(
         repository_root=(repository_root or Path.cwd()).resolve()
     )
@@ -138,6 +139,11 @@ def ensure_browser_origin_tls(
         return
     _validate_settings(resolved)
     requested = _validated_hosts(hosts, installation_domain=resolved.installation_domain)
+    required = requested if required_hosts is None else _validated_hosts(
+        required_hosts, installation_domain=resolved.installation_domain,
+    )
+    if not set(required).issubset(requested):
+        raise BrowserOriginTlsError("Required browser-origin TLS hosts must belong to the issuance batch.")
     if not group_key or len(group_key) > 512 or "\0" in group_key:
         raise BrowserOriginTlsError("Managed browser-origin TLS group is invalid.")
     _ensure_directories(resolved)
@@ -145,17 +151,26 @@ def ensure_browser_origin_tls(
     lock_path = resolved.private_root / "issuance.lock"
     with lock_path.open("a+b") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        if all(_published_host_is_current(resolved, host) for host in requested):
+        if all(_published_host_is_current(resolved, host) for host in required):
             return
         retry_at = issuance_retry_at(resolved.private_root, resolved.installation_domain, resolved.acme_ca)
         if retry_at is not None and retry_at > datetime.now(timezone.utc):
+            if all(_published_host_is_current(resolved, host, renewal_window=timedelta(0)) for host in required):
+                return
             raise BrowserOriginTlsError("Managed browser-origin certificate issuance is temporarily unavailable.")
-        _issue_and_publish(
-            resolved,
-            requested=requested,
-            group_key=group_key,
-            run_command=run_command,
-        )
+        try:
+            _issue_and_publish(
+                resolved,
+                requested=requested,
+                group_key=group_key,
+                run_command=run_command,
+            )
+        except BrowserOriginTlsError:
+            # Recheck after issuance: the old certificate may have expired while
+            # Certbot was running. Only still-valid published material may serve.
+            if all(_published_host_is_current(resolved, host, renewal_window=timedelta(0)) for host in required):
+                return
+            raise
 
 
 def managed_certificate_paths(served_root: Path, host: str) -> tuple[Path, Path]:
@@ -340,7 +355,9 @@ def _validated_pair(certificate_path: Path, private_key_path: Path) -> _Certific
     )
 
 
-def _published_host_is_current(settings: BrowserOriginTlsSettings, host: str) -> bool:
+def _published_host_is_current(
+    settings: BrowserOriginTlsSettings, host: str, *, renewal_window: timedelta = RENEWAL_WINDOW,
+) -> bool:
     certificate_path, private_key_path = managed_certificate_paths(settings.served_root, host)
     if not certificate_path.is_file() or not private_key_path.is_file():
         return False
@@ -348,7 +365,7 @@ def _published_host_is_current(settings: BrowserOriginTlsSettings, host: str) ->
         pair = _validated_pair(certificate_path, private_key_path)
     except BrowserOriginTlsError:
         return False
-    return host in pair.names and pair.not_valid_after - datetime.now(timezone.utc) > RENEWAL_WINDOW
+    return host in pair.names and pair.not_valid_after - datetime.now(timezone.utc) > renewal_window
 
 
 def _publish_pair(

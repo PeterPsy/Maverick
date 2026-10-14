@@ -160,6 +160,101 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
             self.assertFalse(certificate_path.exists())
             self.assertFalse(private_key_path.exists())
 
+    def test_covered_launch_does_not_require_other_batch_hosts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = self._settings(Path(temp_dir))
+            ensure_browser_origin_tls(
+                [self.app_host], group_key="session:one", settings=settings,
+                run_command=lambda command: self._write_lineage(settings, command),
+            )
+            record_issuance_failure(settings.private_root, self.domain, settings.acme_ca, TimeoutError())
+
+            ensure_browser_origin_tls(
+                [self.app_host, self.other_host], required_hosts=[self.app_host],
+                group_key="session:one", settings=settings,
+                run_command=lambda _command: self.fail("Covered launches must not request other certificates"),
+            )
+            with self.assertRaises(BrowserOriginTlsError):
+                ensure_browser_origin_tls(
+                    [self.app_host, self.other_host], required_hosts=[self.other_host],
+                    group_key="session:one", settings=settings,
+                    run_command=lambda _command: self.fail("Backoff must still block an uncovered launch"),
+                )
+
+    def test_failed_renewal_keeps_unexpired_certificate_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = self._settings(Path(temp_dir))
+            ensure_browser_origin_tls(
+                [self.app_host], group_key="session:one", settings=settings,
+                run_command=lambda command: self._write_lineage(settings, command, valid_for=timedelta(days=10)),
+            )
+            certificate_path, _key_path = managed_certificate_paths(settings.served_root, self.app_host)
+            published = certificate_path.read_bytes()
+            calls = []
+
+            def fail(command: list[str]) -> None:
+                calls.append(command)
+                raise subprocess.CalledProcessError(1, command)
+
+            ensure_browser_origin_tls(
+                [self.app_host], group_key="session:one", settings=settings, run_command=fail,
+            )
+            self.assertEqual(len(calls), 1)
+            self.assertIsNotNone(issuance_retry_at(settings.private_root, self.domain, settings.acme_ca))
+            ensure_browser_origin_tls(
+                [self.app_host], group_key="session:one", settings=settings,
+                run_command=lambda _command: self.fail("Renewal must respect backoff"),
+            )
+            self.assertEqual(certificate_path.read_bytes(), published)
+
+    def test_expired_certificate_does_not_authorize_launch_during_backoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = self._settings(Path(temp_dir))
+            ensure_browser_origin_tls(
+                [self.app_host], group_key="session:one", settings=settings,
+                run_command=lambda command: self._write_lineage(settings, command),
+            )
+            certificate_path, key_path = managed_certificate_paths(settings.served_root, self.app_host)
+            self._write_pair(certificate_path, key_path, dns_names=[self.app_host], valid_for=timedelta(seconds=-1))
+            record_issuance_failure(settings.private_root, self.domain, settings.acme_ca, TimeoutError())
+
+            with self.assertRaises(BrowserOriginTlsError):
+                ensure_browser_origin_tls(
+                    [self.app_host], group_key="session:one", settings=settings,
+                    run_command=lambda _command: self.fail("Backoff must block expired certificates"),
+                )
+
+    def test_required_hosts_must_belong_to_issuance_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = self._settings(Path(temp_dir))
+            for required_hosts in ([], [self.other_host]):
+                with self.subTest(required_hosts=required_hosts), self.assertRaises(BrowserOriginTlsError):
+                    ensure_browser_origin_tls(
+                        [self.app_host], required_hosts=required_hosts,
+                        group_key="session:one", settings=settings,
+                        run_command=lambda _command: self.fail("Invalid required hosts must not issue certificates"),
+                    )
+
+    def test_certificate_expiring_during_failed_renewal_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = self._settings(Path(temp_dir))
+            ensure_browser_origin_tls(
+                [self.app_host], group_key="session:one", settings=settings,
+                run_command=lambda command: self._write_lineage(settings, command, valid_for=timedelta(days=10)),
+            )
+            certificate_path, key_path = managed_certificate_paths(settings.served_root, self.app_host)
+
+            def fail(command: list[str]) -> None:
+                self._write_pair(
+                    certificate_path, key_path, dns_names=[self.app_host], valid_for=timedelta(seconds=-1),
+                )
+                raise subprocess.CalledProcessError(1, command)
+
+            with self.assertRaises(BrowserOriginTlsError):
+                ensure_browser_origin_tls(
+                    [self.app_host], group_key="session:one", settings=settings, run_command=fail,
+                )
+
     def test_ca_retry_date_defers_new_sessions_but_keeps_valid_hosts_available(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = self._settings(Path(temp_dir))
@@ -203,7 +298,9 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
             timeout_seconds=30,
         )
 
-    def _write_lineage(self, settings: BrowserOriginTlsSettings, command: list[str]) -> None:
+    def _write_lineage(
+        self, settings: BrowserOriginTlsSettings, command: list[str], *, valid_for: timedelta = timedelta(days=90),
+    ) -> None:
         cert_name = command[command.index("--cert-name") + 1]
         lineage = settings.certbot_config_root / "live" / cert_name
         lineage.mkdir(parents=True, exist_ok=True)
@@ -211,6 +308,7 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
             lineage / "fullchain.pem",
             lineage / "privkey.pem",
             dns_names=self._domains(command),
+            valid_for=valid_for,
         )
 
     @staticmethod
@@ -223,6 +321,7 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
         private_key_path: Path,
         *,
         dns_names: list[str],
+        valid_for: timedelta = timedelta(days=90),
     ) -> None:
         key = ec.generate_private_key(ec.SECP256R1())
         now = datetime.now(timezone.utc)
@@ -233,7 +332,7 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
             .public_key(key.public_key())
             .serial_number(x509.random_serial_number())
             .not_valid_before(now - timedelta(minutes=1))
-            .not_valid_after(now + timedelta(days=90))
+            .not_valid_after(now + valid_for)
             .add_extension(
                 x509.SubjectAlternativeName([x509.DNSName(name) for name in dns_names]),
                 critical=False,

@@ -246,8 +246,10 @@ already routes to Maverick but the operator cannot perform DNS-01. The
 installer prepares a service-private ACME account area, an HTTP-01 webroot, and
 a setgid Nginx-readable publication area. It obtains exact certificates only
 for the reserved `sc-<24 hex>` and `af-<24 hex>` namespace. Core batches all
-launchable app-frame names for one platform login into one SAN lineage; stable
-sidecar names accumulate in a separate installation lineage. It validates SAN,
+launchable app-frame names for one platform login into one SAN lineage, but only
+the requested frame host gates that launch. An already covered app does not
+depend on issuing certificates for other enabled apps. Stable sidecar names
+accumulate in a separate installation lineage. It validates SAN,
 validity, and key equality and swaps a per-host `current` symlink atomically
 before returning the one-shot ticket. The Nginx SNI map rejects names outside
 the reserved shape, while a valid-looking name without published material
@@ -270,9 +272,14 @@ Managed issuance persists a per-installation, per-CA retry deadline after an
 ACME/client failure. Rate-limit responses honor their reported retry date, bounded
 to seven days; ordinary failures back off for one minute. The issuance lock checks
 published valid certificates before this deadline, so existing covered sessions
-continue working. New sessions fail closed during backoff without repeating an
-ACME order for each app frame. The record contains only a timestamp and survives
-backend restarts. Wildcard mode bypasses exact issuance and its backoff.
+continue working. Entering the 30-day renewal window triggers an issuance attempt
+but does not invalidate the published certificate: a failed renewal or an active
+retry deadline may reuse it until its actual expiry. The gate revalidates the
+certificate, key and required SAN after a failed attempt; expired, mismatched or
+missing material still fails closed. New sessions fail closed during backoff
+without repeating an ACME order for each app frame. The record contains only a
+timestamp and survives backend restarts. Wildcard mode bypasses exact issuance
+and its backoff.
 
 The installer renders the four core environment values above and adds a
 dedicated Nginx wildcard router that explicitly strips any upstream

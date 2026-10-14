@@ -144,7 +144,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(appShellSource).toContain("newChatRouteParams()");
     expect(appShellSource).toContain("const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;");
     expect(appShellSource).toContain("onOpenMobileChat={openMobileChatPanel}");
-    expect(appShellSource).toContain("onCloseMobileChat={closeMobileChatPanel}");
+    expect(appShellSource).toContain("onCloseMobileChat={() => closeMobileChatPanel()}");
     expect(appShellSource).toContain("showMobileChatAction={!isChatAppActive}");
     expect(appShellSource).toContain("onOpenNewChat={openNewChat}");
     expect(appShellSource).toContain("onToggleSidebar={toggleMobileSidebar}");

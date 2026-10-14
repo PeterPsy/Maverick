@@ -105,6 +105,10 @@ test("mobile footer and contextual Chat preserve documents through closing and a
     const footerInstance = await saveDraft(footer, "mobile footer");
     await page.getByRole("button", { name: "Chiudi sidebar", exact: true }).click();
     await openApp(page, "storage", true);
+    const chatLauncher = page.getByRole("button", { name: "Apri chat contestuale", exact: true });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await chatLauncher.evaluate((button) => button === document.activeElement), false,
+      "opening an app with Chat already closed must not focus its launcher");
     await page.getByRole("button", { name: "Apri chat contestuale", exact: true }).click();
     const chat = await frameFor(page, 'iframe[title="Mobile chat widget"]');
     const chatInstance = await saveDraft(chat, "mobile draft");
@@ -127,11 +131,19 @@ test("mobile footer and contextual Chat preserve documents through closing and a
     }
     await page.getByRole("button", { name: "Chiudi chat contestuale", exact: true }).click();
     await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Apri chat contestuale");
+    await chatLauncher.press("Tab");
+    await chatLauncher.focus();
+    assert.equal(await chatLauncher.evaluate((button) => button.matches(":focus-visible")), true,
+      "keyboard users must retain the launcher's visible focus indicator");
     await page.getByRole("button", { name: "Apri chat contestuale", exact: true }).click();
     await assertPreserved(chat, chatInstance, "mobile draft");
     await page.screenshot({ path: "/tmp/maverick-contextual-shell-mobile.png" });
     assert.equal(fixture.documents.filter((path) => path.includes("/chat-floating/")).length, 1);
     assert.equal(fixture.documents.filter((path) => path.includes("/chat-sidebar-footer/")).length, 1);
+    await openApp(page, "calendar", true);
+    await chatLauncher.waitFor({ state: "visible" });
+    assert.equal(await chatLauncher.evaluate((button) => button === document.activeElement), false,
+      "app navigation must not restore focus from the panel it closes");
     await context.close();
   } finally { await browser.close(); await close(fixture.server); }
 });

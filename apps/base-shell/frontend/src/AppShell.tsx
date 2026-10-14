@@ -297,7 +297,7 @@ export function AppShell() {
 
   function openSidebar() {
     if (!sidebarEnabled) return;
-    closeMobileChatPanel();
+    closeMobileChatPanel(false);
     clearSidebarClosing();
     setIsMobilePinnedAppsOpen(false);
     setIsSidebarOpen(true);
@@ -323,7 +323,7 @@ export function AppShell() {
 
   function toggleMobileSidebar() {
     if (!sidebarEnabled) {
-      closeMobileChatPanel();
+      closeMobileChatPanel(false);
       setIsMobilePinnedAppsOpen(false);
       setIsSidebarOpen((current) => !current);
       return;
@@ -340,7 +340,7 @@ export function AppShell() {
       setIsMobilePinnedAppsOpen(false);
       return;
     }
-    closeMobileChatPanel();
+    closeMobileChatPanel(false);
     closeSidebar();
     setIsMobilePinnedAppsOpen(true);
   }
@@ -352,23 +352,22 @@ export function AppShell() {
     setIsMobileChatOpen(true);
   }
 
-  function closeMobileChatPanel() {
-    if (!isMobileLayout) {
+  function closeMobileChatPanel(restoreFocus = true) {
+    if (!isMobileLayout || !isMobileChatOpen) {
       clearMobileChatClosing();
       setIsMobileChatOpen(false);
       return;
     }
-    if (isMobileChatOpen) {
-      clearMobileChatClosing();
-      setIsMobileChatClosing(true);
-      mobileChatCloseTimerRef.current = window.setTimeout(() => {
-        setIsMobileChatClosing(false);
-        mobileChatCloseTimerRef.current = null;
-        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Apri chat contestuale"]')?.focus());
-      }, MOBILE_CHAT_TRANSITION_MS);
-    }
+    clearMobileChatClosing();
+    setIsMobileChatClosing(true);
+    mobileChatCloseTimerRef.current = window.setTimeout(() => {
+      setIsMobileChatClosing(false);
+      mobileChatCloseTimerRef.current = null;
+      if (restoreFocus) {
+        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Apri chat contestuale"]')?.focus({ preventScroll: true }));
+      }
+    }, MOBILE_CHAT_TRANSITION_MS);
     setIsMobileChatOpen(false);
-    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Apri chat contestuale"]')?.focus());
   }
 
   function notifyAppDataChanged(ownerAppId: string, resource: string, detail: Record<string, string> = {}) {
@@ -800,7 +799,7 @@ export function AppShell() {
     setActiveAppId(appId);
     setActiveAppParams(resolvedParams);
     setIsMobilePinnedAppsOpen(false);
-    closeMobileChatPanel();
+    closeMobileChatPanel(false);
     if (isSidebarPinned) {
       openSidebar();
     } else {
@@ -1004,7 +1003,7 @@ export function AppShell() {
           isPrimaryActionAvailable={mobilePrimaryAction.available}
           isSidebarOpen={isSidebarOpen || isSidebarClosing}
           showMobileChatAction={!isChatAppActive}
-          onCloseMobileChat={closeMobileChatPanel}
+          onCloseMobileChat={() => closeMobileChatPanel()}
           onOpenMobileChat={openMobileChatPanel}
           onOpenNewChat={openNewChat}
           onTogglePinnedApps={toggleMobilePinnedApps}

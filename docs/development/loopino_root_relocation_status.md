@@ -18,6 +18,19 @@ artifact sets and live receipts are recorded in the ignored
 `operations/phase1/relocation/verification/deployment-manifest.json`.
 The coordinator publishes bundles using source-side Git authority.
 
+Settled implementation checkpoints:
+
+| Repository/change | Commit |
+| --- | --- |
+| Membership identity/domain correction | `c1f0be18ce555bc2846ceb7946ecfeac7a6979f3` |
+| Canonical path source/typed relocation | `dd4e447ea549f9706c6dc701c58e157a64c8d65e` |
+| Apple server-path documentation only | `c1656534b3ff9fc4b3f4d9567dce8857fd37784c` |
+
+Final public catalog index SHA256:
+`a002d75a13605ffa081f6ed793e41032653f0a504cd7a4f7a2becda908fd2ee8`.
+A report-only checkpoint follows the implementation; its exact installed HEAD
+and the unchanged package set are pinned in the final operational manifest.
+
 The accepted executable audit remains
 `2026-10-14-loopino-phase1-deployment-v17`: all 46 exact descriptor and execution
 pins match. No admitted operations or authority checks were broadened. Production

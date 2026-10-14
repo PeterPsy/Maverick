@@ -1,0 +1,48 @@
+{
+  "commands": {
+    "github-actions": {
+      "description": "Dispatch and inspect GitHub Actions workflows through a GitHub App installation.",
+      "required_secrets": [],
+      "secret_selectors": [
+        {
+          "required_secrets": [
+            "github-app-id",
+            "github-installation-id",
+            "github-app-private-key"
+          ],
+          "when": {
+            "action": ["dispatch", "dispatch_and_wait", "list_runs", "run_jobs", "run_status", "run_logs", "wait"]
+          }
+        }
+      ],
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["manifest", "dispatch", "dispatch_and_wait", "list_runs", "run_jobs", "run_status", "run_logs", "wait"],
+            "default": "manifest"
+          },
+          "repository": {"type": "string", "description": "owner/repo repository name."},
+          "owner": {"type": "string"},
+          "repo": {"type": "string"},
+          "workflow_id": {"type": "string", "default": "ios-install-device.yml"},
+          "workflow": {"type": "string"},
+          "ref": {"type": "string", "default": "maverick-integration"},
+          "branch": {"type": "string"},
+          "event": {"type": "string"},
+          "inputs": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean"]}},
+          "device_id": {"type": "string", "default": "00008120-00144CD90130201E"},
+          "launch_app": {"type": ["boolean", "string"], "default": "false"},
+          "run_id": {"type": ["integer", "string"]},
+          "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 7200},
+          "poll_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+          "max_bytes": {"type": "integer", "minimum": 1000, "maximum": 200000},
+          "api_base": {"type": "string", "default": "https://api.github.com"}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

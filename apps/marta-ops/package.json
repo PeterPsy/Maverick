@@ -1,0 +1,36 @@
+{
+  "name": "marta-ops",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.11.0 <25"
+  },
+  "scripts": {
+    "prebuild": "node scripts/check-node-runtime.mjs",
+    "build": "tsc --noEmit && vite build",
+    "predev": "node scripts/check-node-runtime.mjs",
+    "dev": "vite --host 0.0.0.0",
+    "test": "vitest run",
+    "format": "prettier --write frontend/src vite.config.ts vitest.config.ts"
+  },
+  "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
+    "@radix-ui/react-dialog": "^1.1.16",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.0.0",
+    "vite": "^7.0.0",
+    "vitest": "^4.1.11"
+  }
+}

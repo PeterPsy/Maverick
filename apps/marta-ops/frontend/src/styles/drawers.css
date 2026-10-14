@@ -1,0 +1,131 @@
+.drawer-overlay {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(4px);
+}
+.record-drawer {
+  position: fixed;
+  z-index: 101;
+  top: var(--maverick-shell-mobile-content-top-offset, 0px);
+  bottom: 0;
+  right: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(680px, 96vw);
+  border-left: 1px solid var(--marta-border-strong);
+  outline: 0;
+  background: var(--marta-panel-bg);
+  box-shadow: -20px 0 70px rgba(0, 0, 0, 0.45);
+  animation: panel-in 150ms ease-out;
+}
+.drawer-title {
+  margin: 5px 0 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.drawer-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.drawer-tabs {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--marta-border);
+  background: var(--marta-panel-bg);
+  padding: 12px 20px;
+}
+.drawer-tabs button {
+  flex: 0 0 auto;
+  min-height: 33px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--marta-muted);
+  background: transparent;
+  padding: 0 10px;
+  font-size: 0.72rem;
+}
+.drawer-tabs button.is-active {
+  color: var(--marta-text);
+  background: var(--marta-surface-active);
+}
+.record-form,
+.drawer-section {
+  padding: 24px;
+}
+.record-form[hidden] {
+  display: none;
+}
+.drawer-section .section-heading {
+  justify-content: space-between;
+}
+.contact-summary {
+  padding: 20px 24px;
+}
+.contact-summary strong,
+.contact-summary small {
+  display: block;
+}
+.contact-summary strong {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.contact-summary small {
+  margin-top: 5px;
+  color: var(--marta-soft);
+  font-size: 0.72rem;
+}
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--marta-muted);
+  font-size: 0.75rem;
+}
+.check-field input {
+  accent-color: var(--marta-accent);
+}
+.note-capture {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.note-capture button {
+  justify-self: end;
+}
+.muted-message {
+  color: var(--marta-soft);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.inline-feedback {
+  margin: 0;
+  padding: 12px 24px;
+  color: var(--marta-muted);
+  font-size: 0.75rem;
+}
+.drawer-work-list .work-row.is-compact {
+  grid-template-columns: minmax(90px, 1fr) 75px minmax(100px, 1.2fr) 70px 14px;
+  gap: 8px;
+  padding: 12px;
+}
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--marta-focus);
+  outline-offset: 3px;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.panel-footer [hidden] {
+  display: none;
+}

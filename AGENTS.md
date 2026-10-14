@@ -32,6 +32,13 @@ Do not leave the repository in a state where the implementation has moved but th
 
 ## App Source Priority
 
+This installation develops all first-party app source on the `design` branch
+under root `apps/`, including `github-actions` and `marta-ops`. The `default`
+workspace no longer owns a separate app Git repository. Keep its business data,
+Storage files, and runtime material outside source commits. Workspace-local
+projects remain an explicit platform capability for future custom forks; do
+not recreate duplicate local copies of the installation's shared apps.
+
 When a task mentions an app id, first resolve app source from the Maverick root
 repository:
 

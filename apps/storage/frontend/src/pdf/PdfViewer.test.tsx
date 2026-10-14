@@ -69,6 +69,17 @@ it('loads authenticated PDF pages, navigates, zooms and resets when the file cha
   expect(getPage).toHaveBeenLastCalledWith(1);
 });
 
+it('fits the whole page to a short mobile viewport and lets users switch to width', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(224);
+  await mount();
+  expect(container.querySelector('canvas')?.style.width).toBe('150px');
+  expect(container.querySelector('canvas')?.style.height).toBe('200px');
+  await click('Fit PDF to width');
+  expect(container.querySelector('canvas')?.style.width).toBe('320px');
+  await click('Fit PDF to page');
+  expect(container.querySelector('canvas')?.style.height).toBe('200px');
+});
+
 it('cancels an in-flight render and destroys the document when closed', async () => {
   getPage.mockResolvedValue({
     getViewport: () => ({ width: 320, height: 440 }),

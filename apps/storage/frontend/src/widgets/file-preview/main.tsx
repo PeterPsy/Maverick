@@ -12,6 +12,7 @@ import { DocxPreview, isDocxFile } from './docxPreview';
 import { useStorageVisibility } from '../../hooks/useStorageVisibility';
 import { schedulePreviewConversion } from '../../lib/previewConversions';
 import './styles.css';
+import { ImagePreview } from '../../ImagePreview';
 
 type WidgetContext = {
   content?: {
@@ -159,7 +160,7 @@ function Preview({
       />
     );
   }
-  if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
+  if (file.preview_kind === 'image' && previewUrl) return <ImagePreview src={previewUrl} name={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
   if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {

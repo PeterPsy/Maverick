@@ -3005,7 +3005,9 @@ function App() {
               </div>
             </header>
             <div className="preview-modal-body">
-              <StoragePreview file={selectedFile} loading={previewLoading} previewUrl={previewUrl} previewText={previewText} previewTable={previewTable} />
+              <div className="preview-modal-content">
+                <StoragePreview file={selectedFile} loading={previewLoading} previewUrl={previewUrl} previewText={previewText} previewTable={previewTable} />
+              </div>
             </div>
           </section>
         </div>

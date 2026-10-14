@@ -7,6 +7,8 @@ export default function PdfViewer({ previewUrl, fileName, fallback }: PdfPreview
   const { document, error } = usePdfDocument(previewUrl);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
+  const [height, setHeight] = useState(0);
+  const [fitPage, setFitPage] = useState(true);
   const [pageNumber, setPageNumber] = useState(1);
   const [zoom, setZoom] = useState(1);
   const total = document?.numPages || 0;
@@ -14,7 +16,10 @@ export default function PdfViewer({ previewUrl, fileName, fallback }: PdfPreview
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    const resize = () => setWidth(Math.max(1, Math.floor(viewport.clientWidth - 24)));
+    const resize = () => {
+      setWidth(Math.max(1, Math.floor(viewport.clientWidth - 24)));
+      setHeight(Math.max(0, Math.floor(viewport.clientHeight - 24)));
+    };
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(viewport);
@@ -47,14 +52,15 @@ export default function PdfViewer({ previewUrl, fileName, fallback }: PdfPreview
         <div className="pdf-preview__controls">
           <button type="button" aria-label="Zoom out" disabled={zoom <= 0.5 || !total}
             onClick={() => setZoom((current) => Math.max(0.5, current - 0.25))}>−</button>
-          <button type="button" className="pdf-preview__fit" aria-label="Fit PDF to width" disabled={!total}
-            onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" className="pdf-preview__fit" aria-label={fitPage ? 'Fit PDF to width' : 'Fit PDF to page'} disabled={!total}
+            title={fitPage ? 'Fit PDF to width' : 'Fit PDF to page'}
+            onClick={() => { setFitPage((current) => !current); setZoom(1); }}>Fit</button>
           <button type="button" aria-label="Zoom in" disabled={zoom >= 2.5 || !total}
             onClick={() => setZoom((current) => Math.min(2.5, current + 0.25))}>+</button>
         </div>
       </div>
       <div className="pdf-preview__viewport" ref={viewportRef} tabIndex={0} aria-label="PDF page content">
-        {document ? <PdfPage document={document} pageNumber={pageNumber} width={width} zoom={zoom} />
+        {document ? <PdfPage document={document} pageNumber={pageNumber} width={width} height={height} fitPage={fitPage} zoom={zoom} />
           : <div className="pdf-preview__message" role="status">Loading PDF…</div>}
       </div>
     </section>

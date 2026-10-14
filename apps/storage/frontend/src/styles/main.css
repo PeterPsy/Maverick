@@ -39,6 +39,11 @@ body,
   min-height: 0;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -1571,12 +1576,29 @@ h3 {
 }
 
 .preview-modal-body {
-  display: grid;
-  place-items: center;
+  position: relative;
   min-width: 0;
   min-height: 0;
   background: var(--storage-preview);
   overflow: hidden;
+}
+
+.preview-modal-content {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-modal-content > * {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .preview-modal.image-preview .preview-modal-body {
@@ -1589,8 +1611,7 @@ h3 {
   height: auto;
 }
 
-.preview-modal-body > img,
-.preview-modal-body > video {
+.preview-modal-content > video {
   display: block;
   min-width: 0;
   min-height: 0;
@@ -1602,25 +1623,26 @@ h3 {
   object-fit: contain;
 }
 
-.preview-modal-body > audio {
+.preview-modal-content > audio {
   width: 100%;
   height: 100%;
   border: 0;
   object-fit: contain;
 }
 
-.preview-modal-body > audio {
+.preview-modal-content > audio {
   align-self: center;
   height: auto;
   padding: 0 22px;
 }
 
-.preview-modal-body pre {
+.preview-modal-content pre {
   margin: 0;
   overflow: auto;
   padding: 18px;
   color: var(--storage-text);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .file-details-section {
@@ -2111,8 +2133,10 @@ h3 {
   }
 
   .preview-modal {
-    width: 100vw;
-    height: 100%;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: auto;
     max-width: none;
     max-height: none;
     border: 0;
@@ -2122,13 +2146,15 @@ h3 {
 
   .preview-modal.image-preview {
     grid-template-rows: auto minmax(0, 1fr);
-    width: 100vw;
-    height: 100%;
+    width: 100%;
+    height: auto;
+    min-width: 0;
     max-width: none;
     max-height: none;
   }
 
   .preview-modal-header {
+    min-height: 44px;
     align-items: center;
     gap: 8px;
     padding: 0 max(10px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
@@ -2157,6 +2183,12 @@ h3 {
     flex: 0 0 auto;
   }
 
+  .storage-shell input,
+  .storage-shell textarea,
+  .storage-shell select {
+    font-size: 16px;
+  }
+
   .preview-modal-actions .preview-fullscreen-action {
     display: none;
   }
@@ -2171,13 +2203,7 @@ h3 {
   }
 
   .preview-modal.image-preview .preview-modal-body {
-    height: 100%;
-  }
-
-  .preview-modal-body > img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+    height: auto;
   }
 
 }

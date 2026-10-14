@@ -76,8 +76,10 @@ Browser PDF plugins cannot run inside Maverick's isolated app frames. The viewer
 loads local, Drive, converted-document and device-cache preview URLs, retains
 authenticated Storage media reads, and resolves its bundled worker against the
 public module URL. It renders one page at a time, with previous/next controls,
-a page-number input, zoom and fit-to-width. Resize observation fits narrow
-screens and fullscreen layouts. Closing or replacing a preview cancels rendering
+a page-number input, zoom and a toggle between fit-to-page and fit-to-width.
+Pages initially fit both available dimensions, including short landscape screens
+and compact Chat widgets. Resize observation updates the fit; the page input uses
+16px text to avoid iOS focus zoom. Closing or replacing a preview cancels rendering
 and destroys the PDF loading task. Invalid files show an error; password-protected
 files offer a download explanation. The existing modal/widget download actions
 remain available. PDF.js and its worker are loaded only when a PDF is opened.
@@ -149,21 +151,37 @@ inside the preview, Escape leaves fullscreen first and then closes the preview,
 and closing restores focus to the opener. Download is a labelled desktop action;
 destructive actions remain in file details and the file list.
 
+The modal's content has a definite box independent of document intrinsic height.
+The app and Chat widget share image sizing based on their measured content box;
+images preserve their proportions and small images are never enlarged. Long text
+scrolls inside the content box. The widget fits its host-provided height instead
+of extending the document to the image's natural dimensions.
+
 Downloads stay in the authenticated app frame and use attached download links.
 Drive export blobs remain available during asynchronous WebKit handoff; export
 preparation and failures are visible inside the preview. The native Mac host
-(MaverickMac 0.4.3 / build 77) handles download actions and attachment responses
+(MaverickMac 0.5.3 / build 81) handles download actions and attachment responses
 with its Save panel, preserving the Storage page and its session. It streams to
 temporary storage on the selected volume, publishes completed files only, and
 cancels pending transfers during server switching or teardown. The web frontend
-alone cannot add missing download support to an older native host.
+alone cannot add missing download support to an older native host. MaverickDev
+iOS 0.1.4 / build 5 handles WebKit downloads with the authenticated session and
+presents completed original files through the native share sheet, where users
+can choose Save to Files or other destinations. Dismissing the sheet, switching
+servers or tearing down the renderer releases the temporary files. Both hosts
+also accept Core-bound nested widgets: native WebKit reads immutable Core context
+and actual browser ancestors from the source frame and checks its parent against
+the shell's registered origins. Arbitrary external subframes remain excluded.
 
 `node --test apps/storage/tests/preview-workflow.browser.test.mjs` exercises the
 built frontend in a sandboxed cross-origin frame, browser fullscreen and denied
 fullscreen, portrait sizing, Escape/Close, focus restoration and exact downloaded
 bytes at desktop, 390px and 320px widths. It uses the installed Browser development
 Playwright harness; set `PLAYWRIGHT_BROWSERS_PATH` to the installed browser cache
-when the runtime home differs. Native WebKit coverage lives with MaverickMac.
+when the runtime home differs. `mobile-preview.browser.test.mjs` checks 24 app/widget
+cases at 390px, 320px and landscape dimensions, including whole-page PDF fit,
+portrait and small images, internal text scrolling, and exact original download
+bytes. Native WebKit coverage lives with MaverickMac and MaverickDev.
 
 Catalog, pagination and deep-link reads are fenced by the current view and
 cancelled on navigation or suspension. An old response or `finally` cannot

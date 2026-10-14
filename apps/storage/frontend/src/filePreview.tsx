@@ -7,6 +7,7 @@ import { loadCardPreview } from './previewCache';
 import { fitPreviewMediaToBox, type PreviewMediaSize } from './previewSizing';
 import { VideoPreview } from './videoPreview';
 import { PdfPreview } from './pdfPreview';
+import { ImagePreview } from './ImagePreview';
 import type { StorageFile, PreviewTablePayload, TablePreviewSheet } from './types';
 
 const inlineVideoPlaybackProps = {
@@ -176,7 +177,7 @@ function CardImagePreview({ src }: { src: string }) {
 export function StoragePreview({ file, loading = false, previewUrl, previewText, previewTable }: { file: StorageFile; loading?: boolean; previewUrl: string; previewText: string; previewTable?: PreviewTablePayload }) {
   if (loading) return <FileTypeFallback file={file} loading />;
   if (canTablePreview(file) && previewTable) return <SpreadsheetPreview table={previewTable} />;
-  if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
+  if (file.preview_kind === 'image' && previewUrl) return <ImagePreview src={previewUrl} name={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
   if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {

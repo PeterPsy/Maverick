@@ -45,7 +45,7 @@
 .pdf-preview__toolbar button { cursor: pointer; }
 .pdf-preview__toolbar button:disabled { opacity: 0.4; cursor: default; }
 .pdf-preview__toolbar .pdf-preview__fit { width: 48px; }
-.pdf-preview__toolbar input { width: 48px; appearance: textfield; }
+.pdf-preview__toolbar input { width: 48px; appearance: textfield; font-size: 16px; }
 .pdf-preview__toolbar input::-webkit-inner-spin-button { appearance: none; }
 .pdf-preview__toolbar :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
@@ -68,7 +68,7 @@
 .pdf-preview__page canvas[hidden] { display: none; }
 .pdf-preview__message { padding: 24px; text-align: center; overflow-wrap: anywhere; }
 
-.file-widget__document > .pdf-preview { height: 26rem; }
+.file-widget__document > .pdf-preview { height: 100%; }
 .file-widget.is-fullscreen .file-widget__document > .pdf-preview { height: 100%; }
 
 @media (max-width: 420px) {

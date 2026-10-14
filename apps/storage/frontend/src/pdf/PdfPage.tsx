@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 
-export function PdfPage({ document, pageNumber, width, zoom }: {
-  document: PDFDocumentProxy; pageNumber: number; width: number; zoom: number;
+export function PdfPage({ document, pageNumber, width, height = 0, fitPage = false, zoom }: {
+  document: PDFDocumentProxy; pageNumber: number; width: number; height?: number; fitPage?: boolean; zoom: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,8 @@ export function PdfPage({ document, pageNumber, width, zoom }: {
       const context = canvas?.getContext('2d');
       if (!canvas || !context) throw new Error('PDF canvas is unavailable.');
       const base = page.getViewport({ scale: 1 });
-      const viewport = page.getViewport({ scale: Math.min(width, 1200) * zoom / base.width });
+      const scale = Math.min(Math.min(width, 1200) / base.width, fitPage && height > 0 ? height / base.height : Infinity);
+      const viewport = page.getViewport({ scale: scale * zoom });
       const outputScale = Math.min(window.devicePixelRatio || 1, 2,
         Math.sqrt(16_000_000 / (viewport.width * viewport.height)));
       canvas.width = Math.max(1, Math.floor(viewport.width * outputScale));
@@ -43,7 +44,7 @@ export function PdfPage({ document, pageNumber, width, zoom }: {
       renderTask?.cancel();
       // Page resources are shared by PDF.js; the loading task owns their lifetime.
     };
-  }, [document, pageNumber, width, zoom]);
+  }, [document, pageNumber, width, height, fitPage, zoom]);
 
   return (
     <div className="pdf-preview__page" aria-busy={loading}>

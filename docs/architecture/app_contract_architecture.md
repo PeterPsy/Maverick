@@ -160,12 +160,19 @@ popup is a temporary native URL receiver with no native bridge, released after
 handoff or cancellation. OAuth completes in the browser's session using the
 existing authenticated callback; native cookies are not transferred.
 
-The native macOS host also owns WebKit download delivery. A user download action
+The native macOS and iOS hosts also own WebKit download delivery. A user download action
 from the platform or an exact registered app frame stays in the authenticated
 WebKit session, including same-origin blob exports. Attachment responses become
-downloads rather than replacing the embedded document. The host presents a Save
+downloads rather than replacing the embedded document. The macOS host presents a Save
 panel, streams into temporary storage on the selected volume, and publishes the
-destination only after completion. Cancellation, renderer teardown and server
+destination only after completion. On iOS the host presents completed original
+files through the native share sheet (including Save to Files) and retains their
+temporary bytes until sharing completes or is cancelled. Nested widget downloads
+also require immutable Core frame context, a matching Core-owned sidecar namespace,
+and actual browser ancestors whose immediate parent is registered by the shell.
+These facts are read by native WebKit in the source frame, never trusted from an
+app message. Download targets remain limited to the source or platform origin.
+Cancellation, renderer teardown and server
 switching release sheets and transfers; failures remain visible. This host
 capability is independent of Device Use and adds no app-specific Core behavior.
 

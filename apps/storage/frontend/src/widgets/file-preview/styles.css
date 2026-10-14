@@ -66,8 +66,7 @@ button {
 }
 
 .file-widget.is-fullscreen,
-.file-widget:fullscreen,
-.file-widget:-webkit-full-screen {
+.file-widget:is(:fullscreen, :-webkit-full-screen) {
   width: 100vw;
   height: 100dvh;
   min-height: 0;
@@ -152,7 +151,7 @@ button {
 .file-widget__document {
   display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
   max-height: none;
   overflow: auto;
@@ -213,6 +212,11 @@ button {
   object-fit: contain;
 }
 
+.file-widget__document .storage-image-preview > img {
+  width: auto;
+  max-height: 100%;
+}
+
 .file-widget__document audio {
   display: block;
   width: min(100%, 34rem);
@@ -227,6 +231,7 @@ button {
   overflow: visible;
   padding: 1rem;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .markdown-preview {

@@ -35,6 +35,11 @@ compared before and after migration; only platform installation metadata may
 change. Marta Ops retains its Mail, Calendar, and Storage dependency selections.
 No control-plane collections or secret values were edited directly.
 
+The subsequent mounted UI smoke refreshes Marta Ops's existing integration
+cache and its `refreshed_at` timestamp through normal governed callbacks. File
+hash equality was verified at source cutover, before this normal refresh; newer
+app-owned state is retained.
+
 Fusion Connector was removed through its complete-removal surface. Its source,
 binding, project registration, and app data were deleted. Its persistent skill
 was deleted through Skills, and 157 generated runtime skill copies were removed.

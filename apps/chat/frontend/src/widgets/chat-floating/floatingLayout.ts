@@ -1,10 +1,9 @@
 const EXPANDED_WIDTH_REM = 25;
-const COLLAPSED_WIDTH_REM = 3;
+const COLLAPSED_WIDTH_REM = 10;
 const WINDOW_GAP_REM = 0.75;
 const SINGLE_EXPANDED_FRAME_INSET_REM = 2;
 const EXPANDED_MAX_HEIGHT_REM = 38;
 const DEFAULT_ROOT_FONT_SIZE_PX = 16;
-const HORIZONTAL_DRAG_THRESHOLD_PX = 6;
 
 export type FloatingWindowLayoutItem = {
   isCollapsed: boolean;
@@ -35,23 +34,11 @@ export function floatingWidgetSize(windows: FloatingWindowLayoutItem[], sizing =
     gapCount * WINDOW_GAP_REM +
     singleExpandedFrameInset;
   const width = px(widthRem * rootFontSizePx);
-  const height = px(expandedCount > 0 ? EXPANDED_MAX_HEIGHT_REM * rootFontSizePx : COLLAPSED_WIDTH_REM * rootFontSizePx);
+  const height = px(expandedCount > 0 ? EXPANDED_MAX_HEIGHT_REM * rootFontSizePx : 3 * rootFontSizePx);
   return {
     height,
     width,
   };
-}
-
-export function horizontalDragScrollLeft(startScrollLeft: number, startClientX: number, currentClientX: number): number {
-  return startScrollLeft - (currentClientX - startClientX);
-}
-
-export function isHorizontalDragIntent(deltaX: number, deltaY: number): boolean {
-  return Math.abs(deltaX) >= HORIZONTAL_DRAG_THRESHOLD_PX && Math.abs(deltaX) > Math.abs(deltaY);
-}
-
-export function isVerticalDragIntent(deltaX: number, deltaY: number): boolean {
-  return Math.abs(deltaY) >= HORIZONTAL_DRAG_THRESHOLD_PX && Math.abs(deltaY) >= Math.abs(deltaX);
 }
 
 function currentFloatingWidgetSizing(): FloatingWidgetSizing {

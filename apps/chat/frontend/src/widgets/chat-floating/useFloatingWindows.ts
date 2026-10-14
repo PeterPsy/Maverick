@@ -1,41 +1,17 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { activeAppContextFromWidgetContext, type ActiveAppContext } from "../../lib/activeAppContext";
 import { useEffect, useRef, useState } from "react";
 import type { ChatThread } from "../../api/client";
 import { applyThreadCatalogPayload, deleteThread, markThreadRead, updateThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { isThreadUnread } from "../chat-sidebar/sections";
 import {
-  horizontalDragScrollLeft,
-  isHorizontalDragIntent,
-  isVerticalDragIntent,
-} from "./floatingLayout";
-import {
-  type FloatingChatWindow,
-  createWindow,
-  persistWindows,
-  readPersistedOrDefaultWindows,
-  FALLBACK_WIDGET_STATE_STORAGE_KEY,
-  widgetStateStorageKey,
-  reconcileWindowsWithThreads,
-  selectSingleFloatingWindowThread,
+  type FloatingChatWindow, createWindow, persistWindows, readPersistedOrDefaultWindows,
+  FALLBACK_WIDGET_STATE_STORAGE_KEY, widgetStateStorageKey, reconcileWindowsWithThreads,
 } from "./floatingState";
 import {
-  debugThreadSync,
-  floatingWidgetHostContextFromContent,
-  loadFloatingWidgetHostContext,
-  postDockClose,
-  postWidgetSize,
-  shouldIgnoreFloatingStackDrag,
-  type FloatingWidgetMode,
+  floatingWidgetHostContextFromContent, loadFloatingWidgetHostContext, postDockClose,
+  postWidgetSize, type FloatingWidgetMode,
 } from "./floatingWidgetRuntime";
-
-type FloatingStackDragState = {
-  isDragging: boolean;
-  pointerId: number;
-  scrollLeft: number;
-  startX: number;
-  startY: number;
-};
 
 export function useFloatingWindows() {
   const [storageKey, setStorageKey] = useState<string | null>(null);
@@ -44,303 +20,146 @@ export function useFloatingWindows() {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [runtimeThreadsError, setRuntimeThreadsError] = useState<string | null>(null);
   const [windows, setWindows] = useState<FloatingChatWindow[]>([]);
+  const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
+  const latestContextRef = useRef<unknown>(null);
   const [hostMode, setHostMode] = useState<FloatingWidgetMode>("overlay");
   const [hostNavigationScope, setHostNavigationScope] = useState("");
-  const [hostThreadId, setHostThreadId] = useState("");
-  const readReceiptInFlightRef = useRef<Set<string>>(new Set());
-  const stackDragRef = useRef<FloatingStackDragState | null>(null);
+  const readReceiptInFlightRef = useRef(new Set<string>());
   const stackRef = useRef<HTMLDivElement | null>(null);
   const threadsRef = useRef(threads);
   const windowsRef = useRef(windows);
+  threadsRef.current = threads;
+  windowsRef.current = windows;
 
   useRuntimeThreads({ onSnapshot: () => setRuntimeThreadsLoaded(true), setError: setRuntimeThreadsError, setThreads });
 
   useEffect(() => {
-    threadsRef.current = threads;
-    if (!isWindowStateReady) {
-      return;
+    if (isWindowStateReady && runtimeThreadsLoaded) {
+      setWindows((current) => reconcileWindowsWithThreads(current, threads));
     }
-    setWindows((current) => reconcileWindowsWithThreads(current, threads));
-  }, [isWindowStateReady, threads]);
+  }, [isWindowStateReady, runtimeThreadsLoaded, threads]);
 
   useEffect(() => {
-    windowsRef.current = windows;
-    if (!isWindowStateReady || !storageKey) {
-      return;
-    }
-    postWidgetSize(windows);
+    if (!isWindowStateReady || !storageKey) return;
     persistWindows(storageKey, windows);
-  }, [isWindowStateReady, storageKey, windows]);
-
-  useEffect(() => {
-    if (!isWindowStateReady || hostMode !== "overlay") {
-      return;
-    }
-    postWidgetSize(windowsRef.current);
-  }, [hostMode, isWindowStateReady]);
+    if (hostMode === "overlay") postWidgetSize(windows);
+  }, [hostMode, isWindowStateReady, storageKey, windows]);
 
   useEffect(() => {
     let cancelled = false;
-    async function loadScopedWidgetState() {
-      const hostContext = await loadFloatingWidgetHostContext();
-      if (cancelled) {
-        return;
+    void loadFloatingWidgetHostContext().then((initialContext) => {
+      if (cancelled) return;
+      const context = latestContextRef.current ? floatingWidgetHostContextFromContent(latestContextRef.current) : initialContext;
+      setActiveAppContext(latestContextRef.current ? activeAppContextFromWidgetContext({ content: latestContextRef.current }) : initialContext.activeAppContext);
+      const key = context.workspaceId ? widgetStateStorageKey(context.workspaceId) : FALLBACK_WIDGET_STATE_STORAGE_KEY;
+      let restored = readPersistedOrDefaultWindows(key);
+      // Apply a launch selection once. Later context/theme updates are not navigation.
+      if (context.navigationScope && context.threadId) {
+        if (!restored.some((item) => item.id === context.navigationScope)) {
+          restored = [...restored, { ...createWindow(context.threadId), id: context.navigationScope }];
+        }
       }
-      const nextStorageKey = hostContext.workspaceId ? widgetStateStorageKey(hostContext.workspaceId) : FALLBACK_WIDGET_STATE_STORAGE_KEY;
-      const persistedWindows = readPersistedOrDefaultWindows(nextStorageKey);
-      setHostMode(hostContext.mode);
-      setHostNavigationScope(hostContext.navigationScope);
-      setHostThreadId(hostContext.threadId);
-      setStorageKey(nextStorageKey);
-      setWindows(persistedWindows);
+      setHostMode(context.mode);
+      setHostNavigationScope(context.navigationScope);
+      setStorageKey(key);
+      setWindows(restored);
       setIsWindowStateReady(true);
-      postWidgetSize(persistedWindows);
-    }
-
-    void loadScopedWidgetState();
-
-    return () => {
-      cancelled = true;
-    };
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     function handleWidgetMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
-        return;
-      }
-      const payload = event.data as {
-        active_thread_id?: string;
-        navigation_scope?: string;
-        owner_app_id?: string;
-        context?: { content?: unknown };
-        type?: string;
-      };
-      if (payload.type === "maverick.widget.context-changed" && payload.owner_app_id === "chat") {
-        const hostContext = floatingWidgetHostContextFromContent(payload.context?.content);
-        setHostMode(hostContext.mode);
-        setHostNavigationScope(hostContext.navigationScope);
-        setHostThreadId(hostContext.threadId);
-        if (hostContext.threadId) {
-          setWindows((current) => reconcileWindowsWithThreads(current, threadsRef.current, hostContext.threadId, hostContext.navigationScope));
-        }
-        return;
-      }
-      if (payload.type !== "maverick.chat.active-thread-changed" || payload.owner_app_id !== "chat") {
-        return;
-      }
-      const activeThreadId = typeof payload.active_thread_id === "string" ? payload.active_thread_id : "";
-      const navigationScope = typeof payload.navigation_scope === "string" ? payload.navigation_scope : "";
-      const currentWindows = windowsRef.current;
-      debugThreadSync("widget.data-changed", {
-        activeThreadId,
-        navigationScope,
-        windows: currentWindows.map((windowItem) => ({ id: windowItem.id, threadId: windowItem.threadId })),
-      });
-      if (!isWindowStateReady) {
-        return;
-      }
-      setWindows((current) => reconcileWindowsWithThreads(current, threadsRef.current, activeThreadId, navigationScope));
-    }
+      // The authenticated host relay delivers messages into the widget document.
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") return;
+      const payload = event.data;
+      if (payload.owner_app_id !== "chat") return;
+      if (payload.type === "maverick.widget.context-changed" && payload.widget_id === "chat-floating") {
+        latestContextRef.current = payload.context?.content;
+        if (!isWindowStateReady) return;
+        setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
+        const context = floatingWidgetHostContextFromContent(payload.context?.content);
+        setHostMode(context.mode);
+        // Selection belongs to explicit window actions and scoped navigation.
+        // A host context refresh can carry an older scope/thread after a new
+        // draft was opened; it must never change the selected window.
 
+        return;
+      }
+      if (isWindowStateReady && payload.type === "maverick.chat.active-thread-changed") {
+        const scope = typeof payload.navigation_scope === "string" ? payload.navigation_scope : "";
+        const threadId = typeof payload.active_thread_id === "string" ? payload.active_thread_id : "";
+        if (!scope || !threadId) return;
+        setWindows((current) => reconcileWindowsWithThreads(current, threadsRef.current, threadId, scope));
+      }
+    }
     window.addEventListener("message", handleWidgetMessage);
-    return () => {
-      window.removeEventListener("message", handleWidgetMessage);
-    };
+    return () => window.removeEventListener("message", handleWidgetMessage);
   }, [isWindowStateReady]);
 
-  function navigateChat(windowId: string, params: Record<string, string | boolean | null>) {
-    window.postMessage({ type: "maverick.app.navigate", app_id: "chat", navigation_scope: windowId, params }, window.location.origin);
+  function revealWindow(windowId: string) {
+    setHostNavigationScope(windowId);
+    setWindows((current) => current.map((item) => item.id === windowId ? { ...item, isCollapsed: false } : item));
+    requestAnimationFrame(() => stackRef.current?.querySelector(`[data-window-id="${CSS.escape(windowId)}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" }));
   }
 
   function setWindowCollapsed(windowId: string, isCollapsed: boolean) {
-    setWindows((current) => current.map((windowItem) => (windowItem.id === windowId ? { ...windowItem, isCollapsed } : windowItem)));
+    if (!isCollapsed) { revealWindow(windowId); return; }
+    setWindows((current) => current.map((item) => item.id === windowId ? { ...item, isCollapsed: true } : item));
   }
 
-  function closeWindow(windowId: string) {
-    setWindows((current) => {
-      if (current.length <= 1) {
-        return current.map((windowItem) => (windowItem.id === windowId ? { ...windowItem, isCollapsed: true } : windowItem));
-      }
-      return current.filter((windowItem) => windowItem.id !== windowId);
-    });
-  }
-
-  function createDraftChat(windowId: string, projectId: string | null = null) {
-    debugThreadSync("create-draft-chat", { projectId, windowId });
-    const nextWindow = createWindow("", true, projectId);
-    if (hostMode !== "overlay") {
-      setHostNavigationScope(nextWindow.id);
-      setHostThreadId("");
-    }
-    setWindows((current) => [...current, nextWindow]);
+  function createDraftChat(_windowId: string, projectId: string | null = null) {
+    const next = createWindow("", true, projectId);
+    setWindows((current) => [...current, next]);
+    setHostNavigationScope(next.id);
   }
 
   function dockWindow(windowId: string) {
-    const currentWindows = windowsRef.current;
-    const selectedWindow = currentWindows.find((windowItem) => windowItem.id === windowId) || currentWindows[0] || createWindow();
-    window.parent?.postMessage(
-      {
-        type: "maverick.widget.dock.open",
-        owner_app_id: "chat",
-        widget_id: "chat-floating",
-        placement: "right",
-        params: {
-          navigation_scope: selectedWindow.id,
-          thread_id: selectedWindow.threadId,
-        },
-      },
-      "*",
-    );
-    setWindows([{ ...selectedWindow, isCollapsed: false }]);
+    const selected = windowsRef.current.find((item) => item.id === windowId);
+    if (!selected) return;
+    setHostNavigationScope(selected.id);
+    window.parent.postMessage({
+      type: "maverick.widget.dock.open", owner_app_id: "chat", widget_id: "chat-floating", placement: "right",
+      params: { navigation_scope: selected.id, thread_id: selected.threadId },
+    }, "*");
   }
 
-  function closeDock() {
-    postDockClose("chat-floating");
-  }
-
-  function selectThread(windowId: string, threadId: string) {
-    debugThreadSync("select-thread", { threadId, windowId });
-    if (!threadId) {
-      return;
-    }
-    if (hostMode !== "overlay") {
-      const selection = selectSingleFloatingWindowThread(windowsRef.current, windowId, threadId);
-      setHostNavigationScope(selection.windowId);
-      setHostThreadId(threadId);
-      setWindows(selection.windows);
-      return;
-    }
-    const currentWindows = windowsRef.current;
-    const sourceWindow = currentWindows.find((windowItem) => windowItem.id === windowId);
-    if (sourceWindow?.threadId === threadId && !sourceWindow.isDraft) {
-      return;
-    }
-    const existingWindow = currentWindows.find((windowItem) => windowItem.threadId === threadId && !windowItem.isDraft);
-    if (existingWindow) {
-      setWindows((current) =>
-        current.map((windowItem) => (windowItem.id === existingWindow.id ? { ...windowItem, isCollapsed: false } : windowItem)),
-      );
-      return;
-    }
-    setWindows((current) => [...current, createWindow(threadId)]);
+  function selectThread(windowId: string, threadId: string, anotherWindow = false) {
+    if (!threadId) return;
+    const existing = windowsRef.current.find((item) => item.threadId === threadId && !item.isDraft);
+    const next = existing || createWindow(threadId);
+    setWindows((current) => (existing ? current : [...current, next]).map((item) =>
+      item.id === next.id ? { ...item, isCollapsed: false }
+        : !anotherWindow && item.id === windowId ? { ...item, isCollapsed: true } : item));
+    setHostNavigationScope(next.id);
+    requestAnimationFrame(() => stackRef.current?.querySelector(`[data-window-id="${CSS.escape(next.id)}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" }));
   }
 
   async function markThreadReadIfNeeded(thread: ChatThread) {
-    if (!isThreadUnread(thread) || readReceiptInFlightRef.current.has(thread.thread_id)) {
-      return;
-    }
+    if (!isThreadUnread(thread) || readReceiptInFlightRef.current.has(thread.thread_id)) return;
     readReceiptInFlightRef.current.add(thread.thread_id);
-    setThreads((current) =>
-      current.map((item) => (item.thread_id === thread.thread_id ? { ...item, has_unread_completed_response: false } : item)),
-    );
     try {
       const payload = await markThreadRead(thread.thread_id);
       setThreads((current) => applyThreadCatalogPayload(current, payload));
     } catch {
-      // Opening a floating chat should not be blocked by a best-effort read receipt.
-    } finally {
-      readReceiptInFlightRef.current.delete(thread.thread_id);
-    }
+      // Read receipts do not block navigation; failed receipts remain retryable.
+    } finally { readReceiptInFlightRef.current.delete(thread.thread_id); }
   }
 
-  async function renameThread(threadId: string, title: string) {
-    await updateThread({ thread_id: threadId, title });
-  }
-
-  async function removeThread(windowId: string, thread: ChatThread) {
-    const nextThreads = threads.filter((item) => item.thread_id !== thread.thread_id);
-    const nextThreadId = nextThreads[0]?.thread_id || "";
-    setWindows((current) =>
-      current.map((windowItem) => (windowItem.threadId === thread.thread_id ? { ...windowItem, threadId: nextThreadId } : windowItem)),
-    );
+  async function removeThread(_windowId: string, thread: ChatThread) {
     await deleteThread(thread.thread_id);
-    if (nextThreadId) {
-      navigateChat(windowId, { thread_id: nextThreadId });
-    }
-  }
-
-  function startStackDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.pointerType !== "mouse" || event.button !== 0 || shouldIgnoreFloatingStackDrag(event.target)) {
-      return;
-    }
-    const stack = stackRef.current;
-    if (!stack || stack.scrollWidth <= stack.clientWidth) {
-      return;
-    }
-    stackDragRef.current = {
-      isDragging: false,
-      pointerId: event.pointerId,
-      scrollLeft: stack.scrollLeft,
-      startX: event.clientX,
-      startY: event.clientY,
-    };
-  }
-
-  function moveStackDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const dragState = stackDragRef.current;
-    const stack = stackRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId || !stack) {
-      return;
-    }
-
-    const deltaX = event.clientX - dragState.startX;
-    const deltaY = event.clientY - dragState.startY;
-    if (!dragState.isDragging) {
-      if (isVerticalDragIntent(deltaX, deltaY)) {
-        stackDragRef.current = null;
-        return;
-      }
-      if (!isHorizontalDragIntent(deltaX, deltaY)) {
-        return;
-      }
-      dragState.isDragging = true;
-      stack.setPointerCapture(event.pointerId);
-      stack.classList.add("is-horizontal-dragging");
-    }
-
-    event.preventDefault();
-    stack.scrollLeft = horizontalDragScrollLeft(dragState.scrollLeft, dragState.startX, event.clientX);
-  }
-
-  function endStackDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const dragState = stackDragRef.current;
-    const stack = stackRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId || !stack) {
-      return;
-    }
-    if (stack.hasPointerCapture(event.pointerId)) {
-      stack.releasePointerCapture(event.pointerId);
-    }
-    stack.classList.remove("is-horizontal-dragging");
-    stackDragRef.current = null;
+    setThreads((current) => current.filter((item) => item.thread_id !== thread.thread_id));
+    setWindows((current) => current.map((item) => item.threadId === thread.thread_id
+      ? { ...item, draftProjectId: null, isDraft: true, threadId: "" } : item));
   }
 
   return {
-    closeWindow,
-    closeDock,
-    createDraftChat,
-    dockWindow,
-    hostMode,
-    hostNavigationScope,
-    hostThreadId,
-    isWindowStateReady,
-    markThreadReadIfNeeded,
-    removeThread,
-    renameThread,
-    runtimeThreadsError,
-    runtimeThreadsLoaded,
-    selectThread,
-    setWindowCollapsed,
-    stackHandlers: {
-      onLostPointerCapture: endStackDrag,
-      onPointerCancel: endStackDrag,
-      onPointerDown: startStackDrag,
-      onPointerMove: moveStackDrag,
-      onPointerUp: endStackDrag,
-    },
-    stackRef,
-    threads,
-    windows,
+    closeWindow: (windowId: string) => setWindowCollapsed(windowId, true),
+    closeDock: () => postDockClose(), activeAppContext, createDraftChat, dockWindow, hostMode, hostNavigationScope,
+    isWindowStateReady, markThreadReadIfNeeded, removeThread,
+    renameThread: async (threadId: string, title: string) => { await updateThread({ thread_id: threadId, title }); },
+    runtimeThreadsError, runtimeThreadsLoaded, selectThread, setWindowCollapsed, stackRef, threads, windows,
   };
 }

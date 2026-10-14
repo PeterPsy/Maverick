@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../App";
+import type { ActiveAppContext } from "../../lib/activeAppContext";
 import type { ChatThread } from "../../api/client";
 import { FloatingWindow } from "./FloatingWindow";
 import type { FloatingChatWindow } from "./floatingState";
@@ -58,7 +59,7 @@ describe("FloatingWindow", () => {
     vi.clearAllMocks();
   });
 
-  async function renderFloatingWindow(windowItem: FloatingChatWindow) {
+  async function renderFloatingWindow(windowItem: FloatingChatWindow, activeAppContext: ActiveAppContext | null = null, isActive = true) {
     if (!root) {
       container = document.createElement("div");
       document.body.append(container);
@@ -67,6 +68,8 @@ describe("FloatingWindow", () => {
     await act(async () => {
       root?.render(
         <FloatingWindow
+          activeAppContext={activeAppContext}
+          isActive={isActive}
           onClose={vi.fn()}
           onCollapseChange={vi.fn()}
           onCreateDraftChat={vi.fn()}
@@ -112,4 +115,41 @@ describe("FloatingWindow", () => {
     expect(input.value).toBe('Unsent edit');
     expect(input.dataset.visible).toBe('true');
   });
+  it("pins the operational context while the shell navigates without replacing the draft", async () => {
+    const storage = { app_id: "storage", name: "Storage", description: "", views: [], params: { path: "a" } };
+    const crm = { app_id: "crm", name: "CRM", description: "", views: [] };
+    await renderFloatingWindow(floatingWindow(), storage);
+    const draft = container!.querySelector("input");
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Pin app context"]')!.click());
+    await renderFloatingWindow(floatingWindow(), crm);
+    expect(vi.mocked(App).mock.calls.at(-1)?.[0]).toMatchObject({ activeAppContextOverride: storage });
+    expect(container!.querySelector("input")).toBe(draft);
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Follow app context"]')!.click());
+    expect(vi.mocked(App).mock.calls.at(-1)?.[0]).toMatchObject({ activeAppContextOverride: crm });
+  });
+
+  it("defers controllers for retained windows until they become active", async () => {
+    await renderFloatingWindow(floatingWindow(), null, false);
+    expect(App).not.toHaveBeenCalled();
+    await renderFloatingWindow(floatingWindow(), null, true);
+    const input = container!.querySelector("input");
+    await renderFloatingWindow(floatingWindow(), null, false);
+    expect(container!.querySelector("input")).toBe(input);
+    expect(input?.dataset.visible).toBe("false");
+  });
+
+  it("moves from search to a conversation with arrows and returns focus on Escape", async () => {
+    await renderFloatingWindow(floatingWindow());
+    const trigger = container!.querySelector<HTMLButtonElement>('[aria-label="Choose chat"]')!;
+    await act(async () => trigger.click());
+    const search = container!.querySelector<HTMLInputElement>('[aria-label="Search chats"]')!;
+    search.focus();
+    await act(async () => search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })));
+    const selection = container!.querySelector<HTMLButtonElement>(".chat-floating-thread-menu__item-select")!;
+    expect(document.activeElement).toBe(selection);
+    await act(async () => selection.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(document.activeElement).toBe(trigger);
+    expect(container!.querySelector('[role="dialog"]')).toBeNull();
+  });
+
 });

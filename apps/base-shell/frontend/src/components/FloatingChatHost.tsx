@@ -28,6 +28,7 @@ export function FloatingChatHost({
   threadId,
   user,
   widthPx,
+  maxWidthPx = clampFloatingChatWidth(720),
 }: {
   activeApp: AppRegistryItem | null;
   activeAppParams?: Record<string, string | boolean | null>;
@@ -56,6 +57,7 @@ export function FloatingChatHost({
   threadId: string | null;
   user: { username?: string | null } | null;
   widthPx: number;
+  maxWidthPx?: number;
 }) {
   const resizeDragRef = useRef<{ pointerId: number; startWidthPx: number; startX: number } | null>(null);
   const [isResizeActive, setIsResizeActive] = useState(false);
@@ -69,21 +71,21 @@ export function FloatingChatHost({
   const isMobileMode = placement === "mobile-fullscreen";
   const isVisible = isMobileMode ? (isMobileChatOpen || isMobileChatClosing) && !isChatAppActive : !isChatAppActive;
   const scope = `${frameScope.sessionGeneration}:${activeWorkspaceId}`;
-  const [mounted, setMounted] = useState<{ scope: string; placements: FloatingChatPlacement[] }>(() => ({
-    scope, placements: isVisible ? [placement] : [],
-  }));
-  const scopedPlacements = mounted.scope === scope ? mounted.placements : [];
-  const renderedPlacements = isVisible && !scopedPlacements.includes(placement)
-    ? [...scopedPlacements, placement] : scopedPlacements;
+  const [mountedScope, setMountedScope] = useState(isVisible ? scope : "");
   useEffect(() => {
-    setMounted((current) => {
-      const placements = current.scope === scope ? current.placements : [];
-      if (current.scope === scope && (!isVisible || placements.includes(placement))) return current;
-      return { scope, placements: isVisible && !placements.includes(placement) ? [...placements, placement] : placements };
-    });
-  }, [scope, isVisible, placement]);
+    if (isVisible) setMountedScope(scope);
+  }, [scope, isVisible]);
 
-  if (!renderedPlacements.length) return null;
+  useEffect(() => {
+    if (!isVisible || !isMobileMode) return;
+    const surface = document.querySelector(".bs-floating-chat-host__surface");
+    const focus = () => surface?.querySelector<HTMLIFrameElement>("iframe")?.focus();
+    focus();
+    surface?.addEventListener("load", focus, true);
+    return () => surface?.removeEventListener("load", focus, true);
+  }, [isVisible, isMobileMode]);
+
+  if (!isVisible && mountedScope !== scope) return null;
 
   function handleResizePointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     if (!isDockMode || event.button !== 0) {
@@ -110,7 +112,7 @@ export function FloatingChatHost({
     }
     event.preventDefault();
     event.stopPropagation();
-    onWidthChange(clampFloatingChatWidth(drag.startWidthPx + drag.startX - event.clientX));
+    onWidthChange(clampFloatingChatWidth(Math.min(maxWidthPx, drag.startWidthPx + drag.startX - event.clientX)));
   }
 
   function updateResizeHandleY(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -139,17 +141,18 @@ export function FloatingChatHost({
   }
 
   function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (!isDockMode || (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home")) {
+    if (!isDockMode || (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End")) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
+    if (event.key === "End") { onWidthChange(maxWidthPx); return; }
     if (event.key === "Home") {
-      onWidthChange(clampFloatingChatWidth(null));
+      onWidthChange(clampFloatingChatWidth(Math.min(maxWidthPx, 420)));
       return;
     }
     const direction = event.key === "ArrowLeft" ? 1 : -1;
-    onWidthChange(clampFloatingChatWidth(widthPx + direction * 24));
+    onWidthChange(clampFloatingChatWidth(Math.min(maxWidthPx, widthPx + direction * 24)));
   }
 
   return (
@@ -160,10 +163,10 @@ export function FloatingChatHost({
       className={`bs-floating-chat-host is-${placement} ${isVisible ? "is-visible" : ""} ${isMobileChatClosing ? "is-closing" : ""} ${isResizeActive ? "is-resizing" : ""}`}
     >
       <div className="bs-floating-chat-host__surface">
-        {renderedPlacements.map((openedPlacement) => <FloatingChatWidget
-          key={`${scope}:${openedPlacement}`}
-          placement={openedPlacement}
-          visible={isVisible && openedPlacement === placement}
+        <FloatingChatWidget
+          key={scope}
+          placement={placement}
+          visible={isVisible}
           activeApp={activeApp}
           activeAppParams={activeAppParams}
           activeWorkspaceId={activeWorkspaceId}
@@ -177,10 +180,15 @@ export function FloatingChatHost({
           shellTheme={shellTheme}
           threadId={threadId}
           user={user}
-        />)}
+        />
       </div>
       <button
         aria-label="Ridimensiona chat laterale"
+        role="separator"
+        aria-orientation="vertical"
+        aria-valuemin={360}
+        aria-valuemax={maxWidthPx}
+        aria-valuenow={widthPx}
         className="bs-floating-chat-host__resize-handle"
         disabled={!isDockMode}
         onKeyDown={handleResizeKeyDown}

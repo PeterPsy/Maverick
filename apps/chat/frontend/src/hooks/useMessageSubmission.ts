@@ -1,3 +1,4 @@
+import { useChatVisibility } from "./useChatVisibility";
 import { Dispatch, SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import {
   AppReference,
@@ -395,7 +396,8 @@ export function useMessageSubmission({
   const preparedRuntimeSessionRefillTimerRef = useRef<number | null>(null);
   const preparedAppReferencesRequestRef = useRef<PreparedAppReferencesRequest | null>(null);
   const activeThreadPrewarmRef = useRef("");
-  const canPreloadRuntimeRef = useRef(canPreloadRuntime);
+  const isVisible = useChatVisibility();
+  const canPreloadRuntimeRef = useRef(canPreloadRuntime && isVisible);
   const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [queuedMessagesByConversationKey, setQueuedMessagesByConversationKey] = useState<ConversationItems<QueuedMessage>>({});
@@ -413,8 +415,8 @@ export function useMessageSubmission({
   }, [sendingByConversationKey]);
 
   useEffect(() => {
-    canPreloadRuntimeRef.current = canPreloadRuntime;
-  }, [canPreloadRuntime]);
+    canPreloadRuntimeRef.current = canPreloadRuntime && isVisible;
+  }, [canPreloadRuntime, isVisible]);
 
   useEffect(() => {
     activeConversationKeyRef.current = activeConversationKey;
@@ -429,7 +431,7 @@ export function useMessageSubmission({
   useEffect(() => {
     // A native activation is one-use authority. Bind it atomically with the
     // user's first submission rather than consuming it in a hidden prewarm.
-    if (!canPreloadRuntime || deviceUseActivationId) {
+    if (!isVisible || !canPreloadRuntime || deviceUseActivationId) {
       return;
     }
     const abortController = new AbortController();
@@ -437,7 +439,7 @@ export function useMessageSubmission({
     return () => {
       abortController.abort();
     };
-  }, [activeAppContext, activeThread, canPreloadRuntime, deviceUseActivationId, draftChat, selectedAgentRuntimeConfig, threads]);
+  }, [isVisible, activeAppContext, activeThread, canPreloadRuntime, deviceUseActivationId, draftChat, selectedAgentRuntimeConfig, threads]);
 
   useEffect(
     () => () => {
@@ -453,7 +455,7 @@ export function useMessageSubmission({
 
   useEffect(() => {
     const runtimeSessionId = activeThread?.runtime_session_id || "";
-    if (!runtimeSessionId || !canPreloadRuntime || isRuntimeBusy) {
+    if (!isVisible || !runtimeSessionId || !canPreloadRuntime || isRuntimeBusy) {
       return;
     }
     if (activeThreadPrewarmRef.current === runtimeSessionId) {
@@ -461,18 +463,18 @@ export function useMessageSubmission({
     }
     activeThreadPrewarmRef.current = runtimeSessionId;
     const abortController = new AbortController();
-    void prewarmRuntimeSession(runtimeSessionId, { signal: abortController.signal }).catch((error) => {
-      if (!isAbortError(error) && activeThreadPrewarmRef.current === runtimeSessionId) {
+    void prewarmRuntimeSession(runtimeSessionId, { signal: abortController.signal }).catch(() => {
+      if (activeThreadPrewarmRef.current === runtimeSessionId) {
         activeThreadPrewarmRef.current = "";
       }
     });
     return () => {
       abortController.abort();
     };
-  }, [activeThread?.runtime_session_id, canPreloadRuntime, isRuntimeBusy]);
+  }, [isVisible, activeThread?.runtime_session_id, canPreloadRuntime, isRuntimeBusy]);
 
   useEffect(() => {
-    if (isBootstrapping || (!activeThread && (!draftChat || !activeConversationKey))) {
+    if (!isVisible || isBootstrapping || (!activeThread && (!draftChat || !activeConversationKey))) {
       cancelPreparedAppReferencesRequest();
       return;
     }
@@ -538,6 +540,7 @@ export function useMessageSubmission({
     isBootstrapping,
     selectedAgentRuntimeConfig,
     threads,
+    isVisible,
   ]);
 
   useEffect(() => {

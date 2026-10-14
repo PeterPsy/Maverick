@@ -29,9 +29,12 @@ async function openApp(page, appId, mobile = false) {
     await page.getByRole("button", { name: "Apri applicazioni pinnate", exact: true }).click();
     await page.getByRole("button", { name: appId, exact: true }).click();
   } else {
-    await page.getByRole("button", { name: `${appId}. Alt+ArrowUp or Alt+ArrowDown to reorder.`, exact: true }).click();
+    // Exercise navigation independently of the rail's long-press reorder gesture.
+    const shortcut = page.getByRole("button", { name: `${appId}. Alt+ArrowUp or Alt+ArrowDown to reorder.`, exact: true });
+    await shortcut.focus();
+    await shortcut.press("Enter");
   }
-  await page.waitForURL(`**/app/${appId}`);
+  await page.waitForURL((url) => url.pathname === `/app/${appId}`);
   await page.locator(`.bs-sidebar__persistent-widget[data-active="true"] iframe[title="App sidebar footer"]`)
     .waitFor({ state: "attached" });
 }
@@ -66,24 +69,25 @@ test("warm sidebar, overlay and dock documents survive desktop app and placement
     await assertPreserved(overlay, overlayInstance, "overlay draft");
     await overlay.getByRole("button", { name: "Dock chat", exact: true }).click();
     const dock = await frameFor(page, 'iframe[title="Right dock widget"]');
+    await assertPreserved(dock, overlayInstance, "overlay draft");
     const dockInstance = await saveDraft(dock, "dock draft");
     await openApp(page, "chat");
     await openApp(page, "storage");
     await assertPreserved(dock, dockInstance, "dock draft");
     await dock.getByRole("button", { name: "Return to overlay", exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('[data-placement="overlay"]').hidden === false);
-    await assertPreserved(overlay, overlayInstance, "overlay draft");
+    await page.waitForFunction(() => document.querySelector('[data-placement="overlay"]')?.hidden === false);
+    await assertPreserved(overlay, overlayInstance, "dock draft");
     const warmLaunches = fixture.launches.length;
     await openApp(page, "calendar");
     await openApp(page, "chat");
     await openApp(page, "storage");
     assert.equal(fixture.launches.length, warmLaunches, "warm navigation must not request new launch tickets");
-    for (const widgetId of ["chat-sidebar", "chat-sidebar-footer", "chat-floating", "chat-floating-dock"]) {
+    for (const widgetId of ["chat-sidebar", "chat-sidebar-footer", "chat-floating"]) {
       assert.equal(fixture.documents.filter((path) => path.includes(`/${widgetId}/`)).length, 1, widgetId);
     }
     await context.close();
   } catch (error) {
-    console.error("Widget lifecycle failure:", await page?.locator(".bs-shell").getAttribute("class"), fixture.documents);
+    console.error("Widget lifecycle failure:", page?.url(), await page?.locator(".bs-shell").getAttribute("class"), fixture.documents);
     throw error;
   } finally { await browser.close(); await close(fixture.server); }
 });
@@ -104,6 +108,7 @@ test("mobile footer and contextual Chat preserve documents through closing and a
     await page.getByRole("button", { name: "Apri chat contestuale", exact: true }).click();
     const chat = await frameFor(page, 'iframe[title="Mobile chat widget"]');
     const chatInstance = await saveDraft(chat, "mobile draft");
+    assert.equal(await page.locator(".bs-workspace-view-shell").getAttribute("inert"), "");
     await page.getByRole("button", { name: "Chiudi chat contestuale", exact: true }).click();
     await page.waitForFunction(() => document.querySelector(".bs-floating-chat-host")?.getAttribute("aria-hidden") === "true");
     assert.equal(await chat.evaluate(() => window.visible), false);
@@ -115,7 +120,17 @@ test("mobile footer and contextual Chat preserve documents through closing and a
     await openApp(page, "storage", true);
     await page.getByRole("button", { name: "Apri chat contestuale", exact: true }).click();
     await assertPreserved(chat, chatInstance, "mobile draft");
-    assert.equal(fixture.documents.filter((path) => path.includes("/chat-floating-mobile/")).length, 1);
+    await page.getByRole("button", { name: "Chiudi chat contestuale", exact: true }).focus();
+    for (let step = 0; step < 8; step++) {
+      await page.keyboard.press("Tab");
+      assert.equal(await page.evaluate(() => document.querySelector(".bs-workspace-view-shell")?.contains(document.activeElement)), false);
+    }
+    await page.getByRole("button", { name: "Chiudi chat contestuale", exact: true }).click();
+    await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Apri chat contestuale");
+    await page.getByRole("button", { name: "Apri chat contestuale", exact: true }).click();
+    await assertPreserved(chat, chatInstance, "mobile draft");
+    await page.screenshot({ path: "/tmp/maverick-contextual-shell-mobile.png" });
+    assert.equal(fixture.documents.filter((path) => path.includes("/chat-floating/")).length, 1);
     assert.equal(fixture.documents.filter((path) => path.includes("/chat-sidebar-footer/")).length, 1);
     await context.close();
   } finally { await browser.close(); await close(fixture.server); }

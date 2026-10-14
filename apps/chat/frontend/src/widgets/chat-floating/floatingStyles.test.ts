@@ -24,11 +24,11 @@ describe("floating chat widget styles", () => {
     expect(stackBlock).toContain("max-width: 100%;");
     expect(stackBlock).toContain("overflow-x: auto;");
     expect(stackBlock).toContain("overflow-y: hidden;");
-    expect(stackBlock).toContain("scrollbar-width: none;");
+    expect(stackBlock).toContain("scrollbar-width: thin;");
     expect(stackBlock).toContain("touch-action: pan-x pan-y;");
     expect(stackBlock).toContain("-webkit-overflow-scrolling: touch;");
     expect(stackBlock).not.toContain("overflow: hidden;");
-    expect(styles).toMatch(/\.chat-floating-widget-stack::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
+    expect(styles).toMatch(/\.chat-floating-widget-stack::-webkit-scrollbar\s*{[\s\S]*height:\s*6px;/);
   });
 
   it("lets horizontal swipes started inside an open transcript reach the floating stack", () => {
@@ -68,8 +68,8 @@ describe("floating chat widget styles", () => {
   });
 
   it("keeps model and runtime controls visible in the compact utility panel", () => {
-    const styles = readFileSync(resolve(currentDir, "../../styles/composer/compact-utilities.css"), "utf8");
-    const singleLineStyles = styles.replace(/\s+/g, " ");
+    const styles = readFileSync(resolve(currentDir, "../../styles/composer/compact-utility-controls.css"), "utf8");
+    const singleLineStyles = readFileSync(resolve(currentDir, "../../styles/composer/compact-utilities.css"), "utf8").replace(/\s+/g, " ");
     const runtimeBadgesBlock = cssBlock(
       styles,
       ".chatapp-composer-utilities__menu .chatapp-composer__runtime-badges",
@@ -79,7 +79,7 @@ describe("floating chat widget styles", () => {
       ".chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-composer__runtime-badges",
     );
 
-    expect(runtimeBadgesBlock).toContain("display: inline-flex;");
+    expect(runtimeBadgesBlock).toContain("display: flex;");
     expect(providerPanelBadgesBlock).toContain("display: block;");
     expect(providerPanelBadgesBlock).toContain("width: 100%;");
   });

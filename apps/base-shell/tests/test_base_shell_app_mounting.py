@@ -54,7 +54,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
     def test_base_shell_remounts_app_frames_and_widgets_by_workspace(self) -> None:
         host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/AppFrameHost.tsx").read_text()
         sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
-        floating_host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatHost.tsx").read_text()
+        floating_host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatHost.tsx").read_text() + (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatWidget.tsx").read_text()
         widget_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WidgetSlot.tsx").read_text()
 
         self.assertIn("mountScopePrefix = `${frameScope.sessionGeneration}:${activeWorkspaceId}:`", host_source)
@@ -135,7 +135,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
 
     def test_base_shell_uses_registry_backed_overlay_widget(self) -> None:
         shell_source = (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text()
-        floating_host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatHost.tsx").read_text()
+        floating_host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatHost.tsx").read_text() + (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatWidget.tsx").read_text()
 
         self.assertIn("<FloatingChatHost", shell_source)
         self.assertIn("activeApp={activeApp}", shell_source)
@@ -143,9 +143,9 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("active_app", floating_host_source)
         self.assertIn("activeApp.app_id", floating_host_source)
         self.assertIn('hostAppId="base-shell"', floating_host_source)
-        self.assertIn('"shell.overlay.bottomright"', floating_host_source)
-        self.assertIn('size={widgetSize}', floating_host_source)
-        self.assertIn('"shell.overlay.mobile.fullscreen"', floating_host_source)
+        self.assertIn('"shell.contextual.chat"', floating_host_source)
+        self.assertIn('size={isDockMode || isMobileMode ? "fill" : "overlay"}', floating_host_source)
+        self.assertIn('"shell.contextual.chat"', floating_host_source)
         self.assertIn('preferredOwnerAppId="chat"', floating_host_source)
         self.assertIn('"mobile-fullscreen"', floating_host_source)
         self.assertNotIn('aria-modal="true"', floating_host_source)
@@ -153,7 +153,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
 
     def test_base_shell_mounts_chat_right_dock_widget_through_generic_slot(self) -> None:
         shell_source = (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text()
-        floating_host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatHost.tsx").read_text()
+        floating_host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatHost.tsx").read_text() + (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatWidget.tsx").read_text()
         session_source = (REPO_ROOT / "apps/base-shell/frontend/src/session.ts").read_text()
         widget_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WidgetSlot.tsx").read_text()
         layout_styles = (REPO_ROOT / "apps/base-shell/frontend/src/styles/layout.css").read_text()
@@ -167,7 +167,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("isFloatingChatFixed", shell_source)
         self.assertIn("<FloatingChatHost", shell_source)
         self.assertIn("onOpenDock={openFloatingChatDock}", shell_source)
-        self.assertIn('"shell.dock.right"', floating_host_source)
+        self.assertIn('"shell.contextual.chat"', floating_host_source)
         self.assertIn('preferredOwnerAppId="chat"', floating_host_source)
         self.assertIn("onWidthChange(clampFloatingChatWidth", floating_host_source)
         self.assertIn('payload.type === "maverick.widget.dock.open"', widget_source)

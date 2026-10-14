@@ -97,7 +97,6 @@ describe("chat light theme surfaces", () => {
     const documents = [
       resolve(sourceRoot, "../index.html"),
       resolve(sourceRoot, "../widgets/chat-floating/index.html"),
-      resolve(sourceRoot, "../widgets/chat-floating-dock/index.html"),
       resolve(sourceRoot, "../widgets/chat-sidebar/index.html"),
       resolve(sourceRoot, "../widgets/chat-sidebar-footer/index.html"),
       resolve(sourceRoot, "../widgets/runtime-text/index.html"),

@@ -81,6 +81,20 @@ describe("WidgetSlot overlay widget messages", () => {
     expect(slot.style.height).toBe("321px");
   });
 
+  it("retains overlay dimensions when the widget requests a placement change", async () => {
+    await renderOverlay(root);
+    const iframe = await waitForIframe(container);
+    const frameWindow = requireFrameWindow(iframe);
+    await dispatchResize(frameWindow, "420px", "320px");
+    const slot = container.querySelector<HTMLElement>(".bs-widget-slot--overlay")!;
+    await act(async () => window.dispatchEvent(new MessageEvent("message", {
+      origin: window.location.origin, source: frameWindow,
+      data: { type: "maverick.widget.dock.open", owner_app_id: ownerAppId, widget_id: widgetId, placement: "right" },
+    })));
+    expect(slot.style.width).toBe("420px");
+    expect(slot.style.height).toBe("320px");
+  });
+
   it("ignores capture-area start messages from non-mounted frames", async () => {
     await renderOverlay(root);
     const iframe = await waitForIframe(container);

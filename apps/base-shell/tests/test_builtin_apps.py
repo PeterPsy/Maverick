@@ -88,7 +88,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
                 {
                     "widget_id": "chat-floating",
                     "host": "base-shell",
-                    "content_kinds": ["shell.overlay.bottomright"],
+                    "content_kinds": ["shell.contextual.chat"],
                     "mount": "frontend/dist/widgets/chat-floating",
                     "backend": True,
                 },
@@ -1023,7 +1023,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
         parsed = parse_app_contract_file(repo_root / "apps" / "chat")
         self.assertIn("chat_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "chat")
-        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["project"])
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["project", "thread"])
         widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
 
         self.assertIn("chat-sidebar", widgets)
@@ -1033,14 +1033,10 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-sidebar" / "index.html").is_file())
         self.assertIn("chat-floating", widgets)
         self.assertEqual(widgets["chat-floating"].host, "base-shell")
-        self.assertEqual(widgets["chat-floating"].content_kinds, ["shell.overlay.bottomright"])
+        self.assertEqual(widgets["chat-floating"].content_kinds, ["shell.contextual.chat"])
         self.assertEqual(widgets["chat-floating"].frontend.mount, "frontend/dist/widgets/chat-floating")
         self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-floating" / "index.html").is_file())
-        self.assertIn("chat-floating-dock", widgets)
-        self.assertEqual(widgets["chat-floating-dock"].host, "base-shell")
-        self.assertEqual(widgets["chat-floating-dock"].content_kinds, ["shell.dock.right", "shell.overlay.mobile.fullscreen"])
-        self.assertEqual(widgets["chat-floating-dock"].frontend.mount, "frontend/dist/widgets/chat-floating-dock")
-        self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-floating-dock" / "index.html").is_file())
+        self.assertNotIn("chat-floating-dock", widgets)
 
     def test_base_shell_discovers_chat_widgets_without_source_paths(self) -> None:
         repo_root = self.make_repo_root()
@@ -1066,7 +1062,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
         overlay_status, overlay_body, _overlay_headers = self.invoke(
             app,
             path="/api/apps/widgets",
-            query_string="host=base-shell&content_kind=shell.overlay.bottomright",
+            query_string="host=base-shell&content_kind=shell.contextual.chat",
             cookie=cookie,
         )
         overlay_payload = json.loads(overlay_body.decode("utf-8"))
@@ -1081,15 +1077,15 @@ class BuiltinAppsTestCase(unittest.TestCase):
         mobile_status, mobile_body, _mobile_headers = self.invoke(
             app,
             path="/api/apps/widgets",
-            query_string="host=base-shell&content_kind=shell.overlay.mobile.fullscreen",
+            query_string="host=base-shell&content_kind=shell.contextual.chat",
             cookie=cookie,
         )
         mobile_payload = json.loads(mobile_body.decode("utf-8"))
 
         self.assertEqual(mobile_status, 200)
         self.assertEqual(mobile_payload["items"][0]["owner_app_id"], "chat")
-        self.assertEqual(mobile_payload["items"][0]["widget_id"], "chat-floating-dock")
-        self.assertEqual(mobile_payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-floating-dock/frontend/")
+        self.assertEqual(mobile_payload["items"][0]["widget_id"], "chat-floating")
+        self.assertEqual(mobile_payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-floating/frontend/")
         self.assertNotIn("source_root", mobile_payload["items"][0])
         self.assertNotIn("source_path", mobile_payload["items"][0])
 

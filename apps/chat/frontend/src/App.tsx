@@ -1,3 +1,4 @@
+import type { ActiveAppContext } from "./lib/activeAppContext";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
 import type { ChatThread } from "./api/client";
@@ -10,6 +11,7 @@ import type { ExternalFileDrop, ExternalMentionDrop } from "./lib/externalInputs
 import { normalizeChatRouteParams, type ShellRouteParams } from "./lib/shellNavigation";
 
 export function ServerChatApp({
+  activeAppContextOverride,
   enablePageCapture = false,
   externalFileDrop = null,
   externalMentionDrop = null,
@@ -22,6 +24,7 @@ export function ServerChatApp({
   threadId = null,
   renderSurface,
 }: {
+  activeAppContextOverride?: ActiveAppContext | null;
   enablePageCapture?: boolean;
   externalFileDrop?: ExternalFileDrop | null;
   externalMentionDrop?: ExternalMentionDrop | null;
@@ -35,6 +38,7 @@ export function ServerChatApp({
   renderSurface?: (props: ChatSurfaceProps) => ReactNode;
 } = {}) {
   const controller = useChatAppController({
+    activeAppContextOverride,
     enablePageCapture,
     externalFileDrop,
     externalMentionDrop,

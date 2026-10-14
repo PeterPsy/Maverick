@@ -20,7 +20,7 @@ describe("floating chat unread indicator", () => {
     expect(hookSource).toContain("isThreadUnread");
     expect(frameSource).toContain("const isActiveThreadUnread");
     expect(launcherSource).toContain('isActiveThreadUnread ? "is-unread" : ""');
-    expect(menuSource).toContain('isUnread ? "is-unread" : ""');
+    expect(menuSource).toContain('isThreadUnread(thread) ? "is-unread" : ""');
     expect(styles).toContain(".chat-floating-thread-menu__trigger.is-unread:not(.is-busy)");
     expect(styles).toContain(".chat-floating-thread-menu__item.is-unread:not(.is-busy)");
     expect(styles).toContain(".chat-floating-widget-launcher.is-unread:not(.is-busy)");
@@ -36,7 +36,7 @@ describe("floating chat unread indicator", () => {
     const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
 
     expect(hookSource).toContain("markThreadReadIfNeeded");
-    expect(menuSource).toContain("void onMarkThreadRead(thread);");
+    expect(menuSource).toContain("void props.onMarkThreadRead(thread);");
     expect(frameSource).toContain("void onMarkThreadRead(activeThread);");
     expect(hookSource).toMatch(/markThreadRead\s*\(thread\.thread_id\)/);
   });

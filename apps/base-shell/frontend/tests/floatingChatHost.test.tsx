@@ -82,11 +82,13 @@ describe("FloatingChatHost mount gate", () => {
     expect(container.querySelector("[data-testid='widget-slot']")).toBe(widget);
   });
 
-  it("keeps previously opened placements warm but discards them with the frame scope", async () => {
+  it("keeps one document across placements and discards it with the frame scope", async () => {
     await renderHost(root);
     const overlay = container.querySelector("[data-testid='widget-slot']");
     await renderHost(root, { floatingChatMode: "fixed-right" });
-    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(2);
+    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(1);
+    await renderHost(root, { isMobileLayout: true, isMobileChatOpen: true });
+    expect(container.querySelector("[data-testid='widget-slot']")).toBe(overlay);
     await renderHost(root);
     expect(container.querySelector("[data-testid='widget-slot']")).toBe(overlay);
     await renderHost(root, { isChatAppActive: true, frameScope: { ...FRAME_SCOPE, sessionGeneration: "new-session" } });
@@ -94,6 +96,18 @@ describe("FloatingChatHost mount gate", () => {
     await renderHost(root, { frameScope: { ...FRAME_SCOPE, sessionGeneration: "new-session" } });
     expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(1);
     expect(container.querySelector("[data-testid='widget-slot']")).not.toBe(overlay);
+  });
+
+  it("exposes and enforces the shared budget on keyboard resizing", async () => {
+    const onWidthChange = vi.fn();
+    await renderHost(root, { floatingChatMode: "fixed-right", widthPx: 420, maxWidthPx: 430, onWidthChange });
+    const separator = container.querySelector<HTMLElement>('[role="separator"]')!;
+    expect(separator.getAttribute("aria-valuemax")).toBe("430");
+    expect(separator.getAttribute("aria-valuenow")).toBe("420");
+    await act(async () => separator.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })));
+    expect(onWidthChange).toHaveBeenLastCalledWith(430);
+    await act(async () => separator.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })));
+    expect(onWidthChange).toHaveBeenLastCalledWith(430);
   });
 
   it("passes active app params into the floating Chat widget context", async () => {

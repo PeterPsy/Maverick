@@ -30,22 +30,47 @@ changes the layout class and sibling controls, not the ancestry of its iframes.
 
 ## Contextual Chat
 
-Overlay, right dock and mobile fullscreen are separate declared widget surfaces.
-Each placement mounts on its first visible use and then retains its document
-when another placement or the main Chat app is active. A mobile panel closing
-also retains its initialized document. Initial shell entry in Chat and a mobile
-panel that has never opened do not launch these widgets.
+Chat declares one `chat-floating` widget of kind `shell.contextual.chat`.
+Base Shell discovers it once and keeps the same authenticated frame while the
+payload's `mode` changes between overlay, right dock and mobile fullscreen.
+Placement, labels, size and context change without changing discovery identity,
+launch token, React ancestry or iframe document. Dock requests also retain the
+last overlay dimensions, so returning to overlay does not wait for a resize. First use remains lazy; a closed
+mobile panel or initial shell entry in Chat does not launch the widget.
 
-At most three placement documents are retained in one authenticated workspace
-scope. Each keeps its own draft, attachments, transcript and scroll in app-owned
-memory. Existing Chat thread/context messages still coordinate selected threads;
-keeping a document does not copy one placement's unsent draft to another.
+Chat owns the complete window stack and is its only layout-persistence writer.
+Every window keeps its stable id and mounted controller during placement changes.
+Dock/mobile reveal one window and make other windows hidden and inert; returning
+to overlay restores the stack. Drafts, references, attachments, transcript scroll,
+agent selections and pending submission identities stay in the same RAM objects.
+There is no serialized draft handoff, persistent send queue or replay on reload.
+The persisted v1 layout contains only ids, collapsed state and draft project
+metadata; reload does not restore unsent text or file bytes.
 
-Inactive placements are hidden and inert. They receive
-`maverick.app.visibility-changed` with `visible: false`; app visibility observers
-suspend live reads and nonessential polling. Late inactive navigation, dock and
-active-thread callbacks cannot change the shell's current surface. Reopening
-reveals the same document and lets the app resume its live transports.
+The window header shows the operational app context and can pin its app/params
+snapshot. Pinning changes only that window's context; following navigation again
+uses the current host context without changing draft or thread identity.
+
+A repeated context update is not a thread-selection command. Existing window
+identity wins over the shell's remembered thread id; active-thread changes are
+accepted only for an explicit matching navigation scope. Choosing a conversation
+reveals its existing window or creates one and minimizes the previous window.
+“Open in another window” leaves the previous window expanded. Close/minimize keep
+windows recoverable, including unsent work. Deletion changes matching windows
+only after the server succeeds; failures preserve selection and show a local
+error. Deleting a different conversation never changes the current conversation.
+
+The whole contextual document receives authenticated visibility updates. Hidden
+windows also disable Chat's visibility context, suspending live reads, runtime
+prewarm and reference preparation while retaining the draft. Closing mobile Chat
+makes the covered workspace inert through the closing animation and restores
+focus to the header launcher; the header remains available. The dock resize
+control exposes a keyboard-operable vertical separator with width values.
+
+Desktop panels share a viewport budget reserving 560 CSS pixels for the workspace
+plus rail and panel spacing. The dock falls back to overlay if its minimum width
+cannot fit; the sidebar falls back to the rail if both minima cannot fit. Saved
+width/mode preferences remain unchanged and resume when space returns.
 
 Changing workspace/authenticated generation removes retained placement frames
 before rendering the new scope. Logout removes the authenticated shell tree.
@@ -58,8 +83,13 @@ Unit tests cover subscriber replacement, frame-key resets, lazy placement mounts
 scope cleanup and stable mobile footer ancestry. The built-shell browser fixture
 uses real isolated iframes and launch/bootstrap requests. It checks document
 identity, draft and scroll preservation, hidden visibility, overlay/dock/mobile
-navigation and zero new launch tickets for warm app navigation.
+continuity and zero new launch tickets for warm app navigation.
 
 Run `npm run test:widget-lifecycle` from `apps/base-shell` after building its
 frontend. This fixture checks shell lifecycle; Chat's own visibility tests cover
 its live read suspension.
+
+Chat's real-composer browser coverage exercises mode changes with an unsent draft
+and file attachment, stable editor DOM identity, multiple retained windows and
+zero submissions caused by mode changes. Focus and layout coverage also uses
+the mounted shell fixture at desktop and mobile sizes.

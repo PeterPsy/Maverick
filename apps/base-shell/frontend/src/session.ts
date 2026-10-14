@@ -45,6 +45,7 @@ export function readShellSession(): ShellSession {
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(SHELL_SESSION_STORAGE_KEY) || "{}") as Partial<ShellSession>;
+    // Restore bounded preferences; the panel budget applies viewport limits.
     return {
       activeAppId: typeof parsed.activeAppId === "string" && parsed.activeAppId.trim() ? parsed.activeAppId.trim() : DEFAULT_SESSION.activeAppId,
       floatingChatMode: normalizeFloatingChatMode(parsed.floatingChatMode),
@@ -54,9 +55,9 @@ export function readShellSession(): ShellSession {
           : null,
       floatingChatThreadId:
         typeof parsed.floatingChatThreadId === "string" && parsed.floatingChatThreadId.trim() ? parsed.floatingChatThreadId.trim() : null,
-      floatingChatWidthPx: clampFloatingChatWidth(parsed.floatingChatWidthPx),
+      floatingChatWidthPx: clampFloatingChatWidth(parsed.floatingChatWidthPx, Number.NaN),
       isSidebarOpen: typeof parsed.isSidebarOpen === "boolean" ? parsed.isSidebarOpen : DEFAULT_SESSION.isSidebarOpen,
-      sidebarDetailsWidthPx: normalizeSidebarDetailsWidth(parsed.sidebarDetailsWidthPx),
+      sidebarDetailsWidthPx: normalizeSidebarDetailsWidth(parsed.sidebarDetailsWidthPx, Number.NaN),
       sidebarMode: normalizeSidebarMode(parsed.sidebarMode),
       themeMode: normalizeShellThemeMode(parsed.themeMode),
     };

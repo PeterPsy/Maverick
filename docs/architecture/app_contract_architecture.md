@@ -3349,3 +3349,14 @@ authorization. Apps still implement their endpoints through their approved
 hosting contract. The installation planner collects enabled apps’ declarations
 and shows provider registrations required before changing the canonical address.
 Core-owned OAuth registrations remain Core dependencies rather than app contracts.
+
+## Contextual Chat placement contract
+
+Base Shell hosts Chat's single `shell.contextual.chat` widget (`chat-floating`).
+The signed widget identity and discovery kind remain stable while the context
+payload selects `overlay`, `fixed-right` or `mobile-fullscreen`. Placement changes
+are presentation updates, not new document launches or thread navigation. Chat
+owns window/controller identity and layout persistence; Base Shell owns placement,
+visibility, the common panel width budget and focus isolation of the covered app.
+See [shell_widget_lifecycle.md](shell_widget_lifecycle.md) for the continuity and
+verification requirements. The obsolete separate dock entrypoint is removed.

@@ -17,6 +17,7 @@ type ShellNavigationMessage = {
 };
 
 type UseChatShellMessagesParams = {
+  activeAppContextOverride?: ActiveAppContext | null;
   addAttachments: (files: File[]) => void;
   agentCatalogAppId: string;
   loadAgentOptionsFromDependencies: (dependencies: AppDependenciesPayload) => Promise<void>;
@@ -32,6 +33,7 @@ type UseChatShellMessagesParams = {
 };
 
 export function useChatShellMessages({
+  activeAppContextOverride,
   addAttachments,
   agentCatalogAppId,
   loadAgentOptionsFromDependencies,
@@ -74,6 +76,7 @@ export function useChatShellMessages({
         return;
       }
       if (payload.type === "maverick.widget.context-changed") {
+        if (activeAppContextOverride !== undefined) return;
         // Unlike app-navigation messages, widget context keeps the scope under
         // context.content.payload. Read it there so a dock receives its live
         // Design Studio project without leaking context between chat surfaces.
@@ -114,6 +117,7 @@ export function useChatShellMessages({
     window.addEventListener("message", handleShellMessage);
     return () => window.removeEventListener("message", handleShellMessage);
   }, [
+    activeAppContextOverride,
     addAttachments,
     agentCatalogAppId,
     loadAgentOptionsFromDependencies,

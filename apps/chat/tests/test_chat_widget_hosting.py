@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -58,23 +59,12 @@ class ChatWidgetHostingTests(unittest.TestCase):
         footer_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/styles.css").read_text()
         self.assertIn("backdrop-filter: blur(18px) saturate(1.15);", footer_styles)
 
-    def test_chat_declares_shell_right_dock_widget(self) -> None:
-        contract_source = (REPO_ROOT / "apps/chat/app_contract.json").read_text()
-        vite_source = (REPO_ROOT / "apps/chat/vite.config.ts").read_text()
-        dock_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-floating-dock/main.tsx").read_text()
+    def test_chat_declares_one_contextual_widget_for_all_placements(self) -> None:
+        contract = json.loads((REPO_ROOT / "apps/chat/app_contract.json").read_text())
+        widgets = {widget["widget_id"]: widget for widget in contract["widgets"]}
+        self.assertEqual(widgets["chat-floating"]["content_kinds"], ["shell.contextual.chat"])
+        self.assertNotIn("chat-floating-dock", widgets)
         frame_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-floating/FloatingChatFrame.tsx").read_text()
-
-        self.assertIn('"widget_id": "chat-floating-dock"', contract_source)
-        self.assertIn('"shell.dock.right"', contract_source)
-        self.assertIn('"shell.overlay.mobile.fullscreen"', contract_source)
-        self.assertIn('"mount": "frontend/dist/widgets/chat-floating-dock"', contract_source)
-        self.assertIn('"widgets/chat-floating-dock/index": "frontend/widgets/chat-floating-dock/index.html"', vite_source)
-        self.assertIn("ChatFloatingDockMount", dock_source)
-        self.assertIn("FloatingChatFrame", dock_source)
-        self.assertIn("mobile-fullscreen", dock_source)
-        self.assertIn('showClose={dock.mode !== "mobile-fullscreen"}', dock_source)
-        self.assertIn("showOverlay", dock_source)
-        self.assertIn("postDockClose", dock_source)
         self.assertIn('aria-label="Dock chat to right"', frame_source)
         self.assertIn('aria-label="Return chat to overlay"', frame_source)
 

@@ -1,19 +1,13 @@
+import { activeAppContextFromWidgetContext, type ActiveAppContext } from "../../lib/activeAppContext";
 import { getWidgetContext } from "../../api/client";
-import {
-  floatingDockContextFromContent,
-  DEFAULT_FLOATING_DOCK_NAVIGATION_SCOPE,
-  type FloatingDockContext,
-} from "./floatingDockState";
 import { floatingWidgetSize } from "./floatingLayout";
 import type { FloatingChatWindow } from "./floatingState";
 
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
-const FLOATING_STACK_DRAG_IGNORE_SELECTOR =
-  'button, a, input, textarea, select, summary, [contenteditable="true"], [role="button"], [role="textbox"], [role="menuitem"]';
-
 export type FloatingWidgetMode = "overlay" | "fixed-right" | "mobile-fullscreen";
 
 export type FloatingWidgetHostContext = {
+  activeAppContext: ActiveAppContext | null;
   mode: FloatingWidgetMode;
   navigationScope: string;
   threadId: string;
@@ -33,19 +27,6 @@ export async function loadFloatingWidgetHostContext(): Promise<FloatingWidgetHos
   }
 }
 
-export async function loadFloatingDockContext(): Promise<FloatingDockContext> {
-  const token = widgetContextToken();
-  if (!token) {
-    return { mode: "fixed-right", navigationScope: DEFAULT_FLOATING_DOCK_NAVIGATION_SCOPE, threadId: "", workspaceId: null };
-  }
-  try {
-    const payload = await getWidgetContext(token);
-    return floatingDockContextFromContent(payload.context.content);
-  } catch {
-    return { mode: "fixed-right", navigationScope: DEFAULT_FLOATING_DOCK_NAVIGATION_SCOPE, threadId: "", workspaceId: null };
-  }
-}
-
 export function floatingWidgetHostContextFromContent(content: unknown): FloatingWidgetHostContext {
   const contentRecord = content && typeof content === "object" ? (content as Record<string, unknown>) : {};
   const workspaceId =
@@ -60,7 +41,7 @@ export function floatingWidgetHostContextFromContent(content: unknown): Floating
       ? nestedPayload.navigation_scope.trim()
       : "";
   const threadId = typeof nestedPayload.thread_id === "string" && nestedPayload.thread_id.trim() ? nestedPayload.thread_id.trim() : "";
-  return { mode, navigationScope, threadId, workspaceId };
+  return { activeAppContext: activeAppContextFromWidgetContext({ content }), mode, navigationScope, threadId, workspaceId };
 }
 
 export function postWidgetSize(windows: FloatingChatWindow[]) {
@@ -75,7 +56,7 @@ export function postWidgetSize(windows: FloatingChatWindow[]) {
   );
 }
 
-export function postDockClose(widgetId = "chat-floating-dock") {
+export function postDockClose(widgetId = "chat-floating") {
   window.parent?.postMessage(
     {
       type: "maverick.widget.dock.close",
@@ -100,15 +81,11 @@ export function debugThreadSync(label: string, detail: Record<string, unknown> =
   }
 }
 
-export function shouldIgnoreFloatingStackDrag(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest(FLOATING_STACK_DRAG_IGNORE_SELECTOR));
-}
-
 function widgetContextToken(): string {
   const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
   return new URLSearchParams(hash).get("context") || new URLSearchParams(window.location.search).get("context") || "";
 }
 
 function emptyFloatingWidgetHostContext(): FloatingWidgetHostContext {
-  return { mode: "overlay", navigationScope: "", threadId: "", workspaceId: null };
+  return { activeAppContext: null, mode: "overlay", navigationScope: "", threadId: "", workspaceId: null };
 }

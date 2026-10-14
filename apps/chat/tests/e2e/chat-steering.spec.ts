@@ -109,7 +109,7 @@ for (const { surface, width, touch, path, widgetMode } of [
   },
   {
     surface: "dock", width: 480, touch: false, widgetMode: "fixed-right",
-    path: "/apps/chat/widgets/chat-floating-dock/index.html?context=steering-fixture",
+    path: "/apps/chat/widgets/chat-floating/index.html?context=steering-fixture",
   },
   {
     surface: "fullscreen", width: 390, touch: true, widgetMode: "mobile-fullscreen",
@@ -166,7 +166,7 @@ test.describe("fixed dock compact utilities", () => {
 
   test("shows the same model and runtime controls as the mobile composer", async ({ page }) => {
     await installActiveTurn(page, "fixed-right");
-    await page.goto("/apps/chat/widgets/chat-floating-dock/index.html?context=steering-fixture");
+    await page.goto("/apps/chat/widgets/chat-floating/index.html?context=steering-fixture");
 
     const composer = page.locator(".chatapp-composer");
     await composer.getByRole("button", { name: "Composer utilities" }).click();
@@ -175,4 +175,46 @@ test.describe("fixed dock compact utilities", () => {
     await expect(composer.getByRole("button", { name: "Model: Codex" })).toBeVisible();
     await expect(composer.getByRole("img", { name: "Sandbox runtime" })).toBeVisible();
   });
+});
+
+test("preserves the real composer, attachments and other drafts through every placement", async ({ page }) => {
+  const submissions = await installActiveTurn(page, "overlay");
+  await page.goto("/apps/chat/widgets/chat-floating/index.html?context=steering-fixture");
+  const composer = page.getByRole("textbox");
+  await composer.fill("Unsent work survives docking");
+  const activeSlot = page.locator(".chat-floating-window-slot").first();
+  const windowId = await activeSlot.getAttribute("data-window-id");
+  await page.locator(".chat-floating-widget-shell").first().evaluate((element) => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(new File(["Example attachment"], "draft.txt", { type: "text/plain" }));
+    element.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }));
+  });
+  await expect(page.getByText("draft.txt", { exact: true }).first()).toBeVisible();
+  const marker = await composer.evaluate((element) => {
+    element.setAttribute("data-draft-instance", "original");
+    return element.getAttribute("data-draft-instance");
+  });
+  for (const mode of ["fixed-right", "mobile-fullscreen", "overlay"]) {
+    await page.evaluate(({ mode, windowId }) => window.postMessage({
+      type: "maverick.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
+      context: { content: { workspace_id: "default", payload: { mode, navigation_scope: windowId, thread_id: "stale-thread" } } },
+    }, window.location.origin), { mode, windowId });
+    await expect(page.locator(".chat-floating-widget-stack")).toHaveClass(new RegExp(`is-${mode}`));
+    await expect(composer).toHaveText("Unsent work survives docking");
+    await expect(composer).toHaveAttribute("data-draft-instance", marker!);
+    await expect(page.getByText("draft.txt", { exact: true }).first()).toBeVisible();
+  }
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await expect(page.locator(".chat-floating-window-slot")).toHaveCount(2);
+  await activeSlot.getByRole("button", { name: "Dock chat to right" }).click();
+  await page.evaluate(({ windowId, threadId }) => window.postMessage({
+    type: "maverick.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
+    context: { content: { workspace_id: "default", payload: { mode: "fixed-right", navigation_scope: windowId, thread_id: threadId } } },
+  }, window.location.origin), { windowId, threadId: SESSION_ID });
+  await expect(page.locator(".chat-floating-widget-stack")).toHaveClass(/is-fixed-right/);
+  await expect(page.locator(".chat-floating-window-slot:not([hidden])")).toHaveCount(1);
+  await expect(page.locator(".chat-floating-window-slot:not([hidden])").getByRole("textbox")).toHaveText("Unsent work survives docking");
+  await expect(page.locator(".chat-floating-window-slot")).toHaveCount(2);
+  expect(submissions).toHaveLength(0);
+  await page.screenshot({ path: "/tmp/maverick-contextual-chat-desktop.png" });
 });

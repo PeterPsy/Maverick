@@ -5,9 +5,7 @@ const appIds = ["chat", "storage", "calendar"];
 const kinds = {
   "shell.sidebar.primary": "sidebar",
   "shell.sidebar.footer": "sidebar-footer",
-  "shell.overlay.bottomright": "floating",
-  "shell.dock.right": "floating-dock",
-  "shell.overlay.mobile.fullscreen": "floating-mobile",
+  "shell.contextual.chat": "floating",
 };
 
 export function widgetLifecycleFixture() {

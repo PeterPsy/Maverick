@@ -9,6 +9,7 @@ export function FloatingLauncher({
   onDrop,
   onOpen,
   windowItem,
+  title,
 }: {
   isActiveThreadBusy: boolean;
   isActiveThreadUnread: boolean;
@@ -16,11 +17,13 @@ export function FloatingLauncher({
   onDrop: (event: DragEvent<HTMLElement>) => void;
   onOpen: () => void;
   windowItem: FloatingChatWindow;
+  title: string;
 }) {
   return (
     <button
       aria-busy={isActiveThreadBusy || undefined}
-      aria-label={isActiveThreadBusy ? "Open active chat" : isActiveThreadUnread ? "Open chat with unread response" : "Open chat"}
+      aria-label={`Open ${title}${isActiveThreadBusy ? " · Working" : isActiveThreadUnread ? " · Response ready" : ""}`}
+      title={title}
       className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"} ${isActiveThreadBusy ? "is-busy" : ""} ${
         isActiveThreadUnread ? "is-unread" : ""
       }`}
@@ -33,6 +36,7 @@ export function FloatingLauncher({
       <span aria-hidden="true" className="material-symbols-rounded">
         forum
       </span>
+      <span className="chat-floating-widget-launcher__title">{title}</span>
     </button>
   );
 }

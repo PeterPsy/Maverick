@@ -10,7 +10,7 @@ type Props = Pick<ComponentProps<typeof FloatingChatHost>,
   "shellTheme" | "threadId" | "user"
 > & { placement: FloatingChatPlacement; visible: boolean };
 
-/** Each opened placement retains its own app-owned document and composer state. */
+/** Placement changes update context without replacing the app-owned document. */
 export function FloatingChatWidget({ placement, visible, ...props }: Props) {
   const isDockMode = placement === "fixed-right";
   const isMobileMode = placement === "mobile-fullscreen";
@@ -23,9 +23,9 @@ export function FloatingChatWidget({ placement, visible, ...props }: Props) {
       views: props.activeApp.views,
     } : null,
     mode: placement,
-    navigation_scope: isDockMode ? props.navigationScope || "chat-floating-dock" : isMobileMode ? "chat-floating-mobile" : "",
+    navigation_scope: props.navigationScope || "",
     placement: isDockMode ? "right" : isMobileMode ? "mobile-fullscreen" : "bottom-right",
-    thread_id: isDockMode ? props.threadId || "" : "",
+    thread_id: props.threadId || "",
     user: props.user?.username || null,
   }), [props.activeApp, props.activeAppParams, props.navigationScope, props.threadId, props.user?.username, placement]);
 
@@ -33,7 +33,7 @@ export function FloatingChatWidget({ placement, visible, ...props }: Props) {
     <WidgetSlot
       activeWorkspaceId={props.activeWorkspaceId}
       content={content}
-      contentKind={isDockMode ? "shell.dock.right" : isMobileMode ? "shell.overlay.mobile.fullscreen" : "shell.overlay.bottomright"}
+      contentKind="shell.contextual.chat"
       frameScope={props.frameScope}
       hostAppId="base-shell"
       label={isDockMode ? "Right dock widget" : isMobileMode ? "Mobile chat widget" : "Floating chat widget"}

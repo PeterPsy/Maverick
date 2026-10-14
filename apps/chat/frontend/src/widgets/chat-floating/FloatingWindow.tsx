@@ -1,9 +1,12 @@
+import type { ActiveAppContext } from "../../lib/activeAppContext";
 import type { ChatThread } from "../../api/client";
 import { FloatingChatFrame } from "./FloatingChatFrame";
 import type { FloatingChatWindow } from "./floatingState";
 
 export function FloatingWindow({
+  activeAppContext = null,
   className = "",
+  isActive = true,
   onClose,
   onCollapseChange,
   onCreateDraftChat,
@@ -13,6 +16,7 @@ export function FloatingWindow({
   onRemoveThread,
   onRenameThread,
   onSelectThread,
+  onOpenAnotherThread,
   runtimeThreadsError,
   runtimeThreadsLoaded,
   showCollapse = true,
@@ -23,7 +27,9 @@ export function FloatingWindow({
   threads,
   windowItem,
 }: {
+  activeAppContext?: ActiveAppContext | null;
   className?: string;
+  isActive?: boolean;
   onClose: (windowId: string) => void;
   onCollapseChange: (windowId: string, isCollapsed: boolean) => void;
   onCreateDraftChat: (windowId: string, projectId: string | null) => void;
@@ -33,6 +39,7 @@ export function FloatingWindow({
   onRemoveThread: (windowId: string, thread: ChatThread) => Promise<void>;
   onRenameThread: (threadId: string, title: string) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
+  onOpenAnotherThread?: (windowId: string, threadId: string) => void;
   runtimeThreadsError: string | null;
   runtimeThreadsLoaded: boolean;
   showCollapse?: boolean;
@@ -45,7 +52,9 @@ export function FloatingWindow({
 }) {
   return (
     <FloatingChatFrame
+      activeAppContext={activeAppContext}
       className={className}
+      isActive={isActive}
       onClose={onClose}
       onCollapseChange={onCollapseChange}
       onCreateDraftChat={onCreateDraftChat}
@@ -55,6 +64,7 @@ export function FloatingWindow({
       onRemoveThread={onRemoveThread}
       onRenameThread={onRenameThread}
       onSelectThread={onSelectThread}
+      onOpenAnotherThread={onOpenAnotherThread}
       runtimeThreadsError={runtimeThreadsError}
       runtimeThreadsLoaded={runtimeThreadsLoaded}
       showCollapse={showCollapse}

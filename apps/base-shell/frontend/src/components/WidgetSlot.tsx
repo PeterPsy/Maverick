@@ -351,9 +351,6 @@ export function WidgetSlot({
           threadId: typeof params.thread_id === "string" && params.thread_id.trim() ? params.thread_id.trim() : null,
           widgetId: mountedWidget.widget_id,
         });
-        if (size === "overlay") {
-          setOverlaySize(collapsedOverlaySize());
-        }
       }
       if (
         payload.type === "maverick.widget.dock.close" &&

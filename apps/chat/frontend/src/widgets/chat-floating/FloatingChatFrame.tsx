@@ -1,10 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import type { ActiveAppContext } from "../../lib/activeAppContext";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { ChatVisibilityContext } from '../../hooks/useChatVisibility';
+import { ChatVisibilityContext, useChatVisibility } from '../../hooks/useChatVisibility';
 import type { ChatThread } from "../../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../../lib/externalInputs";
 import { filesFromDataTransfer, hasFileDropData } from "../../lib/fileDropAttachments";
-import { sourceAppPresentation } from "../../lib/sourceAppPresentation";
 import { appReferenceMentionItemsFromDataTransfer, hasAppReferenceDragData } from "../../lib/storageDragReferences";
 import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
 import { FloatingLauncher } from "./FloatingLauncher";
@@ -14,7 +14,9 @@ import type { FloatingChatWindow } from "./floatingState";
 const App = lazy(() => import('../../App').then(module => ({ default: module.App })));
 
 export function FloatingChatFrame({
+  activeAppContext = null,
   className = "",
+  isActive = true,
   onClose,
   onCollapseChange,
   onCreateDraftChat,
@@ -24,6 +26,7 @@ export function FloatingChatFrame({
   onRemoveThread,
   onRenameThread,
   onSelectThread,
+  onOpenAnotherThread,
   runtimeThreadsError,
   runtimeThreadsLoaded,
   showCollapse = true,
@@ -34,7 +37,9 @@ export function FloatingChatFrame({
   threads,
   windowItem,
 }: {
+  activeAppContext?: ActiveAppContext | null;
   className?: string;
+  isActive?: boolean;
   onClose: (windowId: string) => void;
   onCollapseChange: (windowId: string, isCollapsed: boolean) => void;
   onCreateDraftChat: (windowId: string, projectId: string | null) => void;
@@ -44,6 +49,7 @@ export function FloatingChatFrame({
   onRemoveThread: (windowId: string, thread: ChatThread) => Promise<void>;
   onRenameThread: (threadId: string, title: string) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
+  onOpenAnotherThread?: (windowId: string, threadId: string) => void;
   runtimeThreadsError: string | null;
   runtimeThreadsLoaded: boolean;
   showCollapse?: boolean;
@@ -54,14 +60,22 @@ export function FloatingChatFrame({
   threads: ChatThread[];
   windowItem: FloatingChatWindow;
 }) {
+  const frameRef = useRef<HTMLElement>(null);
+  const hostVisible = useChatVisibility();
+  useEffect(() => {
+    if (hostVisible && isActive && className.includes("mobile-fullscreen")) {
+      frameRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    }
+  }, [hostVisible, isActive, className]);
   const [externalFileDrop, setExternalFileDrop] = useState<ExternalFileDrop | null>(null);
   const [externalMentionDrop, setExternalMentionDrop] = useState<ExternalMentionDrop | null>(null);
-  const [hasOpened, setHasOpened] = useState(!windowItem.isCollapsed);
-  useEffect(() => { if (!windowItem.isCollapsed) setHasOpened(true); }, [windowItem.isCollapsed]);
+  const [hasOpened, setHasOpened] = useState(isActive && !windowItem.isCollapsed);
+  useEffect(() => { if (isActive && !windowItem.isCollapsed) setHasOpened(true); }, [isActive, windowItem.isCollapsed]);
   const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || null;
   const isActiveThreadBusy = Boolean(activeThread && isThreadBusy(activeThread));
   const isActiveThreadUnread = Boolean(activeThread && isThreadUnread(activeThread));
-  const sourcePresentation = sourceAppPresentation(activeThread?.source_app_id);
+  const [pinnedContext, setPinnedContext] = useState<ActiveAppContext | null>(null);
+  const effectiveContext = pinnedContext || activeAppContext;
 
   function openCollapsedThread() {
     onCollapseChange(windowItem.id, false);
@@ -117,9 +131,11 @@ export function FloatingChatFrame({
           onDrop={handleFloatingDrop}
           onOpen={openCollapsedThread}
           windowItem={windowItem}
+          title={activeThread?.title || "New chat"}
         />
       ) : null}
       <section
+        ref={frameRef}
         className={`chat-floating-widget-shell ${windowItem.isCollapsed ? "is-hidden" : ""}${className ? ` ${className}` : ""}`}
         aria-label="Chat"
         onDragOver={handleFloatingDragOver}
@@ -135,15 +151,16 @@ export function FloatingChatFrame({
             onRemoveThread={onRemoveThread}
             onRenameThread={onRenameThread}
             onSelectThread={onSelectThread}
+            onOpenAnotherThread={onOpenAnotherThread}
             threads={threads}
             windowItem={windowItem}
           />
-          {sourcePresentation ? (
-            <span className="chat-floating-widget-shell__source-badge" title={`${sourcePresentation.label} chat`}>
-              <span aria-hidden="true" className="material-symbols-rounded">{sourcePresentation.icon}</span>
-              {sourcePresentation.label}
-            </span>
-          ) : null}
+          <button type="button" className="chat-floating-widget-shell__source-badge"
+            aria-label={pinnedContext ? "Follow app context" : "Pin app context"} aria-pressed={Boolean(pinnedContext)}
+            disabled={!effectiveContext} title={`${pinnedContext ? "Pinned context" : "Current context"}: ${effectiveContext?.name || "General"}${effectiveContext?.params ? " · " + Object.values(effectiveContext.params).filter(Boolean).join(" · ") : ""}`}
+            onClick={() => setPinnedContext(pinnedContext ? null : activeAppContext)}>
+            {pinnedContext ? "Pinned · " : ""}{effectiveContext?.name || "General"}
+          </button>
         </div>
         <div className="chat-floating-widget-shell__actions">
           <button
@@ -208,9 +225,10 @@ export function FloatingChatFrame({
       </header>
       <div className="chat-floating-widget-shell__body">
         {hasOpened ? (
-          <ChatVisibilityContext.Provider value={!windowItem.isCollapsed}>
-            <Suspense fallback={null}>
+          <ChatVisibilityContext.Provider value={isActive && !windowItem.isCollapsed}>
+            <Suspense fallback={<div className="chat-floating-loading" role="status">Loading chat…</div>}>
               <App
+                activeAppContextOverride={effectiveContext}
                 externalFileDrop={externalFileDrop}
                 externalMentionDrop={externalMentionDrop}
                 navigationScope={windowItem.id}

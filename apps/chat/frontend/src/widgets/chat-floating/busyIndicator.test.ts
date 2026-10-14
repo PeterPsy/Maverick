@@ -30,14 +30,6 @@ describe("floating chat busy indicator", () => {
     expect(hookSource).not.toContain('payload.type === "maverick.chat.thread-availability-changed"');
   });
 
-  it("keeps the last floating window available when close is pressed", () => {
-    const source = readWidgetFile("useFloatingWindows.ts");
-
-    expect(source).toContain("if (current.length <= 1)");
-    expect(source).toContain("? { ...windowItem, isCollapsed: true } : windowItem");
-    expect(source).toContain("return current.filter((windowItem) => windowItem.id !== windowId);");
-  });
-
   it("round-trips persisted draft window state", () => {
     const source = readWidgetFile("floatingState.ts");
 
@@ -69,17 +61,12 @@ describe("floating chat busy indicator", () => {
     const runtimeSource = readWidgetFile("floatingWidgetRuntime.ts");
 
     expect(mainSource).toContain('const isOverlayMode = floating.hostMode === "overlay"');
-    expect(mainSource).toContain("visibleWindows.map");
+    expect(mainSource).toContain("floating.windows.map");
     expect(hookSource).toContain("loadFloatingWidgetHostContext");
     expect(hookSource).toContain("floatingWidgetHostContextFromContent");
-    expect(hookSource).toContain('postDockClose("chat-floating")');
+    expect(hookSource).toContain('postDockClose()');
     expect(runtimeSource).toContain('export type FloatingWidgetMode = "overlay" | "fixed-right" | "mobile-fullscreen"');
   });
 
-  it("resizes the overlay frame when returning from the right dock", () => {
-    const hookSource = readWidgetFile("useFloatingWindows.ts");
 
-    expect(hookSource).toContain('hostMode !== "overlay"');
-    expect(hookSource).toContain("postWidgetSize(windowsRef.current)");
-  });
 });

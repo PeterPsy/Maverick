@@ -37,6 +37,7 @@ import { useQueuedMessageMemory } from "./useQueuedMessageMemory";
 import { useDeviceUse } from "./useDeviceUse";
 
 type UseChatAppControllerParams = {
+  activeAppContextOverride?: ActiveAppContext | null;
   enablePageCapture: boolean;
   externalFileDrop: ExternalFileDrop | null;
   externalMentionDrop: ExternalMentionDrop | null;
@@ -226,6 +227,7 @@ export function providersForComposer(providers: ProviderItem[], selectedProvider
 }
 
 export function useChatAppController({
+  activeAppContextOverride,
   enablePageCapture,
   externalFileDrop,
   externalMentionDrop,
@@ -319,7 +321,12 @@ export function useChatAppController({
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(50);
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
-  const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
+  const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(activeAppContextOverride || null);
+  const activeContextOverrideRef = useRef(activeAppContextOverride);
+  activeContextOverrideRef.current = activeAppContextOverride;
+  useEffect(() => {
+    if (activeAppContextOverride !== undefined) setActiveAppContext(activeAppContextOverride);
+  }, [activeAppContextOverride]);
   const [multiAgentMode, setMultiAgentMode] = useState<MultiAgentComposerMode>("off");
   const [interAgentRuns, setInterAgentRuns] = useState<InterAgentRunDetail[]>([]);
   const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
@@ -668,7 +675,7 @@ export function useChatAppController({
     setInitialDependenciesReady(false);
     try {
       const widgetActiveAppContext = await loadWidgetActiveAppContext();
-      setActiveAppContext(widgetActiveAppContext);
+      setActiveAppContext(activeContextOverrideRef.current !== undefined ? activeContextOverrideRef.current : widgetActiveAppContext);
       await loadInitialChatDependencies();
       setInitialDependenciesReady(true);
     } catch (loadError) {
@@ -859,6 +866,7 @@ export function useChatAppController({
       setPendingUserMessages,
     },
     shellMessages: {
+      activeAppContextOverride,
       addAttachments,
       agentCatalogAppId,
       loadAgentOptionsFromDependencies,

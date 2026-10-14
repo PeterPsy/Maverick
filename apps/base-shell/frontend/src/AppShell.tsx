@@ -1,3 +1,5 @@
+import { resolvePanelLayout } from "./lib/panelLayout";
+import { usePanelViewport } from "./hooks/usePanelViewport";
 import { reportShellAuthorizationFailure, resetShellAuthorizationChecks } from "./shellAuthorization";
 import { useShellSessionRecovery } from "./hooks/useShellSessionRecovery";
 import { createIdempotencyKey } from "@maverick/pwa-cache";
@@ -103,9 +105,9 @@ export function AppShell() {
   const [appSettingsScope, setAppSettingsScope] = useState<{ appId: string; sessionGeneration: string } | null>(null);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
-  const [sidebarDetailsWidthPx, setSidebarDetailsWidthPx] = useState(() => clampSidebarDetailsWidth(initialSession.sidebarDetailsWidthPx));
+  const [sidebarDetailsWidthPx, setSidebarDetailsWidthPx] = useState(initialSession.sidebarDetailsWidthPx);
   const [floatingChatMode, setFloatingChatMode] = useState<FloatingChatMode>(initialSession.floatingChatMode);
-  const [floatingChatWidthPx, setFloatingChatWidthPx] = useState(() => clampFloatingChatWidth(initialSession.floatingChatWidthPx));
+  const [floatingChatWidthPx, setFloatingChatWidthPx] = useState(initialSession.floatingChatWidthPx);
   const [floatingChatThreadId, setFloatingChatThreadId] = useState<string | null>(initialSession.floatingChatThreadId);
   const [floatingChatNavigationScope, setFloatingChatNavigationScope] = useState<string | null>(initialSession.floatingChatNavigationScope);
   const [themeMode, setThemeMode] = useState<ShellThemeMode>(initialSession.themeMode);
@@ -136,9 +138,9 @@ export function AppShell() {
   const registryActiveApp = preferredActiveApp(apps, activeAppId);
   const sidebarDisabled = registryActiveApp?.sidebar_enabled === false;
   const sidebarEnabled = registryActiveApp ? !sidebarDisabled : !isLoading;
-  const isSidebarPinned = sidebarEnabled && sidebarMode === "fixed" && !isMobileLayout;
+  const panelViewport = usePanelViewport();
   const isChatAppActive = activeAppId === CHAT_APP_ID;
-  const isFloatingChatFixed = floatingChatMode === "fixed-right" && !isMobileLayout && !isChatAppActive;
+
   const sidebarCloseTimerRef = useRef<number | null>(null);
   const mobileChatCloseTimerRef = useRef<number | null>(null);
   const pinnedAppIdsRef = useRef(pinnedAppIds);
@@ -249,6 +251,19 @@ export function AppShell() {
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
   const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount + (sidebarEnabled ? 0 : 2), isMobileLayout);
+  const panelLayoutInput = {
+    viewportWidth: panelViewport.width, rootFontSize: panelViewport.rootFontSize,
+    railWidthRem: Number.parseFloat(String((shellSidebarMetrics as Record<string, unknown>)["--bs-sidebar-rail-width"])) || 3.35,
+    sidebarFixed: sidebarEnabled && sidebarMode === "fixed" && !isMobileLayout,
+    chatFixed: floatingChatMode === "fixed-right" && !isMobileLayout && !isChatAppActive,
+    sidebarWidth: sidebarDetailsWidthPx, chatWidth: floatingChatWidthPx,
+  };
+  const panelLayout = resolvePanelLayout(panelLayoutInput);
+  const maximumDockWidth = resolvePanelLayout({ ...panelLayoutInput, chatWidth: 720 }).chatWidth;
+  const effectiveSidebarMode = panelLayout.fixedSidebar ? "fixed" : "rail";
+  const effectiveChatMode = panelLayout.fixedChat ? "fixed-right" : "overlay";
+  const isSidebarPinned = panelLayout.fixedSidebar;
+  const isFloatingChatFixed = panelLayout.fixedChat;
   const shellTheme = useMemo(() => createShellThemeState(themeMode, systemColorScheme), [systemColorScheme, themeMode]);
   const shellStyle = useMemo(() => {
     const style: CSSProperties & {
@@ -257,12 +272,12 @@ export function AppShell() {
       "--maverick-sidebar-details-width"?: string;
     } = { ...shellSidebarMetrics };
     if (!isMobileLayout) {
-      style["--maverick-sidebar-details-width"] = `${sidebarDetailsWidthPx}px`;
-      style["--bs-floating-chat-width"] = `${floatingChatWidthPx}px`;
-      style["--bs-floating-chat-fixed-space"] = `${floatingChatWidthPx + 24}px`;
+      style["--maverick-sidebar-details-width"] = `${panelLayout.sidebarWidth}px`;
+      style["--bs-floating-chat-width"] = `${panelLayout.chatWidth}px`;
+      style["--bs-floating-chat-fixed-space"] = `${panelLayout.chatWidth + 1.5 * panelViewport.rootFontSize}px`;
     }
     return style;
-  }, [floatingChatWidthPx, isMobileLayout, shellSidebarMetrics, sidebarDetailsWidthPx]);
+  }, [panelLayout.chatWidth, isMobileLayout, shellSidebarMetrics, panelLayout.sidebarWidth, panelViewport.rootFontSize]);
 
   function clearSidebarClosing() {
     if (sidebarCloseTimerRef.current !== null) {
@@ -349,9 +364,11 @@ export function AppShell() {
       mobileChatCloseTimerRef.current = window.setTimeout(() => {
         setIsMobileChatClosing(false);
         mobileChatCloseTimerRef.current = null;
+        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Apri chat contestuale"]')?.focus());
       }, MOBILE_CHAT_TRANSITION_MS);
     }
     setIsMobileChatOpen(false);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[aria-label="Apri chat contestuale"]')?.focus());
   }
 
   function notifyAppDataChanged(ownerAppId: string, resource: string, detail: Record<string, string> = {}) {
@@ -748,23 +765,6 @@ export function AppShell() {
   ]);
 
   useEffect(() => {
-    if (isMobileLayout) {
-      return undefined;
-    }
-    function handleResize() {
-      setSidebarDetailsWidthPx((current) => clampSidebarDetailsWidth(current));
-      setFloatingChatWidthPx((current) => clampFloatingChatWidth(current));
-    }
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    window.visualViewport?.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.visualViewport?.removeEventListener("resize", handleResize);
-    };
-  }, [isMobileLayout]);
-
-  useEffect(() => {
     if (isSidebarPinned) {
       openSidebar();
     }
@@ -992,7 +992,7 @@ export function AppShell() {
 
   const renderShell = (notifications: ReactNode) => (
     <main
-      className={`bs-shell is-sidebar-mode-${sidebarEnabled ? sidebarMode : "rail"} ${sidebarEnabled && isSidebarOpen ? "is-sidebar-open" : ""} ${sidebarEnabled && isSidebarClosing ? "is-sidebar-closing" : ""} ${sidebarEnabled && isSidebarResizing ? "is-sidebar-resizing" : ""} ${isFloatingChatFixed ? "is-floating-chat-fixed" : ""} ${isFloatingChatResizing ? "is-floating-chat-resizing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
+      className={`bs-shell is-sidebar-mode-${effectiveSidebarMode} ${sidebarEnabled && isSidebarOpen ? "is-sidebar-open" : ""} ${sidebarEnabled && isSidebarClosing ? "is-sidebar-closing" : ""} ${sidebarEnabled && isSidebarResizing ? "is-sidebar-resizing" : ""} ${isFloatingChatFixed ? "is-floating-chat-fixed" : ""} ${isFloatingChatResizing ? "is-floating-chat-resizing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
       style={shellStyle}
     >
       {isMobileLayout ? (
@@ -1026,7 +1026,7 @@ export function AppShell() {
           settingsApp={settingsShortcutApp}
         />
       ) : null}
-      <div className="bs-workspace-view-shell">
+      <div className="bs-workspace-view-shell" inert={isMobileLayout && (isMobileChatOpen || isMobileChatClosing) && !isChatAppActive} aria-hidden={isMobileLayout && (isMobileChatOpen || isMobileChatClosing) && !isChatAppActive}>
         <WorkspaceView
           activeApp={activeApp}
           activeAppParams={activeAppParams}
@@ -1054,7 +1054,7 @@ export function AppShell() {
         isOpen={isSidebarOpen}
         isMobileLayout={isMobileLayout}
         isPinned={isSidebarPinned}
-        mode={sidebarMode}
+        mode={effectiveSidebarMode}
         mobilePrimaryActionRequestId={mobilePrimaryActionRequestId}
         notifications={isMobileLayout ? null : notifications}
         onClose={closeSidebar}
@@ -1070,7 +1070,7 @@ export function AppShell() {
         onWorkspaceChange={handleWorkspaceChange}
         pinnedAppIds={pinnedAppIds}
         railMetrics={shellSidebarMetrics}
-        sidebarDetailsWidthPx={sidebarDetailsWidthPx}
+        sidebarDetailsWidthPx={panelLayout.sidebarWidth}
         shellTheme={shellTheme}
         themeMode={themeMode}
         onThemeModeChange={setThemeMode}
@@ -1116,7 +1116,7 @@ export function AppShell() {
         activeAppParams={activeAppParams}
         activeWorkspaceId={activeWorkspaceId}
         frameScope={frameScope}
-        floatingChatMode={floatingChatMode}
+        floatingChatMode={effectiveChatMode}
         isChatAppActive={isChatAppActive}
         isMobileChatClosing={isMobileChatClosing}
         isMobileChatOpen={isMobileChatOpen}
@@ -1132,7 +1132,8 @@ export function AppShell() {
         shellTheme={shellTheme}
         threadId={floatingChatThreadId}
         user={authenticatedSession.user}
-        widthPx={floatingChatWidthPx}
+        widthPx={panelLayout.chatWidth}
+        maxWidthPx={maximumDockWidth}
       />
       <ProviderSetupDialog
         onClose={() => setDismissedProviderSetupWorkspaceId(activeWorkspaceId)}

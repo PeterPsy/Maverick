@@ -1,0 +1,119 @@
+.chat-floating-window-slot {
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  height: 100%;
+  min-width: 0;
+}
+
+.chat-floating-window-slot[hidden] {
+  display: none;
+}
+
+.chat-floating-widget-stack:not(.is-overlay) .chat-floating-window-slot {
+  width: 100%;
+}
+
+.chat-floating-widget-launcher {
+  width: 10rem;
+  border-radius: 22px;
+}
+
+.chat-floating-widget-launcher__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 7rem;
+  font-size: .8rem;
+}
+
+.chat-floating-stack-navigation {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  z-index: 40;
+  background: var(--maverick-bg);
+  border-radius: 18px;
+  padding: .25rem .5rem;
+  font-size: .8rem;
+}
+
+.chat-floating-stack-navigation button {
+  min-width: 32px;
+  min-height: 28px;
+  color: inherit;
+}
+
+.chat-floating-thread-menu__search {
+  width: 100%;
+  min-height: 36px;
+  padding: .5rem;
+  color: var(--maverick-text);
+  background: var(--chat-sidebar-soft-surface);
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: 18px;
+}
+
+.chat-floating-thread-menu__item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-floating-thread-menu__state {
+  font-size: .72rem;
+  color: var(--maverick-text-muted);
+}
+
+.chat-floating-loading {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: var(--maverick-text-muted);
+}
+
+.chat-floating-thread-menu button:focus-visible, .chat-floating-widget-shell__button:focus-visible, .chat-floating-widget-launcher:focus-visible {
+  outline: 2px solid var(--maverick-text);
+  outline-offset: -2px;
+}
+
+.chat-floating-widget-shell--mobile-fullscreen .chat-floating-widget-shell__button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.chat-floating-widget-shell__body pre, .chat-floating-widget-shell__body table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+
+.chat-floating-widget-stack.is-overlay.has-multiple-windows {
+  padding-top: 2rem;
+  box-sizing: border-box;
+}
+
+
+.chat-floating-widget-shell__button .material-symbols-rounded {
+  width: 1.2em;
+  overflow: hidden;
+  font-size: 1.15rem;
+  pointer-events: none;
+}
+
+
+.chat-floating-widget-shell__source-badge {
+  background: var(--chat-sidebar-soft-surface);
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.chat-floating-widget-shell--mobile-fullscreen .chat-floating-thread-menu__icon-action {
+  min-width: 44px;
+  min-height: 44px;
+}

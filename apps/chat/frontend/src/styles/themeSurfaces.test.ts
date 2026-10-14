@@ -89,7 +89,6 @@ describe("chat light theme surfaces", () => {
     applyRootTheme("light");
 
     expect(computedBackgroundColor(element("div", "chat-floating-thread-menu__panel"))).toBe("rgba(255, 255, 255, 0.72)");
-    expect(computedBackgroundColor(element("input", "chat-floating-thread-menu__rename-input"))).toBe("rgba(15, 23, 42, 0.055)");
     expect(computedBackgroundColor(element("input", "bs-chat-folder__title-input"))).toBe("rgba(15, 23, 42, 0.055)");
   });
 
@@ -105,8 +104,12 @@ describe("chat light theme surfaces", () => {
     documents.forEach((filePath) => {
       const html = readFileSync(filePath, "utf8");
       expect(html, filePath).toContain('id="maverick-first-paint"');
-      expect(html, filePath).toContain("background: #070708;");
-      expect(html, filePath).toContain("background: #f7f8fb;");
+      if (filePath.includes("/widgets/chat-sidebar/") || filePath.includes("/widgets/chat-sidebar-footer/")) {
+        expect(html, filePath).toContain("background: transparent;");
+      } else {
+        expect(html, filePath).toContain("background: #070708;");
+        expect(html, filePath).toContain("background: #f7f8fb;");
+      }
     });
   });
 });

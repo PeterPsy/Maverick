@@ -47,6 +47,18 @@ There is no serialized draft handoff, persistent send queue or replay on reload.
 The persisted v1 layout contains only ids, collapsed state and draft project
 metadata; reload does not restore unsent text or file bytes.
 
+The conversation picker composes Chat's sidebar search, thread rows and editor
+with their shared stylesheets. The editor retains project choices, mutation errors,
+keyboard dismissal and explicit deletion confirmation. Working status remains
+available to assistive technology while the animated frame supplies its visual
+indicator. Selecting a conversation moves focus to the revealed window.
+
+A deleted promoted draft keeps its window/controller identity but gets a fresh,
+RAM-only new-chat request id. The original request id may already have been
+consumed before promotion and cannot be reused to reset that controller. Layout
+persistence excludes this command id. Minimized launchers occupy ten rem; a
+multi-window minimized frame also reserves two rem for navigation.
+
 The window header shows the operational app context and can pin its app/params
 snapshot. Pinning changes only that window's context; following navigation again
 uses the current host context without changing draft or thread identity.

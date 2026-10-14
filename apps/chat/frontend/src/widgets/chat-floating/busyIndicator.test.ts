@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
-function readWidgetFile(filename: string) {
-  return readFileSync(resolve(currentDir, filename), "utf8");
+function readWidgetFile(filename: string): string {
+  const filePath = resolve(currentDir, filename);
+  const source = readFileSync(filePath, "utf8");
+  return filename.endsWith(".css") ? source.replace(/@import\s+"([^\"]+)";/g, (_, imported: string) => readWidgetFile(resolve(dirname(filePath), imported))) : source;
 }
 
 describe("floating chat busy indicator", () => {
@@ -39,7 +41,7 @@ describe("floating chat busy indicator", () => {
 
   it("keeps the intended border glow available for collapsed and menu states", () => {
     const floatingStyles = readWidgetFile("styles.css");
-    const sidebarStyles = readFileSync(resolve(currentDir, "../chat-sidebar/styles.css"), "utf8");
+    const sidebarStyles = readWidgetFile("../chat-sidebar/styles.css");
 
     expect(floatingStyles).toContain(".chat-floating-widget-launcher.is-busy");
     expect(floatingStyles).toContain(".bs-chat-list__glow-layer::before");

@@ -37,7 +37,7 @@ export function FloatingWindow({
   onMarkThreadRead: (thread: ChatThread) => Promise<void>;
   onOverlay?: (windowId: string) => void;
   onRemoveThread: (windowId: string, thread: ChatThread) => Promise<void>;
-  onRenameThread: (threadId: string, title: string) => Promise<void>;
+  onRenameThread: (threadId: string, title: string, projectId?: string | null) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
   onOpenAnotherThread?: (windowId: string, threadId: string) => void;
   runtimeThreadsError: string | null;

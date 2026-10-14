@@ -1,0 +1,39 @@
+.bs-chat-sidebar-search-frame {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.48rem;
+  height: var(--chat-sidebar-search-height);
+  min-height: var(--chat-sidebar-search-height);
+  padding: 0 0.72rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.05);
+  border-radius: 10px;
+  background: var(--chat-sidebar-glass-surface);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+}
+
+.bs-chat-sidebar-search-frame svg {
+  width: 1.08rem;
+  height: 1.08rem;
+  color: var(--maverick-text-muted);
+  flex: none;
+  stroke: currentColor;
+}
+
+.bs-chat-sidebar-search {
+  width: 100%;
+  min-width: 0;
+  outline: none;
+  background: transparent;
+  color: var(--maverick-text);
+}
+
+.bs-chat-sidebar-search::placeholder {
+  color: var(--maverick-text-soft);
+}
+
+.bs-chat-sidebar-search-frame:focus-within {
+  background: var(--chat-sidebar-soft-surface-hover);
+}

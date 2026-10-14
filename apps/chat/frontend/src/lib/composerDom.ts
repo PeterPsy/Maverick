@@ -20,7 +20,12 @@ function nodeMentionText(node: ChildNode): string | null {
   return isElementNode(node) ? node.dataset.mentionText || null : null;
 }
 
+function isCaretPlaceholder(node: ChildNode): boolean {
+  return isElementNode(node) && node.dataset.composerPlaceholder === "true";
+}
+
 function textFromComposerNode(node: ChildNode): string {
+  if (isCaretPlaceholder(node)) return "";
   const tokenText = nodeMentionText(node);
   if (tokenText !== null) {
     return tokenText;
@@ -55,6 +60,7 @@ function caretOffsetInNode(root: HTMLElement, target: Node, targetOffset: number
   }
 
   function visit(node: ChildNode): void {
+    if (isCaretPlaceholder(node)) return;
     if (found) {
       return;
     }
@@ -143,6 +149,7 @@ function rangeAtComposerOffset(root: HTMLElement, offset: number): Range {
   }
 
   function visit(node: ChildNode): void {
+    if (isCaretPlaceholder(node)) return;
     if (placed) {
       return;
     }
@@ -292,6 +299,7 @@ function composerContentIsCurrent(root: HTMLElement, text: string, tokens: Menti
   if (composerText(root) !== text) {
     return false;
   }
+  if (text.endsWith("\n") !== Boolean(root.lastChild && isCaretPlaceholder(root.lastChild))) return false;
   const chips = mentionChipElements(root);
   if (chips.length !== tokens.length) {
     return false;
@@ -331,6 +339,13 @@ export function renderComposerContent(
   if (cursor < text.length || !tokens.length) {
     appendTextSegment(fragment, text.slice(cursor));
   }
+  // Browsers treat a terminal BR as an editor filler. A second, non-data BR
+  // gives the caret a real final line without adding a newline to the message.
+  if (text.endsWith("\n")) {
+    const placeholder = document.createElement("br");
+    placeholder.dataset.composerPlaceholder = "true";
+    fragment.append(placeholder);
+  }
   root.replaceChildren(fragment);
   return true;
 }
@@ -343,6 +358,6 @@ export function isMobileComposerInput(): boolean {
   return (
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
-    (window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 720px)").matches)
+    window.matchMedia("(pointer: coarse)").matches
   );
 }

@@ -4,7 +4,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../App";
 import type { ActiveAppContext } from "../../lib/activeAppContext";
 import type { ChatThread } from "../../api/client";
@@ -15,6 +15,10 @@ vi.mock("../../App", async () => {
   const { useChatVisibility } = await import('../../hooks/useChatVisibility');
   return { App: vi.fn(() => <input aria-label="Fixture draft" data-visible={useChatVisibility()} defaultValue="Saved draft" />) };
 });
+
+vi.mock("../chat-sidebar/useSidebarProjects", () => ({
+  useSidebarProjects: () => ({ projects: [], error: null, isLoading: false, refresh: vi.fn() }),
+}));
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -51,8 +55,12 @@ describe("FloatingWindow", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
-  afterEach(() => {
-    root?.unmount();
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(async () => {
+    await act(async () => root?.unmount());
     root = null;
     container?.remove();
     container = null;
@@ -145,11 +153,33 @@ describe("FloatingWindow", () => {
     const search = container!.querySelector<HTMLInputElement>('[aria-label="Search chats"]')!;
     search.focus();
     await act(async () => search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })));
-    const selection = container!.querySelector<HTMLButtonElement>(".chat-floating-thread-menu__item-select")!;
+    const selection = container!.querySelector<HTMLButtonElement>(".bs-chat-list__select-button")!;
     expect(document.activeElement).toBe(selection);
     await act(async () => selection.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(document.activeElement).toBe(trigger);
     expect(container!.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("reuses the sidebar editor and requires confirmation before deleting", async () => {
+    await renderFloatingWindow(floatingWindow());
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Choose chat"]')!.click());
+    expect(container!.querySelector(".bs-chat-list__item")).not.toBeNull();
+    expect(container!.querySelector(".chat-floating-thread-menu__item")).toBeNull();
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Edit Selected thread"]')!.click());
+    expect(container!.querySelector(".bs-chat-thread-editor")).not.toBeNull();
+    expect(container!.querySelector('[aria-label="Edit title Selected thread"]')).not.toBeNull();
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Delete Selected thread"]')!.click());
+    expect(container!.textContent).toContain("Delete this chat?");
+    await act(async () => [...container!.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Keep chat")!.click());
+    expect(container!.textContent).not.toContain("Delete this chat?");
+  });
+
+  it("forwards a fresh draft command after a retained window loses its thread", async () => {
+    await renderFloatingWindow(floatingWindow({ isDraft: true, threadId: "" }));
+    expect(vi.mocked(App).mock.calls.at(-1)?.[0]?.newChatRequestId).toBe("window-1");
+    await renderFloatingWindow(floatingWindow());
+    await renderFloatingWindow(floatingWindow({ isDraft: true, threadId: "", draftRequestId: "after-deletion" }));
+    expect(vi.mocked(App).mock.calls.at(-1)?.[0]?.newChatRequestId).toBe("after-deletion");
   });
 
 });

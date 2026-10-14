@@ -97,11 +97,18 @@ export function useFloatingWindows() {
     return () => window.removeEventListener("message", handleWidgetMessage);
   }, [isWindowStateReady]);
 
+  function focusWindow(windowId: string) {
+    requestAnimationFrame(() => {
+      const slot = stackRef.current?.querySelector(`[data-window-id="${CSS.escape(windowId)}"]`);
+      slot?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      slot?.querySelector<HTMLButtonElement>(".chat-floating-thread-menu__trigger")?.focus({ preventScroll: true });
+    });
+  }
+
   function revealWindow(windowId: string) {
     setHostNavigationScope(windowId);
     setWindows((current) => current.map((item) => item.id === windowId ? { ...item, isCollapsed: false } : item));
-    requestAnimationFrame(() => stackRef.current?.querySelector(`[data-window-id="${CSS.escape(windowId)}"]`)
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+    focusWindow(windowId);
   }
 
   function setWindowCollapsed(windowId: string, isCollapsed: boolean) {
@@ -133,8 +140,7 @@ export function useFloatingWindows() {
       item.id === next.id ? { ...item, isCollapsed: false }
         : !anotherWindow && item.id === windowId ? { ...item, isCollapsed: true } : item));
     setHostNavigationScope(next.id);
-    requestAnimationFrame(() => stackRef.current?.querySelector(`[data-window-id="${CSS.escape(next.id)}"]`)
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+    focusWindow(next.id);
   }
 
   async function markThreadReadIfNeeded(thread: ChatThread) {
@@ -152,14 +158,16 @@ export function useFloatingWindows() {
     await deleteThread(thread.thread_id);
     setThreads((current) => current.filter((item) => item.thread_id !== thread.thread_id));
     setWindows((current) => current.map((item) => item.threadId === thread.thread_id
-      ? { ...item, draftProjectId: null, isDraft: true, threadId: "" } : item));
+      ? { ...item, draftProjectId: null, draftRequestId: crypto.randomUUID(), isDraft: true, threadId: "" } : item));
   }
 
   return {
     closeWindow: (windowId: string) => setWindowCollapsed(windowId, true),
     closeDock: () => postDockClose(), activeAppContext, createDraftChat, dockWindow, hostMode, hostNavigationScope,
     isWindowStateReady, markThreadReadIfNeeded, removeThread,
-    renameThread: async (threadId: string, title: string) => { await updateThread({ thread_id: threadId, title }); },
+    renameThread: async (threadId: string, title: string, projectId?: string | null) => {
+      await updateThread({ thread_id: threadId, title, ...(projectId !== undefined ? { project_id: projectId } : {}) });
+    },
     runtimeThreadsError, runtimeThreadsLoaded, selectThread, setWindowCollapsed, stackRef, threads, windows,
   };
 }

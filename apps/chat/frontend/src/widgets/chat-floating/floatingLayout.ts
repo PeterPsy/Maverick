@@ -3,6 +3,7 @@ const COLLAPSED_WIDTH_REM = 10;
 const WINDOW_GAP_REM = 0.75;
 const SINGLE_EXPANDED_FRAME_INSET_REM = 2;
 const EXPANDED_MAX_HEIGHT_REM = 38;
+const STACK_NAVIGATION_HEIGHT_REM = 2;
 const DEFAULT_ROOT_FONT_SIZE_PX = 16;
 
 export type FloatingWindowLayoutItem = {
@@ -34,7 +35,8 @@ export function floatingWidgetSize(windows: FloatingWindowLayoutItem[], sizing =
     gapCount * WINDOW_GAP_REM +
     singleExpandedFrameInset;
   const width = px(widthRem * rootFontSizePx);
-  const height = px(expandedCount > 0 ? EXPANDED_MAX_HEIGHT_REM * rootFontSizePx : 3 * rootFontSizePx);
+  const collapsedHeightRem = 3 + (windows.length > 1 ? STACK_NAVIGATION_HEIGHT_REM : 0);
+  const height = px((expandedCount > 0 ? EXPANDED_MAX_HEIGHT_REM : collapsedHeightRem) * rootFontSizePx);
   return {
     height,
     width,

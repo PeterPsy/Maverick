@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
-function readWidgetFile(filename: string) {
-  return readFileSync(resolve(currentDir, filename), "utf8");
+function readWidgetFile(filename: string): string {
+  const filePath = resolve(currentDir, filename);
+  const source = readFileSync(filePath, "utf8");
+  return filename.endsWith(".css") ? source.replace(/@import\s+"([^\"]+)";/g, (_, imported: string) => readWidgetFile(resolve(dirname(filePath), imported))) : source;
 }
 
 describe("floating chat unread indicator", () => {
@@ -15,14 +17,15 @@ describe("floating chat unread indicator", () => {
     const frameSource = readWidgetFile("FloatingChatFrame.tsx");
     const launcherSource = readWidgetFile("FloatingLauncher.tsx");
     const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
+    const rowSource = readWidgetFile("../chat-sidebar/ThreadRow.tsx");
     const styles = readWidgetFile("styles.css");
 
     expect(hookSource).toContain("isThreadUnread");
     expect(frameSource).toContain("const isActiveThreadUnread");
     expect(launcherSource).toContain('isActiveThreadUnread ? "is-unread" : ""');
-    expect(menuSource).toContain('isThreadUnread(thread) ? "is-unread" : ""');
+    expect(rowSource).toContain('isUnread ? "is-unread" : ""');
     expect(styles).toContain(".chat-floating-thread-menu__trigger.is-unread:not(.is-busy)");
-    expect(styles).toContain(".chat-floating-thread-menu__item.is-unread:not(.is-busy)");
+    expect(styles).toContain(".bs-chat-list__item.is-unread:not(.is-busy):not(.is-expanded)");
     expect(styles).toContain(".chat-floating-widget-launcher.is-unread:not(.is-busy)");
     expect(styles.indexOf(".chat-floating-thread-menu__trigger.is-unread:not(.is-busy)")).toBeGreaterThan(
       styles.indexOf(".chat-floating-widget-launcher:hover"),

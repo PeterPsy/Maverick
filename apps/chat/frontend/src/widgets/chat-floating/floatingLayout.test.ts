@@ -25,4 +25,10 @@ describe("floating chat widget layout", () => {
     expect(floatingWidgetSize([{ isCollapsed: false }], sizing).height).toBe("608px");
   });
 
+  it("reserves navigation height when multiple chats are minimized", () => {
+    expect(floatingWidgetSize([{ isCollapsed: true }, { isCollapsed: true }, { isCollapsed: true }], sizing)).toEqual({
+      width: "504px", height: "80px",
+    });
+  });
+
 });

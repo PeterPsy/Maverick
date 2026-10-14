@@ -15,7 +15,10 @@
 }
 
 .chat-floating-widget-launcher {
+  flex-basis: 10rem;
   width: 10rem;
+  gap: .35rem;
+  padding-inline: .65rem;
   border-radius: 22px;
 }
 
@@ -48,24 +51,34 @@
   color: inherit;
 }
 
-.chat-floating-thread-menu__search {
-  width: 100%;
-  min-height: 36px;
-  padding: .5rem;
-  color: var(--maverick-text);
-  background: var(--chat-sidebar-soft-surface);
-  border: 1px solid var(--chat-sidebar-soft-border);
-  border-radius: 18px;
+.chat-floating-thread-picker {
+  --chat-sidebar-search-height: 2.4rem;
+  display: grid;
+  gap: .35rem;
 }
 
-.chat-floating-thread-menu__item-actions {
-  opacity: 1;
-  pointer-events: auto;
+.chat-floating-thread-menu__accessible-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.chat-floating-thread-menu__state {
-  font-size: .72rem;
-  color: var(--maverick-text-muted);
+.chat-floating-thread-menu .bs-chat-list__select-button {
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-height: 2.2rem;
+}
+
+.chat-floating-thread-menu button:focus-visible {
+  outline: 2px solid var(--maverick-text);
+  outline-offset: -2px;
 }
 
 .chat-floating-loading {
@@ -113,7 +126,7 @@
   cursor: pointer;
 }
 
-.chat-floating-widget-shell--mobile-fullscreen .chat-floating-thread-menu__icon-action {
+.chat-floating-thread-picker.is-shell-mobile .bs-instance-menu__trigger {
   min-width: 44px;
   min-height: 44px;
 }

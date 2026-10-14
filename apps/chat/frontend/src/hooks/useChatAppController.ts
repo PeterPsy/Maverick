@@ -671,7 +671,8 @@ export function useChatAppController({
   }, [chatVisible, interAgentRuns, refreshInterAgentRuns]);
 
   const loadInitialState = useCallback(async () => {
-    setIsBootstrapping(true);
+    // Navigation owns this flag. Resetting it here can run after a draft's
+    // initial navigation effect and leave later new-chat commands blocked.
     setInitialDependenciesReady(false);
     try {
       const widgetActiveAppContext = await loadWidgetActiveAppContext();

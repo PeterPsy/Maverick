@@ -5,7 +5,7 @@ import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Check, FolderInput, Pencil } from "lucide-react";
+import { Check, ExternalLink, FolderInput, Pencil } from "lucide-react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import {
   attachChatThreadDragImage,
@@ -44,6 +44,7 @@ export function ThreadRow({
   onSetExpandedThreadTitle,
   onToggleThreadEdit,
   onToggleThreadSelection,
+  onOpenAnotherThread,
   onTrackThreadTouchStart,
   canMoveThread,
   projects,
@@ -80,7 +81,8 @@ export function ThreadRow({
   ) => void;
   onSetExpandedThreadTitle: (title: string) => void;
   onToggleThreadEdit: (thread: ChatThread) => void;
-  onToggleThreadSelection: (thread: ChatThread) => void;
+  onToggleThreadSelection?: (thread: ChatThread) => void;
+  onOpenAnotherThread?: (thread: ChatThread) => void;
   onTrackThreadTouchStart: (
     event: ReactPointerEvent<HTMLButtonElement>,
     thread: ChatThread,
@@ -207,7 +209,7 @@ export function ThreadRow({
               </span>
             ) : null}
             <div className="bs-chat-list__actions">
-              <button
+              {onToggleThreadSelection ? <button
                 aria-label={`${isSelected ? "Deselect" : "Select"} ${threadLabel}`}
                 aria-pressed={isSelected}
                 className="bs-chat-list__selection-toggle"
@@ -221,7 +223,16 @@ export function ThreadRow({
                 >
                   {isSelected ? <Check size={11} strokeWidth={2.5} /> : null}
                 </span>
-              </button>
+              </button> : null}
+              {onOpenAnotherThread ? <button
+                aria-label={`Open ${threadLabel} in another window`}
+                className="bs-instance-menu__trigger"
+                onClick={() => onOpenAnotherThread(thread)}
+                title="Open in another chat window"
+                type="button"
+              >
+                <ExternalLink aria-hidden="true" size={15} strokeWidth={1.5} />
+              </button> : null}
               {canMoveThread && sectionProjectId !== thread.project_id ? (
                 <button
                   aria-label={`Move ${threadLabel} to ${sectionTitle}`}

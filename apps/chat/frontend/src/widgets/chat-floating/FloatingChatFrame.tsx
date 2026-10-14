@@ -47,7 +47,7 @@ export function FloatingChatFrame({
   onMarkThreadRead: (thread: ChatThread) => Promise<void>;
   onOverlay?: (windowId: string) => void;
   onRemoveThread: (windowId: string, thread: ChatThread) => Promise<void>;
-  onRenameThread: (threadId: string, title: string) => Promise<void>;
+  onRenameThread: (threadId: string, title: string, projectId?: string | null) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
   onOpenAnotherThread?: (windowId: string, threadId: string) => void;
   runtimeThreadsError: string | null;
@@ -233,7 +233,7 @@ export function FloatingChatFrame({
                 externalMentionDrop={externalMentionDrop}
                 navigationScope={windowItem.id}
                 newChatProjectId={windowItem.draftProjectId}
-                newChatRequestId={windowItem.isDraft && !windowItem.threadId ? windowItem.id : null}
+                newChatRequestId={windowItem.isDraft && !windowItem.threadId ? windowItem.draftRequestId || windowItem.id : null}
                 runtimeThreads={threads}
                 runtimeThreadsError={runtimeThreadsError}
                 runtimeThreadsLoaded={runtimeThreadsLoaded}

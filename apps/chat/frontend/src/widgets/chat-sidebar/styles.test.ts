@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
 function readStyle(filename: string): string {
-  return readFileSync(resolve(currentDir, filename), "utf8");
+  const styles = readFileSync(resolve(currentDir, filename), "utf8");
+  return styles.replace(/@import\s+"([^\"]+)";/g, (_, imported: string) => readStyle(imported));
 }
 
 describe("chat sidebar scroll clearance", () => {

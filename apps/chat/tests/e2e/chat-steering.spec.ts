@@ -1,103 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-
-const SESSION_ID = "session-steering-browser";
-const TURN_ID = "turn-still-working";
-const NOW = "2026-09-06T00:00:00.000Z";
-
-async function installActiveTurn(page: Page, widgetMode = "overlay") {
-  const submissions: Record<string, unknown>[] = [];
-  const session = {
-    session_id: SESSION_ID, workspace_id: "default", agent_id: "chat",
-    source_app_id: "chat", status: "running", effective_mode: "sandbox",
-  };
-  const thread = {
-    thread_id: SESSION_ID, runtime_session_id: SESSION_ID, title: "Active work",
-    source_app_id: "chat", agent_label: "Chat", agent_type_id: "", agent_role_id: "",
-    system_prompt: "", project_id: null, archived: false, availability: "active",
-    created_at: NOW, updated_at: NOW, last_user_message_at: NOW,
-  };
-  const turn = {
-    turn_id: TURN_ID, session_id: SESSION_ID, workspace_id: "default", status: "active",
-    input_text: "Keep working", failure_reason: null, created_at: NOW, updated_at: NOW,
-  };
-  const event = (eventType: string, payload: Record<string, unknown>, id = eventType) => ({
-    event_id: id, session_id: SESSION_ID, turn_id: TURN_ID,
-    event_type: eventType, payload, created_at: NOW,
-  });
-  const events = [
-    event("runtime.turn.queued", { input_text: "Keep working", client_message_id: "initial" }),
-    event("runtime.turn.started", {}),
-    event("runtime.provider.accepted", { provider_turn_id: "native-turn" }),
-    event("runtime.output.delta", { text: "I am still working." }),
-  ];
-
-  await page.route(/^http:\/\/[^/]+\/api\//, async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    const body = request.method() === "POST" ? request.postDataJSON() as Record<string, unknown> : {};
-    const json = (payload: unknown, status = 200) => route.fulfill({ status, json: payload });
-    if (url.pathname === "/api/providers") {
-      const provider = {
-        provider_id: "codex", label: "Codex", status: "active",
-        provider_role: "runtime_engine", kind: "runtime_backend",
-      };
-      return json({ workspace_id: "default", configured: true, active_provider: provider, items: [provider] });
-    }
-    if (url.pathname === "/api/apps/widgets/context/steering-fixture") {
-      return json({ context: { content: {
-        workspace_id: "default", payload: { mode: widgetMode, thread_id: SESSION_ID },
-      } } });
-    }
-    if (url.pathname === "/api/apps/dependencies") return json({ dependencies: [] });
-    if (url.pathname === "/api/apps") return json({ items: [] });
-    if (url.pathname === "/api/apps/chat/backend" && body.action === "view_filter") {
-      return json({ state: { view_filter: { query: "", mode: "thread" } } });
-    }
-    if (url.pathname === "/api/apps/skills/backend" && body.action === "catalog") return json({ skills: [] });
-    if (url.pathname === "/api/inter-agent/runs") return json({ items: [] });
-    if (url.pathname === `/api/runtime/sessions/${SESSION_ID}/turns` && request.method() === "POST") {
-      submissions.push(body);
-      return json({
-        session, thread, turn, delivery: "steered",
-        events: [event("runtime.message.steered", {
-          input_text: body.input_text, client_message_id: body.client_message_id, delivery: "steered",
-        }, `steered-${submissions.length}`)],
-      }, 202);
-    }
-    if (url.pathname === `/api/runtime/threads/${SESSION_ID}/read`) return json({ thread, threads: [thread] });
-    if (url.pathname === `/api/runtime/threads/${SESSION_ID}`) return json({ thread });
-    if (url.pathname === `/api/runtime/sessions/${SESSION_ID}/events`) {
-      return json({ revision: "messages-v1", payload: { kind: "messages", data: { messages: [] } } });
-    }
-    if (url.pathname === "/api/runtime/threads" && url.searchParams.get("projection") === "display") {
-      return json({
-        revision: "threads-v1", payload: { kind: "threads", data: { threads: [{
-          thread_id: SESSION_ID, runtime_session_id: SESSION_ID, title: "Active work",
-          source_app_id: "chat", created_at: NOW, updated_at: NOW,
-        }] } },
-      });
-    }
-    if (url.pathname === "/api/runtime/threads") return json({ threads: [thread], workspace_id: "default", has_more: false });
-    if (url.pathname === `/api/runtime/sessions/${SESSION_ID}/prewarm`) return json(session);
-    if (url.pathname === `/api/runtime/turns/${TURN_ID}/client-metrics`) return json({});
-    if (url.pathname === "/api/runtime/sessions" && body.prepare_only === true) {
-      return json({ ...session, session_id: "unused-prepared-draft" });
-    }
-    throw new Error(`Unexpected browser request: ${request.method()} ${url.pathname}`);
-  });
-  await page.routeWebSocket("**/ws/runtime/threads", (socket) => {
-    setTimeout(() => socket.send(JSON.stringify({
-      type: "runtime.thread.snapshot", workspace_id: "default", threads: [thread], at: NOW,
-    })), 0);
-  });
-  await page.routeWebSocket(`**/ws/runtime/sessions/${SESSION_ID}*`, (socket) => {
-    setTimeout(() => socket.send(JSON.stringify({
-      type: "runtime.snapshot", session, turns: [turn], events,
-      last_event_id: events.at(-1)?.event_id, oldest_event_id: events[0].event_id, has_more_before: false,
-    })), 0);
-  });
-  return submissions;
-}
+import { expect, test } from "@playwright/test";
+import { installActiveTurn, SESSION_ID, TURN_ID } from "./fixtures/activeTurn";
 
 for (const { surface, width, touch, path, widgetMode } of [
   { surface: "app", width: 1280, touch: false, path: `/apps/chat/?thread_id=${SESSION_ID}` },
@@ -217,4 +119,99 @@ test("preserves the real composer, attachments and other drafts through every pl
   await expect(page.locator(".chat-floating-window-slot")).toHaveCount(2);
   expect(submissions).toHaveLength(0);
   await page.screenshot({ path: "/tmp/maverick-contextual-chat-desktop.png" });
+});
+
+
+test.describe("desktop contextual keyboard", () => {
+  test.use({ viewport: { width: 480, height: 844 }, hasTouch: false });
+  for (const mode of ["overlay", "fixed-right"]) {
+    test(`Enter submits and Shift+Enter inserts a newline in ${mode}`, async ({ page }) => {
+      const submissions = await installActiveTurn(page, mode);
+      await page.goto("/apps/chat/widgets/chat-floating/index.html?context=steering-fixture");
+      const composer = page.getByRole("textbox");
+      await expect(composer).toBeEditable();
+      await composer.fill("First line");
+      await composer.press("Shift+Enter");
+      await expect(composer).toHaveText("First line\n");
+      expect(submissions).toHaveLength(0);
+      await page.keyboard.insertText("Second line");
+      await expect.poll(() => composer.evaluate((element) => (element as HTMLElement).innerText)).toBe("First line\nSecond line");
+      await composer.press("Enter");
+      await expect.poll(() => submissions.at(-1)?.input_text).toBe("First line\nSecond line");
+      await expect(composer).toHaveText("");
+      expect(submissions).toHaveLength(1);
+    });
+  }
+});
+
+test("uses the sidebar row/editor and preserves project changes", async ({ page }) => {
+  const mutations: Record<string, unknown>[] = [];
+  await installActiveTurn(page, "overlay", mutations);
+  await page.goto("/apps/chat/widgets/chat-floating/index.html?context=steering-fixture");
+  await page.getByRole("button", { name: "Choose chat", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Choose chat", exact: true });
+  const row = dialog.locator(".bs-chat-list__item");
+  await expect(row).toHaveCount(1);
+  await row.hover();
+  await row.getByRole("button", { name: "Edit Active work", exact: true }).click();
+  await expect(dialog.locator(".bs-chat-thread-editor")).toBeVisible();
+  await dialog.getByRole("textbox", { name: "Edit title Active work" }).fill("Renamed work");
+  await dialog.getByRole("combobox", { name: "Project", exact: true }).selectOption("project-demo");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => mutations.at(-1)).toMatchObject({ action: "rename", title: "Renamed work", project_id: "project-demo" });
+  await expect(dialog.locator(".bs-chat-thread-editor")).toHaveCount(0);
+  await page.screenshot({ path: "/tmp/maverick-chat-shared-picker-desktop.png" });
+});
+
+test("resets the real controller after deleting a promoted draft", async ({ page }) => {
+  const mutations: Record<string, unknown>[] = [];
+  const submissions = await installActiveTurn(page, "overlay", mutations);
+  await page.goto("/apps/chat/widgets/chat-floating/index.html?context=steering-fixture");
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  const slot = page.locator(".chat-floating-window-slot").last();
+  const windowId = await slot.getAttribute("data-window-id");
+  await expect(slot.getByRole("textbox")).toBeEditable();
+  await page.evaluate(({ windowId, threadId }) => window.postMessage({
+    type: "maverick.chat.active-thread-changed", owner_app_id: "chat", navigation_scope: windowId, active_thread_id: threadId,
+  }, window.location.origin), { windowId, threadId: SESSION_ID });
+  await expect(slot.getByRole("button", { name: "Choose chat", exact: true })).toContainText("Active work");
+  await slot.getByRole("button", { name: "Choose chat", exact: true }).click();
+  const dialog = slot.getByRole("dialog", { name: "Choose chat", exact: true });
+  await dialog.locator(".bs-chat-list__item").hover();
+  await dialog.getByRole("button", { name: "Edit Active work", exact: true }).click();
+  await dialog.getByRole("button", { name: "Delete Active work", exact: true }).click();
+  expect(mutations).toHaveLength(0);
+  await dialog.getByRole("button", { name: "Delete chat", exact: true }).click();
+  await expect.poll(() => mutations.at(-1)?.action).toBe("delete");
+  await expect(dialog.locator(".bs-chat-thread-editor")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Search chats", exact: true }).press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(slot.getByRole("button", { name: "Choose chat", exact: true })).toContainText("New chat");
+  await expect(slot.getByText("I am still working.", { exact: true })).toBeHidden();
+  await expect(slot.locator(".chatapp-composer__editor")).toBeEditable();
+  expect(submissions).toHaveLength(0);
+});
+
+
+test.describe("mobile shared chat picker", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  test("reveals the sidebar editor with the same long-press gesture", async ({ page }) => {
+    await installActiveTurn(page, "mobile-fullscreen");
+    await page.goto("/apps/chat/widgets/chat-floating/index.html?context=steering-fixture");
+    const trigger = page.getByRole("button", { name: "Choose chat", exact: true });
+    await expect(trigger).not.toContainText("Working");
+    await trigger.tap();
+    const dialog = page.getByRole("dialog", { name: "Choose chat", exact: true });
+    const rowButton = dialog.locator(".bs-chat-list__select-button");
+    await rowButton.dispatchEvent("pointerdown", { pointerId: 1, pointerType: "touch", clientX: 30, clientY: 100 });
+    await expect(dialog.locator(".chat-floating-thread-picker")).toHaveClass(/has-thread-actions-revealed/);
+    await rowButton.dispatchEvent("pointerup", { pointerId: 1, pointerType: "touch", clientX: 30, clientY: 100 });
+    await dialog.getByRole("button", { name: "Edit Active work", exact: true }).tap();
+    await expect(dialog.locator(".bs-chat-thread-editor")).toBeVisible();
+    await expect(dialog.getByRole("combobox", { name: "Project", exact: true })).toBeVisible();
+    await page.screenshot({ path: "/tmp/maverick-chat-shared-picker-mobile.png" });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).tap();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".bs-chat-thread-editor")).toHaveCount(0);
+  });
 });

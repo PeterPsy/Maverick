@@ -84,5 +84,22 @@ describe("contextual window ownership", () => {
     expect(state.windows).toEqual(before);
     await act(async () => state.removeThread("a", { thread_id: "thread-a" } as ChatThread));
     expect(state.windows.at(-1)).toMatchObject({ threadId: "", isDraft: true });
+    expect(state.windows.at(-1)?.draftRequestId).toEqual(expect.any(String));
+  });
+
+  it("gives a promoted draft a fresh command when its thread is deleted", async () => {
+    await act(async () => state.createDraftChat("a"));
+    const windowId = state.windows.at(-1)!.id;
+    await act(async () => window.dispatchEvent(new MessageEvent("message", {
+      origin: window.location.origin,
+      data: { type: "maverick.chat.active-thread-changed", owner_app_id: "chat", navigation_scope: windowId, active_thread_id: "thread-a" },
+    })));
+    expect(state.windows.at(-1)).toMatchObject({ id: windowId, isDraft: false, threadId: "thread-a" });
+    vi.mocked(deleteThread).mockResolvedValueOnce({} as Awaited<ReturnType<typeof deleteThread>>);
+    await act(async () => state.removeThread(windowId, { thread_id: "thread-a" } as ChatThread));
+    expect(state.windows.at(-1)).toMatchObject({ id: windowId, isDraft: true, threadId: "" });
+    expect(state.windows.at(-1)?.draftRequestId).not.toBe(windowId);
+    expect(state.windows.at(-1)?.draftRequestId).toEqual(expect.any(String));
+    expect(readPersistedWindows(key)?.at(-1)).not.toHaveProperty("draftRequestId");
   });
 });

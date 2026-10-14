@@ -3,6 +3,8 @@ export const FALLBACK_WIDGET_STATE_STORAGE_KEY = `${WIDGET_STATE_STORAGE_KEY_PRE
 
 export type FloatingChatWindow = {
   draftProjectId: string | null;
+  /** A fresh new-chat command when an existing window is reset after deletion. */
+  draftRequestId?: string;
   id: string;
   isDraft: boolean;
   isCollapsed: boolean;

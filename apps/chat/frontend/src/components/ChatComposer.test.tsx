@@ -716,6 +716,22 @@ describe("ChatComposer reference search", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("submits with Enter in a narrow desktop floating composer", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: query === "(max-width: 720px)", media: query,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    const onSubmit = vi.fn();
+    const { getValue } = await renderComposer({ onSubmit });
+    await typeInEditor("hello");
+    await keyDownEditor({ key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(getValue()).toBe("hello");
+    await keyDownEditor({ key: "Enter", shiftKey: true });
+    expect(getValue()).toBe("hello\n");
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("undoes and redoes coalesced composer typing", async () => {
     const { getValue } = await renderComposer();
     await typeInEditor("hello");

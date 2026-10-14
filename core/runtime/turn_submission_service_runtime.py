@@ -11,14 +11,8 @@ from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_engine_for_session
-from core.runtime.turn_submission_service_events import (
-    _complete_turn_from_exit_code,
-    _debug_log_runtime_turn,
-    _execution_provider_id,
-    _record_final_output,
-    _record_turn_failed,
-    _terminalize_worker_observed_cancellation,
-)
+from core.runtime.turn_submission_service_events import _complete_turn_from_exit_code, _execution_provider_id, _record_final_output, _record_turn_failed, _terminalize_worker_observed_cancellation
+from core.runtime.turn_submission_service_diagnostics import _debug_log_runtime_turn
 from core.runtime.turn_submission_service_fence import (
     RuntimeTurnQueueFence,
     runtime_turn_queue_fence,

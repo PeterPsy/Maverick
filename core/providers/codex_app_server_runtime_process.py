@@ -1,41 +1,20 @@
 """Stateful Codex app-server protocol client."""
 from __future__ import annotations
-from dataclasses import dataclass
 import queue
 import subprocess
 import time
 from typing import Callable
 from core.providers.codex_app_server_runtime_errors import terminal_completion_wait
 from core.providers.codex_app_server_device_use_turn import (
-    clear_device_use_turn,
-    codex_turn_input,
-    codex_turn_start_params,
-    finish_device_use_turn,
-    set_device_use_turn,
+    clear_device_use_turn, codex_turn_input, codex_turn_start_params,
+    finish_device_use_turn, set_device_use_turn,
 )
+from core.providers.codex_app_server_runtime_state import CodexAppServerTurnResult
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEventSink
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.skills.models import SkillDefinition
-@dataclass
-class CodexAppServerTurnResult:
-    """Result of one Codex app-server turn."""
-    output_text: str
-    exit_code: int
-    provider_thread_id: str
-    failure_reason_code: str | None = None
 
-
-def prewarm_codex_app_server_runtime(
-    *,
-    session: RuntimeSessionRecord,
-    launch_spec: RuntimeBackendLaunchSpec,
-    command_runner=subprocess.Popen,
-) -> str:
-    """Start the Codex app-server and bind a provider thread before the next turn."""
-    runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
-    _remove_generated_system_skills_if_needed(runtime=runtime, launch_spec=launch_spec, session=session)
-    return _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec)
 
 def execute_codex_app_server_turn(
     *,

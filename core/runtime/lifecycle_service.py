@@ -11,7 +11,15 @@ from core.runtime import lifecycle_service_children as _lifecycle_service_childr
 from core.runtime import lifecycle_service_turns as _lifecycle_service_turns
 from core.runtime import lifecycle_service_events as _lifecycle_service_events
 
+from core.runtime.lifecycle_service_policy import *  # noqa: F401,F403
+from core.runtime import lifecycle_service_policy as _lifecycle_service_policy
+from core.runtime.lifecycle_service_child_sessions import *  # noqa: F401,F403
+from core.runtime import lifecycle_service_child_sessions as _lifecycle_service_child_sessions
+
 _modules = (
+    _lifecycle_service_policy,
+    _lifecycle_service_child_sessions,
+
     _lifecycle_service_events,
     _lifecycle_service_sessions,
     _lifecycle_service_children,

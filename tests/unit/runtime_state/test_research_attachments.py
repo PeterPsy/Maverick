@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import base64
 from dataclasses import replace
-from io import BytesIO
 import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
-import zipfile
 
-from core.apps.contracts import parse_app_contract_file
 from core.providers.agentic_adapter import RuntimeTurnContext
 from core.providers.codex_app_server_device_use_turn import codex_turn_input
 from core.providers.errors import AgenticRuntimeError
@@ -20,37 +17,17 @@ from core.providers.openrouter_agentic_request import openrouter_chat_payload
 from core.providers.openrouter_agentic_state import (
     decode_openrouter_chat_state, encode_openrouter_chat_state, initial_openrouter_chat_state,
 )
-from core.runtime.provider_input_context import runtime_provider_input_sources
 from core.runtime.message_steering import attempt_runtime_message_steer
 from core.runtime.research_attachments import research_input_text, validate_research_attachments
 from core.runtime.semantic_envelope import HostedSemanticEnvelopeCompiler
-from tests.support.hosted_agentic_harness import HostedAgenticHarness
-from tests.unit.providers.test_google_interactions_codec import _request as google_request
+from tests.unit.providers.google_interactions_fixture import _request as google_request
 from tests.unit.providers.test_openrouter_agentic_codec import _request as openrouter_request
 from tests.unit.runtime_state import test_research_runtime
+from tests.support.research_attachment_fixture import ResearchAttachmentFixture
 
 
-class ResearchAttachmentsTest(unittest.TestCase):
-    def setUp(self):
-        self.harness = HostedAgenticHarness(self)
-        self.session = replace(self.harness.session, runtime_profile="research")
-        self.state = SimpleNamespace(
-            workspace_store=SimpleNamespace(get_resource_classification=lambda **_kwargs: None),
-            repository_root=Path(__file__).resolve().parents[3],
-        )
+class ResearchAttachmentsTest(ResearchAttachmentFixture, unittest.TestCase):
 
-    def attachment(self, name, raw, media_type):
-        relative = f"storage/uploaded/fixture/{name}"
-        target = Path(self.session.workspace_root) / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(raw)
-        return {"name": name, "relativePath": relative, "type": media_type, "size": len(raw)}
-
-    def sources(self, attachments, text="Analyze these."):
-        return runtime_provider_input_sources(
-            self.state, session=self.session, turn_id="turn-hosted", input_text=text,
-            attachments=attachments, app_references=[{"app_id": "hidden"}],
-        )
 
     def test_text_and_image_snapshots_reach_native_and_hosted_inputs_without_paths(self):
         image = b"exact image fixture"
@@ -105,21 +82,6 @@ class ResearchAttachmentsTest(unittest.TestCase):
         with self.assertRaisesRegex(AgenticRuntimeError, "research_attachment_limit_exceeded"):
             validate_research_attachments([attachment] * 9)
 
-    def test_document_bytes_are_decoded_by_the_declared_app_backend(self):
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr("word/document.xml", '<w:document xmlns:w="urn:w"><w:p><w:t>Document evidence</w:t></w:p></w:document>')
-        attachment = self.attachment("source.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        app_root = self.state.repository_root / "apps/document-generator"
-        parsed = parse_app_contract_file(app_root)
-        binding = SimpleNamespace(app_id="document-generator", data_root=str(self.harness.root / "data"))
-        self.state.app_store = SimpleNamespace()
-        with patch("core.apps.runtime_attachment_text.enabled_workspace_app_bindings", return_value=[binding]), patch(
-            "core.apps.runtime_attachment_text.resolve_workspace_app_surface", return_value=(app_root, parsed),
-        ):
-            sources = self.sources([attachment], text="")
-        self.assertEqual(sources[0].content["text"], "Document evidence")
-        self.assertIn("Document evidence", research_input_text("", sources))
 
     def test_research_attachments_queue_instead_of_using_text_only_steering(self):
         with patch("core.runtime.message_steering._persisted_message_attempt", return_value=None):

@@ -2,23 +2,18 @@
 
 import base64
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from hashlib import sha256
 from io import BytesIO
 import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
-import unittest
 from unittest.mock import patch
-from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from core.api.connected_accounts_api import handle_connected_accounts_api, provider_status
-from core.api.session_api import RequestSession
 from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
 from core.apps.contracts import parse_app_contract_file
 from core.apps.registration import build_workspace_app_binding_record
@@ -34,54 +29,20 @@ from core.app_sdk.connected_accounts import account_urlopen
 from core.connected_accounts.app_context import account_context, filter_secret_requests
 from core.connected_accounts.broker import AccountBroker
 from core.connected_accounts.google import AccountError, SERVICES, allowed_api_request
-from core.connected_accounts.google_identity import verify_identity
-from core.connected_accounts.service import complete_flow, disconnect_account, select_account, start_flow
-from core.connected_accounts.store import AccountCollections, AccountDocumentStore
-from core.identity.service import build_auth_session, build_user_record
-from core.identity.store import IdentityCollections, IdentityDocumentStore
+from core.connected_accounts.service import complete_flow, disconnect_account, select_account
+from core.identity.service import build_user_record
 from core.secrets.app_delivery import AppSecretRequest
-from core.secrets.service import create_platform_secret
-from core.secrets.store import SecretCollections, SecretDocumentStore
 from core.shared.in_memory_collection import InMemoryCollection
 from core.workspaces.service import build_workspace_record, ensure_workspace_membership
-from core.workspaces.store import WorkspaceCollections, WorkspaceDocumentStore
+
+from tests.support.connected_account_fixture import ConnectedAccountFixture
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-class ConnectedAccountsTests(unittest.TestCase):
-    def setUp(self):
-        self.now = datetime.now(UTC)
-        self.accounts = AccountDocumentStore(AccountCollections(*(InMemoryCollection() for _ in range(3))))
-        self.identity = IdentityDocumentStore(IdentityCollections(*(InMemoryCollection() for _ in range(3))), account_store=self.accounts)
-        self.workspace = WorkspaceDocumentStore(WorkspaceCollections(*(InMemoryCollection() for _ in range(5))))
-        self.workspace.save_workspace(build_workspace_record(workspace_id="default", name="Default", slug="default", now=self.now))
-        self.user = self.identity.save_user(build_user_record(user_id="user:alice", username="alice", email="alice@example.com", now=self.now))
-        ensure_workspace_membership(self.workspace, membership_id="alice-default", workspace_id="default", user_id=self.user.user_id, role="member", now=self.now)
-        session = build_auth_session(session_id="session-alice", user_id=self.user.user_id, expires_at=self.now + timedelta(days=1), now=self.now)
-        self.context = RequestSession(self.user, session, "default")
-        self.secrets = SecretDocumentStore(SecretCollections(*(InMemoryCollection() for _ in range(4))), key_loader=lambda: b"k" * 32)
-        create_platform_secret(self.secrets, label="Client id", secret_id="client-id", alias="google-oauth-client-id", raw_value="test-client")
-        create_platform_secret(self.secrets, label="Client secret", secret_id="client-secret", alias="google-oauth-client-secret", raw_value="private-client-secret")
-        self.state = SimpleNamespace(account_store=self.accounts, identity_store=self.identity, workspace_store=self.workspace,
-                                     secret_store=self.secrets, repository_root=ROOT)
-        self.environment = patch.dict("os.environ", {"LOOPINO_GOOGLE_REDIRECT_URI": "https://loopino.example/api/auth/google/callback",
-            "LOOPINO_GOOGLE_ALLOW_REGISTRATION": "1", "LOOPINO_GOOGLE_CLIENT_ID_REF": "platform:secret-alias/google-oauth-client-id",
-            "LOOPINO_GOOGLE_CLIENT_SECRET_REF": "platform:secret-alias/google-oauth-client-secret"})
-        self.environment.start()
-        self.addCleanup(self.environment.stop)
+class ConnectedAccountsTests(ConnectedAccountFixture):
 
-    def flow(self, services=None, mode="connect", context=None):
-        result, browser = start_flow(self.state, mode=mode, services=services or [],
-                                     context=self.context if mode == "connect" and context is None else context, now=self.now)
-        query = parse_qs(urlsplit(result["authorization_url"]).query)
-        return query, browser
 
-    def complete(self, query, browser, *, context=None, subject="subject-alice", email="alice@example.com", scopes=None, refresh="private-refresh"):
-        tokens = {"id_token": "signed-token", "scope": " ".join(scopes if scopes is not None else SERVICES["calendar"]["scopes"]), "refresh_token": refresh}
-        return complete_flow(self.state, raw_state=query["state"][0], browser=browser, code="auth-code",
-            context=context or self.context, now=self.now, exchange=lambda *args, **kwargs: tokens,
-            identity_verifier=lambda *args, **kwargs: {"sub": subject, "email": email, "name": "Alice"})
 
     def test_authorization_has_pkce_and_persists_no_browser_or_state_secret(self):
         query, browser = self.flow(["calendar", "gmail"])
@@ -349,33 +310,3 @@ class ConnectedAccountsTests(unittest.TestCase):
             self.assertIsNone(other)
             self.workspace.delete_memberships_for_user(self.user.user_id)
             self.assertIsNone(self.personal_context(root))
-
-
-class GoogleIdentityTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        numbers = cls.key.public_key().public_numbers()
-        encode_int = lambda value: base64.urlsafe_b64encode(value.to_bytes((value.bit_length()+7)//8, "big")).decode().rstrip("=")
-        cls.keys = {"key": {"e": encode_int(numbers.e), "n": encode_int(numbers.n)}}
-
-    def token(self, changes=None):
-        claims = {"iss": "https://accounts.google.com", "aud": "client", "sub": "google-sub", "email": "user@example.com",
-                  "email_verified": True, "nonce": "browser-nonce", "exp": 2000, "iat": 900, **(changes or {})}
-        encode = lambda value: base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
-        signed = encode({"alg": "RS256", "kid": "key"}) + "." + encode(claims)
-        signature = self.key.sign(signed.encode(), padding.PKCS1v15(), hashes.SHA256())
-        return signed + "." + base64.urlsafe_b64encode(signature).decode().rstrip("=")
-
-    def test_signed_identity_checks_audience_nonce_expiry_verified_email(self):
-        self.assertEqual(verify_identity(self.token(), client_id="client", nonce="browser-nonce", now=1000, keys=self.keys)["sub"], "google-sub")
-        for change in [{"aud": "other"}, {"nonce": "wrong"}, {"exp": 999}, {"email_verified": False}, {"iss": "https://evil.example"}]:
-            with self.assertRaisesRegex(AccountError, "google_identity_invalid"):
-                verify_identity(self.token(change), client_id="client", nonce="browser-nonce", now=1000, keys=self.keys)
-
-    def test_tampered_signature_is_rejected(self):
-        token = self.token()
-        parts = token.split(".")
-        parts[2] = ("A" if parts[2][0] != "A" else "B") + parts[2][1:]
-        with self.assertRaisesRegex(AccountError, "google_identity_invalid"):
-            verify_identity(".".join(parts), client_id="client", nonce="browser-nonce", now=1000, keys=self.keys)

@@ -70,3 +70,12 @@ class _CodexAppServerRuntime:
 
 _RUNTIMES: dict[str, _CodexAppServerRuntime] = {}
 _RUNTIMES_LOCK = threading.Lock()
+
+
+@dataclass
+class CodexAppServerTurnResult:
+    """Result of one Codex app-server turn."""
+    output_text: str
+    exit_code: int
+    provider_thread_id: str
+    failure_reason_code: str | None = None

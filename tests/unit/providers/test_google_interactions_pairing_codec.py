@@ -8,7 +8,7 @@ import unittest
 
 from core.providers.agentic_protocol import AgenticToolResult
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
-from tests.unit.providers.test_google_interactions_codec import (
+from tests.unit.providers.google_interactions_fixture import (
     _ScriptedTransport,
     _events,
     _request,

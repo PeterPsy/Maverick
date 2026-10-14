@@ -25,7 +25,7 @@ from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
 from core.runtime.turn_submission_service_events import _complete_turn_from_exit_code
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
-from tests.unit.providers.test_google_interactions_codec import (
+from tests.unit.providers.google_interactions_fixture import (
     THOUGHT_SIGNATURE,
     _ScriptedTransport,
     _completed,

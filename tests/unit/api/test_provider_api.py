@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from io import BytesIO
 import json
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from core.api.provider_api import _agentic_model_reasoning, handle_provider_api
-from core.api.session_api import RequestSession
+from core.api.provider_api import _agentic_model_reasoning
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.service import builtin_provider_registry, register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
@@ -18,9 +16,10 @@ from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.secrets.service import bind_provider_secret, build_secret_ref, create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from tests.support.collections import FakeCollection
+from tests.unit.api.provider_api_fixture import ProviderApiFixture
 
 
-class ProviderApiTest(unittest.TestCase):
+class ProviderApiTest(ProviderApiFixture, unittest.TestCase):
     def test_agentic_codex_profile_exposes_provider_reasoning_choices(self) -> None:
         default, options = _agentic_model_reasoning(
             builtin_provider_registry(refresh_model_catalog=False),
@@ -487,40 +486,6 @@ class ProviderApiTest(unittest.TestCase):
         status, payload = self.invoke("/api/runtime/status", state=state)
         self.assertEqual(status, "200 OK")
         self.assertEqual(payload["sessions"][0]["runtime_mode"], "plain_hosted_chat")
-
-    def invoke(
-        self,
-        path: str,
-        *,
-        query: str = "",
-        method: str = "GET",
-        body: dict | None = None,
-        state=None,
-    ) -> tuple[str, dict]:
-        state = state or self.make_state()
-        context = RequestSession(
-            user=SimpleNamespace(user_id="user-1", platform_role="admin"),
-            session=SimpleNamespace(session_id="session-1"),
-            workspace_id="default",
-        )
-        body_bytes = json.dumps(body or {}).encode("utf-8") if body is not None else b""
-        environ = {
-            "PATH_INFO": path,
-            "QUERY_STRING": query,
-            "REQUEST_METHOD": method,
-            "wsgi.input": BytesIO(body_bytes),
-            "CONTENT_LENGTH": str(len(body_bytes)),
-            "CONTENT_TYPE": "application/json",
-        }
-        captured: dict[str, object] = {}
-        def start_response(status: str, headers: list[tuple[str, str]]) -> None:
-            captured["status"] = status
-            captured["headers"] = headers
-
-        with patch("core.api.provider_api.require_session", return_value=context):
-            body = handle_provider_api(state, environ, start_response)
-        assert body is not None
-        return str(captured["status"]), json.loads(b"".join(body).decode("utf-8"))
 
 
 if __name__ == "__main__":

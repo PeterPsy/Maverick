@@ -10,7 +10,7 @@ from core.providers.agentic_models import (
     codex_runtime_policy,
 )
 from core.runtime.execution_binding import build_runtime_execution_binding
-from core.runtime.lifecycle_service_sessions import create_child_runtime_session
+from core.runtime.lifecycle_service_child_sessions import create_child_runtime_session
 from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord
 from core.runtime.session_provider_state import initialize_bound_provider_state
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore

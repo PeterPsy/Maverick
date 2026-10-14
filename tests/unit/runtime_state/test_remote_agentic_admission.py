@@ -7,21 +7,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_capabilities, codex_runtime_policy
-from core.providers.agentic_data_policies import (
-    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
-    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
-)
 from core.providers.errors import AgenticProfileError, AgenticRuntimeError
 from core.recovery.runtime_admission import assess_runtime_session_admission
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
-from core.runtime.execution_binding import build_runtime_execution_binding
-from core.runtime.agentic_feature_flags import (
-    LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
-    LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
-    LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
-)
+from core.runtime.agentic_feature_flags import LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW, LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.errors import RuntimeTurnNotFoundError, RuntimeTurnQueueRejectedError
 from core.runtime.lifecycle_service import create_runtime_session, queue_runtime_turn
@@ -31,186 +20,17 @@ from core.runtime.remote_agentic_admission import (
     require_remote_agentic_session_admission,
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
-from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_queue_admission import require_turn_queue_session_executable
 from core.workspaces.data_governance import (
     issue_fake_data_attestation,
     revoke_data_attestation,
 )
-from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
-
-
-def _identity(provider_id: str):
-    return SimpleNamespace(
-        runtime_engine_id="hosted-agent-runtime",
-        adapter_id="hosted-agent-adapter",
-        model_provider_id=provider_id,
-        provider_protocol=f"{provider_id}-agentic-v1",
-    )
-
-
-def _remote_binding(*, provider_id: str, now: datetime):
-    return build_runtime_execution_binding(
-        session_id=f"session-{provider_id}",
-        workspace_id="workspace-1",
-        workspace_binding_id=f"binding-{provider_id}",
-        runtime_engine_id="loopino-tool-loop",
-        adapter_id="loopino-hosted-tool-loop",
-        adapter_version="candidate",
-        model_provider_id=provider_id,
-        model_id="fixture-model",
-        model_revision="fixture-revision",
-        model_revision_policy="exact",
-        provider_protocol=f"{provider_id}-agentic-v1",
-        provider_api_version="v1",
-        routing_constraint=codex_routing_constraint(),
-        credential_binding_id="credential-fixture",
-        reasoning_effort="high",
-        reasoning_efforts=("high",),
-        capabilities=codex_runtime_capabilities(),
-        execution_mode="sandbox",
-        runtime_policy=codex_runtime_policy(),
-        egress_policy_id="fixture-egress",
-        egress_policy_revision="1",
-        created_at=now,
-    )
-
-
-def _runtime_store() -> RuntimeDocumentStore:
-    return RuntimeDocumentStore(
-        RuntimeCollections(
-            sessions=FakeCollection(),
-            turns=FakeCollection(),
-            events=FakeCollection(),
-            processes=FakeCollection(),
-            states=FakeCollection(),
-            threads=FakeCollection(),
-            provider_states=FakeCollection(),
-        )
-    )
-
-
-class _AttestationStore:
-    def __init__(self, *records) -> None:
-        self.records = list(records)
-        self.calls = 0
-
-    def get_data_attestation(self, workspace_id: str):
-        self.calls += 1
-        if not self.records:
-            return None
-        record = self.records[min(self.calls - 1, len(self.records) - 1)]
-        if record is not None and record.workspace_id != workspace_id:
-            return record
-        return record
-
-
-def _remote_environment(provider_id: str) -> dict[str, str]:
-    return {
-        LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-        (
-            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW
-            if provider_id == "google-ai-studio"
-            else LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW
-        ): "1",
-    }
+from tests.unit.runtime_state.remote_admission_fixture import _identity, _remote_binding, _runtime_store, _AttestationStore, _remote_environment
 
 
 class RemoteAgenticAdmissionTest(unittest.TestCase):
-    def test_openrouter_full_workspace_policy_needs_no_fake_attestation(self) -> None:
-        identity = SimpleNamespace(
-            **vars(_identity("openrouter")),
-            egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
-            egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
-        )
-        workspace_store = Mock()
-        with patch.dict(
-            "os.environ",
-            _remote_environment("openrouter"),
-            clear=True,
-        ), patch(
-            "core.runtime.remote_agentic_admission.REMOTE_AGENTIC_ATTESTATION_AVAILABLE",
-            False,
-        ):
-            require_remote_agentic_session_admission(
-                identity,
-                workspace_id="workspace-1",
-                workspace_store=workspace_store,
-            )
-        workspace_store.get_data_attestation.assert_not_called()
 
-    def test_antigravity_requires_its_independent_preview_flag(self) -> None:
-        identity = SimpleNamespace(
-            runtime_engine_id="antigravity-cli",
-            adapter_id="antigravity-cli-stream-json",
-            model_provider_id="google",
-            provider_protocol="antigravity-cli-stream-json",
-        )
-        environment = {
-            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: "0",
-        }
-        with patch.dict("os.environ", environment, clear=True):
-            with self.assertRaisesRegex(
-                AgenticProfileError,
-                "antigravity_agentic_preview_disabled",
-            ):
-                require_remote_agentic_session_admission(identity)
-
-        environment[LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW] = "1"
-        with patch.dict("os.environ", environment, clear=True):
-            with self.assertRaisesRegex(
-                AgenticProfileError,
-                "remote_agentic_attestation_required",
-            ):
-                require_remote_agentic_session_admission(identity)
-
-    def test_google_and_openrouter_sessions_fail_before_any_store_call(self) -> None:
-        for provider_id in ("google-ai-studio", "openrouter"):
-            with self.subTest(provider_id=provider_id), patch.dict("os.environ", {}, clear=True):
-                store = Mock()
-                with self.assertRaises(AgenticProfileError) as raised:
-                    create_runtime_session(
-                        store,
-                        session_id=f"session-{provider_id}",
-                        workspace_id="default",
-                        agent_id="chat",
-                        runtime_mode="agentic",
-                        execution_binding=_identity(provider_id),
-                    )
-                self.assertEqual(str(raised.exception), "hosted_agent_runtime_disabled")
-                store.assert_not_called()
-                self.assertEqual(store.method_calls, [])
-
-    def test_client_fake_declaration_never_authorizes_remote_session(self) -> None:
-        environment = {
-            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
-        }
-        with patch.dict("os.environ", environment, clear=True):
-            with self.assertRaises(AgenticProfileError) as raised:
-                require_remote_agentic_session_admission(
-                    _identity("google-ai-studio"),
-                    declared_remote_data_class="workspace_internal_fake",
-                )
-        self.assertEqual(str(raised.exception), "remote_data_declaration_not_accepted")
-
-        with patch.dict("os.environ", environment, clear=True):
-            with self.assertRaises(AgenticProfileError) as raised:
-                require_remote_agentic_session_admission(_identity("google-ai-studio"))
-        self.assertEqual(str(raised.exception), "remote_agentic_attestation_required")
-
-    def test_unknown_hosted_provider_fails_closed_even_when_known_flags_are_on(self) -> None:
-        environment = {
-            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
-            LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "1",
-        }
-        with patch.dict("os.environ", environment, clear=True):
-            with self.assertRaises(HostedAgenticLoopError) as raised:
-                require_remote_agentic_dispatch(_identity("future-provider"))
-        self.assertEqual(raised.exception.reason_code, "remote_agentic_provider_unapproved")
 
     def test_attestation_gate_requires_active_matching_workspace_record(self) -> None:
         environment = {

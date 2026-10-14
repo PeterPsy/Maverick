@@ -10,13 +10,11 @@ from core.observability.service import append_platform_log, record_platform_audi
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.errors import RuntimeTransitionError
 from core.runtime.message_admission import runtime_message_admission_handoff
-from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_session import RuntimeSessionRecord, RuntimeSessionStatus
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.runtime_threads import mark_runtime_thread_user_message
 from core.runtime.store import RuntimeStore
 from core.runtime.turn_queue_admission import require_turn_queue_session_executable
-from core.workspaces.models import WorkspaceGovernanceRecord
 
 
 def transition_runtime_session(
@@ -115,46 +113,6 @@ def transition_runtime_session(
             now=timestamp,
         )
     return saved
-
-
-def reconcile_runtime_session_policy(
-    store: RuntimeStore,
-    session: RuntimeSessionRecord,
-    *,
-    governance: WorkspaceGovernanceRecord | None = None,
-    platform_allows_full_access: bool = False,
-    now: datetime | None = None,
-    start_path: Path | None = None,
-) -> RuntimeSessionRecord:
-    """Bring a persisted runtime session back in line with current execution policy."""
-    timestamp = now or utcnow()
-    routing = build_runtime_routing(
-        session_id=session.session_id,
-        workspace_id=session.workspace_id,
-        agent_id=session.agent_id,
-        requested_mode=session.requested_mode,
-        governance=governance,
-        platform_allows_full_access=platform_allows_full_access,
-        start_path=start_path,
-    )
-    if (
-        session.effective_mode == routing.effective_mode
-        and session.workspace_root == routing.workspace_root
-        and session.workdir == routing.workdir
-        and session.runtime_root == routing.runtime_root
-    ):
-        return session
-    return store.patch_session_metadata(
-        session_id=session.session_id,
-        workspace_id=session.workspace_id,
-        updates={
-            "effective_mode": routing.effective_mode,
-            "workspace_root": routing.workspace_root,
-            "workdir": routing.workdir,
-            "runtime_root": routing.runtime_root,
-        },
-        now=timestamp,
-    )
 
 
 def queue_runtime_turn(

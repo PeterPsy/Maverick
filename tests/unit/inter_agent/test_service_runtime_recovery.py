@@ -14,7 +14,7 @@ from core.inter_agent.orchestration_state import load_control_state
 from core.inter_agent.orchestration_tasks import materialize_plan, record_plan
 from core.inter_agent.store import build_inter_agent_document_store
 from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.lifecycle_service_sessions import create_child_runtime_session
+from core.runtime.lifecycle_service_child_sessions import create_child_runtime_session
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_state import RuntimeStateRecord

@@ -38,7 +38,7 @@ from core.inter_agent.models import (
 )
 from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
 from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.lifecycle_service_sessions import create_child_runtime_session
+from core.runtime.lifecycle_service_child_sessions import create_child_runtime_session
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_threads import runtime_thread_availability_for_session, update_runtime_thread_availability
 from core.runtime.store import RuntimeStore

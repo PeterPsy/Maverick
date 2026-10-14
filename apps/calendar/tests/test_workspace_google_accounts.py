@@ -1,5 +1,6 @@
 """Multiple personal accounts remain explicitly scoped to each workspace."""
 
+from io import BytesIO
 from dataclasses import asdict, replace
 import json
 from pathlib import Path
@@ -10,7 +11,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request
 
-from tests.unit.identity import test_connected_accounts as fixtures
+from tests.support import connected_account_fixture as fixtures
 from core.api.connected_accounts_api import handle_connected_accounts_api
 from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
 from core.apps.contracts import parse_app_contract_file
@@ -28,7 +29,7 @@ ROOT = fixtures.ROOT
 
 class WorkspaceGoogleAccountsTests(unittest.TestCase):
     def setUp(self):
-        self.f = fixtures.ConnectedAccountsTests()
+        self.f = fixtures.ConnectedAccountFixture()
         self.f.setUp()
         self.addCleanup(self.f.doCleanups)
         scopes = [scope for service in SERVICES.values() for scope in service["scopes"]]
@@ -107,7 +108,7 @@ class WorkspaceGoogleAccountsTests(unittest.TestCase):
             captured = []
             environ = {"PATH_INFO": "/api/connected-accounts/workspace-access", "REQUEST_METHOD": "POST",
                 "HTTP_ORIGIN": origin, "HTTP_HOST": "loopino.example", "wsgi.url_scheme": "https",
-                "wsgi.input": fixtures.BytesIO(body), "CONTENT_LENGTH": str(len(body))}
+                "wsgi.input": BytesIO(body), "CONTENT_LENGTH": str(len(body))}
             with patch("core.api.connected_accounts_api.resolve_request_session", return_value=self.f.context):
                 handle_connected_accounts_api(self.f.state, environ, lambda status, headers: captured.append(status))
             self.assertTrue(captured[0].startswith(expected), captured)
@@ -149,7 +150,7 @@ class WorkspaceGoogleAccountsTests(unittest.TestCase):
         captured = []
         environ = {"PATH_INFO": "/api/connected-accounts/workspace-access", "REQUEST_METHOD": "POST",
             "HTTP_ORIGIN": "https://loopino.example", "HTTP_HOST": "loopino.example", "wsgi.url_scheme": "https",
-            "wsgi.input": fixtures.BytesIO(body), "CONTENT_LENGTH": str(len(body))}
+            "wsgi.input": BytesIO(body), "CONTENT_LENGTH": str(len(body))}
         with patch("core.api.connected_accounts_api.resolve_request_session", return_value=self.f.context):
             response = handle_connected_accounts_api(self.f.state, environ, lambda status, headers: captured.append(status))
         self.assertTrue(captured[0].startswith("409"), captured)

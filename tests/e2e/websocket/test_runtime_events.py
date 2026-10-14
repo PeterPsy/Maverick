@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from io import BytesIO
 from pathlib import Path
-import asyncio, json, os, tempfile, unittest
+import asyncio, json, tempfile, unittest
 from uuid import uuid4
 from unittest.mock import patch
 
@@ -28,10 +27,11 @@ from core.runtime.service import create_runtime_session, record_runtime_event, t
 from core.runtime.store import RuntimeEventPage
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.support.markers import slow_test_class
+from tests.e2e.websocket.runtime_websocket_fixture import RuntimeWebsocketFixture
 
 
 @slow_test_class("slow websocket integration suite; run with scripts/test_suite.py --level slow")
-class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
+class RuntimeWebSocketTestCase(RuntimeWebsocketFixture, unittest.IsolatedAsyncioTestCase):
     """Verify runtime WebSocket streams are app-agnostic and workspace-scoped."""
 
     def make_repo_root(self) -> Path:
@@ -44,43 +44,6 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         return repo_root
 
-    def invoke(self, app, *, path: str, method: str = "GET", body: dict | None = None, cookie: str = "") -> tuple[int, dict, dict[str, str]]:
-        payload = json.dumps(body).encode("utf-8") if body is not None else b""
-        headers: dict[str, str] = {}
-        environ = {
-            "PATH_INFO": path,
-            "REQUEST_METHOD": method,
-            "CONTENT_LENGTH": str(len(payload)),
-            "CONTENT_TYPE": "application/json",
-            "QUERY_STRING": "",
-            "HTTP_HOST": "loopino.localhost",
-            "HTTP_ORIGIN": "http://loopino.localhost",
-            "wsgi.url_scheme": "http",
-            "wsgi.input": BytesIO(payload),
-        }
-        if cookie:
-            environ["HTTP_COOKIE"] = cookie
-
-        def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
-            headers.update(dict(response_headers))
-            headers["__status__"] = status
-
-        body_bytes = b"".join(app(environ, start_response))
-        return int(headers["__status__"].split()[0]), json.loads(body_bytes.decode("utf-8")), headers
-
-    def login_cookie(self, state) -> str:
-        app = PlatformHost(state, start_path=state.repository_root)
-        status, _payload, headers = self.invoke(
-            app,
-            path="/api/auth/login",
-            method="POST",
-            body={
-                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
-            },
-        )
-        self.assertEqual(status, 200)
-        return headers["Set-Cookie"].split(";", 1)[0]
 
     def create_session_with_events(self, state) -> tuple[str, list[str]]:
         session = create_runtime_session(
@@ -152,33 +115,6 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         )
         return sent
 
-    def insert_corrupt_session(self, state, *, session_id: str = "corrupt-session") -> None:
-        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
-        repo_root = state.repository_root
-        state.runtime_store.collections.sessions.update_one(
-            {"workspace_id": "default", "session_id": session_id},
-            {
-                "$set": {
-                    "workspace_id": "default",
-                    "agent_id": "chat",
-                    "status": "running",
-                    "requested_mode": None,
-                    "effective_mode": "sandbox",
-                    "workspace_root": str(repo_root / "workspaces" / "default"),
-                    "workdir": str(repo_root / "workspaces" / "default"),
-                    "runtime_root": str(
-                        repo_root / "workspaces" / "default" / "runtime" / "sessions" / session_id
-                    ),
-                    "started_at": now,
-                    "updated_at": now,
-                    "ended_at": None,
-                    "last_progress_at": now,
-                    "session_kind": "chat_root",
-                    "thread_visibility": "not-hidden",
-                }
-            },
-            upsert=True,
-        )
 
     async def test_runtime_websocket_streams_ordered_persisted_events(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

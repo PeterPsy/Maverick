@@ -6,14 +6,14 @@ from unittest.mock import patch
 from core.app_sdk.google_profile import google_picture_url
 from core.connected_accounts.profile import refresh_profile
 from core.connected_accounts.service import complete_flow, public_account
-from tests.unit.identity import test_connected_accounts as fixtures
+from tests.support import connected_account_fixture as fixtures
 
 PICTURE = 'https://lh3.googleusercontent.com/a/photo=s96-c'
 
 class GoogleProfilePhotoTests(unittest.TestCase):
-    setUp = fixtures.ConnectedAccountsTests.setUp
-    flow = fixtures.ConnectedAccountsTests.flow
-    complete = fixtures.ConnectedAccountsTests.complete
+    setUp = fixtures.ConnectedAccountFixture.setUp
+    flow = fixtures.ConnectedAccountFixture.flow
+    complete = fixtures.ConnectedAccountFixture.complete
 
     def account(self):
         query, browser = self.flow(['calendar'])

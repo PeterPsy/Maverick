@@ -10,7 +10,7 @@ from core.providers.agentic_protocol import (
     HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
-from tests.unit.providers.test_google_interactions_codec import (
+from tests.unit.providers.google_interactions_fixture import (
     _events,
     _request,
     _ScriptedTransport,

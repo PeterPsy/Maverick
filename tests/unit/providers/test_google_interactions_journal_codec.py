@@ -8,7 +8,7 @@ import unittest
 
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
 from core.providers.google_interactions_state import decode_google_interaction_state
-from tests.unit.providers.test_google_interactions_codec import (
+from tests.unit.providers.google_interactions_fixture import (
     _ScriptedTransport,
     _events,
     _request,

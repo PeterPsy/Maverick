@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import gzip
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -38,9 +37,10 @@ from core.apps.sidecar_browser_sessions import (
     SESSION_ROTATION_SECONDS,
 )
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
+from tests.integration.app_hosting.frame_asset_fixture import FrameAssetFixture
 
 
-class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unittest.TestCase):
+class AppFrameBrowserOriginIntegrationTests(FrameAssetFixture, SidecarBrowserOriginTestSupport, unittest.TestCase):
     def test_launch_bootstrap_authority_and_document_isolation(self) -> None:
         asyncio.run(self._assert_origin_contract())
 
@@ -920,28 +920,3 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             send,
         )
         return messages
-
-    @staticmethod
-    def _asset_source() -> bytes:
-        return ("export const isolatedAsset = 'public-cache';\n" * 80).encode("utf-8")
-
-    @staticmethod
-    def _worker_source() -> bytes:
-        return ("self.onmessage = () => self.postMessage('ready');\n" * 80).encode("utf-8")
-
-    @staticmethod
-    def _audio_source() -> bytes:
-        return b"ID3" + bytes(range(256)) * 8
-
-    @staticmethod
-    def _wasm_source() -> bytes:
-        return b"\x00asm\x01\x00\x00\x00" + b"\x00" * 2048
-
-    @staticmethod
-    def _asset_record(frontend_root: Path, relative: str) -> dict[str, object]:
-        body = (frontend_root / relative).read_bytes()
-        return {
-            "path": relative,
-            "sha256": hashlib.sha256(body).hexdigest(),
-            "size_bytes": len(body),
-        }

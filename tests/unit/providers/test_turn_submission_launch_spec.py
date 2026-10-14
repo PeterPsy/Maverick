@@ -12,7 +12,7 @@ from core.runtime.service import create_runtime_session, queue_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission import prewarm_runtime_session_async, runtime_session_prewarm_status, submit_runtime_turn_async
 from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
-from core.runtime.turn_submission_service_events import _debug_log_runtime_turn
+from core.runtime.turn_submission_service_diagnostics import _debug_log_runtime_turn
 from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution
 from tests.support.collections import FakeCollection
 from tests.support.fake_agentic_adapter import FakeLegacyLocalRuntimeCapabilities
@@ -24,7 +24,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         state = SimpleNamespace(repository_root=make_temp_repo_root(self))
         session = SimpleNamespace(session_id="sess-debug-log", workspace_id="default")
         with patch.dict("os.environ", {}, clear=True), patch(
-            "core.runtime.turn_submission_service_events.append_platform_log"
+            "core.runtime.turn_submission_service_diagnostics.append_platform_log"
         ) as append_log:
             _debug_log_runtime_turn(
                 state,
@@ -37,7 +37,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             append_log.assert_not_called()
 
         with patch.dict("os.environ", {"LOOPINO_RUNTIME_TURN_DEBUG_LOGS": "1"}), patch(
-            "core.runtime.turn_submission_service_events.append_platform_log"
+            "core.runtime.turn_submission_service_diagnostics.append_platform_log"
         ) as append_log:
             _debug_log_runtime_turn(
                 state,

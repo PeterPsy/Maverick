@@ -140,11 +140,8 @@ from core.runtime.turn_submission import (
     submit_runtime_turn_async,
     wait_for_runtime_session_prewarm,
 )
-from core.runtime.turn_submission_service_queue import (
-    RuntimeTurnSubmissionTiming,
-    record_turn_post_queue_response_metric,
-    runtime_turn_submission_timing,
-)
+from core.runtime.turn_submission_service_timing import RuntimeTurnSubmissionTiming, runtime_turn_submission_timing
+from core.runtime.turn_submission_service_queue import record_turn_post_queue_response_metric
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 from core.usage.payloads import chat_usage_summary_payload
 from core.usage.service import build_runtime_chat_usage_summary

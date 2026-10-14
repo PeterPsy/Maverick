@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+import os
 import tempfile
 import unittest
 
@@ -67,7 +68,12 @@ class ConfinedWorkspaceFilesystemSnapshotTest(unittest.TestCase):
 
             def mutate_file_after_scan(event: str, _path: str) -> None:
                 if event == "list_scanned":
+                    before = nested.stat()
                     nested.write_text("changed", encoding="utf-8")
+                    # The listing fences metadata versions. Same-sized writes
+                    # can share a filesystem timestamp tick; make the fixture
+                    # version change deterministic without sleeping.
+                    os.utime(nested, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
 
             racing = ConfinedWorkspaceFilesystem(
                 workspace_id="default",

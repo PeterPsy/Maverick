@@ -18,12 +18,7 @@ from core.providers.models import (
     ProviderReasoningOption,
     RuntimeBackendLaunchSpec,
 )
-from core.providers.provider_codex_reasoning import (
-    CODEX_DEFAULT_MODEL,
-    CODEX_DEFAULT_REASONING_EFFORT,
-    codex_default_reasoning_effort,
-    normalize_codex_model_options,
-)
+from core.providers.provider_codex_reasoning import CODEX_DEFAULT_MODEL, CODEX_DEFAULT_REASONING_EFFORT, normalize_codex_model_options
 from core.providers.provider_codex_research import codex_launch_scope
 from core.runtime.execution_events import RuntimeExecutionEventSink
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -129,12 +124,6 @@ def _default_model_id(options: list[ProviderModelOption]) -> str:
     if CODEX_DEFAULT_MODEL in option_ids:
         return CODEX_DEFAULT_MODEL
     return option_ids[0] if option_ids else CODEX_DEFAULT_MODEL
-
-
-def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
-    return codex_default_reasoning_effort(option)
-
-
 
 
 def _skill_manifest(skills: list["SkillDefinition"]) -> dict[str, object]:
@@ -356,7 +345,6 @@ class CodexLaunchMixin:
         )
 
 
-
     def prepare_runtime_skills(
         self,
         session: RuntimeSessionRecord,
@@ -412,7 +400,6 @@ class CodexLaunchMixin:
         return materializations
 
 
-
     def execute_turn(
         self,
         *,
@@ -450,7 +437,6 @@ class CodexLaunchMixin:
             command_runner=command_runner,
         )
         return RuntimeExecutionResult(output_text=result.output_text, exit_code=result.exit_code, failure_reason_code=result.failure_reason_code)
-
 
 
     def close_runtime(self, session_id: str) -> int:

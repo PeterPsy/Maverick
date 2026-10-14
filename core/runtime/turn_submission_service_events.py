@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
-import os
 from threading import Lock
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
-from core.observability.service import append_platform_log
 from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -89,7 +86,6 @@ def _record_final_output(
         },
         event_bus=state.runtime_event_bus,
     )
-
 
 
 def _complete_turn_from_exit_code(
@@ -277,37 +273,3 @@ def _safe_diagnostic_reference(value: object) -> str | None:
         return None
     allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:._-")
     return value if all(character in allowed for character in value) else None
-
-
-
-def _debug_log_runtime_turn(
-    state: PlatformState,
-    *,
-    session: RuntimeSessionRecord,
-    provider_id: str,
-    turn_id: str,
-    message: str,
-    payload: dict[str, object],
-) -> None:
-    """Write best-effort runtime turn diagnostics without changing execution behavior."""
-    if not _runtime_turn_debug_logs_enabled():
-        return
-    with suppress(Exception):
-        append_platform_log(
-            log_plane="runtime",
-            message=message,
-            payload={
-                "component": "runtime_turn_submission",
-                "session_id": session.session_id,
-                "turn_id": turn_id,
-                **payload,
-            },
-            workspace_id=session.workspace_id,
-            runtime_session_id=session.session_id,
-            provider_id=provider_id,
-            start_path=state.repository_root,
-        )
-
-
-def _runtime_turn_debug_logs_enabled() -> bool:
-    return os.environ.get("LOOPINO_RUNTIME_TURN_DEBUG_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}

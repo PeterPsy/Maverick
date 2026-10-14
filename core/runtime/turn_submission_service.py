@@ -25,7 +25,15 @@ from core.runtime import turn_submission_service_runtime as _turn_submission_ser
 from core.runtime import turn_submission_service_submit as _turn_submission_service_submit
 from core.runtime import message_steering as _message_steering
 
+from core.runtime.turn_submission_service_diagnostics import *  # noqa: F401,F403
+from core.runtime import turn_submission_service_diagnostics as _turn_submission_service_diagnostics
+from core.runtime.turn_submission_service_timing import *  # noqa: F401,F403
+from core.runtime import turn_submission_service_timing as _turn_submission_service_timing
+
 _modules = (
+    _turn_submission_service_diagnostics,
+    _turn_submission_service_timing,
+
     _app_references,
     _turn_submission_service_events,
     _turn_submission_service_failures,

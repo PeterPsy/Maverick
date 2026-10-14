@@ -222,7 +222,7 @@ class PwaCacheAuditTests(unittest.TestCase):
 """,
                 encoding="utf-8",
             )
-            storage_source = root / "apps" / "storage" / "frontend" / "src" / "retry.ts"
+            storage_source = root / "apps" / "sample-app" / "frontend" / "src" / "retry.ts"
             storage_source.parent.mkdir(parents=True)
             storage_source.write_text(
                 """export const mutation = createMutationRetryExecutor({

@@ -9,14 +9,9 @@ from core.providers.service import resolve_runtime_engine_for_session
 from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, assert_plain_hosted_chat_input_allowed, runtime_session_is_plain_hosted_chat
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.provider_input_capture_context import (
-    capture_runtime_provider_input,
-)
+from core.runtime.provider_input_capture_context import capture_runtime_provider_input
 from core.runtime.authority_service import preflight_runtime_context_capabilities
-from core.runtime.resolved_runtime_engine import (
-    ResolvedRuntimeEngine,
-    build_optional_local_launch_spec,
-)
+from core.runtime.resolved_runtime_engine import ResolvedRuntimeEngine, build_optional_local_launch_spec
 from core.runtime.provider_start_handoff import (
     provider_thread_recorder,
     runtime_provider_start_handoff,
@@ -26,13 +21,8 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.research_runtime import assert_research_runtime_input_allowed
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import transition_runtime_turn
-from core.runtime.turn_submission_service_events import (
-    _complete_turn_from_exit_code,
-    _debug_log_runtime_turn,
-    _execution_provider_id,
-    _record_final_output,
-    _terminalize_worker_observed_cancellation,
-)
+from core.runtime.turn_submission_service_events import _complete_turn_from_exit_code, _execution_provider_id, _record_final_output, _terminalize_worker_observed_cancellation
+from core.runtime.turn_submission_service_diagnostics import _debug_log_runtime_turn
 from core.runtime.turn_submission_service_failures import (
     terminalize_queued_dispatch_failure,
     terminalize_sync_execution_failure,

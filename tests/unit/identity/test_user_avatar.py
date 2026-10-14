@@ -5,15 +5,15 @@ import unittest
 from core.api.session_api import public_user_payload
 from core.identity.errors import UserNotFoundError
 from core.connected_accounts.service import complete_flow
-from tests.unit.identity import test_connected_accounts as fixtures
+from tests.support import connected_account_fixture as fixtures
 
 PHOTO = "https://lh3.googleusercontent.com/a/primary=s96-c"
 SECONDARY = "https://lh3.googleusercontent.com/a/secondary=s96-c"
 
 
 class UserAvatarTests(unittest.TestCase):
-    setUp = fixtures.ConnectedAccountsTests.setUp
-    flow = fixtures.ConnectedAccountsTests.flow
+    setUp = fixtures.ConnectedAccountFixture.setUp
+    flow = fixtures.ConnectedAccountFixture.flow
 
     def connect(self, *, photo=PHOTO, subject="primary", mode="connect"):
         query, browser = self.flow([], mode=mode)

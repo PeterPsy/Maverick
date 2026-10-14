@@ -56,13 +56,12 @@ def references_first_party_app_source(content: str, app_id: str) -> bool:
     """Return whether test source directly names a first-party app source path."""
 
     source_fragments = (
-        f'"apps/{app_id}',
-        f"'apps/{app_id}",
         f'"apps" / "{app_id}"',
         f"'apps' / '{app_id}'",
         f'"apps", "{app_id}"',
     )
-    return any(fragment in content for fragment in source_fragments)
+    literal_path = re.search(r'["\']apps/' + re.escape(app_id) + r'(?:/|["\'])', content)
+    return bool(literal_path) or any(fragment in content for fragment in source_fragments)
 
 
 class RepositoryConventionsTestCase(unittest.TestCase):
@@ -245,6 +244,7 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         self.assertTrue(references_first_party_app_source('Path("apps/sample")', "sample"))
         self.assertTrue(references_first_party_app_source('root / "apps" / "sample"', "sample"))
         self.assertFalse(references_first_party_app_source('"/api/apps/sample/media"', "sample"))
+        self.assertFalse(references_first_party_app_source('"apps/sample test"', "sample"))
         self.assertFalse(references_first_party_app_source('"http://localhost/apps/sample/"', "sample"))
 
     def test_root_tests_do_not_reference_first_party_app_directories(self) -> None:

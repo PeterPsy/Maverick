@@ -60,6 +60,7 @@ apps/design-studio/service/artifacts/
 !apps/*/frontend/dist/**
 
 # OS/editor
+/.t/
 .DS_Store
 .idea/
 .vscode/

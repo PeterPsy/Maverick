@@ -11,11 +11,8 @@ from core.runtime.runtime_process_lifecycle import release_idle_runtime_processe
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import transition_runtime_turn
-from core.runtime.turn_submission_service_events import (
-    _debug_log_runtime_turn,
-    _record_turn_failed,
-    _terminalize_worker_observed_cancellation,
-)
+from core.runtime.turn_submission_service_diagnostics import _debug_log_runtime_turn
+from core.runtime.turn_submission_service_events import _record_turn_failed, _terminalize_worker_observed_cancellation
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState

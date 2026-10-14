@@ -1,5 +1,7 @@
 """Regression coverage for independent native and system-browser cookie jars."""
 
+from core.identity.service import build_user_record, build_auth_session
+from core.workspaces.service import ensure_workspace_membership
 from dataclasses import replace
 from datetime import timedelta
 from io import BytesIO
@@ -13,14 +15,14 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from threading import Thread
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
-from tests.unit.identity import test_connected_accounts as fixtures
+from tests.support import connected_account_fixture as fixtures
 from core.api.connected_accounts_api import handle_connected_accounts_api
 from core.connected_accounts.service import digest
 
 
 class GoogleBrowserHandoffTests(unittest.TestCase):
     def setUp(self):
-        fixtures.ConnectedAccountsTests.setUp(self)
+        fixtures.ConnectedAccountFixture.setUp(self)
         self.identity.save_auth_session(self.context.session)
         self.native = {"loopino_session": self.context.session.session_id}
         self.browser = {}
@@ -175,9 +177,9 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         self.assertEqual(self.accounts.get_flow(flow_id).status, "completed")
 
     def test_browser_signed_into_another_user_does_not_change_account_owner(self):
-        other = self.identity.save_user(fixtures.build_user_record(user_id="user:bob", username="bob", email="bob@example.com"))
-        fixtures.ensure_workspace_membership(self.workspace, membership_id="bob-default", workspace_id="default", user_id=other.user_id, role="member")
-        session = self.identity.save_auth_session(fixtures.build_auth_session(session_id="session-bob", user_id=other.user_id,
+        other = self.identity.save_user(build_user_record(user_id="user:bob", username="bob", email="bob@example.com"))
+        ensure_workspace_membership(self.workspace, membership_id="bob-default", workspace_id="default", user_id=other.user_id, role="member")
+        session = self.identity.save_auth_session(build_auth_session(session_id="session-bob", user_id=other.user_id,
                                                                               expires_at=self.now + timedelta(days=1)))
         self.browser["loopino_session"] = session.session_id
         flow_id, raw_state, handoff = self.start()
@@ -196,8 +198,8 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
 
     def test_login_cookie_is_issued_only_to_original_native_webview(self):
         # Establish an explicitly linked identity using an ordinary connect.
-        query, cookie = fixtures.ConnectedAccountsTests.flow(self)
-        fixtures.ConnectedAccountsTests.complete(self, query, cookie, subject="google-alice", scopes=[])
+        query, cookie = fixtures.ConnectedAccountFixture.flow(self)
+        fixtures.ConnectedAccountFixture.complete(self, query, cookie, subject="google-alice", scopes=[])
         self.native = {}
         flow_id, raw_state, handoff = self.start("login")
         self.launch(raw_state, handoff)

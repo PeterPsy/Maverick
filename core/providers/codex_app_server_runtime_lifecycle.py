@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
+from core.providers.models import RuntimeBackendLaunchSpec
+from core.runtime.runtime_session import RuntimeSessionRecord
+
 from core.providers.codex_app_server_runtime_state import _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
 from core.runtime.process_control import (
@@ -46,3 +50,15 @@ def close_codex_app_server_runtime(session_id: str) -> int:
     terminated = int(terminate_runtime_process(runtime.process))
     unregister_runtime_process(session_id, runtime.process)
     return terminated
+
+
+def prewarm_codex_app_server_runtime(
+    *,
+    session: RuntimeSessionRecord,
+    launch_spec: RuntimeBackendLaunchSpec,
+    command_runner=subprocess.Popen,
+) -> str:
+    """Start the Codex app-server and bind a provider thread before the next turn."""
+    runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
+    _remove_generated_system_skills_if_needed(runtime=runtime, launch_spec=launch_spec, session=session)
+    return _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec)

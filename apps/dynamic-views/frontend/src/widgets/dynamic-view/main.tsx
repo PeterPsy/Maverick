@@ -43,7 +43,7 @@ function payloadHasPackage(payload: Record<string, unknown>): payload is Dynamic
 function openDynamicViews(instanceId?: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'dynamic-views',
       params: instanceId ? { app_page: `views/${encodeURIComponent(instanceId)}`, instance_id: instanceId, view_id: instanceId } : {}
     },

@@ -17,8 +17,8 @@ spec.loader.exec_module(credentials)
 
 class CloudflareCredentialsTests(unittest.TestCase):
     def test_rotation_replaces_private_projection_and_permissions(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder, "private", "cloudflare.ini")
+        with tempfile.TemporaryDirectory() as folder, patch.object(credentials, "ROOT", Path(folder)):
+            path = Path(folder, "installation/tls/credentials/cloudflare.ini")
             credentials.refresh_credentials(path, resolver=lambda: "a" * 40)
             credentials.refresh_credentials(path, resolver=lambda: "b" * 40)
             self.assertEqual(path.read_text(), "dns_cloudflare_api_token = " + "b" * 40 + "\n")
@@ -27,8 +27,9 @@ class CloudflareCredentialsTests(unittest.TestCase):
             self.assertEqual(list(path.parent.iterdir()), [path])
 
     def test_failed_resolution_removes_stale_token_and_does_not_report_it(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder, "cloudflare.ini")
+        with tempfile.TemporaryDirectory() as folder, patch.object(credentials, "ROOT", Path(folder)):
+            path = Path(folder, "installation/tls/credentials/cloudflare.ini")
+            path.parent.mkdir(parents=True)
             path.write_text("old token")
             def denied():
                 raise RuntimeError("Sensitive dependency error")
@@ -37,24 +38,25 @@ class CloudflareCredentialsTests(unittest.TestCase):
             self.assertFalse(path.exists())
 
     def test_symlink_cannot_overwrite_another_file(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, patch.object(credentials, "ROOT", Path(folder)):
             target = Path(folder, "target")
             target.write_text("preserve")
-            link = Path(folder, "cloudflare.ini")
+            link = Path(folder, "installation/tls/credentials/cloudflare.ini")
+            link.parent.mkdir(parents=True)
             link.symlink_to(target)
             with self.assertRaises(ValueError):
                 credentials.refresh_credentials(link, resolver=lambda: "a" * 40)
             self.assertEqual(target.read_text(), "preserve")
 
     def test_ini_injection_is_rejected_without_leaving_a_credential(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder, "cloudflare.ini")
+        with tempfile.TemporaryDirectory() as folder, patch.object(credentials, "ROOT", Path(folder)):
+            path = Path(folder, "installation/tls/credentials/cloudflare.ini")
             with self.assertRaises(ValueError):
                 credentials.refresh_credentials(path, resolver=lambda: "a" * 40 + "\nother = injected")
             self.assertFalse(path.exists())
 
     def test_cli_hides_exception_values(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, patch.object(credentials, "ROOT", Path(folder)):
             env = Path(folder, "installation.env")
             env.write_text("")
             output = io.StringIO()

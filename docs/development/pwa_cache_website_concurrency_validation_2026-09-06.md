@@ -108,7 +108,7 @@ fixed the harness setup; no product code was changed or assertion bypassed.
 The prior provider identity startup blocker did not recur. Later concurrent
 commits or dirty files are not recertified by this immutable-candidate evidence.
 
-Representative commands (Maverick root unless stated otherwise):
+Representative commands (Loopino root unless stated otherwise):
 
 ```sh
 npm --prefix apps/website-studio test -- --maxWorkers=1
@@ -122,7 +122,7 @@ npm --prefix packages/pwa-cache run typecheck
 npm --prefix apps/base-shell run test:service-worker
 .venv/bin/python -m unittest discover -s tests/unit/pwa
 .venv/bin/python -m unittest tests.unit.scripts.test_audit_pwa_cache tests.unit.scripts.test_pwa_device_regression
-maverick app website-studio frontend build --json
+loopino app website-studio frontend build --json
 .venv/bin/python scripts/audit_pwa_cache.py
 python3 scripts/check_unused_imports.py
 ```
@@ -148,7 +148,7 @@ not executed here; this change does not upgrade the existing dev toolchain.
    Automated kill-switch coverage does not close this gate.
 
 The Storage-owned plan
-`storage/generated/development/maverick-pwa-cache-development-plan.md` was
+`storage/generated/development/loopino-pwa-cache-development-plan.md` was
 updated using six guarded exact replacements through
 `storage_update_markdown_file`, followed by a full eight-page official reread.
 Sections 5.8 and 7.8 now describe the independent lifetimes and identify this

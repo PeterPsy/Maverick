@@ -5,18 +5,18 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { baseUrl, chromium, executablePath } from './performance_browser_support.mjs';
 
-const history = JSON.parse(readFileSync(process.env.MAVERICK_PERFORMANCE_CHAT_EVENTS, 'utf8'));
+const history = JSON.parse(readFileSync(process.env.LOOPINO_PERFORMANCE_CHAT_EVENTS, 'utf8'));
 assert.equal(history.length, 4000);
-const samples = Number(process.env.MAVERICK_PERFORMANCE_STREAM_TRIALS || 5);
+const samples = Number(process.env.LOOPINO_PERFORMANCE_STREAM_TRIALS || 5);
 assert(Number.isInteger(samples) && samples >= 1 && samples <= 10);
-const tracePath = process.env.MAVERICK_PERFORMANCE_STREAM_TRACE;
+const tracePath = process.env.LOOPINO_PERFORMANCE_STREAM_TRACE;
 if (tracePath) assert.equal(samples, 1, 'Tracing is a separate diagnostic, not a comparison trial.');
 const browser = await chromium.launch({ headless: true, executablePath: executablePath() });
 const browserMetrics = await browser.newBrowserCDPSession();
 const processCpu = async () => (await browserMetrics.send('SystemInfo.getProcessInfo')).processInfo;
 const { gpu } = await browserMetrics.send('SystemInfo.getInfo');
 const results = [];
-const compactEvidence = process.env.MAVERICK_PERFORMANCE_COMPACT === '1';
+const compactEvidence = process.env.LOOPINO_PERFORMANCE_COMPACT === '1';
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const metrics = async cdp => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(({ name, value }) => [name, value]));
 const percentile = (values, fraction) => {

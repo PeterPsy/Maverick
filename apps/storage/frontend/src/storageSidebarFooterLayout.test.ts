@@ -34,6 +34,6 @@ describe('storage sidebar footer layout', () => {
     expect(footerSource).toContain('owner_app_id: ownerAppId');
     expect(footerSource).toContain('widget_id: WIDGET_ID');
     expect(appSource).toContain("window.top === window && storageOAuthNavigationDisposition() === 'same-window'");
-    expect(appSource).toContain('window.location.replace(maverickPlatformOrigin())');
+    expect(appSource).toContain('window.location.replace(loopinoPlatformOrigin())');
   });
 });

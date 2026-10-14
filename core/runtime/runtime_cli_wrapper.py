@@ -1,32 +1,32 @@
-"""Runtime-local Maverick CLI wrapper management for agentic sessions."""
+"""Runtime-local Loopino CLI wrapper management for agentic sessions."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 
-def refresh_runtime_maverick_wrappers(repository_root: Path) -> list[Path]:
-    """Refresh existing runtime-local Maverick CLI wrappers in workspace sessions."""
+def refresh_runtime_loopino_wrappers(repository_root: Path) -> list[Path]:
+    """Refresh existing runtime-local Loopino CLI wrappers in workspace sessions."""
     refreshed: list[Path] = []
     sessions_root = Path(repository_root) / "workspaces"
     if not sessions_root.is_dir():
         return refreshed
-    for wrapper in sessions_root.glob("*/runtime/sessions/*/bin/maverick"):
+    for wrapper in sessions_root.glob("*/runtime/sessions/*/bin/loopino"):
         try:
             current = wrapper.read_text(encoding="utf-8") if wrapper.is_file() else ""
-            source = runtime_maverick_wrapper_source()
+            source = runtime_loopino_wrapper_source()
             if current == source:
                 continue
-            write_runtime_maverick_wrapper(wrapper)
+            write_runtime_loopino_wrapper(wrapper)
             refreshed.append(wrapper)
         except OSError:
             continue
     return refreshed
 
 
-def write_runtime_maverick_wrapper(path: Path) -> None:
+def write_runtime_loopino_wrapper(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(runtime_maverick_wrapper_source(), encoding="utf-8")
+    path.write_text(runtime_loopino_wrapper_source(), encoding="utf-8")
     path.chmod(0o755)
 
 
@@ -42,7 +42,7 @@ def refresh_runtime_device_use_mcp_wrappers(repository_root: Path) -> list[Path]
     sessions_root = Path(repository_root) / "workspaces"
     if not sessions_root.is_dir():
         return refreshed
-    for wrapper in sessions_root.glob("*/runtime/sessions/*/bin/maverick-device-use-mcp"):
+    for wrapper in sessions_root.glob("*/runtime/sessions/*/bin/loopino-device-use-mcp"):
         try:
             current = wrapper.read_text(encoding="utf-8") if wrapper.is_file() else ""
             source = runtime_device_use_mcp_wrapper_source()
@@ -55,8 +55,8 @@ def refresh_runtime_device_use_mcp_wrappers(repository_root: Path) -> list[Path]
     return refreshed
 
 
-def runtime_maverick_wrapper_source() -> str:
-    """Return the workspace-local Maverick CLI wrapper installed into runtime/bin."""
+def runtime_loopino_wrapper_source() -> str:
+    """Return the workspace-local Loopino CLI wrapper installed into runtime/bin."""
     return """#!/usr/bin/env python3
 import json
 import os
@@ -67,11 +67,11 @@ import urllib.request
 
 def main(argv):
     if not argv or argv in (["--help"], ["-h"]):
-        print("Usage: maverick {apps|core|app|sdk} ...")
-        print("       maverick apps list --json")
-        print("       maverick core cli list --json")
-        print("       maverick app <app_id> frontend build --json")
-        print("       maverick core cli run core.app-sdk.create --app-id <app_id> --template-id <id> --json")
+        print("Usage: loopino {apps|core|app|sdk} ...")
+        print("       loopino apps list --json")
+        print("       loopino core cli list --json")
+        print("       loopino app <app_id> frontend build --json")
+        print("       loopino core cli run core.app-sdk.create --app-id <app_id> --template-id <id> --json")
         return 0
     if argv[:2] == ["sdk", "templates"]:
         return call_sdk({"action": "templates"})
@@ -81,15 +81,15 @@ def main(argv):
 
 
 def runtime_auth_headers():
-    token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "")
+    token = os.environ.get("LOOPINO_RUNTIME_API_TOKEN", "")
     if not token:
-        print("maverick: MAVERICK_RUNTIME_API_TOKEN is not set", file=sys.stderr)
+        print("loopino: LOOPINO_RUNTIME_API_TOKEN is not set", file=sys.stderr)
         return None
     return {"Content-Type": "application/json", "Authorization": "Bearer " + token}
 
 
 def call_sdk(payload, text_field=None):
-    base_url = os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014").rstrip("/")
+    base_url = os.environ.get("LOOPINO_API_BASE", "http://127.0.0.1:8014").rstrip("/")
     headers = runtime_auth_headers()
     if headers is None:
         return 1
@@ -103,16 +103,16 @@ def call_sdk(payload, text_field=None):
 
 
 def call_cli(argv):
-    base_url = os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014").rstrip("/")
+    base_url = os.environ.get("LOOPINO_API_BASE", "http://127.0.0.1:8014").rstrip("/")
     headers = runtime_auth_headers()
     if headers is None:
         return 1
-    output_profile = os.environ.get("MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE", "provider_compact").strip() or "provider_compact"
+    output_profile = os.environ.get("LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE", "provider_compact").strip() or "provider_compact"
     request = urllib.request.Request(
         base_url + "/api/runtime/cli",
         data=json.dumps({
             "argv": argv,
-            "effective_mode": os.environ.get("MAVERICK_EFFECTIVE_MODE", "sandbox"),
+            "effective_mode": os.environ.get("LOOPINO_EFFECTIVE_MODE", "sandbox"),
             "output_profile": output_profile,
         }).encode("utf-8"),
         headers=headers,
@@ -199,8 +199,8 @@ def send_response(resp):
 
 
 def get_tools():
-    base_url = os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014").rstrip("/")
-    token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "")
+    base_url = os.environ.get("LOOPINO_API_BASE", "http://127.0.0.1:8014").rstrip("/")
+    token = os.environ.get("LOOPINO_RUNTIME_API_TOKEN", "")
     req = urllib.request.Request(
         base_url + "/api/device-use/tools",
         headers={{"Authorization": "Bearer " + token}} if token else {{}},
@@ -225,9 +225,9 @@ def get_tools():
 
 
 def call_tool(name, arguments):
-    base_url = os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014").rstrip("/")
-    token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "")
-    session_id = os.environ.get("MAVERICK_RUNTIME_SESSION_ID", "")
+    base_url = os.environ.get("LOOPINO_API_BASE", "http://127.0.0.1:8014").rstrip("/")
+    token = os.environ.get("LOOPINO_RUNTIME_API_TOKEN", "")
+    session_id = os.environ.get("LOOPINO_RUNTIME_SESSION_ID", "")
     payload = {{
         "tool": name,
         "arguments": arguments,
@@ -311,7 +311,7 @@ def main():
                     "protocolVersion": params.get("protocolVersion") or "2024-11-05",
                     "capabilities": {{"tools": {{}}}},
                     "serverInfo": {{
-                        "name": "maverick-device-use-mcp",
+                        "name": "loopino-device-use-mcp",
                         "version": "1.0.0",
                     }},
                 }},

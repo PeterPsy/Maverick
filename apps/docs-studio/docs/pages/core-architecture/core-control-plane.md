@@ -1,6 +1,6 @@
 # Control plane versus data plane
 
-Maverick separates platform state from workspace content so app behavior can evolve without turning the core into a business database.
+Loopino separates platform state from workspace content so app behavior can evolve without turning the core into a business database.
 
 ## The three planes
 

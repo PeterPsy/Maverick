@@ -1,4 +1,4 @@
-"""Prepare native OpenDesign-owned and bounded Maverick-owned data roots.
+"""Prepare native OpenDesign-owned and bounded Loopino-owned data roots.
 
 The one-time legacy cutover is implemented by the explicit migration command;
 this lifecycle hook never opens or mutates OpenDesign's private database.

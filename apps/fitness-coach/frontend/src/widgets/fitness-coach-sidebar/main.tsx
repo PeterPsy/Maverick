@@ -50,14 +50,14 @@ function setupTabFromContext(context: WidgetContext): SetupTab {
 function openWorkout(workoutId: string, isMobile: boolean) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'fitness-coach',
       params: { app_page: `workouts/${workoutId}`, workout_id: workoutId }
     },
     "*"
   );
   if (isMobile) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -65,14 +65,14 @@ function openSetupTab(setupTab: SetupTab, isMobile: boolean) {
   updateViewState({ setup_tab: setupTab }).catch(() => undefined);
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'fitness-coach',
       params: { setup_tab: setupTab }
     },
     "*"
   );
   if (isMobile) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -118,19 +118,19 @@ function Sidebar() {
     function handleMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { context?: WidgetContext; owner_app_id?: string; resource?: string; selection?: Record<string, unknown>; type?: string };
-      if (payload.type === 'maverick.widget.context-changed' && payload.context) {
+      if (payload.type === 'loopino.widget.context-changed' && payload.context) {
         setActiveWorkoutId(activeWorkoutFromContext(payload.context));
         setSetupTab(setupTabFromContext(payload.context));
         setIsMobile(isMobileFromContext(payload.context));
       }
-      if (payload.type === 'maverick.app.selection-changed' && payload.owner_app_id === 'fitness-coach') {
+      if (payload.type === 'loopino.app.selection-changed' && payload.owner_app_id === 'fitness-coach') {
         setActiveWorkoutId(String(payload.selection?.workout_id || ''));
         const nextSetupTab = String(payload.selection?.setup_tab || '');
         if (nextSetupTab === 'workout-settings' || nextSetupTab === 'exercise-library') {
           setSetupTab(nextSetupTab);
         }
       }
-      if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === 'fitness-coach' && DATA_RESOURCES.has(String(payload.resource || ''))) {
+      if (payload.type === 'loopino.widget.data-changed' && payload.owner_app_id === 'fitness-coach' && DATA_RESOURCES.has(String(payload.resource || ''))) {
         refresh();
       }
     }

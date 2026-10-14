@@ -4,7 +4,7 @@
   "name": "Skills",
   "version": "0.3.0",
   "description": "Workspace app for managing local runtime skills and installing reviewed public Agent Skills from prompts.chat.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
@@ -52,7 +52,7 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_skills_app",
+      "loopino_skills_app",
       "skills_view_filter",
       "skills_set_view_filter",
       "skills_set_custom_view",
@@ -68,9 +68,9 @@
     ],
     "skills": [
       "generate-image",
-      "maverick-app-creator",
-      "maverick-app-design",
-      "maverick-code-skill",
+      "loopino-app-creator",
+      "loopino-app-design",
+      "loopino-code-skill",
       "skills-ops"
     ],
     "views": [

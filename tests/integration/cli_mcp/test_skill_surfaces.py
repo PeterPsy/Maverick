@@ -152,7 +152,7 @@ class TestSkillSurfaces(SurfaceTestBase):
                 name="Custom Skills",
                 version="1.0.0",
                 description="Custom skill catalog provider.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     provides=[
                         build_provided_interface_declaration(
@@ -170,7 +170,7 @@ class TestSkillSurfaces(SurfaceTestBase):
                 name="Runtime Consumer",
                 version="1.0.0",
                 description="Runtime consumer app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     requires=[
                         build_required_interface_declaration(
@@ -214,7 +214,7 @@ class TestSkillSurfaces(SurfaceTestBase):
                 name="Custom Skills",
                 version="1.0.0",
                 description="Custom skill catalog provider.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     provides=[
                         build_provided_interface_declaration(

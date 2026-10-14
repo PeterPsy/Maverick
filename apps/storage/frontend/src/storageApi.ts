@@ -1,5 +1,5 @@
 import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveLocalizePayload, DrivePreviewPayload, DriveStartOAuthPayload, DriveWritePayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
-import { preventMaverickAppHibernation, createRequestFingerprint, readCacheModelJson, readThroughParentDataCache } from '@maverick/pwa-cache';
+import { preventLoopinoAppHibernation, createRequestFingerprint, readCacheModelJson, readThroughParentDataCache } from '@loopino/pwa-cache';
 import { stableStorageFileSourceVersion } from './storageFileCacheClient';
 
 const DEFAULT_APP_ID = 'storage';
@@ -159,7 +159,7 @@ const DRIVE_CLIENT_SECRET_NAMES = ['google-drive-oauth-client-id', 'google-drive
 const DRIVE_REFRESH_TOKEN_SECRET_NAME = 'google-drive-refresh-token';
 
 export async function callBackend<T>(body: Record<string, unknown>, options: StorageApiOptions = {}): Promise<T> {
-  const release = preventMaverickAppHibernation();
+  const release = preventLoopinoAppHibernation();
   try {
     const fetchImpl = options.fetchImpl || fetch;
     const requestInit: RequestInit = {
@@ -176,7 +176,7 @@ export async function callBackend<T>(body: Record<string, unknown>, options: Sto
     } catch (error) {
       if (options.signal?.aborted) throw error;
       const transport = new Error('Storage backend transport failed.', { cause: error });
-      transport.name = 'MaverickTransportError';
+      transport.name = 'LoopinoTransportError';
       throw transport;
     }
     let payload: (T & { detail?: string; error?: string }) | null = null;
@@ -199,7 +199,7 @@ export async function callBackend<T>(body: Record<string, unknown>, options: Sto
 export class StorageHttpError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfterMs: number | null) {
     super(message);
-    this.name = 'MaverickHttpError';
+    this.name = 'LoopinoHttpError';
   }
 }
 
@@ -240,7 +240,7 @@ export type CatalogReadOptions = Pick<StorageApiOptions, 'signal'> & { forceNetw
 export class CatalogChangedError extends Error {
   constructor(readonly datasetRevision: number) { super('Storage catalog changed; reload its first page.'); }
 }
-export const STORAGE_CATALOG_REVALIDATED_EVENT = 'maverick.storage.catalog-revalidated.v1';
+export const STORAGE_CATALOG_REVALIDATED_EVENT = 'loopino.storage.catalog-revalidated.v1';
 
 export const CATALOG_PAGE_LIMIT = 100;
 export const DRIVE_PAGE_LIMIT = 50;

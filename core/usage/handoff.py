@@ -15,9 +15,9 @@ USAGE_ROOT = Path('data/control-plane/usage')
 
 
 def selected_adapter() -> str:
-    value = os.environ.get('MAVERICK_USAGE_STORE', 'document').strip().lower()
+    value = os.environ.get('LOOPINO_USAGE_STORE', 'document').strip().lower()
     if value not in {'document', 'sqlite'}:
-        raise ValueError('MAVERICK_USAGE_STORE must be document or sqlite.')
+        raise ValueError('LOOPINO_USAGE_STORE must be document or sqlite.')
     return value
 
 
@@ -81,7 +81,7 @@ def usage_fence(root: Path, *, expected: str | None = None, exclusive: bool = Fa
                 sleep(.01)
         try:
             if expected is not None and active_adapter(root) != expected:
-                raise RuntimeError('Usage adapter changed; restart with the selected MAVERICK_USAGE_STORE.')
+                raise RuntimeError('Usage adapter changed; restart with the selected LOOPINO_USAGE_STORE.')
             held[key] = exclusive
             yield
         finally:

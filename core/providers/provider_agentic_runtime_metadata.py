@@ -14,8 +14,8 @@ from core.providers.models import (
 def build_hosted_agentic_runtime_definition(timestamp: datetime) -> ProviderDefinition:
     """Return the process-independent runtime engine definition."""
     return ProviderDefinition(
-        provider_id="maverick-tool-loop",
-        label="Maverick Hosted Tool Loop",
+        provider_id="loopino-tool-loop",
+        label="Loopino Hosted Tool Loop",
         description="Core-owned agentic runtime engine for hosted model APIs.",
         kind="runtime_backend",
         provider_role="runtime_engine",

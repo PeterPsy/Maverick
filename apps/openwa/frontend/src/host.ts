@@ -1,37 +1,37 @@
 import { useEffect } from "react";
 import {
   connectAppEventSocket,
-  isExactMaverickParentMessage,
-  maverickAppIsVisible,
-} from "@maverick/pwa-cache";
+  isExactLoopinoParentMessage,
+  loopinoAppIsVisible,
+} from "@loopino/pwa-cache";
 
 type AppEvent = { type?: string; owner_app_id?: string; resource?: string };
-export function useMaverickHost(
+export function useLoopinoHost(
   refresh: () => void,
   onSession: (id: string) => void,
 ) {
   useEffect(() => {
-    const initial = new URLSearchParams(location.search).get("maverick_theme");
+    const initial = new URLSearchParams(location.search).get("loopino_theme");
     if (initial === "light" || initial === "dark")
       applyTheme(initial);
     const stop = connectAppEventSocket<AppEvent>((event) => {
       if (
-        event.type === "maverick.app.data-changed" &&
+        event.type === "loopino.app.data-changed" &&
         event.owner_app_id === "openwa" &&
-        ["connection", "sessions"].includes(event.resource || "") && maverickAppIsVisible()
+        ["connection", "sessions"].includes(event.resource || "") && loopinoAppIsVisible()
       )
         refresh();
     }, refresh);
     const listener = (event: MessageEvent) => {
       if (
-        !isExactMaverickParentMessage(event) ||
+        !isExactLoopinoParentMessage(event) ||
         !event.data ||
         typeof event.data !== "object"
       )
         return;
       const data = event.data;
       if (
-        data.type === "maverick.app.navigate" &&
+        data.type === "loopino.app.navigate" &&
         (!data.app_id || data.app_id === "openwa") &&
         typeof data.params?.session_id === "string" &&
         data.params.session_id.length <= 128 &&
@@ -39,7 +39,7 @@ export function useMaverickHost(
       )
         onSession(data.params.session_id);
       if (
-        ["maverick.shell.theme-changed", "maverick.app.navigate"].includes(data.type) &&
+        ["loopino.shell.theme-changed", "loopino.app.navigate"].includes(data.type) &&
         ["light", "dark"].includes(data.theme?.effective)
       )
         applyTheme(data.theme.effective);
@@ -66,7 +66,7 @@ function preventBackspaceNavigation(event: KeyboardEvent) {
 }
 
 function applyTheme(theme: string) {
-  document.documentElement.dataset.maverickTheme = theme;
+  document.documentElement.dataset.loopinoTheme = theme;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 }

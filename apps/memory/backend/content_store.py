@@ -60,7 +60,7 @@ def write_body(
             body_bytes=len(body.encode("utf-8")),
         )
     target.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, prefix=".maverick-memory-write-", delete=False) as handle:
+    with NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, prefix=".loopino-memory-write-", delete=False) as handle:
         temp_path = Path(handle.name)
         handle.write(payload)
         handle.flush()

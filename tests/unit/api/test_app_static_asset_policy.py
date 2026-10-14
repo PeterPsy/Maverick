@@ -7,13 +7,13 @@ from core.api.app_mounts import is_public_app_static_asset
 
 class AppStaticAssetPolicyTest(unittest.TestCase):
     def test_app_owned_compact_icon_is_public(self) -> None:
-        self.assertTrue(is_public_app_static_asset("maverick-icon-compact.png"))
+        self.assertTrue(is_public_app_static_asset("loopino-icon-compact.png"))
 
     def test_compact_icon_allowlist_does_not_expose_similar_paths(self) -> None:
         for path in (
             "other-icon.png",
-            "private/maverick-icon-compact.png",
-            "maverick-icon-compact.png/private.json",
+            "private/loopino-icon-compact.png",
+            "loopino-icon-compact.png/private.json",
         ):
             with self.subTest(path=path):
                 self.assertFalse(is_public_app_static_asset(path))

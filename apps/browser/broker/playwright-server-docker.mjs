@@ -5,12 +5,12 @@ import { readFileSync } from "node:fs";
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const pinnedPlaywrightVersion = packageJson.dependencies?.playwright;
 
-const version = process.env.MAVERICK_BROWSER_PLAYWRIGHT_VERSION || pinnedPlaywrightVersion;
+const version = process.env.LOOPINO_BROWSER_PLAYWRIGHT_VERSION || pinnedPlaywrightVersion;
 if (!version) {
   throw new Error("apps/browser/package.json must pin the playwright dependency.");
 }
-const image = process.env.MAVERICK_BROWSER_PLAYWRIGHT_IMAGE || `mcr.microsoft.com/playwright:v${version}-noble`;
-const hostPort = process.env.MAVERICK_BROWSER_PLAYWRIGHT_PORT || "3100";
+const image = process.env.LOOPINO_BROWSER_PLAYWRIGHT_IMAGE || `mcr.microsoft.com/playwright:v${version}-noble`;
+const hostPort = process.env.LOOPINO_BROWSER_PLAYWRIGHT_PORT || "3100";
 const containerPort = "3000";
 
 const args = [

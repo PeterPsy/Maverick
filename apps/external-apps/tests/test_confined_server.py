@@ -54,7 +54,7 @@ class ConfinedServerTests(unittest.TestCase):
                         private_port = private_listener.getsockname()[1]
                         program = ("import os,socket; assert not os.path.exists('/app.sqlite'); "
                                    "assert not os.path.exists('/home/ubuntu'); assert not os.path.exists('/data/control-plane'); "
-                                   "assert os.listdir('/sites'); assert 'MAVERICK_API_TOKEN' not in os.environ; "
+                                   "assert os.listdir('/sites'); assert 'LOOPINO_API_TOKEN' not in os.environ; "
                                    "s=socket.socket(); s.settimeout(.2); "
                                    f"assert s.connect_ex(('127.0.0.1',{private_port})) != 0; print('isolated')")
                         proof = subprocess.run(prefix + ["/usr/bin/python3", "-c", program], capture_output=True, text=True, timeout=5)

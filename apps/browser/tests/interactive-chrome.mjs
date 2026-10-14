@@ -49,7 +49,7 @@ export async function verifyInteractiveChrome({context,worker,page,connection,ru
     if(body?.action === "companion.complete" && body.operation_id === recoveryOperation && !suppressed){suppressed=true;await route.abort();}
     else await route.continue();
   };
-  const completionRoute="**/.well-known/maverick-app-background/request";
+  const completionRoute="**/.well-known/loopino-app-background/request";
   await context.route(completionRoute,intercept);
   const queued=await api({action:"click",session_id:connection.session_id,ref:ref("Save")});recoveryOperation=queued.operation_id;
   for(let i=0;i<300 && !suppressed;i++)await new Promise(resolve=>setTimeout(resolve,100));

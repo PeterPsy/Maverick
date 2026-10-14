@@ -1,4 +1,4 @@
-import { preventMaverickAppHibernation } from "@maverick/pwa-cache";
+import { preventLoopinoAppHibernation } from "@loopino/pwa-cache";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, transcribeSpeech, transcribeSpeechBlob, type SpeechTranscribePayload } from "../api/client";
 import { VoiceInput } from "./ui/voice-input";
@@ -62,7 +62,7 @@ export function ComposerDictationButton({
   const providerDisabled = !providerAppId || providerAvailable === false;
   const effectiveMaxAudioBytes = Number.isFinite(maxAudioBytes) && maxAudioBytes > 0 ? maxAudioBytes : DEFAULT_MAX_DICTATION_AUDIO_BYTES;
   const effectiveMaxDurationSeconds = Number.isFinite(maxDurationSeconds) && maxDurationSeconds > 0 ? maxDurationSeconds : DEFAULT_MAX_DICTATION_MS / 1000;
-  useEffect(() => status !== "idle" ? preventMaverickAppHibernation() : undefined, [status]);
+  useEffect(() => status !== "idle" ? preventLoopinoAppHibernation() : undefined, [status]);
   const isRecording = status === "recording";
   const isTranscribing = status === "transcribing";
   const title = isRecording ? "Stop dictation" : isTranscribing ? "Transcribing" : "Dictate";
@@ -442,15 +442,15 @@ function microphoneRequestErrorMessage(error: unknown, permissionState: Permissi
   const name = domErrorName(error);
   if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError") {
     if (microphoneBlockedByFramePolicy()) {
-      return "Maverick shell is blocking microphone access for Chat. Hard refresh the full Maverick page, then try again.";
+      return "Loopino shell is blocking microphone access for Chat. Hard refresh the full Loopino page, then try again.";
     }
-    if ((window as Window & { __maverickNativeLoadingSurface?: boolean }).__maverickNativeLoadingSurface === true) {
+    if ((window as Window & { __loopinoNativeLoadingSurface?: boolean }).__loopinoNativeLoadingSurface === true) {
       return "Microphone permission was blocked. Allow microphone access for this app in your device's privacy settings, then try again.";
     }
     if (permissionState === "denied") {
-      return "Microphone permission was denied by the browser. Allow microphone access in browser site settings, then reload Maverick.";
+      return "Microphone permission was denied by the browser. Allow microphone access in browser site settings, then reload Loopino.";
     }
-    return "Microphone permission was blocked. Use the browser site settings to allow microphone access for Maverick, then try again.";
+    return "Microphone permission was blocked. Use the browser site settings to allow microphone access for Loopino, then try again.";
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
     return "No microphone device was found by the browser.";

@@ -36,7 +36,7 @@ class RuntimeSessionEventsApiTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -60,12 +60,12 @@ class RuntimeSessionEventsApiTestCase(unittest.TestCase):
             "REQUEST_METHOD": method,
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
-            "HTTP_HOST": "maverick.test",
+            "HTTP_HOST": "loopino.test",
             "QUERY_STRING": query_string,
             "wsgi.input": BytesIO(payload),
         }
         if method != "GET":
-            environ["HTTP_ORIGIN"] = "http://maverick.test"
+            environ["HTTP_ORIGIN"] = "http://loopino.test"
         if cookie:
             environ["HTTP_COOKIE"] = cookie
 
@@ -82,8 +82,8 @@ class RuntimeSessionEventsApiTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -94,9 +94,9 @@ class RuntimeSessionEventsApiTestCase(unittest.TestCase):
         with patch.dict(
             "os.environ",
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root)
@@ -142,9 +142,9 @@ class RuntimeSessionEventsApiTestCase(unittest.TestCase):
         with patch.dict(
             "os.environ",
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root)

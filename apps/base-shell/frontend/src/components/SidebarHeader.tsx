@@ -29,7 +29,7 @@ export function SidebarHeader({ activeApp, activeWorkspaceId, isLoading, isWorks
         <span aria-hidden="true" className="material-symbols-rounded">settings</span>
       </button>
       <button className="bs-sidebar__app-settings bs-sidebar__account-button" aria-label="Account and servers" title="Account and servers" type="button"
-        onClick={() => window.dispatchEvent(new Event("maverick.connected-accounts.open"))}>
+        onClick={() => window.dispatchEvent(new Event("loopino.connected-accounts.open"))}>
         <UserAvatar user={user} />
       </button>
       {notifications}

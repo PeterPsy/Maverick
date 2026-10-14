@@ -16,10 +16,10 @@ import tempfile
 import unittest
 import zlib
 
-MAVERICK_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
+LOOPINO_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
 APP_ROOT = Path(__file__).resolve().parents[1]
-STORAGE_ROOT = MAVERICK_ROOT / "apps" / "storage"
-sys.path.insert(0, str(MAVERICK_ROOT))
+STORAGE_ROOT = LOOPINO_ROOT / "apps" / "storage"
+sys.path.insert(0, str(LOOPINO_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from core.shared.entrypoints import run_json_entrypoint
@@ -143,9 +143,9 @@ def actor(user_id: str = "user-1", workspace_role: str = "member") -> dict[str, 
 def run_hook(relative_path: str, payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     env["PYTHONPATH"] = (
-        str(MAVERICK_ROOT)
+        str(LOOPINO_ROOT)
         if not env.get("PYTHONPATH")
-        else f"{MAVERICK_ROOT}{os.pathsep}{env['PYTHONPATH']}"
+        else f"{LOOPINO_ROOT}{os.pathsep}{env['PYTHONPATH']}"
     )
     return subprocess.run(
         [sys.executable, relative_path],
@@ -1189,7 +1189,7 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
                         "dependency_provider_app_id": "speech",
                         "json": {
                             "job_id": "stt_test",
-                            "text": "ciao Maverick",
+                            "text": "ciao Loopino",
                             "language": "it",
                             "duration_seconds": 1.2,
                         },
@@ -1199,7 +1199,7 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertEqual(transcribed["transcription"]["status"], "completed")
-            self.assertEqual(transcribed["transcription"]["text"], "ciao Maverick")
+            self.assertEqual(transcribed["transcription"]["text"], "ciao Loopino")
 
             status, dispatch = handle_action(
                 data_root,
@@ -1214,7 +1214,7 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 202)
             runtime_request = dispatch["runtime_launch_requests"][0]
-            self.assertIn("Transcript: ciao Maverick", runtime_request["input_text"])
+            self.assertIn("Transcript: ciao Loopino", runtime_request["input_text"])
             self.assertEqual(runtime_request["attachments"][0]["content_type"], "audio/wav")
             self.assertIn("domanda vocale", runtime_request["title"])
 

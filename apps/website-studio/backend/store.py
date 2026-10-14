@@ -83,7 +83,7 @@ DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
 DEFAULT_RETENTION_REVIEW_CADENCE = "run dry-run during routine workspace maintenance and prune after reviewing counts"
 MAX_SOURCE_MAP_ASSET_INDEX = 120
 PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v6"
-FILE_GATEWAY_SCHEMA = "maverick.app.file_gateway.v1"
+FILE_GATEWAY_SCHEMA = "loopino.app.file_gateway.v1"
 FILE_GATEWAY_REUSE_INDEX_SCHEMA = "website-studio.file_gateway_reuse_index.v1"
 PREVIEW_FILE_GATEWAY_TTL = timedelta(minutes=30)
 PREVIEW_FILE_GATEWAY_REUSE_MIN_TTL = timedelta(minutes=5)
@@ -2500,7 +2500,7 @@ def _preview_document_payload(data_root: Path, preview: dict[str, object], html:
         "html": html,
         "source_map": source_map,
         "observability": {
-            "browser_report_event": "maverick.website-studio.preview-report",
+            "browser_report_event": "loopino.website-studio.preview-report",
             "browser_report_global": "__WEBSITE_STUDIO_PREVIEW_REPORT__",
             "covers": ["dom_snapshot", "computed_styles", "font_readiness", "asset_coverage", "console_log", "resource_log"],
         },
@@ -2718,7 +2718,7 @@ def _compact_asset_index(assets: list[object], asset_refs: list[str], *, include
 def _browser_probe_contract(preview: dict[str, object]) -> dict[str, object]:
     return {
         "preview_url": preview.get("preview_url") or "",
-        "event_type": "maverick.website-studio.preview-report",
+        "event_type": "loopino.website-studio.preview-report",
         "window_global": "__WEBSITE_STUDIO_PREVIEW_REPORT__",
         "message_source": "nested opaque-origin preview iframe",
         "checks": [
@@ -4522,7 +4522,7 @@ def configure_publish_target(
     config_payload = dict(config) if isinstance(config, dict) else {}
     if clean_kind == "managed_static":
         config_payload = {
-            "provider": "maverick-managed-static",
+            "provider": "loopino-managed-static",
             "runtime": "local_static_artifact",
             "platform_surface": "generic_static_hosting",
             "platform_binding_status": "pending_generic_surface",
@@ -4661,7 +4661,7 @@ def _approval_actor_policy(actor: dict[str, object], approved_by: object) -> dic
     platform_role = str(actor.get("platform_role") or "").strip().lower()
     effective_mode = str(actor.get("effective_mode") or "").strip()
     if not user_id:
-        return {"allowed": False, "detail": "approval requires an authenticated Maverick user actor"}
+        return {"allowed": False, "detail": "approval requires an authenticated Loopino user actor"}
     allowed_roles = {"owner", "admin"}
     allowed_platform_roles = {"admin", "operator"}
     if workspace_role not in allowed_roles and platform_role not in allowed_platform_roles:
@@ -4676,7 +4676,7 @@ def _approval_actor_policy(actor: dict[str, object], approved_by: object) -> dic
     if explicit_approver and explicit_approver != user_id:
         return {
             "allowed": False,
-            "detail": "approved_by must match the authenticated Maverick user actor",
+            "detail": "approved_by must match the authenticated Loopino user actor",
             "user_id": user_id,
             "approved_by": explicit_approver,
         }
@@ -5016,8 +5016,8 @@ def _publish_mode(source_ref: dict[str, object]) -> str:
         return "github_pull_request"
     if source_ref.get("provider") == "github":
         return "github_pr_prepared"
-    if source_ref.get("provider") == "maverick-managed-static":
-        return "maverick_managed_static"
+    if source_ref.get("provider") == "loopino-managed-static":
+        return "loopino_managed_static"
     return "internal_static_snapshot"
 
 
@@ -5094,7 +5094,7 @@ def _publish_to_managed_static_artifact(
         verification_status=str(target_config.get("verification_status") or ""),
     )
     return {
-        "provider": "maverick-managed-static",
+        "provider": "loopino-managed-static",
         "status": "artifact_ready",
         "publish_target_id": str(target.get("id") or ""),
         "environment_id": str(environment.get("id") or ""),
@@ -5506,12 +5506,12 @@ def _vault_requirement_payload(auth_mode: str, logical_name: str, connection_id:
         "selected_logical_name": logical_name,
         "resource_type": "git_connection",
         "resource_id": connection_id,
-        "delivery_target": "maverick://app.backend/backend",
+        "delivery_target": "loopino://app.backend/backend",
         "delivery_targets": [
-            "maverick://app.backend/backend",
-            "maverick://app.backend/cli/website-studio",
-            "maverick://app.backend/mcp/website-import-git",
-            "maverick://app.backend/mcp/website-publish",
+            "loopino://app.backend/backend",
+            "loopino://app.backend/cli/website-studio",
+            "loopino://app.backend/mcp/website-import-git",
+            "loopino://app.backend/mcp/website-publish",
         ],
         "status": "grant_required",
     }

@@ -28,7 +28,7 @@ export function shouldOpenNewAgent(params: AgentNavigationParams): boolean {
 }
 
 export function agentTypeIdFromWidgetContext(message: WidgetContextMessage): string {
-  if (message.type !== 'maverick.widget.context-changed') {
+  if (message.type !== 'loopino.widget.context-changed') {
     return '';
   }
   const payload = message.context?.content?.payload;

@@ -40,9 +40,9 @@ VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action in DATA_CHANGED_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "resource": "skills"}]
+        return [{"type": "loopino.app.data-changed", "resource": "skills"}]
     if action in VIEW_STATE_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+        return [{"type": "loopino.app.data-changed", "resource": "view-state"}]
     return []
 
 

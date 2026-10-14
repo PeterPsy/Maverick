@@ -10,9 +10,9 @@ const APP_BASE_PATTERN = /^\/apps\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?\/$/;
  * worker, and imported-media URLs against that public module URL instead of the
  * isolated document origin.
  */
-export function maverickIsolatedFrameAssetUrls() {
+export function loopinoIsolatedFrameAssetUrls() {
   return {
-    name: "maverick-isolated-frame-asset-urls",
+    name: "loopino-isolated-frame-asset-urls",
     apply: "build",
     config(config) {
       const base = exactAppBase(config.base);
@@ -32,7 +32,7 @@ export function maverickIsolatedFrameAssetUrls() {
 
 function exactAppBase(value) {
   if (typeof value !== "string" || !APP_BASE_PATTERN.test(value)) {
-    throw new Error("Isolated Maverick frontends require one exact /apps/<app_id>/ Vite base.");
+    throw new Error("Isolated Loopino frontends require one exact /apps/<app_id>/ Vite base.");
   }
   return value;
 }
@@ -46,6 +46,6 @@ function safeBuiltFilename(value) {
     || /[?#\u0000-\u001f\u007f]/u.test(value)
     || value.split("/").some((segment) => segment === "." || segment === "..")
   ) {
-    throw new Error(`Vite emitted an unsafe Maverick frontend asset path: ${value}`);
+    throw new Error(`Vite emitted an unsafe Loopino frontend asset path: ${value}`);
   }
 }

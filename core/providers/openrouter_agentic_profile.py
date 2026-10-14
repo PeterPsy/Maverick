@@ -25,15 +25,15 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_REVISION,
     OPENROUTER_DEEPSEEK_FLASH_LATEST_REASONING_EFFORTS,
 )
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
     OPENROUTER_RELACE_DEEPSEEK_FLASH_LATEST_PROVIDER_CONFIG,
     OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
-from core.providers.maverick_agent_onboarding import (
-    MaverickAgentProfilePublication,
-    publish_maverick_agent_profile,
-    validate_maverick_runtime_adapter,
+from core.providers.loopino_agent_onboarding import (
+    LoopinoAgentProfilePublication,
+    publish_loopino_agent_profile,
+    validate_loopino_runtime_adapter,
 )
 from core.providers.store import ProviderStore
 from core.runtime.hosted_provider_model_config import (
@@ -51,7 +51,7 @@ OPENROUTER_DEFAULT_REASONING_EFFORT = OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFOR
 
 
 def openrouter_agentic_capabilities() -> RuntimeCapabilitySet:
-    """Capabilities implemented by Maverick's OpenRouter tool loop."""
+    """Capabilities implemented by Loopino's OpenRouter tool loop."""
     return RuntimeCapabilitySet(
         streaming=True,
         tool_orchestration=True,
@@ -116,13 +116,13 @@ def openrouter_agentic_routing_constraint() -> RoutingConstraint:
 def openrouter_agentic_preview_publication(
     *,
     now: datetime | None = None,
-) -> MaverickAgentProfilePublication:
+) -> LoopinoAgentProfilePublication:
     """Build the immutable OpenRouter publication record used by onboarding."""
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         display_name="GLM 5.3 Flash",
-        runtime_engine_id="maverick-tool-loop",
+        runtime_engine_id="loopino-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,
         model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
@@ -143,7 +143,7 @@ def openrouter_agentic_preview_publication(
         egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
         context_policy=OPENROUTER_HOSTED_MODEL_CONFIG.context_policy,
     )
-    return MaverickAgentProfilePublication(
+    return LoopinoAgentProfilePublication(
         adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
         provider_config=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
         model_config=OPENROUTER_HOSTED_MODEL_CONFIG,
@@ -154,13 +154,13 @@ def openrouter_agentic_preview_publication(
 def openrouter_deepseek_flash_latest_publication(
     *,
     now: datetime | None = None,
-) -> MaverickAgentProfilePublication:
+) -> LoopinoAgentProfilePublication:
     """Build the OpenRouter DeepSeek Flash Latest agent publication."""
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_DEEPSEEK_FLASH_LATEST_PROFILE_ID,
         display_name="DeepSeek Flash Latest",
-        runtime_engine_id="maverick-tool-loop",
+        runtime_engine_id="loopino-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_ID,
         model_revision=OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_REVISION,
@@ -187,7 +187,7 @@ def openrouter_deepseek_flash_latest_publication(
             OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_CONFIG.context_policy
         ),
     )
-    return MaverickAgentProfilePublication(
+    return LoopinoAgentProfilePublication(
         adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
         provider_config=OPENROUTER_RELACE_DEEPSEEK_FLASH_LATEST_PROVIDER_CONFIG,
         model_config=OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_CONFIG,
@@ -203,8 +203,8 @@ def ensure_openrouter_agentic_preview_profile(
 ) -> AgenticProfileDefinition:
     """Publish the current OpenRouter agentic model config without enabling it."""
     timestamp = now or datetime.now(tz=UTC)
-    validate_maverick_runtime_adapter(OPENROUTER_CHAT_PROTOCOL_ADAPTER, adapter)
-    return publish_maverick_agent_profile(
+    validate_loopino_runtime_adapter(OPENROUTER_CHAT_PROTOCOL_ADAPTER, adapter)
+    return publish_loopino_agent_profile(
         store,
         publication=openrouter_agentic_preview_publication(now=timestamp),
         now=timestamp,

@@ -21,7 +21,7 @@ describe('storage view filter events', () => {
       },
       owner_app_id: 'storage',
       resource: 'view-state',
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
     });
   });
 
@@ -29,7 +29,7 @@ describe('storage view filter events', () => {
     const message = storageViewFilterChangedMessage('storage', viewFilter);
 
     expect(storageViewFilterFromMessage(message, 'storage')).toBe(viewFilter);
-    expect(storageViewFilterFromMessage({ ...message, type: 'maverick.widget.data-changed' }, 'storage')).toBe(viewFilter);
+    expect(storageViewFilterFromMessage({ ...message, type: 'loopino.widget.data-changed' }, 'storage')).toBe(viewFilter);
     expect(storageViewFilterFromMessage(message, 'storage-fork')).toBeNull();
     expect(storageViewFilterFromMessage({ ...message, resource: 'files' }, 'storage')).toBeNull();
   });

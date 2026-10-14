@@ -63,7 +63,7 @@ class AccountBroker:
     def start(self):
         if not self.context or not self.context.get("account") or self.context["account"].status != "connected" or not self.context["services"]:
             return None
-        self.root = Path(tempfile.mkdtemp(prefix="maverick-account-"))
+        self.root = Path(tempfile.mkdtemp(prefix="loopino-account-"))
         os.chmod(self.root, 0o700)
         path = self.root / "broker.sock"
         self.server = _Server(str(path), _Handler)
@@ -72,7 +72,7 @@ class AccountBroker:
         self.thread = Thread(target=lambda: self.server.serve_forever(poll_interval=0.05), daemon=True, name="account-broker")
         self.thread.start()
         descriptor = json.dumps({"socket": str(path), "capability": self.capability}, separators=(",", ":"))
-        return "maverick-account:" + base64.urlsafe_b64encode(descriptor.encode()).decode()
+        return "loopino-account:" + base64.urlsafe_b64encode(descriptor.encode()).decode()
 
     def handle_request(self, raw):
         try:

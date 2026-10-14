@@ -1,1 +1,1 @@
-"""Official Maverick app SDK helpers."""
+"""Official Loopino app SDK helpers."""

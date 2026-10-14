@@ -81,30 +81,30 @@ class BrowserOriginTlsSettings:
         """Read runtime settings without accepting a browser-provided value."""
         default_root = repository_root / "data" / "browser-origin-tls"
         default_webroot = repository_root / "data" / "browser-origin-acme"
-        timeout_text = os.environ.get("MAVERICK_BROWSER_ORIGIN_CERTBOT_TIMEOUT_SECONDS", "120")
+        timeout_text = os.environ.get("LOOPINO_BROWSER_ORIGIN_CERTBOT_TIMEOUT_SECONDS", "120")
         try:
             timeout_seconds = int(timeout_text)
         except ValueError as error:
             raise BrowserOriginTlsError("Managed browser-origin TLS timeout is invalid.") from error
         return cls(
             mode=(
-                os.environ.get("MAVERICK_BROWSER_ORIGIN_TLS_MODE", EXTERNAL_WILDCARD_TLS_MODE)
+                os.environ.get("LOOPINO_BROWSER_ORIGIN_TLS_MODE", EXTERNAL_WILDCARD_TLS_MODE)
                 .strip()
                 .lower()
                 or EXTERNAL_WILDCARD_TLS_MODE
             ),
             installation_domain=(
-                os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
+                os.environ.get("LOOPINO_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
             ),
-            tls_root=Path(os.environ.get("MAVERICK_BROWSER_ORIGIN_TLS_ROOT", str(default_root))),
+            tls_root=Path(os.environ.get("LOOPINO_BROWSER_ORIGIN_TLS_ROOT", str(default_root))),
             acme_webroot=Path(
-                os.environ.get("MAVERICK_BROWSER_ORIGIN_ACME_WEBROOT", str(default_webroot))
+                os.environ.get("LOOPINO_BROWSER_ORIGIN_ACME_WEBROOT", str(default_webroot))
             ),
             certbot_command=(
-                os.environ.get("MAVERICK_BROWSER_ORIGIN_CERTBOT_COMMAND", "certbot").strip()
+                os.environ.get("LOOPINO_BROWSER_ORIGIN_CERTBOT_COMMAND", "certbot").strip()
                 or "certbot"
             ),
-            acme_ca=os.environ.get("MAVERICK_BROWSER_ORIGIN_ACME_CA", "").strip(),
+            acme_ca=os.environ.get("LOOPINO_BROWSER_ORIGIN_ACME_CA", "").strip(),
             timeout_seconds=timeout_seconds,
         )
 
@@ -112,13 +112,13 @@ class BrowserOriginTlsSettings:
 def managed_browser_origin_tls_enabled() -> bool:
     """Return whether runtime exact-certificate management is explicitly enabled."""
     mode = (
-        os.environ.get("MAVERICK_BROWSER_ORIGIN_TLS_MODE", EXTERNAL_WILDCARD_TLS_MODE)
+        os.environ.get("LOOPINO_BROWSER_ORIGIN_TLS_MODE", EXTERNAL_WILDCARD_TLS_MODE)
         .strip()
         .lower()
         or EXTERNAL_WILDCARD_TLS_MODE
     )
     if mode not in SUPPORTED_TLS_MODES:
-        raise BrowserOriginTlsError("MAVERICK_BROWSER_ORIGIN_TLS_MODE is invalid.")
+        raise BrowserOriginTlsError("LOOPINO_BROWSER_ORIGIN_TLS_MODE is invalid.")
     return mode == MANAGED_EXACT_TLS_MODE
 
 
@@ -181,7 +181,7 @@ def managed_certificate_paths(served_root: Path, host: str) -> tuple[Path, Path]
 
 def _validate_settings(settings: BrowserOriginTlsSettings) -> None:
     if settings.mode not in SUPPORTED_TLS_MODES:
-        raise BrowserOriginTlsError("MAVERICK_BROWSER_ORIGIN_TLS_MODE is invalid.")
+        raise BrowserOriginTlsError("LOOPINO_BROWSER_ORIGIN_TLS_MODE is invalid.")
     if settings.mode != MANAGED_EXACT_TLS_MODE:
         return
     if not settings.installation_domain or not _DOMAIN_PATTERN.fullmatch(settings.installation_domain):
@@ -229,7 +229,7 @@ def _issue_and_publish(
     group_key: str,
     run_command: Callable[[list[str]], object] | None,
 ) -> None:
-    cert_name = f"maverick-browser-{sha256(group_key.encode('utf-8')).hexdigest()[:24]}"
+    cert_name = f"loopino-browser-{sha256(group_key.encode('utf-8')).hexdigest()[:24]}"
     lineage_certificate = settings.certbot_config_root / "live" / cert_name / "fullchain.pem"
     lineage_private_key = settings.certbot_config_root / "live" / cert_name / "privkey.pem"
     existing_names: set[str] = set()

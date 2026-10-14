@@ -6,7 +6,7 @@ export async function acquireConnectorLease(shared) {
     const overview=await request({action:"companion.overview"});
     const previous=overview.connections.find(c=>c.session_id === cached.lease.connection.session_id);
     // Never transfer a retained secret to another account or workspace.
-    if(!previous || previous.status === "revoked")throw Object.assign(new Error("The connected Maverick account changed. Reconnect from Companion."),{code:"connector_principal_changed"});
+    if(!previous || previous.status === "revoked")throw Object.assign(new Error("The connected Loopino account changed. Reconnect from Companion."),{code:"connector_principal_changed"});
     if(previous.expires_at*1000>Date.now())return {...cached.lease,connection:previous};
   }
   const lease=await request({action:"companion.connect",display_name:shared.title?.slice(0,100) || "Shared Chrome tab",allowed_platforms:shared.allowed_platforms || [],agent_tab_id:shared.agent_tab_id,access_mode:shared.access_mode,website_scope:shared.website_scope});
@@ -18,8 +18,8 @@ export async function acquireConnectorLease(shared) {
 }
 
 export function recoverFrameAuthorization() {
-  if(window.parent === window || !window.__MAVERICK_PLATFORM_ORIGIN__)return false;
-  window.parent.postMessage({type:"maverick.app-frame.authorization-required",path:location.pathname+location.search},window.__MAVERICK_PLATFORM_ORIGIN__);
+  if(window.parent === window || !window.__LOOPINO_PLATFORM_ORIGIN__)return false;
+  window.parent.postMessage({type:"loopino.app-frame.authorization-required",path:location.pathname+location.search},window.__LOOPINO_PLATFORM_ORIGIN__);
   return true;
 }
 

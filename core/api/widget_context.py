@@ -13,15 +13,15 @@ from core.secrets.bootstrap import resolve_bootstrap_secret
 
 
 def _secret() -> bytes:
-    configured_ref = os.environ.get("MAVERICK_WIDGET_CONTEXT_SECRET_REF", "").strip()
+    configured_ref = os.environ.get("LOOPINO_WIDGET_CONTEXT_SECRET_REF", "").strip()
     if configured_ref:
         return resolve_bootstrap_secret(configured_ref).encode("utf-8")
-    configured = os.environ.get("MAVERICK_WIDGET_CONTEXT_SECRET", "").strip()
+    configured = os.environ.get("LOOPINO_WIDGET_CONTEXT_SECRET", "").strip()
     if configured:
         return configured.encode("utf-8")
-    if os.environ.get("MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS") == "1":
-        return b"maverick-dev-widget-context"
-    raise RuntimeError("MAVERICK_WIDGET_CONTEXT_SECRET_REF or MAVERICK_WIDGET_CONTEXT_SECRET is required.")
+    if os.environ.get("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS") == "1":
+        return b"loopino-dev-widget-context"
+    raise RuntimeError("LOOPINO_WIDGET_CONTEXT_SECRET_REF or LOOPINO_WIDGET_CONTEXT_SECRET is required.")
 
 
 def _encode_json(payload: dict[str, Any]) -> str:

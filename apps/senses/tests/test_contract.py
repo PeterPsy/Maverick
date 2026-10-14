@@ -7,9 +7,9 @@ from pathlib import Path
 import sys
 import unittest
 
-MAVERICK_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
+LOOPINO_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
 APP_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(MAVERICK_ROOT))
+sys.path.insert(0, str(LOOPINO_ROOT))
 
 from core.app_sdk.service import validate_app_source
 from core.apps.contracts import parse_app_contract_file
@@ -75,8 +75,8 @@ class SensesContractTest(unittest.TestCase):
         self.assertEqual(sidebar_widget.content_kinds, ["shell.sidebar.primary"])
         self.assertEqual(sidebar_widget.frontend.mount, "frontend/dist/widgets/senses-sidebar")
         self.assertIn("'widgets/senses-sidebar/index': 'frontend/widgets/senses-sidebar/index.html'", vite_source)
-        self.assertIn("maverick.widget.open-app", sidebar_source)
-        self.assertIn("maverick.shell.sidebar.close", sidebar_source)
+        self.assertIn("loopino.widget.open-app", sidebar_source)
+        self.assertIn("loopino.shell.sidebar.close", sidebar_source)
 
     def test_sdk_validation_passes(self) -> None:
         validation = validate_app_source(APP_ROOT)

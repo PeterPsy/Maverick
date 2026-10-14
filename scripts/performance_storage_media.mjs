@@ -8,7 +8,7 @@ const browser = await chromium.launch({ headless: true, executablePath: executab
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
 await context.addInitScript(() => {
   const messages = [];
-  Object.defineProperty(window, '__MAVERICK_PERFORMANCE_MESSAGES__', { value: messages });
+  Object.defineProperty(window, '__LOOPINO_PERFORMANCE_MESSAGES__', { value: messages });
   window.addEventListener('message', event => {
     const payload = event.data && typeof event.data === 'object' ? event.data : {};
     messages.push({ type: payload.type, app_id: payload.app_id,
@@ -28,8 +28,8 @@ page.on('request', request => {
 });
 let storage;
 const navigate = async params => storage.evaluate(params => window.parent.postMessage({
-  type: 'maverick.app.open-app', app_id: 'storage', params,
-}, window.__MAVERICK_PLATFORM_ORIGIN__), params);
+  type: 'loopino.app.open-app', app_id: 'storage', params,
+}, window.__LOOPINO_PLATFORM_ORIGIN__), params);
 const file = (id, connection) => ({ id, file_id: id, path_id: id, provider: 'google_drive',
   connection_id: connection, drive_file_id: id, role: '', name: `${id}.txt`, relative_path: id,
   workspace_relative_path: '', extension: '.txt', size_bytes: 20, modified_at: '2026-09-01T00:00:00Z',
@@ -174,8 +174,8 @@ try {
   const selectedVideo = await fitness.locator('.media-picker').innerText();
   assert(selectedVideo.includes('fixture-video.webm'));
 
-  await fitness.evaluate(() => window.parent.postMessage({ type: 'maverick.app.open-app', app_id: 'chat' },
-    window.__MAVERICK_PLATFORM_ORIGIN__));
+  await fitness.evaluate(() => window.parent.postMessage({ type: 'loopino.app.open-app', app_id: 'chat' },
+    window.__LOOPINO_PLATFORM_ORIGIN__));
   await page.waitForURL(url => url.pathname === '/app/chat');
   const chatElement = page.locator('iframe.bs-workspace-app-frame.is-active[title="Chat viewport"]');
   await chatElement.waitFor();
@@ -197,7 +197,7 @@ try {
 } catch (error) {
   const frames = await Promise.all(page.frames().map(async frame => ({ url: frame.url(),
     text: (await frame.locator('body').innerText().catch(() => '')).slice(0, 500),
-    messages: await frame.evaluate(() => window.__MAVERICK_PERFORMANCE_MESSAGES__ || []).catch(() => []),
+    messages: await frame.evaluate(() => window.__LOOPINO_PERFORMANCE_MESSAGES__ || []).catch(() => []),
   })));
   throw new Error(`${error.message}; frames=${JSON.stringify(frames)}; errors=${JSON.stringify(errors)}`);
 } finally {

@@ -18,21 +18,21 @@ from scripts.deploy.reload_nginx import check_nginx, reload_nginx
 
 def external_tls_environment(content: str) -> str:
     """Preserve every unrelated setting, comment and credential byte."""
-    pattern = re.compile(r"^(?:export\s+)?MAVERICK_BROWSER_ORIGIN_TLS_MODE\s*=")
+    pattern = re.compile(r"^(?:export\s+)?LOOPINO_BROWSER_ORIGIN_TLS_MODE\s*=")
     lines = content.splitlines(keepends=True)
     found = False
     output = []
     for line in lines:
         if pattern.match(line):
             if not found:
-                output.append("MAVERICK_BROWSER_ORIGIN_TLS_MODE=external_wildcard\n")
+                output.append("LOOPINO_BROWSER_ORIGIN_TLS_MODE=external_wildcard\n")
                 found = True
         else:
             output.append(line)
     if not found:
         if output and not output[-1].endswith("\n"):
             output[-1] += "\n"
-        output.append("MAVERICK_BROWSER_ORIGIN_TLS_MODE=external_wildcard\n")
+        output.append("LOOPINO_BROWSER_ORIGIN_TLS_MODE=external_wildcard\n")
     return "".join(output)
 
 
@@ -73,7 +73,7 @@ def main() -> int:
     parser.add_argument("--hostname", required=True)
     parser.add_argument("--certificate-dir", type=Path, required=True)
     parser.add_argument("--nginx-config", type=Path, required=True)
-    parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
+    parser.add_argument("--env-file", type=Path, default=service_env_path(ROOT))
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     if not re.fullmatch(r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}", args.hostname):
@@ -87,7 +87,7 @@ def main() -> int:
     if errors:
         print(json.dumps({"status": "blocked", "errors": errors}))
         return 1
-    content = (ROOT / "scripts/deploy/nginx/maverick.sidecars.example.conf").read_text()
+    content = (ROOT / "scripts/deploy/nginx/loopino.sidecars.example.conf").read_text()
     for placeholder, value in {
         "{{HOSTNAME}}": args.hostname, "{{SIDECAR_TLS_CERT_PATH}}": str(certificate),
         "{{SIDECAR_TLS_CERT_KEY_PATH}}": str(key), "{{BIND_HOST}}": "127.0.0.1", "{{CORE_PORT}}": "8014",
@@ -104,7 +104,7 @@ def main() -> int:
             print(json.dumps({"status": "already_active", "mode": "external_wildcard",
                 "certificate": str(certificate), "backend_restart_required": False}))
             return 0
-        backup = Path("/var/backups/maverick-wildcard") / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        backup = Path("/var/backups/loopino-wildcard") / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         backup.mkdir(parents=True, mode=0o700)
         for source, name in [(nginx_path, "sidecars.conf"), (env_path, "installation.env")]:
             destination = backup / name

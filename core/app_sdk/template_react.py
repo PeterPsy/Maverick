@@ -107,9 +107,9 @@ export function App() {{
   return (
     <main className="app-shell">
       <section className="hero">
-        <p className="eyebrow">Maverick workspace app</p>
+        <p className="eyebrow">Loopino workspace app</p>
         <h1>{title}</h1>
-        <p>This React/Vite app is mounted by Maverick and calls its own backend surface.</p>
+        <p>This React/Vite app is mounted by Loopino and calls its own backend surface.</p>
       </section>
       <section className="status-panel">
         <h2>Status</h2>
@@ -267,10 +267,10 @@ function nodeRuntimeDiagnostic(versionText) {
     return `node returned an unrecognized version \\`${versionText.trim()}\\``;
   }
   if (version[0] > SUPPORTED_NODE_MAJOR) {
-    return `node ${formatNodeVersion(version)} is outside the supported range; Maverick requires ${NODE_RUNTIME_REQUIREMENT}`;
+    return `node ${formatNodeVersion(version)} is outside the supported range; Loopino requires ${NODE_RUNTIME_REQUIREMENT}`;
   }
   if (version[0] < SUPPORTED_NODE_MAJOR || compareNodeVersion(version, MINIMUM_NODE_VERSION) < 0) {
-    return `node ${formatNodeVersion(version)} is too old; Maverick requires ${NODE_RUNTIME_REQUIREMENT}`;
+    return `node ${formatNodeVersion(version)} is too old; Loopino requires ${NODE_RUNTIME_REQUIREMENT}`;
   }
   return null;
 }
@@ -344,7 +344,7 @@ function Widget() {{
   return (
     <main className="widget-shell">
       <strong>{widget_title}</strong>
-      <p>React widget mounted through the Maverick widget surface.</p>
+      <p>React widget mounted through the Loopino widget surface.</p>
     </main>
   );
 }}

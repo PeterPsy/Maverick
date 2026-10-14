@@ -143,7 +143,7 @@ export function useChatComposerContext({
   function handleCapturePageArea() {
     window.parent?.postMessage(
       {
-        type: "maverick.shell.capture-area.start",
+        type: "loopino.shell.capture-area.start",
         owner_app_id: "chat",
         widget_id: "chat-floating",
         navigation_scope: navigationScope,

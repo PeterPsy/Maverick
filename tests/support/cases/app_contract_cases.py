@@ -507,7 +507,7 @@ class AppContractTestCase(unittest.TestCase):
                 name="Checklists",
                 version="1.0.0",
                 description="Checklist widgets.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     entrypoints=build_app_entrypoints(backend="backend/app_backend.py"),
                     widgets=[
@@ -546,7 +546,7 @@ class AppContractTestCase(unittest.TestCase):
                 name="Widgets",
                 version="1.0.0",
                 description="Widget app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     widgets=[
                         build_widget_declaration(
@@ -578,7 +578,7 @@ class AppContractTestCase(unittest.TestCase):
                 name="Widgets",
                 version="1.0.0",
                 description="Widget app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     widgets=[
                         build_widget_declaration(
@@ -604,7 +604,7 @@ class AppContractTestCase(unittest.TestCase):
                 name="Widgets",
                 version="1.0.0",
                 description="Widget app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     widgets=[
                         build_widget_declaration(
@@ -716,7 +716,7 @@ class AppContractTestCase(unittest.TestCase):
 
     def test_run_lifecycle_hook_uses_configured_timeout_mapping(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            repo_root = Path(temp_dir) / "maverick"
+            repo_root = Path(temp_dir) / "loopino"
             for name in ("core", "apps", "workspaces"):
                 (repo_root / name).mkdir(parents=True, exist_ok=True)
             (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -729,7 +729,7 @@ class AppContractTestCase(unittest.TestCase):
                 name="Validator",
                 version="1.0.0",
                 description="Validator app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     lifecycle=build_app_lifecycle(validate_after_import=True),
                     entrypoints=build_app_entrypoints(

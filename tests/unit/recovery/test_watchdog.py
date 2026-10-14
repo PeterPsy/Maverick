@@ -30,11 +30,11 @@ from scripts.rescue_backend_watchdog import (
 
 
 class BackendWatchdogTestCase(unittest.TestCase):
-    def test_default_operational_paths_do_not_use_maverick_local_state(self) -> None:
+    def test_default_operational_paths_do_not_use_loopino_local_state(self) -> None:
         defaults = (DEFAULT_STATE_FILE, DEFAULT_LOCK_FILE, DEFAULT_LOG_DIR)
 
         self.assertIn("tmp/recovery", DEFAULT_STATE_FILE)
-        self.assertTrue(all(".maverick" not in path for path in defaults))
+        self.assertTrue(all(".loopino" not in path for path in defaults))
         self.assertTrue(all("local-state" not in path for path in defaults))
 
     def test_unhealthy_probe_starts_continuous_downtime_window(self) -> None:
@@ -131,7 +131,7 @@ class BackendWatchdogTestCase(unittest.TestCase):
         self.assertEqual(restored, state)
 
     def test_recovery_command_is_derived_from_persisted_provider_selection(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="maverick-rescue-provider-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="loopino-rescue-provider-") as temp_dir:
             root = Path(temp_dir)
             store = local_recovery_provider_store(root)
             configure_workspace_provider(
@@ -154,7 +154,7 @@ class BackendWatchdogTestCase(unittest.TestCase):
         self.assertEqual(resolved.command[-1], "-")
 
     def test_raw_rescue_command_does_not_bypass_missing_provider_selection(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="maverick-watchdog-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="loopino-watchdog-") as temp_dir:
             root = Path(temp_dir)
             output = StringIO()
             with patch("scripts.rescue_backend_watchdog._probe_backend", return_value=(False, "down")), redirect_stdout(output):
@@ -185,7 +185,7 @@ class BackendWatchdogTestCase(unittest.TestCase):
         self.assertEqual(state.last_blocked_reason, "no_provider_configured")
 
     def test_rescue_watchdog_blocks_without_configured_provider_command(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="maverick-watchdog-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="loopino-watchdog-") as temp_dir:
             root = Path(temp_dir)
             output = StringIO()
             with patch("scripts.rescue_backend_watchdog._probe_backend", return_value=(False, "down")), redirect_stdout(output):

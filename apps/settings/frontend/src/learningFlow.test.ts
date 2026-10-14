@@ -10,7 +10,7 @@ import { beginSettingsBindings } from './controlBindings';
 const api = vi.hoisted(() => ({ request: vi.fn(), dependencies: vi.fn(), select: vi.fn() }));
 const events = vi.hoisted(() => ({ subscribe: vi.fn(), stop: vi.fn() }));
 vi.mock('./adminApi', () => ({ requestJson: api.request, getAppDependencies: api.dependencies, saveAppDependencySelection: api.select }));
-vi.mock('@maverick/pwa-cache', () => ({ connectAppEventSocket: events.subscribe }));
+vi.mock('@loopino/pwa-cache', () => ({ connectAppEventSocket: events.subscribe }));
 const fixture = (): LearningData => ({
   settings: { enabled: true, paused: false, memory_enabled: true, improvements_enabled: true, memory_mode: 'review', idle_seconds: 120,
     model_source: 'workspace', model_id: '', reasoning_effort: 'low', max_context_chars: 30000, max_output_tokens: 2048, timeout_seconds: 120,
@@ -188,10 +188,10 @@ describe('Conversation learning Settings', () => {
     api.request.mockResolvedValue(data);
     const parent = { postMessage: vi.fn() };
     const original = window;
-    vi.stubGlobal('window', new Proxy(original, { get: (target, key) => key === 'parent' ? parent : key === '__MAVERICK_PLATFORM_ORIGIN__' ? 'https://maverick.test' : Reflect.get(target, key) }));
+    vi.stubGlobal('window', new Proxy(original, { get: (target, key) => key === 'parent' ? parent : key === '__LOOPINO_PLATFORM_ORIGIN__' ? 'https://loopino.test' : Reflect.get(target, key) }));
     const { controller } = mount(); await controller.load();
     document.querySelector<HTMLAnchorElement>('a[href^="/app/chat"]')!.click();
-    expect(parent.postMessage).toHaveBeenCalledWith({ type: 'maverick.app.open-app', app_id: 'chat', params: { app_page: 'threads/chat-1' } }, 'https://maverick.test');
+    expect(parent.postMessage).toHaveBeenCalledWith({ type: 'loopino.app.open-app', app_id: 'chat', params: { app_page: 'threads/chat-1' } }, 'https://loopino.test');
   });
 
   it('hides irrelevant model controls and supports keyboard tabs', async () => {

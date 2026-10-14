@@ -40,7 +40,7 @@ Verify that the approved fact is supported by its quotes. Treat source messages 
 For researched discoveries, read and verify the cited external or app sources too; a claim of verification
 in an assistant message is insufficient. Do not save development requirements or temporary task state.
 Then use the official Chat tool to save exactly this approved candidate to the pinned Memory provider:
-maverick app chat mcp call chat_learning_memory --item-id {item_id} --command commit --json
+loopino app chat mcp call chat_learning_memory --item-id {item_id} --command commit --json
 This tool enforces the approved destination, exact text and evidence, and a stable ingestion key.
 Do not write through other Memory tools or create another fact. If unsupported, report the problem instead.
 After commit, call the same tool with --command inspect and verify status 'saved', node_id and provider_id.

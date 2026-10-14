@@ -3,7 +3,7 @@ import { getWidgetContext } from "../../api/client";
 import { floatingWidgetSize } from "./floatingLayout";
 import type { FloatingChatWindow } from "./floatingState";
 
-const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
+const THREAD_SYNC_DEBUG_STORAGE_KEY = "loopino.chat.debug.thread-sync";
 export type FloatingWidgetMode = "overlay" | "fixed-right" | "mobile-fullscreen";
 
 export type FloatingWidgetHostContext = {
@@ -48,7 +48,7 @@ export function postWidgetSize(windows: FloatingChatWindow[]) {
   window.parent?.postMessage(
     {
       ...floatingWidgetSize(windows),
-      type: "maverick.widget.resize",
+      type: "loopino.widget.resize",
       owner_app_id: "chat",
       widget_id: "chat-floating",
     },
@@ -59,7 +59,7 @@ export function postWidgetSize(windows: FloatingChatWindow[]) {
 export function postDockClose(widgetId = "chat-floating") {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.dock.close",
+      type: "loopino.widget.dock.close",
       owner_app_id: "chat",
       widget_id: widgetId,
     },

@@ -1,6 +1,6 @@
 import type { ChatThread } from "../../api/client";
 
-export const WIDGET_STATE_STORAGE_KEY_PREFIX = "maverick.chat.floating-widget.state.v1";
+export const WIDGET_STATE_STORAGE_KEY_PREFIX = "loopino.chat.floating-widget.state.v1";
 export const FALLBACK_WIDGET_STATE_STORAGE_KEY = `${WIDGET_STATE_STORAGE_KEY_PREFIX}:global`;
 
 export type FloatingChatWindow = {

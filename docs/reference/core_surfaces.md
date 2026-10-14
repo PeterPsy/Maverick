@@ -116,7 +116,7 @@ event cursor; replay is capped at 200 records.
 Discover core commands with:
 
 ```bash
-./scripts/maverick core cli list --json
+./scripts/loopino core cli list --json
 ```
 
 Important current core commands include:
@@ -149,7 +149,7 @@ preconditions hold. In particular, `app.<app_id>.sidecars.restart` appears only
 for an enabled workspace binding with declared HTTP sidecars. It is full-access,
 revokes only that app/workspace's isolated-browser tickets and sessions,
 restarts only the declared sidecars, waits for declared readiness, and emits
-`maverick.app.runtime-changed` so Base Shell remounts only that app's iframe and
+`loopino.app.runtime-changed` so Base Shell remounts only that app's iframe and
 widgets.
 
 ## Core MCP
@@ -157,7 +157,7 @@ widgets.
 Discover core MCP tools with:
 
 ```bash
-./scripts/maverick core mcp list --json
+./scripts/loopino core mcp list --json
 ```
 
 Important current tools include:
@@ -261,9 +261,9 @@ Do not infer app capabilities from the filesystem alone.
 Use:
 
 ```bash
-./scripts/maverick apps list --json
-./scripts/maverick app <app_id> cli list --json
-./scripts/maverick app <app_id> mcp list --json
+./scripts/loopino apps list --json
+./scripts/loopino app <app_id> cli list --json
+./scripts/loopino app <app_id> mcp list --json
 ```
 
 ## Developer Context

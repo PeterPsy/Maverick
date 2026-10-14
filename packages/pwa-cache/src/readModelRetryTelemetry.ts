@@ -1,6 +1,6 @@
 import type { RetryTelemetryEvent } from "./metricsTypes";
 
-export const PWA_DATA_CACHE_BROKER_RETRY = "maverick.pwa.data-cache.retry.v1";
+export const PWA_DATA_CACHE_BROKER_RETRY = "loopino.pwa.data-cache.retry.v1";
 
 export type ParentDataCacheRetryMessage = {
   app_id: string;

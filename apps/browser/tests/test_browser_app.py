@@ -81,8 +81,8 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(package["scripts"]["broker:local"], "node broker/playwright-server-local.mjs")
 
     def test_authenticated_sandbox_session_is_private_actor_scoped_and_bounded_to_platform(self):
-        grant = {"origin": "http://maverick.localhost:8014", "frame_host_suffix": ".sidecars.maverick.localhost",
-                 "cookie_name": "maverick_session", "cookie_value": "private-cookie", "user_id": "user:one", "workspace_id": "default"}
+        grant = {"origin": "http://loopino.localhost:8014", "frame_host_suffix": ".sidecars.loopino.localhost",
+                 "cookie_name": "loopino_session", "cookie_value": "private-cookie", "user_id": "user:one", "workspace_id": "default"}
         metadata = {"session_id": "owned-session", "user_id": "user:one", "platform_origin": grant["origin"],
                     "frame_host_suffix": grant["frame_host_suffix"], "admin_dev_targets_enabled": False}
         with TemporaryDirectory() as temporary:
@@ -92,7 +92,7 @@ class BrowserAppTests(unittest.TestCase):
                 calls.append((action, payload))
                 return SimpleNamespace(status_code=200, payload=dict(metadata if action == "session.create" else {"session_id": "owned-session"}))
             with patch("service.call_broker_action", side_effect=broker):
-                status, created = mcp_result_for_tool(root, "browser_session_create", {"mode": "maverick_dev_inspector"},
+                status, created = mcp_result_for_tool(root, "browser_session_create", {"mode": "loopino_dev_inspector"},
                     user_id="user:one", workspace_id="default", effective_mode="sandbox", workspace_role="admin", platform_browser_session=grant)
                 self.assertEqual(status, 200)
                 self.assertEqual(calls[0][1]["platform_browser_session"], grant)
@@ -103,7 +103,7 @@ class BrowserAppTests(unittest.TestCase):
                 options = {"user_id": "user:one", "workspace_id": "default", "effective_mode": "sandbox", "workspace_role": "admin"}
                 status, _ = handle_action(root, {"action": "navigate", "session_id": "owned-session", "url": grant["origin"] + "/app/chat"}, **options)
                 self.assertEqual(status, 200)
-                status, _ = handle_action(root, {"action": "click", "session_id": "owned-session", "ref": "1", "target_url": grant["origin"], "mode": "maverick_dev_inspector"}, **options)
+                status, _ = handle_action(root, {"action": "click", "session_id": "owned-session", "ref": "1", "target_url": grant["origin"], "mode": "loopino_dev_inspector"}, **options)
                 self.assertEqual(status, 200)
                 for user_id, url in (("user:two", grant["origin"]), ("user:one", "http://hostmachine:8014")):
                     status, _ = handle_action(root, {"action": "navigate", "session_id": "owned-session", "url": url}, **{**options, "user_id": user_id})
@@ -179,8 +179,8 @@ class BrowserAppTests(unittest.TestCase):
                 with patch.dict(
                     "os.environ",
                     {
-                        "MAVERICK_BROWSER_BROKER_URL": broker.url,
-                        "MAVERICK_BROWSER_BROKER_TOKEN": "test-token",
+                        "LOOPINO_BROWSER_BROKER_URL": broker.url,
+                        "LOOPINO_BROWSER_BROKER_TOKEN": "test-token",
                     },
                 ), patch(
                     "service.preflight_payload",
@@ -225,7 +225,7 @@ class BrowserAppTests(unittest.TestCase):
             extra_status, extra = mcp_result_for_tool(
                 Path(temp_dir),
                 "web_search",
-                {"query": "maverick", "session_id": "not-allowed"},
+                {"query": "loopino", "session_id": "not-allowed"},
             )
             long_status, too_long = mcp_result_for_tool(
                 Path(temp_dir),
@@ -376,7 +376,7 @@ class BrowserAppTests(unittest.TestCase):
                     "session_id": "session-1",
                     "ref": " ",
                     "target_url": "http://hostmachine:8000/apps/base-shell/",
-                    "mode": "maverick_dev_inspector",
+                    "mode": "loopino_dev_inspector",
                 },
                 "ref",
             ),
@@ -396,11 +396,11 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(
                         data_root,
-                        {"action": "session.create", "mode": "maverick_dev_inspector"},
+                        {"action": "session.create", "mode": "loopino_dev_inspector"},
                         workspace_role="admin",
                     )
                     status_code, result = mcp_result_for_tool(
@@ -428,7 +428,7 @@ class BrowserAppTests(unittest.TestCase):
                 {
                     "action": "policy.preflight",
                     "url": "http://hostmachine:8000/apps/base-shell/",
-                    "mode": "maverick_dev_inspector",
+                    "mode": "loopino_dev_inspector",
                 },
             )
             dev_status, dev = handle_action(
@@ -436,7 +436,7 @@ class BrowserAppTests(unittest.TestCase):
                 {
                     "action": "policy.preflight",
                     "url": "http://hostmachine:8000/apps/base-shell/",
-                    "mode": "maverick_dev_inspector",
+                    "mode": "loopino_dev_inspector",
                 },
                 workspace_role="admin",
             )
@@ -445,7 +445,7 @@ class BrowserAppTests(unittest.TestCase):
                 {
                     "action": "policy.preflight",
                     "url": "http://hostmachine:8014/app/fitness-coach",
-                    "mode": "maverick_dev_inspector",
+                    "mode": "loopino_dev_inspector",
                 },
                 workspace_role="admin",
             )
@@ -454,7 +454,7 @@ class BrowserAppTests(unittest.TestCase):
                 {
                     "action": "policy.preflight",
                     "url": "http://127.0.0.1:8014/app/fitness-coach?token=secret",
-                    "mode": "maverick_dev_inspector",
+                    "mode": "loopino_dev_inspector",
                 },
                 workspace_role="admin",
             )
@@ -474,7 +474,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(loopback_status, 200)
         self.assertFalse(loopback["policy"]["allowed"])
         self.assertEqual(loopback["policy"]["reason"], "blocked_restricted_ip")
-        self.assertEqual(loopback["policy"]["guidance"]["mode"], "maverick_dev_inspector")
+        self.assertEqual(loopback["policy"]["guidance"]["mode"], "loopino_dev_inspector")
         self.assertEqual(loopback["policy"]["guidance"]["allowed_ports"], [8000, 8014])
         self.assertEqual(loopback["policy"]["guidance"]["suggested_url"], "http://hostmachine:8014/app/fitness-coach")
 
@@ -516,7 +516,7 @@ class BrowserAppTests(unittest.TestCase):
     def test_status_reports_unreachable_broker_without_failing(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir)
-            with patch.dict("os.environ", {"MAVERICK_BROWSER_BROKER_URL": "http://127.0.0.1:1"}):
+            with patch.dict("os.environ", {"LOOPINO_BROWSER_BROKER_URL": "http://127.0.0.1:1"}):
                 status_code, result = handle_action(data_root, {"action": "status"})
 
         self.assertEqual(status_code, 200)
@@ -542,7 +542,7 @@ class BrowserAppTests(unittest.TestCase):
             with broker_stub({"session_id": "stub-session"}) as broker:
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     status_code, result = handle_action(data_root, {"action": "status"})
 
@@ -572,7 +572,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     status_code, result = acceptance_smoke_payload(
                         data_root,
@@ -605,7 +605,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(screenshot_step["screenshot_bytes"], len("aW1hZ2U="))
         self.assertNotIn("data", screenshot_step)
 
-    def test_dev_smoke_builds_allowlisted_mobile_maverick_app_target(self) -> None:
+    def test_dev_smoke_builds_allowlisted_mobile_loopino_app_target(self) -> None:
         action_responses = {
             "session.create": {
                 "session_id": "stub-session",
@@ -645,7 +645,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     status_code, result = dev_smoke_payload(
                         data_root,
@@ -658,7 +658,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(result["smoke"], "dev.smoke")
         self.assertEqual(result["target"]["url"], "http://hostmachine:8014/app/fitness-coach")
         self.assertEqual(result["viewport"], {"viewport_width": 390, "viewport_height": 844, "mobile": True})
-        self.assertEqual(broker.actions[0]["payload"]["mode"], "maverick_dev_inspector")
+        self.assertEqual(broker.actions[0]["payload"]["mode"], "loopino_dev_inspector")
         self.assertEqual(broker.actions[0]["payload"]["viewport_width"], 390)
         self.assertEqual(broker.actions[0]["payload"]["viewport_height"], 844)
         self.assertIs(broker.actions[0]["payload"]["mobile"], True)
@@ -721,7 +721,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     status_code, result = handle_action(data_root, {"action": "session.create", "mode": "read_only"})
                     status_payload_code, status_payload = handle_action(data_root, {"action": "status"})
@@ -756,7 +756,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     status_code, result = mcp_result_for_tool(
                         data_root,
@@ -782,9 +782,9 @@ class BrowserAppTests(unittest.TestCase):
                 token_file.write_text("file-token\n", encoding="utf-8")
                 token_file.chmod(0o600)
                 env = {
-                    "MAVERICK_BROWSER_BROKER_URL": broker.url,
-                    "MAVERICK_BROWSER_BROKER_TOKEN": "",
-                    "MAVERICK_BROWSER_BROKER_TOKEN_FILE": str(token_file),
+                    "LOOPINO_BROWSER_BROKER_URL": broker.url,
+                    "LOOPINO_BROWSER_BROKER_TOKEN": "",
+                    "LOOPINO_BROWSER_BROKER_TOKEN_FILE": str(token_file),
                 }
                 with patch.dict("os.environ", env, clear=False):
                     status_code, result = handle_action(data_root, {"action": "session.create", "mode": "read_only"})
@@ -803,7 +803,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(data_root, {"action": "session.create", "mode": "read_only"})
                     close_status, close_result = handle_action(
@@ -827,7 +827,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(data_root, {"action": "session.create", "mode": "read_only"})
                     handle_action(data_root, {"action": "session.close", "session_id": "stub-session"})
@@ -875,11 +875,11 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     create_status, create_result = handle_action(
                         data_root,
-                        {"action": "session.create", "mode": "maverick_dev_inspector"},
+                        {"action": "session.create", "mode": "loopino_dev_inspector"},
                         workspace_role="admin",
                     )
                     status_code, result = handle_action(
@@ -888,7 +888,7 @@ class BrowserAppTests(unittest.TestCase):
                             "action": "navigate",
                             "session_id": create_result["session_id"],
                             "url": "http://hostmachine:8000/apps/base-shell/",
-                            "mode": "maverick_dev_inspector",
+                            "mode": "loopino_dev_inspector",
                             "policy_context": {"allow_admin_dev_targets": False},
                         },
                         workspace_role="admin",
@@ -906,11 +906,11 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(
                         data_root,
-                        {"action": "session.create", "mode": "maverick_dev_inspector"},
+                        {"action": "session.create", "mode": "loopino_dev_inspector"},
                         workspace_role="admin",
                     )
                     status_code, result = handle_action(
@@ -944,7 +944,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(data_root, {"action": "session.create", "mode": "read_only"})
                     navigate_status, navigate_result = handle_action(
@@ -984,11 +984,11 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(
                         data_root,
-                        {"action": "session.create", "mode": "maverick_dev_inspector"},
+                        {"action": "session.create", "mode": "loopino_dev_inspector"},
                         workspace_role="admin",
                     )
                     status_code, result = handle_action(data_root, {"action": "snapshot", "session_id": "stub-session"})
@@ -1007,11 +1007,11 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(
                         data_root,
-                        {"action": "session.create", "mode": "maverick_dev_inspector"},
+                        {"action": "session.create", "mode": "loopino_dev_inspector"},
                         workspace_role="admin",
                     )
                     member_status_code, member_status = handle_action(data_root, {"action": "status"})
@@ -1038,7 +1038,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(admin_status["sessions"][0]["session_id"], "stub-session")
         self.assertEqual(admin_audit_code, 200)
         self.assertEqual(admin_audit["audit"][-1]["action"], "session.create")
-        self.assertEqual(admin_audit["audit"][-1]["mode"], "maverick_dev_inspector")
+        self.assertEqual(admin_audit["audit"][-1]["mode"], "loopino_dev_inspector")
 
     def test_non_admin_audit_hides_closed_dev_inspector_session_records(self) -> None:
         action_responses = {
@@ -1051,11 +1051,11 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(
                         data_root,
-                        {"action": "session.create", "mode": "maverick_dev_inspector"},
+                        {"action": "session.create", "mode": "loopino_dev_inspector"},
                         workspace_role="admin",
                     )
                     handle_action(
@@ -1079,7 +1079,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(member_audit["audit"], [])
         self.assertEqual(admin_audit_code, 200)
         self.assertEqual([item["action"] for item in admin_audit["audit"]], ["session.create", "snapshot", "session.close"])
-        self.assertEqual({item["mode"] for item in admin_audit["audit"]}, {"maverick_dev_inspector"})
+        self.assertEqual({item["mode"] for item in admin_audit["audit"]}, {"loopino_dev_inspector"})
 
     def test_broker_token_is_required_before_handoff(self) -> None:
         with broker_stub({"session_id": "stub-session"}) as broker:
@@ -1088,9 +1088,9 @@ class BrowserAppTests(unittest.TestCase):
                 with patch.dict(
                     "os.environ",
                     {
-                        "MAVERICK_BROWSER_BROKER_URL": broker.url,
-                        "MAVERICK_BROWSER_BROKER_TOKEN": "",
-                        "MAVERICK_BROWSER_BROKER_TOKEN_FILE": str(Path(temp_dir) / "missing-token"),
+                        "LOOPINO_BROWSER_BROKER_URL": broker.url,
+                        "LOOPINO_BROWSER_BROKER_TOKEN": "",
+                        "LOOPINO_BROWSER_BROKER_TOKEN_FILE": str(Path(temp_dir) / "missing-token"),
                     },
                     clear=False,
                 ):
@@ -1106,7 +1106,7 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(data_root, {"action": "session.create", "mode": "read_only"})
                     status_code, result = handle_action(
@@ -1131,19 +1131,19 @@ class BrowserAppTests(unittest.TestCase):
             with broker_stub({"session_id": "session-1"}) as broker:
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                    {"LOOPINO_BROWSER_BROKER_URL": broker.url, "LOOPINO_BROWSER_BROKER_TOKEN": "test-token"},
                 ):
                     handle_action(
                         data_root,
-                        {"action": "session.create", "mode": "maverick_dev_inspector"},
+                        {"action": "session.create", "mode": "loopino_dev_inspector"},
                         workspace_role="admin",
                     )
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_BROWSER_BROKER_URL": "http://127.0.0.1:1",
-                    "MAVERICK_BROWSER_BROKER_TOKEN": "",
-                    "MAVERICK_BROWSER_BROKER_TOKEN_FILE": str(Path(temp_dir) / "missing-token"),
+                    "LOOPINO_BROWSER_BROKER_URL": "http://127.0.0.1:1",
+                    "LOOPINO_BROWSER_BROKER_TOKEN": "",
+                    "LOOPINO_BROWSER_BROKER_TOKEN_FILE": str(Path(temp_dir) / "missing-token"),
                 },
                 clear=False,
             ):
@@ -1154,7 +1154,7 @@ class BrowserAppTests(unittest.TestCase):
                         "session_id": "session-1",
                         "ref": "button-1",
                         "target_url": "http://hostmachine:8000/app/chat",
-                        "mode": "maverick_dev_inspector",
+                        "mode": "loopino_dev_inspector",
                     },
                     workspace_role="admin",
                 )
@@ -1185,8 +1185,8 @@ class BrowserAppTests(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir)
             env = dict(os.environ)
-            env.pop("MAVERICK_BROWSER_BROKER_TOKEN", None)
-            env["MAVERICK_BROWSER_BROKER_URL"] = "http://127.0.0.1:1"
+            env.pop("LOOPINO_BROWSER_BROKER_TOKEN", None)
+            env["LOOPINO_BROWSER_BROKER_URL"] = "http://127.0.0.1:1"
             completed = subprocess.run(
                 [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
                 input=json.dumps({"data_root": str(data_root)}),
@@ -1207,8 +1207,8 @@ class BrowserAppTests(unittest.TestCase):
             with TemporaryDirectory() as temp_dir:
                 data_root = Path(temp_dir)
                 env = dict(os.environ)
-                env["MAVERICK_BROWSER_BROKER_URL"] = broker.url
-                env["MAVERICK_BROWSER_BROKER_TOKEN"] = "wrong-token"
+                env["LOOPINO_BROWSER_BROKER_URL"] = broker.url
+                env["LOOPINO_BROWSER_BROKER_TOKEN"] = "wrong-token"
                 completed = subprocess.run(
                     [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
                     input=json.dumps({"data_root": str(data_root)}),
@@ -1231,8 +1231,8 @@ class BrowserAppTests(unittest.TestCase):
             with TemporaryDirectory() as temp_dir:
                 data_root = Path(temp_dir)
                 env = dict(os.environ)
-                env["MAVERICK_BROWSER_BROKER_URL"] = broker.url
-                env["MAVERICK_BROWSER_BROKER_TOKEN"] = "test-token"
+                env["LOOPINO_BROWSER_BROKER_URL"] = broker.url
+                env["LOOPINO_BROWSER_BROKER_TOKEN"] = "test-token"
                 completed = subprocess.run(
                     [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
                     input=json.dumps({"data_root": str(data_root)}),
@@ -1255,8 +1255,8 @@ class BrowserAppTests(unittest.TestCase):
             with TemporaryDirectory() as temp_dir:
                 data_root = Path(temp_dir)
                 env = dict(os.environ)
-                env["MAVERICK_BROWSER_BROKER_URL"] = broker.url
-                env["MAVERICK_BROWSER_BROKER_TOKEN"] = "test-token"
+                env["LOOPINO_BROWSER_BROKER_URL"] = broker.url
+                env["LOOPINO_BROWSER_BROKER_TOKEN"] = "test-token"
                 completed = subprocess.run(
                     [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
                     input=json.dumps({"data_root": str(data_root)}),
@@ -1307,10 +1307,10 @@ class BrowserAppTests(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             token_file = Path(temp_dir) / "broker-token"
             env = dict(os.environ)
-            env.pop("MAVERICK_BROWSER_BROKER_TOKEN", None)
-            env["MAVERICK_BROWSER_BROKER_TOKEN_FILE"] = str(token_file)
-            env["MAVERICK_BROWSER_BROKER_PORT"] = "0"
-            env["MAVERICK_BROWSER_PROXY_PORT"] = "0"
+            env.pop("LOOPINO_BROWSER_BROKER_TOKEN", None)
+            env["LOOPINO_BROWSER_BROKER_TOKEN_FILE"] = str(token_file)
+            env["LOOPINO_BROWSER_BROKER_PORT"] = "0"
+            env["LOOPINO_BROWSER_PROXY_PORT"] = "0"
             process = subprocess.Popen(
                 ["node", str(APP_ROOT / "broker" / "playwright-broker.mjs")],
                 text=True,

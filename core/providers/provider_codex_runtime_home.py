@@ -15,8 +15,9 @@ from core.providers.provider_codex_reasoning import (
     codex_default_reasoning_effort,
     normalize_codex_model_options,
 )
-from core.runtime.runtime_cli_wrapper import write_runtime_maverick_wrapper
+from core.runtime.runtime_cli_wrapper import write_runtime_loopino_wrapper
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.providers.source_homes import codex_source_home
 if TYPE_CHECKING:
     from core.runtime.execution import RuntimeExecutionResult
     from core.skills.models import SkillDefinition, SkillMaterialization
@@ -36,7 +37,7 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 def _codex_executable() -> str:
-    configured = os.environ.get("MAVERICK_CODEX_COMMAND", "").strip()
+    configured = os.environ.get("LOOPINO_CODEX_COMMAND", "").strip()
     if configured:
         return configured
     resolved = shutil.which("codex")
@@ -93,7 +94,7 @@ def _fallback_model_options() -> list[ProviderModelOption]:
         ProviderModelOption(
             model_id=CODEX_DEFAULT_MODEL,
             label=CODEX_DEFAULT_MODEL,
-            description="Default Codex model configured by Maverick when the Codex model catalog cannot be read.",
+            description="Default Codex model configured by Loopino when the Codex model catalog cannot be read.",
             default_reasoning_effort=CODEX_DEFAULT_REASONING_EFFORT,
             supported_reasoning_efforts=_fallback_reasoning_options(),
         )
@@ -122,7 +123,7 @@ def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
 
 
 def remove_codex_system_skills(runtime_home: Path) -> None:
-    """Remove Codex-generated system skills from a Maverick-managed runtime home."""
+    """Remove Codex-generated system skills from a Loopino-managed runtime home."""
     system_root = Path(runtime_home) / "skills" / CODEX_SYSTEM_SKILLS_ROOT
     if system_root.is_symlink() or system_root.is_file():
         system_root.unlink(missing_ok=True)
@@ -175,7 +176,7 @@ class CodexRuntimeHomeMixin:
     def _prepare_runtime_bin(self, session: RuntimeSessionRecord, *, host_command: str | None = None) -> Path:
         runtime_bin = Path(session.runtime_root) / "bin"
         runtime_bin.mkdir(parents=True, exist_ok=True)
-        write_runtime_maverick_wrapper(runtime_bin / "maverick")
+        write_runtime_loopino_wrapper(runtime_bin / "loopino")
         write_codex_post_tool_use_hook(runtime_bin / CODEX_POST_TOOL_USE_HOOK_NAME)
         sandbox_launcher = runtime_bin / "workspace_sandbox.py"
         shutil.copy2(Path(__file__).resolve().parents[1] / "runtime" / "workspace_sandbox.py", sandbox_launcher)
@@ -201,10 +202,7 @@ class CodexRuntimeHomeMixin:
 
 
     def _source_codex_home(self) -> Path:
-        configured = str(os.environ.get("MAVERICK_CODEX_HOME") or os.environ.get("CODEX_HOME") or "").strip()
-        if configured:
-            return Path(configured).expanduser()
-        return Path.home() / ".codex"
+        return codex_source_home()
 
 
 

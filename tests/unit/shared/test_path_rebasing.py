@@ -13,7 +13,7 @@ from core.shared.path_rebasing import rebase_local_state_paths, rebase_repositor
 class PathRebasingTestCase(unittest.TestCase):
     def test_rebase_repository_path_rewrites_old_repository_root(self) -> None:
         repository_root = Path("/tmp/new-checkout")
-        original = "/old-checkout/maverick/workspaces/default/apps/simple-calculator"
+        original = "/old-checkout/loopino/workspaces/default/apps/simple-calculator"
 
         rebased = rebase_repository_path(original, repository_root=repository_root)
 
@@ -21,14 +21,14 @@ class PathRebasingTestCase(unittest.TestCase):
 
     def test_rebase_repository_path_leaves_non_repository_absolute_paths_unchanged(self) -> None:
         repository_root = Path("/tmp/new-checkout")
-        original = "/var/tmp/not-maverick/example.txt"
+        original = "/var/tmp/not-loopino/example.txt"
 
         rebased = rebase_repository_path(original, repository_root=repository_root)
 
         self.assertEqual(rebased, original)
 
     def test_rebase_local_state_paths_updates_known_json_documents(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="maverick-rebase-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="loopino-rebase-") as temp_dir:
             repository_root = Path(temp_dir)
             (repository_root / "AGENTS.md").write_text("", encoding="utf-8")
             (repository_root / "core").mkdir()
@@ -37,7 +37,7 @@ class PathRebasingTestCase(unittest.TestCase):
             app_state_root = repository_root / "data" / "control-plane" / "json" / "apps"
             app_state_root.mkdir(parents=True)
 
-            old_root = Path("/old-checkout/maverick")
+            old_root = Path("/old-checkout/loopino")
             (app_state_root / "app_sources.json").write_text(
                 json.dumps([{"source_path": str(old_root / "apps" / "sample-app")}], indent=2) + "\n",
                 encoding="utf-8",

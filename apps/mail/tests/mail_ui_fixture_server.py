@@ -111,5 +111,5 @@ if __name__ == "__main__":
         parser.error("thread-count must be between 1 and 100000")
     THREADS = make_threads(args.thread_count)
     with ThreadingHTTPServer(("0.0.0.0", args.port), Handler) as server:
-        print(f"Synthetic Mail fixture: http://maverick.localhost:{args.port}/apps/mail/", flush=True)
+        print(f"Synthetic Mail fixture: http://loopino.localhost:{args.port}/apps/mail/", flush=True)
         server.serve_forever()

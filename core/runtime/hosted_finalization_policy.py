@@ -46,7 +46,7 @@ def validate_finalization_resources(policy, reserve) -> None:
         or policy.max_output_tokens < reserve.reserved_output_tokens
         or policy.max_wall_time_seconds < reserve.reserved_time_seconds
     ):
-        raise AgenticProfileError("maverick_profile_finalization_budget_insufficient")
+        raise AgenticProfileError("loopino_profile_finalization_budget_insufficient")
 
 
 __all__ = [

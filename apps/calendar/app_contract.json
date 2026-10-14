@@ -4,7 +4,7 @@
   "name": "Calendar",
   "version": "0.2.0",
   "description": "Workspace calendar for creating, filtering, editing, and rescheduling events.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

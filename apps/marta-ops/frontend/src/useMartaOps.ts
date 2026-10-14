@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { connectAppEventSocket } from "@maverick/pwa-cache";
+import { connectAppEventSocket } from "@loopino/pwa-cache";
 import { mountedAppIdFromPath } from "./lib/shellNavigation";
 import { callBackend } from "./api";
 import type { BackendPayload, MartaOpsState } from "./types";
@@ -79,7 +79,7 @@ export function useMartaOps() {
     }>(
       (message) => {
         if (
-          message.type === "maverick.app.data-changed" &&
+          message.type === "loopino.app.data-changed" &&
           message.owner_app_id === mountedAppIdFromPath() &&
           message.resource === "state"
         ) {

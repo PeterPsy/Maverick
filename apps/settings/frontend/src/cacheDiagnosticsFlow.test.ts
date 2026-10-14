@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PwaCacheDashboard, PwaCacheMetricsSnapshot } from '@maverick/pwa-cache';
+import type { PwaCacheDashboard, PwaCacheMetricsSnapshot } from '@loopino/pwa-cache';
 import { bindCacheDiagnosticsEvents } from './bindEvents';
 import { createCacheDiagnosticsController } from './cacheDiagnosticsController';
 import { confirmSettingsAction } from './settingsDialogs';
@@ -15,7 +15,7 @@ const parentProtocol = vi.hoisted(() => ({
 
 vi.mock('./settingsDialogs', () => ({ confirmSettingsAction: vi.fn() }));
 
-vi.mock('@maverick/pwa-cache', () => ({
+vi.mock('@loopino/pwa-cache', () => ({
   clearParentPwaCache: parentProtocol.clear,
   requestParentPwaCacheDashboard: parentProtocol.diagnostics,
 }));
@@ -106,7 +106,7 @@ function dashboard(entryCount: number): PwaCacheDashboard {
       structuredEntryCount: entryCount,
     },
     metrics: {
-      schema: 'maverick.pwa-cache-metrics.v1',
+      schema: 'loopino.pwa-cache-metrics.v1',
       counters,
       quota: { lastEstimatedAt: 1, quotaBytes: 10_000, supported: true, usageBytes: entryCount * 100 },
       requestWait: {

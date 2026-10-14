@@ -26,9 +26,9 @@ from core.shared.browser_origin_tls import (
 
 
 class BrowserOriginTlsTestCase(unittest.TestCase):
-    domain = "maverick.example.test"
-    app_host = "af-111111111111111111111111.sidecars.maverick.example.test"
-    other_host = "af-222222222222222222222222.sidecars.maverick.example.test"
+    domain = "loopino.example.test"
+    app_host = "af-111111111111111111111111.sidecars.loopino.example.test"
+    other_host = "af-222222222222222222222222.sidecars.loopino.example.test"
 
     def test_external_wildcard_mode_never_runs_certbot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -48,9 +48,9 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = self._settings(Path(temp_dir))
             for invalid in (
-                "maverick.example.test",
-                "*.sidecars.maverick.example.test",
-                "af-short.sidecars.maverick.example.test",
+                "loopino.example.test",
+                "*.sidecars.loopino.example.test",
+                "af-short.sidecars.loopino.example.test",
                 "af-111111111111111111111111.sidecars.attacker.test",
             ):
                 with self.subTest(host=invalid), self.assertRaises(BrowserOriginTlsError):

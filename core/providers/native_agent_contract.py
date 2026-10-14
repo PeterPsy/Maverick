@@ -15,7 +15,7 @@ NativeProtocolKind = Literal[
     "structured_cli",
 ]
 NativeEffectMode = Literal[
-    "maverick_tools",
+    "loopino_tools",
     "sandboxed_native_tools",
     "mapped_hybrid",
 ]
@@ -88,7 +88,7 @@ class NativeAgentHarnessRecipe:
     """Prompt and context settings for a native-agent integration."""
 
     prompt_contract_revision: str
-    context_owner: Literal["native_runtime", "maverick"]
+    context_owner: Literal["native_runtime", "loopino"]
 
 
 @dataclass(frozen=True)

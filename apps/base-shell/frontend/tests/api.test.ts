@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getActiveProvider, getPlatformStatus, getSession, isRetryableReadError, listApps, listPinnedApps, MaverickHttpError, MaverickTransportError, normalizeAppRegistryPayload, retryAfterMs, savePinnedApps } from "../src/api";
+import { getActiveProvider, getPlatformStatus, getSession, isRetryableReadError, listApps, listPinnedApps, LoopinoHttpError, LoopinoTransportError, normalizeAppRegistryPayload, retryAfterMs, savePinnedApps } from "../src/api";
 import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
 import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
 
@@ -109,13 +109,13 @@ describe("base-shell api normalization", () => {
   });
 
   it("classifies transport and explicitly retryable read responses without hiding terminal HTTP", () => {
-    const transport = new MaverickTransportError("transport failed");
-    const unavailable = new MaverickHttpError("/api/session", new Response(null, {
+    const transport = new LoopinoTransportError("transport failed");
+    const unavailable = new LoopinoHttpError("/api/session", new Response(null, {
       status: 503,
       headers: { "Retry-After": "2" },
     }));
-    const forbidden = new MaverickHttpError("/api/session", new Response(null, { status: 403 }));
-    const unauthenticated = new MaverickHttpError("/api/session", new Response(null, { status: 401 }));
+    const forbidden = new LoopinoHttpError("/api/session", new Response(null, { status: 403 }));
+    const unauthenticated = new LoopinoHttpError("/api/session", new Response(null, { status: 401 }));
 
     expect(isRetryableReadError(transport)).toBe(true);
     expect(isRetryableReadError(unavailable)).toBe(true);
@@ -152,7 +152,7 @@ describe("base-shell api normalization", () => {
 
     const pending = getSession(controller.signal, "base-shell:test-auth-terminal");
 
-    await expect(pending).rejects.toBeInstanceOf(MaverickHttpError);
+    await expect(pending).rejects.toBeInstanceOf(LoopinoHttpError);
     await expect(pending).rejects.toMatchObject({ status });
   });
 
@@ -215,9 +215,9 @@ describe("base-shell api normalization", () => {
     pendingCleanup.resolve({ pendingCleanupCount: 0, removed: 0, status: "complete" });
 
     const error = await observed;
-    expect(error).toBeInstanceOf(MaverickHttpError);
+    expect(error).toBeInstanceOf(LoopinoHttpError);
     expect(error).toMatchObject({ status: 403 });
-    expect(error).not.toBeInstanceOf(MaverickTransportError);
+    expect(error).not.toBeInstanceOf(LoopinoTransportError);
   });
 
   it("reads and saves ordered pinned apps through the App Store backend", async () => {

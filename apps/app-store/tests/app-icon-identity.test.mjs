@@ -4,7 +4,7 @@ import { withRegistryLogo } from '../frontend/src/assets/appIconIdentity.js';
 
 test('mounted app identity supplies the same public asset used by the shell', () => {
   const app = { app_id: 'example-app' };
-  const logo = { kind: 'image', value: '/apps/example-app/maverick-icon-compact.png' };
+  const logo = { kind: 'image', value: '/apps/example-app/loopino-icon-compact.png' };
   assert.deepEqual(withRegistryLogo(app, [{ app_id: 'example-app', logo }]), { ...app, logo });
   assert.equal(app.logo, undefined);
 });

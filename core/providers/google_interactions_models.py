@@ -9,7 +9,7 @@ from typing import Literal
 GOOGLE_INTERACTIONS_CODEC_ID = "google-gemini-interactions"
 GOOGLE_INTERACTIONS_CODEC_VERSION = "5"
 GOOGLE_INTERACTIONS_SCHEMA_VERSION = "3"
-GOOGLE_INTERACTIONS_CONTENT_TYPE = "application/vnd.maverick.google-interactions+json"
+GOOGLE_INTERACTIONS_CONTENT_TYPE = "application/vnd.loopino.google-interactions+json"
 GOOGLE_INTERACTIONS_ENDPOINT = "https://generativelanguage.googleapis.com/v1/interactions?alt=sse"
 
 GoogleInteractionStateMode = Literal["stateful", "stateless"]

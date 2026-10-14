@@ -1,7 +1,7 @@
 import {
-  observeMaverickVisibility,
-  maverickAppIsVisible,
-} from "@maverick/pwa-cache";
+  observeLoopinoVisibility,
+  loopinoAppIsVisible,
+} from "@loopino/pwa-cache";
 import { eventDisplayDate } from "./calendar-utils";
 import { useEffect, useRef, useState } from "react";
 import { searchEvents } from "@/api";
@@ -24,7 +24,7 @@ export function GlobalSearch({
     [loading, setLoading] = useState(false);
   const read = useRef<AbortController | null>(null);
   async function search(offset: number) {
-    if (!maverickAppIsVisible()) return;
+    if (!loopinoAppIsVisible()) return;
     read.current?.abort();
     const controller = new AbortController();
     read.current = controller;
@@ -60,7 +60,7 @@ export function GlobalSearch({
   useEffect(() => {
     setRows([]);
     let timer: number | undefined;
-    const stop = observeMaverickVisibility((visible) => {
+    const stop = observeLoopinoVisibility((visible) => {
       window.clearTimeout(timer);
       read.current?.abort();
       setLoading(false);

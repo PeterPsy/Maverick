@@ -4,7 +4,7 @@ export function AppLogo({ app, className = "" }: { app: AppRegistryItem; classNa
   const logo = appLogoPresentation(app);
   if (logo.kind === "image") {
     // SDK compact assets are transparent silhouettes; native frames own their colour.
-    if (/^\/apps\/[^/]+\/maverick-icon-compact\.png(?:[?#].*)?$/.test(logo.value)) {
+    if (/^\/apps\/[^/]+\/loopino-icon-compact\.png(?:[?#].*)?$/.test(logo.value)) {
       const mask = `url(${JSON.stringify(logo.value)}) center / contain no-repeat`;
       return (
         <span className={`bs-app-logo is-glyph ${className}`}>
@@ -53,7 +53,7 @@ function defaultIcon(app: AppRegistryItem): string {
     "marta-ops": "view_kanban",
     storage: "cloud",
     "gmail-app": "mail",
-    "maverick-monitor": "monitor_heart",
+    "loopino-monitor": "monitor_heart",
     memory: "database",
     skills: "school",
     senses: "sensors",

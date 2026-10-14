@@ -52,10 +52,10 @@ AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 AsgiForward = Callable[[dict[str, Any], AsgiReceive, AsgiSend], Awaitable[None]]
 
 APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch"
-APP_FRAME_SESSION_LEASE_PATH = "/.well-known/maverick-app-frame-session"
-APP_FRAME_COOKIE_NAME = "maverick_app_frame_session"
-APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "maverick.app-frame.authorization-required"
-APP_FRAME_LOADED_MESSAGE = "maverick.app-frame.loaded"
+APP_FRAME_SESSION_LEASE_PATH = "/.well-known/loopino-app-frame-session"
+APP_FRAME_COOKIE_NAME = "loopino_app_frame_session"
+APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "loopino.app-frame.authorization-required"
+APP_FRAME_LOADED_MESSAGE = "loopino.app-frame.loaded"
 _APP_FRAME_SESSION_LEASE_INTERVAL_MS = 2 * 60 * 1000
 _APP_FRAME_SESSION_LEASE_RETRY_MAX_MS = 15 * 1000
 _MAX_BOOTSTRAP_BODY_BYTES = 4096
@@ -166,7 +166,7 @@ def handle_app_frame_oauth_relay(
     """Relay registered platform OAuth callbacks into the app's isolated origin."""
     # The isolated proxy must serve the app SPA callback itself. Relaying that
     # second hop would recursively mint new frame origins forever.
-    if environ.get("maverick.app_frame_proxy") is True:
+    if environ.get("loopino.app_frame_proxy") is True:
         return None
     path = str(environ.get("PATH_INFO") or "/")
     method = str(environ.get("REQUEST_METHOD") or "GET").upper()
@@ -753,14 +753,14 @@ def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
         "const fc=Object.freeze(" + frame_context + ");"
         "const lp=" + lease_path + ",am=" + authorization_message + ";"
         "let hv=true,lt=0,lr=0,lf=false;"
-        "const a=d=>{if(!d||d.type!=='maverick.shell.layout-changed'||typeof d.mobile!=='boolean')return;"
-        "const r=document.documentElement,p=['--maverick-shell-mobile-status-bar-height',"
-        "'--maverick-shell-mobile-header-height','--maverick-shell-mobile-content-top-offset'];"
-        "if(d.mobile){r.setAttribute('data-maverick-shell-mobile-layout','true');"
+        "const a=d=>{if(!d||d.type!=='loopino.shell.layout-changed'||typeof d.mobile!=='boolean')return;"
+        "const r=document.documentElement,p=['--loopino-shell-mobile-status-bar-height',"
+        "'--loopino-shell-mobile-header-height','--loopino-shell-mobile-content-top-offset'];"
+        "if(d.mobile){r.setAttribute('data-loopino-shell-mobile-layout','true');"
         "r.style.setProperty(p[0],'env(safe-area-inset-top, 0px)');"
         "r.style.setProperty(p[1],'2.75rem');"
         "r.style.setProperty(p[2],'calc(env(safe-area-inset-top, 0px) + 2.75rem)');}"
-        "else{r.removeAttribute('data-maverick-shell-mobile-layout');p.forEach(n=>r.style.removeProperty(n));}};"
+        "else{r.removeAttribute('data-loopino-shell-mobile-layout');p.forEach(n=>r.style.removeProperty(n));}};"
         "const lv=()=>hv&&document.visibilityState!=='hidden';"
         "const ls=d=>{window.clearTimeout(lt);lt=0;if(lv())lt=window.setTimeout(lc,d);};"
         "const lc=async()=>{if(lf||!lv())return;lf=true;let d="
@@ -776,12 +776,12 @@ def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
         + str(_APP_FRAME_SESSION_LEASE_RETRY_MAX_MS)
         + ",1000*(2**lr));}finally{lf=false;ls(d);}};"
         "const lw=()=>{if(lv())ls(0);else{window.clearTimeout(lt);lt=0;}};"
-        "const v=d=>{if(!d||d.type!=='maverick.app.visibility-changed'||typeof d.visible!=='boolean')return;"
+        "const v=d=>{if(!d||d.type!=='loopino.app.visibility-changed'||typeof d.visible!=='boolean')return;"
         "hv=d.visible;lw();};"
-        "Object.defineProperty(window,'__MAVERICK_PLATFORM_ORIGIN__',{value:o,configurable:false});"
-        "Object.defineProperty(window,'__MAVERICK_APP_FRAME_CONTEXT__',"
+        "Object.defineProperty(window,'__LOOPINO_PLATFORM_ORIGIN__',{value:o,configurable:false});"
+        "Object.defineProperty(window,'__LOOPINO_APP_FRAME_CONTEXT__',"
         "{value:fc,writable:false,configurable:false});"
-        "a({type:'maverick.shell.layout-changed',mobile:new URLSearchParams(location.search).get('maverick_mobile_layout')==='1'});"
+        "a({type:'loopino.shell.layout-changed',mobile:new URLSearchParams(location.search).get('loopino_mobile_layout')==='1'});"
         "window.addEventListener('message',e=>{"
         "if(e.source!==window.parent||e.origin!==po)return;"
         "a(e.data);v(e.data);"

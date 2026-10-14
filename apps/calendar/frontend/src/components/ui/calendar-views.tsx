@@ -1,6 +1,6 @@
 import { t, readPreferences, formatCalendarDate } from "@/preferences";
 import { timelineEvents } from "./time-layout";
-import { observeMaverickVisibility } from "@maverick/pwa-cache";
+import { observeLoopinoVisibility } from "@loopino/pwa-cache";
 import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -228,7 +228,7 @@ function useCurrentMinuteDate() {
 
   useEffect(() => {
     let timer: number | undefined;
-    const stop = observeMaverickVisibility((visible) => {
+    const stop = observeLoopinoVisibility((visible) => {
       window.clearTimeout(timer);
       if (!visible) return;
       const tick = () => {

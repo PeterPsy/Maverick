@@ -76,7 +76,7 @@ export function openContextAppParamsInShell(
   const origin = options.origin ?? "*";
   parentWindow.postMessage(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: normalizedAppId,
       params,
     },
@@ -99,7 +99,7 @@ export function shellAppHrefTarget(value: unknown): ShellAppHrefTarget | null {
   }
   let url: URL;
   try {
-    url = new URL(value, "https://maverick.invalid");
+    url = new URL(value, "https://loopino.invalid");
   } catch {
     return null;
   }
@@ -135,7 +135,7 @@ function postAppRouteToShell(appId: string, params: ShellRouteParams, options: S
   const origin = options.origin ?? "*";
   parentWindow.postMessage(
     {
-      type: "maverick.app.open-app",
+      type: "loopino.app.open-app",
       app_id: appId,
       params,
     },

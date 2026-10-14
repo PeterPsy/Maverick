@@ -4,14 +4,14 @@ export function createPlatformState(platformOrigin, onVisibility) {
   const visible = () => shellVisible && document.visibilityState !== "hidden";
   const theme = value => {
     if (value !== "light" && value !== "dark") return;
-    document.documentElement.dataset.maverickTheme = value;
+    document.documentElement.dataset.loopinoTheme = value;
     document.documentElement.style.colorScheme = value;
   };
   window.addEventListener("message", event => {
     if (event.source !== window.parent || event.origin !== platformOrigin) return;
     const message = event.data;
-    if (message?.type === "maverick.shell.theme-changed") theme(message.theme?.effective || message.theme?.color_scheme);
-    if (message?.type === "maverick.app.visibility-changed" && typeof message.visible === "boolean"
+    if (message?.type === "loopino.shell.theme-changed") theme(message.theme?.effective || message.theme?.color_scheme);
+    if (message?.type === "loopino.app.visibility-changed" && typeof message.visible === "boolean"
         && (message.app_id || message.owner_app_id) === "browser") {
       shellVisible = message.visible;
       onVisibility();

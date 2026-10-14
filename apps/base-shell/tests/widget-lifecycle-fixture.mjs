@@ -35,9 +35,9 @@ export function widgetLifecycleFixture() {
       const ticket = `fixture-ticket-${++serial}`;
       tickets.set(ticket, body.path);
       const origin = `http://localhost:${port}`;
-      json({ origin, bootstrap_url: `${origin}/.well-known/maverick-app-frame-bootstrap`,
+      json({ origin, bootstrap_url: `${origin}/.well-known/loopino-app-frame-bootstrap`,
         method: "POST", ticket, ticket_field: "ticket" });
-    } else if (url.pathname === "/.well-known/maverick-app-frame-bootstrap") {
+    } else if (url.pathname === "/.well-known/loopino-app-frame-bootstrap") {
       const ticket = new URLSearchParams(await readBody()).get("ticket");
       const path = tickets.get(ticket);
       tickets.delete(ticket);
@@ -65,13 +65,13 @@ function frameDocument({ owner, widgetId, instance, port }) {
     const post=data=>parent.postMessage({owner_app_id:owner,widget_id:widgetId,...data},platform);
     addEventListener("message",event=>{
       if(event.origin!==platform||event.source!==parent)return;
-      if(event.data.type==="maverick.app.visibility-changed")window.visible=event.data.visible;
-      if(event.data.type==="maverick.widget.context-changed")window.context=event.data.context;
-      if(event.data.type==="maverick.widget.primary-action.query")post({type:"maverick.widget.primary-action.state",available:true,label:"New "+owner});
+      if(event.data.type==="loopino.app.visibility-changed")window.visible=event.data.visible;
+      if(event.data.type==="loopino.widget.context-changed")window.context=event.data.context;
+      if(event.data.type==="loopino.widget.primary-action.query")post({type:"loopino.widget.primary-action.state",available:true,label:"New "+owner});
     });
-    document.querySelector("#dock").onclick=()=>post({type:"maverick.widget.dock.open",placement:"right",params:{navigation_scope:"fixture-chat",thread_id:"fixture-thread"}});
-    document.querySelector("#overlay").onclick=()=>post({type:"maverick.widget.dock.close"});
-    if(widgetId.endsWith("floating"))post({type:"maverick.widget.resize",width:"420px",height:"400px"});
-    post(widgetId?{type:"maverick.widget.ready"}:{type:"maverick.app.ready",app_id:owner});
+    document.querySelector("#dock").onclick=()=>post({type:"loopino.widget.dock.open",placement:"right",params:{navigation_scope:"fixture-chat",thread_id:"fixture-thread"}});
+    document.querySelector("#overlay").onclick=()=>post({type:"loopino.widget.dock.close"});
+    if(widgetId.endsWith("floating"))post({type:"loopino.widget.resize",width:"420px",height:"400px"});
+    post(widgetId?{type:"loopino.widget.ready"}:{type:"loopino.app.ready",app_id:owner});
     </script></body></html>`;
 }

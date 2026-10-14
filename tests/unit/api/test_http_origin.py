@@ -9,9 +9,9 @@ class HttpOriginTest(unittest.TestCase):
     def request(self, **headers):
         return {
             "REQUEST_METHOD": "POST",
-            "HTTP_HOST": "maverick.test",
+            "HTTP_HOST": "loopino.test",
             "wsgi.url_scheme": "https",
-            "HTTP_COOKIE": "maverick_session=synthetic",
+            "HTTP_COOKIE": "loopino_session=synthetic",
             **headers,
         }
 
@@ -22,24 +22,24 @@ class HttpOriginTest(unittest.TestCase):
 
     def test_invalid_origin_cannot_fall_back_to_valid_referer(self):
         for origin in (
-            "null", "", "not-a-url", "//maverick.test", "https://",
-            "https://[broken", "https://maverick.test:bad", "https://maverick.test:65536",
-            "https://user@maverick.test", "https://maverick.test/path",
-            "https://maverick.test/", "https://maverick.test:",
-            "https://maverick.test?", "https://maverick.test#",
-            "https://maverick.test?query", "https://maverick.test#fragment",
-            "https://maverick.\ttest", "https://maverick.test\\path",
+            "null", "", "not-a-url", "//loopino.test", "https://",
+            "https://[broken", "https://loopino.test:bad", "https://loopino.test:65536",
+            "https://user@loopino.test", "https://loopino.test/path",
+            "https://loopino.test/", "https://loopino.test:",
+            "https://loopino.test?", "https://loopino.test#",
+            "https://loopino.test?query", "https://loopino.test#fragment",
+            "https://loopino.\ttest", "https://loopino.test\\path",
         ):
             with self.subTest(origin=origin):
                 self.assert_denied(self.request(
-                    HTTP_ORIGIN=origin, HTTP_REFERER="https://maverick.test/app",
+                    HTTP_ORIGIN=origin, HTTP_REFERER="https://loopino.test/app",
                 ))
 
     def test_scheme_host_and_effective_port_must_match(self):
-        for origin in ("http://maverick.test", "https://other.test", "https://maverick.test:444"):
+        for origin in ("http://loopino.test", "https://other.test", "https://loopino.test:444"):
             with self.subTest(origin=origin):
                 self.assert_denied(self.request(HTTP_ORIGIN=origin))
-        for origin in ("https://maverick.test", "https://MAVERICK.test:443"):
+        for origin in ("https://loopino.test", "https://LOOPINO.test:443"):
             with self.subTest(origin=origin):
                 enforce_same_origin_for_unsafe_request(self.request(HTTP_ORIGIN=origin))
 
@@ -47,29 +47,29 @@ class HttpOriginTest(unittest.TestCase):
         enforce_same_origin_for_unsafe_request(self.request(
             HTTP_HOST="[::1]:8443", HTTP_ORIGIN="https://[::1]:8443",
         ))
-        self.assert_denied(self.request(HTTP_HOST="maverick.test:8443", HTTP_ORIGIN="https://maverick.test"))
+        self.assert_denied(self.request(HTTP_HOST="loopino.test:8443", HTTP_ORIGIN="https://loopino.test"))
 
     def test_referer_is_allowed_only_when_origin_is_absent(self):
-        enforce_same_origin_for_unsafe_request(self.request(HTTP_REFERER="https://maverick.test/app?tab=one"))
-        for referer in ("null", "/app", "https://foreign.test/app", "http://maverick.test/app"):
+        enforce_same_origin_for_unsafe_request(self.request(HTTP_REFERER="https://loopino.test/app?tab=one"))
+        for referer in ("null", "/app", "https://foreign.test/app", "http://loopino.test/app"):
             with self.subTest(referer=referer):
                 self.assert_denied(self.request(HTTP_REFERER=referer))
 
     def test_missing_or_invalid_request_authority_fails_closed(self):
         for headers in (
-            {"HTTP_HOST": ""}, {"HTTP_HOST": "maverick.test/path"},
-            {"HTTP_HOST": "user@maverick.test"}, {"wsgi.url_scheme": ""},
+            {"HTTP_HOST": ""}, {"HTTP_HOST": "loopino.test/path"},
+            {"HTTP_HOST": "user@loopino.test"}, {"wsgi.url_scheme": ""},
         ):
             with self.subTest(headers=headers):
-                self.assert_denied(self.request(HTTP_ORIGIN="https://maverick.test", **headers))
+                self.assert_denied(self.request(HTTP_ORIGIN="https://loopino.test", **headers))
 
     def test_raw_forwarded_headers_cannot_supply_origin_authority(self):
         self.assert_denied(self.request(
-            **{"wsgi.url_scheme": "http"}, HTTP_ORIGIN="https://maverick.test",
-            HTTP_X_FORWARDED_PROTO="https", HTTP_FORWARDED="proto=https;host=maverick.test",
+            **{"wsgi.url_scheme": "http"}, HTTP_ORIGIN="https://loopino.test",
+            HTTP_X_FORWARDED_PROTO="https", HTTP_FORWARDED="proto=https;host=loopino.test",
         ))
         enforce_same_origin_for_unsafe_request(self.request(
-            HTTP_ORIGIN="https://maverick.test", HTTP_X_FORWARDED_PROTO="http",
+            HTTP_ORIGIN="https://loopino.test", HTTP_X_FORWARDED_PROTO="http",
         ))
 
     def test_cookie_requests_without_proof_are_denied_but_nonbrowser_calls_remain_supported(self):

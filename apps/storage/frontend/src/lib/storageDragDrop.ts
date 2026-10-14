@@ -1,15 +1,15 @@
 import type { FileRole, PreviewKind, StorageFile, StorageFolder } from '../types';
 import type { DriveBreadcrumbTarget } from './storageDriveBreadcrumbs';
 
-export const STORAGE_FILE_DRAG_DATA_TYPE = 'application/x-maverick-storage-file';
-export const STORAGE_FOLDER_DRAG_DATA_TYPE = 'application/x-maverick-storage-folder';
-export const STORAGE_SELECTION_DRAG_DATA_TYPE = 'application/x-maverick-storage-selection';
-export const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = 'application/x-maverick-storage-drive-file';
-export const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = 'application/x-maverick-storage-drive-folder';
+export const STORAGE_FILE_DRAG_DATA_TYPE = 'application/x-loopino-storage-file';
+export const STORAGE_FOLDER_DRAG_DATA_TYPE = 'application/x-loopino-storage-folder';
+export const STORAGE_SELECTION_DRAG_DATA_TYPE = 'application/x-loopino-storage-selection';
+export const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = 'application/x-loopino-storage-drive-file';
+export const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = 'application/x-loopino-storage-drive-folder';
 
-const STORAGE_FILE_DRAG_ROLE_TYPE_PREFIX = 'application/x-maverick-storage-file-role-';
-const STORAGE_FOLDER_DRAG_ROLE_TYPE_PREFIX = 'application/x-maverick-storage-folder-role-';
-const STORAGE_SELECTION_DRAG_ROLE_TYPE_PREFIX = 'application/x-maverick-storage-selection-role-';
+const STORAGE_FILE_DRAG_ROLE_TYPE_PREFIX = 'application/x-loopino-storage-file-role-';
+const STORAGE_FOLDER_DRAG_ROLE_TYPE_PREFIX = 'application/x-loopino-storage-folder-role-';
+const STORAGE_SELECTION_DRAG_ROLE_TYPE_PREFIX = 'application/x-loopino-storage-selection-role-';
 const STORAGE_FILE_ROLES: FileRole[] = ['uploaded', 'generated'];
 
 export type StorageFileDragPayload = {

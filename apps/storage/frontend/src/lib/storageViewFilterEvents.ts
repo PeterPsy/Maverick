@@ -1,7 +1,7 @@
 import type { StorageViewFilter } from '../types';
 
-const DATA_CHANGED_TYPE = 'maverick.app.data-changed';
-const WIDGET_DATA_CHANGED_TYPE = 'maverick.widget.data-changed';
+const DATA_CHANGED_TYPE = 'loopino.app.data-changed';
+const WIDGET_DATA_CHANGED_TYPE = 'loopino.widget.data-changed';
 const VIEW_STATE_RESOURCE = 'view-state';
 
 type RecordPayload = Record<string, unknown>;

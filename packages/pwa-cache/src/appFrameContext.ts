@@ -1,16 +1,16 @@
 const MAX_FRAME_CONTEXT_ID_LENGTH = 256;
 
-export type MaverickAppFrameContext = {
+export type LoopinoAppFrameContext = {
   appId: string;
   workspaceId: string;
 };
 
 /** Read the immutable app/workspace scope injected by Core into isolated frames. */
-export function readMaverickAppFrameContext(): MaverickAppFrameContext | null {
+export function readLoopinoAppFrameContext(): LoopinoAppFrameContext | null {
   if (typeof window === "undefined") return null;
   const value = (window as Window & {
-    __MAVERICK_APP_FRAME_CONTEXT__?: unknown;
-  }).__MAVERICK_APP_FRAME_CONTEXT__;
+    __LOOPINO_APP_FRAME_CONTEXT__?: unknown;
+  }).__LOOPINO_APP_FRAME_CONTEXT__;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as { app_id?: unknown; workspace_id?: unknown };
   if (!validContextId(raw.app_id) || !validContextId(raw.workspace_id)) return null;

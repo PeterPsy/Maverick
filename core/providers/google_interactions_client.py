@@ -25,7 +25,7 @@ from core.providers.google_interactions_transport import (
     GoogleInteractionsHttpTransport,
     GoogleInteractionsTransport,
 )
-from core.providers.maverick_agent_provider_config import MaverickTokenCostPolicy
+from core.providers.loopino_agent_provider_config import LoopinoTokenCostPolicy
 
 
 GOOGLE_AGENTIC_MODEL_ID = "gemini-3.6-flash"
@@ -41,7 +41,7 @@ class GoogleInteractionsAgenticClient:
         model_id: str = GOOGLE_AGENTIC_MODEL_ID,
         state_mode: GoogleInteractionStateMode = "stateful",
         transport: GoogleInteractionsTransport | None = None,
-        token_cost_policy: MaverickTokenCostPolicy | None = None,
+        token_cost_policy: LoopinoTokenCostPolicy | None = None,
         routing_constraint: RoutingConstraint | None = None,
         allowed_upstream_ids: tuple[str, ...] | None = None,
         upstream_provider_names: tuple[str, ...] | None = None,
@@ -61,7 +61,7 @@ class GoogleInteractionsAgenticClient:
             or upstream_provider_names is None
             or resolved_model_ids is None
         ):
-            from core.providers.maverick_agent_builtins import (
+            from core.providers.loopino_agent_builtins import (
                 GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
             )
 

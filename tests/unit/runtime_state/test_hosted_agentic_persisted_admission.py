@@ -111,7 +111,7 @@ class HostedAgenticPersistedAdmissionTest(unittest.TestCase):
         harness, _adapter = self._ready_pairing()
         with patch.dict(
             "os.environ",
-            {"MAVERICK_RUNTIME_API_SECRET": "terminal-gap-token-secret"},
+            {"LOOPINO_RUNTIME_API_SECRET": "terminal-gap-token-secret"},
             clear=True,
         ):
             token = issue_workspace_api_token(

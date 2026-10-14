@@ -32,7 +32,7 @@ class BrowserSessionTests(unittest.TestCase):
         self.selection_patch = patch("core.identity.browser_sessions.resolve_active_workspace_for_user", side_effect=lambda *args, **kwargs: self.workspace)
         self.selection_patch.start()
         self.addCleanup(self.selection_patch.stop)
-        self.origin_patch = patch.dict("os.environ", {"MAVERICK_SIDECAR_PLATFORM_ORIGIN": "http://maverick.localhost:8014"})
+        self.origin_patch = patch.dict("os.environ", {"LOOPINO_SIDECAR_PLATFORM_ORIGIN": "http://loopino.localhost:8014"})
         self.origin_patch.start()
         self.addCleanup(self.origin_patch.stop)
         self.grant = self.issue()
@@ -97,30 +97,30 @@ class BrowserSessionTests(unittest.TestCase):
 
     def test_http_identity_resolution_requires_exact_origin(self):
         state = SimpleNamespace(identity_store=self.identity, runtime_store=self.runtime_store, workspace_store=object())
-        env = {"HTTP_COOKIE": f"maverick_session={self.session.session_id}", "wsgi.url_scheme": "http", "HTTP_HOST": "maverick.localhost:8014"}
+        env = {"HTTP_COOKIE": f"loopino_session={self.session.session_id}", "wsgi.url_scheme": "http", "HTTP_HOST": "loopino.localhost:8014"}
         with patch("core.api.session_api._now", return_value=self.now), patch("core.api.session_api.resolve_active_workspace_for_user", return_value=self.workspace):
             self.assertIsNotNone(resolve_request_session(state, env))
             self.assertIsNone(resolve_request_session(state, {**env, "HTTP_HOST": "hostmachine:8014"}))
 
     def test_local_origin_uses_running_api_port(self):
-        with patch.dict("os.environ", {"MAVERICK_SIDECAR_PLATFORM_ORIGIN": "", "MAVERICK_API_BASE": "http://127.0.0.1:8123"}):
-            self.assertEqual(platform_browser_origin(), "http://maverick.localhost:8123")
+        with patch.dict("os.environ", {"LOOPINO_SIDECAR_PLATFORM_ORIGIN": "", "LOOPINO_API_BASE": "http://127.0.0.1:8123"}):
+            self.assertEqual(platform_browser_origin(), "http://loopino.localhost:8123")
 
     def test_websocket_authentication_uses_the_equivalent_http_origin(self):
         state = SimpleNamespace(identity_store=self.identity, runtime_store=self.runtime_store, workspace_store=object())
-        for scheme, origin, host in (("ws", "http://maverick.localhost:8014", "maverick.localhost:8014"),
-                                    ("wss", "https://maverick.example", "maverick.example")):
+        for scheme, origin, host in (("ws", "http://loopino.localhost:8014", "loopino.localhost:8014"),
+                                    ("wss", "https://loopino.example", "loopino.example")):
             self.identity.save_auth_session(replace(self.session, browser_origin=origin))
-            env = {"HTTP_COOKIE": f"maverick_session={self.session.session_id}", "wsgi.url_scheme": scheme, "HTTP_HOST": host}
+            env = {"HTTP_COOKIE": f"loopino_session={self.session.session_id}", "wsgi.url_scheme": scheme, "HTTP_HOST": host}
             with patch("core.api.session_api._now", return_value=self.now), patch("core.api.session_api.resolve_active_workspace_for_user", return_value=self.workspace):
                 self.assertIsNotNone(resolve_request_session(state, env), scheme)
                 self.assertIsNone(resolve_request_session(state, {**env, "HTTP_HOST": "another.example"}), scheme)
 
     def test_runtime_websocket_handlers_preserve_the_trusted_transport_origin(self):
         state = SimpleNamespace(identity_store=self.identity, runtime_store=self.runtime_store, workspace_store=object())
-        self.identity.save_auth_session(replace(self.session, browser_origin="https://maverick.example"))
+        self.identity.save_auth_session(replace(self.session, browser_origin="https://loopino.example"))
         scope = {"scheme": "wss", "path": "/ws/runtime/threads", "headers": [
-            (b"host", b"maverick.example"), (b"cookie", f"maverick_session={self.session.session_id}".encode()),
+            (b"host", b"loopino.example"), (b"cookie", f"loopino_session={self.session.session_id}".encode()),
         ]}
         for build in (websocket_environ, thread_websocket_environ):
             with self.subTest(handler=build.__module__), patch("core.api.session_api._now", return_value=self.now), patch("core.api.session_api.resolve_active_workspace_for_user", return_value=self.workspace):

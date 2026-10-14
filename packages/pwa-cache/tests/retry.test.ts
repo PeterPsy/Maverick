@@ -470,7 +470,7 @@ describe("RAM retry coordinator", () => {
     await expect(pending).resolves.toBe("ok");
   });
 
-  it("pauses retries while the Maverick app frame is hidden", async () => {
+  it("pauses retries while the Loopino app frame is hidden", async () => {
     vi.useFakeTimers();
     const coordinator = new RetryCoordinator({ random: () => 0.5 });
     const fetchMock = vi.spyOn(globalThis, "fetch")

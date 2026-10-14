@@ -1,4 +1,4 @@
-"""Errors raised by the Maverick app SDK."""
+"""Errors raised by the Loopino app SDK."""
 
 from __future__ import annotations
 

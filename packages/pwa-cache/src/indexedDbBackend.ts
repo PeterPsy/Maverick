@@ -8,7 +8,7 @@ import type {
   StoredCacheEntry,
 } from "./types";
 
-export const PWA_CACHE_DATABASE_NAME = "maverick-pwa-data-v1";
+export const PWA_CACHE_DATABASE_NAME = "loopino-pwa-data-v1";
 export const PWA_CACHE_DATABASE_VERSION = 3;
 
 const ENTRY_STORE = "entries";

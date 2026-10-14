@@ -4,7 +4,7 @@ Date: 2026-04-17
 
 ## Purpose
 
-Define the target Maverick architecture where each workspace is a first-class isolated working environment.
+Define the target Loopino architecture where each workspace is a first-class isolated working environment.
 
 This document establishes the intended end state:
 
@@ -41,7 +41,7 @@ The platform should instead think in terms of:
 
 ## Platform Plane Separation
 
-Maverick should distinguish three different planes:
+Loopino should distinguish three different planes:
 
 1. global control plane
 2. workspace governance plane
@@ -167,10 +167,10 @@ For example:
 
 ## Target Filesystem Layout
 
-At installation level, Maverick should have:
+At installation level, Loopino should have:
 
 ```text
-/maverick/
+/loopino/
   apps/
   core/
   workspaces/
@@ -301,7 +301,7 @@ on-disk queue after a backend restart. Runtime and transcript surfaces never
 read the quarantine; deleted conversations are not recovered from residual
 files or backups.
 
-Installation-level runtime state under `.maverick/local-state/runtime/` is reserved for platform security records such as runtime API token lifecycle state. It must not store runtime sessions, threads, turns, events, process records, state snapshots, or other workspace-scoped runtime records.
+Installation-level runtime state under `.loopino/local-state/runtime/` is reserved for platform security records such as runtime API token lifecycle state. It must not store runtime sessions, threads, turns, events, process records, state snapshots, or other workspace-scoped runtime records.
 
 Runtime sessions may also contain provider-managed executable shims under:
 
@@ -309,15 +309,15 @@ Runtime sessions may also contain provider-managed executable shims under:
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/bin/
 ```
 
-The `maverick` shim installed there is the official SDK and platform CLI for workspace-isolated agents. It is a hosted API client scoped by a runtime token and must not depend on installation-level `core/`, `apps/`, or `scripts/` paths being readable inside the workspace sandbox.
+The `loopino` shim installed there is the official SDK and platform CLI for workspace-isolated agents. It is a hosted API client scoped by a runtime token and must not depend on installation-level `core/`, `apps/`, or `scripts/` paths being readable inside the workspace sandbox.
 
-Provider adapters must make that runtime `bin/` directory the first `PATH` entry for the provider process and for provider-managed shell tool environments. If the provider has its own shell environment policy, as Codex does, the runtime home configuration must explicitly set `PATH` so `command -v maverick` resolves to the session-local shim. A provider adapter must not launch runtime sessions through a host-level provider wrapper that rewrites `PATH`, clears the runtime home, or otherwise strips the managed runtime environment; when such a wrapper is discovered, the adapter must resolve the real provider entrypoint or packaged runtime binary for session launch while leaving the operator wrapper untouched for non-runtime use. A developer/operator wrapper such as `scripts/maverick` may exist outside the workspace root, but when it is accidentally invoked inside a runtime session with a runtime token it must delegate to the session shim instead of bootstrapping the platform directly.
+Provider adapters must make that runtime `bin/` directory the first `PATH` entry for the provider process and for provider-managed shell tool environments. If the provider has its own shell environment policy, as Codex does, the runtime home configuration must explicitly set `PATH` so `command -v loopino` resolves to the session-local shim. A provider adapter must not launch runtime sessions through a host-level provider wrapper that rewrites `PATH`, clears the runtime home, or otherwise strips the managed runtime environment; when such a wrapper is discovered, the adapter must resolve the real provider entrypoint or packaged runtime binary for session launch while leaving the operator wrapper untouched for non-runtime use. A developer/operator wrapper such as `scripts/loopino` may exist outside the workspace root, but when it is accidentally invoked inside a runtime session with a runtime token it must delegate to the session shim instead of bootstrapping the platform directly.
 
-Provider adapters may place provider hook scripts in the same runtime `bin/` directory when the hook is session-scoped and uses only runtime-issued authority. For Codex, Maverick installs a `PostToolUse` hook script there, disables Codex `unified_exec` for Maverick-managed sessions, registers the hook in the session `CODEX_HOME/config.toml`, and writes the matching Codex `hooks.state` trusted hash so large `Bash` results can be redacted and compacted before the provider continues from the tool output when Codex accepts and runs that hook under its hook-trust policy.
+Provider adapters may place provider hook scripts in the same runtime `bin/` directory when the hook is session-scoped and uses only runtime-issued authority. For Codex, Loopino installs a `PostToolUse` hook script there, disables Codex `unified_exec` for Loopino-managed sessions, registers the hook in the session `CODEX_HOME/config.toml`, and writes the matching Codex `hooks.state` trusted hash so large `Bash` results can be redacted and compacted before the provider continues from the tool output when Codex accepts and runs that hook under its hook-trust policy.
 
 Provider adapters may also bind specific development helper binaries into this directory when those tools are required for ordinary workspace work. These must be explicit file-level read-only binds, not broad package-root, home-directory, or repository mounts. For Codex, the adapter binds the packaged standalone `rg` binary into `runtime/sessions/<runtime_session_id>/bin/rg` so agents can search inside their workspace without being able to read the operator's Codex package tree or any non-workspace data.
 
-The shim must support the same discovery-first command families documented for agents, including `maverick apps list --json`, `maverick core cli list --json`, `maverick app <app_id> cli list --json`, and `maverick app <app_id> frontend build --json`. Runtime shims forward those commands to a core-owned runtime CLI API, which resolves the workspace and runtime session from a signed runtime token carrying workspace, session, execution-mode, token id, and expiry claims. That token id must also have an active store-backed lifecycle record, so the platform can revoke runtime API tokens and reject unregistered, expired, mismatched, or revoked tokens before enforcing the command's invocation policy. Hosted full-access tool processes additionally bind the token to one active `runtime_turn_id`; terminalization revokes it even when the child process survives. Native provider launch tokens remain session-scoped because their process spans turns. The API accepts `output_profile: "full"` or `output_profile: "provider_compact"` in the runtime-token request body; `full` is the API default for compatibility, while the shim requests `provider_compact` by default so large textual CLI response fields are compacted before provider consumption. Provider compaction must preserve explicit document-body fields for developer-context and Storage read surfaces from truncation when shortening would corrupt the requested source material; redaction still applies. Runtime shims must not impose a short fixed client timeout on forwarded CLI or SDK calls because app-owned operations such as renders and exports may legitimately run longer than ordinary request/response commands. Frontend rebuild runs host-side build tooling and is denied to sandbox runtime sessions; agents must use an allowed full-access or operator path for that operation.
+The shim must support the same discovery-first command families documented for agents, including `loopino apps list --json`, `loopino core cli list --json`, `loopino app <app_id> cli list --json`, and `loopino app <app_id> frontend build --json`. Runtime shims forward those commands to a core-owned runtime CLI API, which resolves the workspace and runtime session from a signed runtime token carrying workspace, session, execution-mode, token id, and expiry claims. That token id must also have an active store-backed lifecycle record, so the platform can revoke runtime API tokens and reject unregistered, expired, mismatched, or revoked tokens before enforcing the command's invocation policy. Hosted full-access tool processes additionally bind the token to one active `runtime_turn_id`; terminalization revokes it even when the child process survives. Native provider launch tokens remain session-scoped because their process spans turns. The API accepts `output_profile: "full"` or `output_profile: "provider_compact"` in the runtime-token request body; `full` is the API default for compatibility, while the shim requests `provider_compact` by default so large textual CLI response fields are compacted before provider consumption. Provider compaction must preserve explicit document-body fields for developer-context and Storage read surfaces from truncation when shortening would corrupt the requested source material; redaction still applies. Runtime shims must not impose a short fixed client timeout on forwarded CLI or SDK calls because app-owned operations such as renders and exports may legitimately run longer than ordinary request/response commands. Frontend rebuild runs host-side build tooling and is denied to sandbox runtime sessions; agents must use an allowed full-access or operator path for that operation.
 
 So the distinction is:
 
@@ -351,7 +351,7 @@ share one path resolver. The resolver accepts `.`, relative paths,
 the same syntax but rejects a resolved path outside its workspace boundary.
 Full-access shell/process execution inherits the installed host command
 environment while keeping the session runtime `bin/` directory first on
-`PATH`, so `maverick`, `git`, `rg`, and other installed CLIs are available. It
+`PATH`, so `loopino`, `git`, `rg`, and other installed CLIs are available. It
 does not stage a copy-on-write workspace or automatically mask `.git`, host
 paths or tool output. Direct listing/search still use cooperative cancellation
 and physical scan/read ceilings: these implementation bounds prevent a broad
@@ -362,7 +362,7 @@ Provider processes that operate on workspace files should start in the workspace
 
 Notes:
 
-- `default/` is the installation-level workspace created automatically by Maverick.
+- `default/` is the installation-level workspace created automatically by Loopino.
 - Every additional company or tenant workspace gets its own sibling root under `workspaces/`.
 - `core/` and the installation-level app store/cache under `apps/` stay outside the workspace roots.
 - A sandboxed agent assigned to a non-default workspace may not write outside `/workspaces/<workspace_id>/`.
@@ -537,7 +537,7 @@ Each app should own its own namespace under:
 /workspaces/<workspace_id>/data/<app_id>/
 ```
 
-This is the Maverick equivalent of an app sandbox data container.
+This is the Loopino equivalent of an app sandbox data container.
 
 If an app named `dynamic_views` produces a saved artifact for workspace `acme`, it should persist under:
 
@@ -557,7 +557,7 @@ That means the platform should support this principle:
 - `data/<app_id>/` is the app storage boundary inside that workspace
 - the app developer chooses the internal storage structure
 
-The standard contract for Maverick apps is defined in:
+The standard contract for Loopino apps is defined in:
 
 - [app_contract_architecture.md](app_contract_architecture.md)
 
@@ -593,7 +593,7 @@ Installed but disabled apps keep their workspace binding and app-owned data, but
 
 #### Install
 
-When an app is installed in a workspace, Maverick should:
+When an app is installed in a workspace, Loopino should:
 
 1. register the app as installed for that workspace
 2. create `data/<app_id>/` if it does not already exist
@@ -639,7 +639,7 @@ This avoids conflating:
 
 #### Reinstall
 
-If an app is reinstalled in a workspace and `data/<app_id>/` still exists, Maverick should allow the app to reattach to that existing data.
+If an app is reinstalled in a workspace and `data/<app_id>/` still exists, Loopino should allow the app to reattach to that existing data.
 
 This may require:
 
@@ -732,7 +732,7 @@ One supported runtime backend today is:
 
 It is one backend that can satisfy the runtime contract.
 
-What Maverick calls "agents" at workspace level are not separate core runtime types.
+What Loopino calls "agents" at workspace level are not separate core runtime types.
 
 They are app-owned configurations that instruct the selected runtime backend through prompts and related metadata.
 
@@ -782,21 +782,21 @@ The Codex backend must be conversation-continuous.
 
 For interactive chat and agent sessions, Codex is driven through the Codex app-server protocol:
 
-- the core runtime creates one Maverick runtime session
+- the core runtime creates one Loopino runtime session
 - the Codex provider adapter launches `codex app-server --listen stdio://`
 - the adapter creates or resumes one Codex provider thread for that runtime session
 - every user turn is sent with `turn/start` to that same provider thread
-- provider app-server events are normalized into Maverick runtime events and streamed over the core runtime WebSocket
+- provider app-server events are normalized into Loopino runtime events and streamed over the core runtime WebSocket
 
 If the provider app-server subprocess exits before emitting a terminal turn event, the runtime must treat that turn as terminally failed or cancelled according to the canonical turn record and must release the session execution lock so queued follow-up turns can start.
 
-Core runtime stores chat thread metadata and the linked Maverick `runtime_session_id`. The chat app may render and update that core-owned record through runtime APIs, but it must not persist its own thread catalog, own the Codex provider thread id, or reconstruct provider memory itself.
+Core runtime stores chat thread metadata and the linked Loopino `runtime_session_id`. The chat app may render and update that core-owned record through runtime APIs, but it must not persist its own thread catalog, own the Codex provider thread id, or reconstruct provider memory itself.
 
 The provider thread id is core runtime/provider state.
 
 This keeps the app boundary clean while preserving real conversation memory.
 
-If the browser refreshes or the user leaves and reopens the chat, the UI reloads transcript from Maverick runtime events and the next user turn continues through the same provider conversation when the backend supports thread resume.
+If the browser refreshes or the user leaves and reopens the chat, the UI reloads transcript from Loopino runtime events and the next user turn continues through the same provider conversation when the backend supports thread resume.
 
 Examples of app-owned agent definition content:
 
@@ -868,7 +868,7 @@ The platform database is not the default storage engine for app-owned data.
 
 ### Platform database versus app database
 
-Maverick should distinguish clearly between:
+Loopino should distinguish clearly between:
 
 - the core platform database
 - app-owned embedded storage inside the workspace
@@ -927,7 +927,7 @@ These are related, but they are not the same thing.
 
 #### Install
 
-When an app is installed in a workspace, Maverick should:
+When an app is installed in a workspace, Loopino should:
 
 1. register the app as installed in that workspace
 2. make the app bundle or capability available to that workspace
@@ -946,7 +946,7 @@ Install should create the minimum required structure, not arbitrary seeded conte
 
 #### Upgrade
 
-When an app is upgraded in a workspace, Maverick should:
+When an app is upgraded in a workspace, Loopino should:
 
 1. activate the new version for that workspace
 2. preserve the existing `data/<app_id>/`
@@ -992,7 +992,7 @@ This avoids conflating:
 
 #### Reinstall
 
-If an app is reinstalled in a workspace and `data/<app_id>/` still exists, Maverick should allow the app to reattach to that existing data.
+If an app is reinstalled in a workspace and `data/<app_id>/` still exists, Loopino should allow the app to reattach to that existing data.
 
 This may require:
 
@@ -1022,7 +1022,7 @@ By default, duplication should not preserve unless explicitly requested:
 
 Workspace export and import should include app-owned persisted data under `data/<app_id>/`, together with the metadata required to understand which apps were installed and which versions those data were associated with.
 
-If app data is imported before the corresponding app is available locally, Maverick may keep that data as dormant app-owned workspace content until the app is installed again.
+If app data is imported before the corresponding app is available locally, Loopino may keep that data as dormant app-owned workspace content until the app is installed again.
 
 ### App data migrations
 
@@ -1070,8 +1070,8 @@ In the first implementation, a small app-owned metadata file under `data/<app_id
 
 When an app is upgraded in a workspace:
 
-1. Maverick activates or prepares the new app version
-2. Maverick invokes the app migration hook if required
+1. Loopino activates or prepares the new app version
+2. Loopino invokes the app migration hook if required
 3. the app reads the current data schema version
 4. the app performs the required migration steps
 5. the app updates its local schema version metadata
@@ -1189,7 +1189,7 @@ This keeps workspace export understandable and portable.
 
 #### Workspace import
 
-When a workspace is imported, Maverick should:
+When a workspace is imported, Loopino should:
 
 1. create or attach the target workspace
 2. restore the workspace data plane
@@ -1266,7 +1266,7 @@ That platform backup covers:
 
 This backup is distinct from workspace export.
 
-For the local hosted bootstrap, identity and workspace control-plane records are stored in the configured control-plane adapter. The default adapter is JSON under `data/control-plane/json`, outside `.maverick`. MongoDB and future adapters are selectable installation choices.
+For the local hosted bootstrap, identity and workspace control-plane records are stored in the configured control-plane adapter. The default adapter is JSON under `data/control-plane/json`, outside `.loopino`. MongoDB and future adapters are selectable installation choices.
 
 This control-plane persistence is not workspace data:
 
@@ -1290,10 +1290,10 @@ This separation prevents operational debugging from collapsing into one undiffer
 
 ### Installation-level logs
 
-At installation level, Maverick should have:
+At installation level, Loopino should have:
 
 ```text
-/maverick/logs/
+/loopino/logs/
   platform/
   runtime/
 ```
@@ -1340,7 +1340,7 @@ This area is for workspace-scoped operational events such as:
 
 Runtime-domain records are authoritative execution state, not debug logs.
 
-The local bootstrap host persists workspace-scoped runtime collections under the owning workspace root. Runtime sessions, runtime threads, turns, events, processes, and state must survive host restarts without using installation-local `.maverick/local-state/runtime/` as their storage home.
+The local bootstrap host persists workspace-scoped runtime collections under the owning workspace root. Runtime sessions, runtime threads, turns, events, processes, and state must survive host restarts without using installation-local `.loopino/local-state/runtime/` as their storage home.
 
 #### `logs/apps/<app_id>/`
 
@@ -1776,7 +1776,7 @@ That means:
 - Vault or another platform-authorized surface may create an app grant that binds the reference to an installed, enabled, and surface-resolvable workspace app, logical name, allowed actions, optional structured HTTP/HTTPS target patterns or platform delivery target patterns, and expiry; `app.backend` grant names must be declared by the target app under `permissions.secrets.read`, and admin UI discovery of those logical names must use a Core Secrets surface rather than the generic `/api/apps` workspace registry
 - the runtime resolves that reference through the platform only for the requested action and target
 - the platform decides whether the grant, workspace, app, action, target, and expiry allow the use
-- mounted app backend, CLI, and MCP entrypoints receive secret values only as ephemeral `app_secrets` input from active, non-expired grants that allow `app.backend`, match the delivery target such as `maverick://app.backend/backend`, `maverick://app.backend/cli/<command>`, or `maverick://app.backend/mcp/<tool>`, and match contract-declared logical names; CLI and MCP delivery is further limited to logical names explicitly listed in the command or tool descriptor's `required_secrets`; required delivery fails closed and emits audit/event records if a logical name has no current compatible grant
+- mounted app backend, CLI, and MCP entrypoints receive secret values only as ephemeral `app_secrets` input from active, non-expired grants that allow `app.backend`, match the delivery target such as `loopino://app.backend/backend`, `loopino://app.backend/cli/<command>`, or `loopino://app.backend/mcp/<tool>`, and match contract-declared logical names; CLI and MCP delivery is further limited to logical names explicitly listed in the command or tool descriptor's `required_secrets`; required delivery fails closed and emits audit/event records if a logical name has no current compatible grant
 
 If the runtime receives a resolved secret value, that delivery should be treated as ephemeral runtime input, not as workspace-owned persisted state.
 
@@ -1800,7 +1800,7 @@ At most, workspace data may include:
 
 If a workspace is imported elsewhere, secret values must be re-established in the local platform control plane.
 
-Vault is the workspace-facing management app for this domain. It may display secret metadata, grant metadata, and audit events through core APIs, but it must not create a `data/vault` store for raw values or become the source of authority for secret material. A generic app data-root marker such as `data/vault/.maverick-app.json` may exist as installation metadata for an enabled app binding, but Vault must not persist app-owned records there. Core Secrets remains the only authoritative owner of encrypted values, resolution policy, revocation, and audit.
+Vault is the workspace-facing management app for this domain. It may display secret metadata, grant metadata, and audit events through core APIs, but it must not create a `data/vault` store for raw values or become the source of authority for secret material. A generic app data-root marker such as `data/vault/.loopino-app.json` may exist as installation metadata for an enabled app binding, but Vault must not persist app-owned records there. Core Secrets remains the only authoritative owner of encrypted values, resolution policy, revocation, and audit.
 
 ### Working directory
 
@@ -1825,7 +1825,7 @@ The writable scope must still be the whole workspace root.
 If a sandboxed agent wants to:
 
 - query company memory outside local files
-- create or manage Maverick app records
+- create or manage Loopino app records
 - access operating system records
 - inspect platform status
 - interact with external providers
@@ -1878,7 +1878,7 @@ That inventory records stable file ids, current paths, content type, preview kin
 
 Large Storage transfers must avoid app-backend JSON bodies as the transport. Inline write and read operations stay bounded for CLI, MCP, and preview workflows, while app-owned chunked upload sessions and authenticated media/file-response routes handle large user-facing upload and download workflows. This keeps workspace files under `storage/uploaded/` and `storage/generated/` as the source of truth without requiring the core app backend bridge to accept hundreds of megabytes of JSON.
 
-Out-of-band files under `storage/uploaded/` or `storage/generated/` remain valid workspace artifacts. Storage catalog reconciliation may scan the filesystem to add those files to `files.json`; once indexed, references should use the assigned stable `file_id`. Reconciliation must ignore Storage atomic-write temporary files with the internal `.maverick-storage-write-` prefix and tolerate paths disappearing while a concurrent external writer changes the tree.
+Out-of-band files under `storage/uploaded/` or `storage/generated/` remain valid workspace artifacts. Storage catalog reconciliation may scan the filesystem to add those files to `files.json`; once indexed, references should use the assigned stable `file_id`. Reconciliation must ignore Storage atomic-write temporary files with the internal `.loopino-storage-write-` prefix and tolerate paths disappearing while a concurrent external writer changes the tree.
 
 ### Stable file identity
 
@@ -1964,7 +1964,7 @@ No silent cross-tenant fallback should exist.
 
 ### Memory domain model
 
-For the current Maverick target, the memory app should model:
+For the current Loopino target, the memory app should model:
 
 - human-facing graph nodes
 - typed links between nodes
@@ -2083,7 +2083,7 @@ Memory retrieval should prefer:
 
 Use one platform database with strict workspace scoping, not one database per workspace.
 
-This is the recommended default architecture for Maverick.
+This is the recommended default architecture for Loopino.
 
 Why:
 
@@ -2130,7 +2130,7 @@ Use that only when required by:
 
 ## Provisioning Model
 
-When Maverick is installed on a machine:
+When Loopino is installed on a machine:
 
 1. create installation-level `apps/`
 2. create installation-level `core/`
@@ -2199,7 +2199,7 @@ The key requirement is that the workspace root is the canonical isolated operati
 
 ## Decision Summary
 
-The target Maverick architecture should be:
+The target Loopino architecture should be:
 
 - top-level `workspaces/` directory alongside `core/` and `apps/`
 - one canonical filesystem root per workspace

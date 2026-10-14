@@ -1,6 +1,6 @@
 /** Core-injected origin: never infer trust from a widget URL, referrer or message. */
 export function postToShell(message: Record<string, unknown>): boolean {
-  const origin = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+  const origin = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__;
   if (window.parent === window || typeof origin !== 'string') return false;
   try {
     const url = new URL(origin);

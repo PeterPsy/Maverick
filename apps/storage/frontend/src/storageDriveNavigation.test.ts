@@ -49,8 +49,8 @@ describe('storage Drive navigation stability', () => {
   it('pauses Drive and view sync work while the app iframe is hidden', () => {
     const source = readSource('main.tsx');
 
-    expect(source).toContain('const appVisibleRef = useRef(maverickAppIsVisible());');
-    expect(source).toContain('observeMaverickVisibility');
+    expect(source).toContain('const appVisibleRef = useRef(loopinoAppIsVisible());');
+    expect(source).toContain('observeLoopinoVisibility');
     expect(source).toContain('connectAppEventSocket');
     expect(source).toContain('abortDriveRequests();');
     expect(source).toContain('!appVisibleRef.current || driveFolderAbortRef.current || driveLoadMoreAbortRef.current');

@@ -1,9 +1,22 @@
 {
-  "name": "@maverick/account-avatar",
+  "name": "@loopino/account-avatar",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "types": "./src/index.tsx",
-  "exports": { ".": { "types": "./src/index.tsx", "import": "./src/index.tsx" } },
-  "peerDependencies": { "react": ">=19 <20" }
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "import": "./src/index.tsx"
+    }
+  },
+  "peerDependencies": {
+    "react": ">=19 <20"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7"
+  },
+  "engines": {
+    "node": ">=24.11.0 <25"
+  }
 }

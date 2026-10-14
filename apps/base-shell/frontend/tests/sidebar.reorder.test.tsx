@@ -21,7 +21,7 @@ function app(app_id: string, name = app_id): AppRegistryItem {
     frontend_launchable: true,
     logo: null,
     name,
-    publisher: "maverick",
+    publisher: "loopino",
     source_access: "none",
     status: "enabled",
     version: "1.0.0",
@@ -104,12 +104,12 @@ describe("Sidebar desktop rail reorder", () => {
     expect(accounts[0].closest(".bs-sidebar__rail")).toBeNull();
 
     const openAccounts = vi.fn();
-    window.addEventListener("maverick.connected-accounts.open", openAccounts);
+    window.addEventListener("loopino.connected-accounts.open", openAccounts);
     try {
       await act(async () => accounts[0].click());
       expect(openAccounts).toHaveBeenCalledOnce();
     } finally {
-      window.removeEventListener("maverick.connected-accounts.open", openAccounts);
+      window.removeEventListener("loopino.connected-accounts.open", openAccounts);
     }
   });
 

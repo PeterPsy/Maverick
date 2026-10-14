@@ -164,11 +164,11 @@ class AgentsAppTestCase(unittest.TestCase):
     def test_data_and_view_actions_emit_separate_events(self) -> None:
         self.assertEqual(
             app_events_for_action("upsert_agent_definition"),
-            [{"type": "maverick.app.data-changed", "resource": "configuration"}],
+            [{"type": "loopino.app.data-changed", "resource": "configuration"}],
         )
         self.assertEqual(
             app_events_for_action("set_view_filter"),
-            [{"type": "maverick.app.data-changed", "resource": "view-state"}],
+            [{"type": "loopino.app.data-changed", "resource": "view-state"}],
         )
         self.assertEqual(app_events_for_action("catalog"), [])
 

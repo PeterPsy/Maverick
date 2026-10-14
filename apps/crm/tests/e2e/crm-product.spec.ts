@@ -80,7 +80,7 @@ test('calendar ranges, quality review and transcripts remain explicit read-only 
   for (const table of ['contacts', 'external_refs', 'workflow_proposals', 'notes']) expect(after[table]).toEqual(before[table]);
 });
 
-test('dashboard mirrors brief, metrics and pipeline structure with Maverick colors on desktop and mobile', async ({ page }, testInfo) => {
+test('dashboard mirrors brief, metrics and pipeline structure with Loopino colors on desktop and mobile', async ({ page }, testInfo) => {
   create('brief', { title: 'Relationship priorities', body: 'Follow up on the customer meeting.\nPrepare the next offer.', period_start: '2030-10-01', period_end: '2030-10-07' });
   backend(dataRoot, { action: 'crm.create_deal', name: 'Customer opportunity', value: 2000, currency: 'EUR', margin_minor: 50000 });
   backend(dataRoot, { action: 'crm.create_deal', name: 'USD opportunity', value: 1000, currency: 'USD', margin_minor: 20000 });
@@ -116,11 +116,11 @@ test('dashboard mirrors brief, metrics and pipeline structure with Maverick colo
   await expect(page.getByRole('complementary', { name: 'Record inspector' })).toHaveCount(0);
 });
 
-test('mobile canvas reserves the Maverick shell header without creating page overflow', async ({ page }, testInfo) => {
+test('mobile canvas reserves the Loopino shell header without creating page overflow', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mount(page, dataRoot);
   await page.evaluate(() => {
-    document.documentElement.style.setProperty('--maverick-shell-mobile-content-top-offset', '68px');
+    document.documentElement.style.setProperty('--loopino-shell-mobile-content-top-offset', '68px');
   });
 
   const layout = await page.locator('.product-main').evaluate((main) => {

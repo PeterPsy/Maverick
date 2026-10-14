@@ -137,8 +137,8 @@ _PUBLIC_APP_STATIC_MANIFEST = {
     "favicon.ico",
     "manifest.webmanifest",
     "material-symbols-rounded.woff2",
-    "maverick-frontend-assets.json",
-    "maverick-icon-compact.png",
+    "loopino-frontend-assets.json",
+    "loopino-icon-compact.png",
     "pwa-apple-touch-icon.png",
     "pwa-logo-192.png",
     "pwa-logo.png",
@@ -147,7 +147,7 @@ _PUBLIC_APP_STATIC_MANIFEST = {
 _ROOT_REVALIDATED_CACHE_CONTROL = {
     "manifest.webmanifest": "public, max-age=300, must-revalidate",
     "sw.js": "no-cache",
-    "maverick-frontend-assets.json": "no-cache",
+    "loopino-frontend-assets.json": "no-cache",
 }
 _PUBLIC_UNHASHED_CACHE_CONTROL = "public, max-age=86400, must-revalidate"
 _PUBLIC_IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
@@ -718,7 +718,7 @@ def handle_app_backend(
         ):
             streaming_entrypoint = run_streaming_json_entrypoint_with_sidecars(
                 source_root / backend,
-                payload={**entrypoint_payload, "stream_response_protocol": "maverick.backend.stream.v1"},
+                payload={**entrypoint_payload, "stream_response_protocol": "loopino.backend.stream.v1"},
                 cwd=source_root,
                 timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
                 shutdown_controller=shutdown_controller,
@@ -896,7 +896,7 @@ def _serve_app_file_gateway_manifest(
         manifest, error, status_code = _load_app_file_gateway_manifest(manifest_root=manifest_root, token=token)
         if manifest is None:
             return json_response(start_response, {"error": error}, status=status_line(status_code))
-    if str(manifest.get("schema") or "") != "maverick.app.file_gateway.v1":
+    if str(manifest.get("schema") or "") != "loopino.app.file_gateway.v1":
         return json_response(start_response, {"error": "file_gateway_invalid"}, status=status_line(500))
     manifest_app_id = str(manifest.get("app_id") or app_id).strip()
     if manifest_app_id and manifest_app_id != app_id:

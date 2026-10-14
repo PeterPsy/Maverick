@@ -31,7 +31,7 @@ export function notifyActiveMemorySelection(nodeId: string, options: NotifyOptio
   const ownerAppId = options.ownerAppId || "memory";
   parentWindow.postMessage(
     {
-      type: "maverick.app.selection-changed",
+      type: "loopino.app.selection-changed",
       owner_app_id: ownerAppId,
       selection: { node_id: normalizedNodeId },
     },
@@ -41,7 +41,7 @@ export function notifyActiveMemorySelection(nodeId: string, options: NotifyOptio
 }
 
 export function nodeIdFromSelectionMessage(message: ActiveMemorySelectionMessage, ownerAppId = "memory"): string {
-  if (message.type !== "maverick.app.selection-changed" || message.owner_app_id !== ownerAppId) {
+  if (message.type !== "loopino.app.selection-changed" || message.owner_app_id !== ownerAppId) {
     return "";
   }
   const value = message.selection && typeof message.selection.node_id === "string" ? message.selection.node_id.trim() : "";
@@ -56,7 +56,7 @@ export function nodeIdFromWidgetContext(message: {
   };
   type?: string;
 }, ownerAppId = "memory"): string {
-  if (message.type !== "maverick.widget.context-changed") {
+  if (message.type !== "loopino.widget.context-changed") {
     return "";
   }
   const payload = message.context?.content?.payload;

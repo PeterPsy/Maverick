@@ -4,12 +4,12 @@ type ServerBridge = { postMessage: (message: Record<string, unknown>) => Promise
 
 function bridge(): ServerBridge | undefined {
   const handlers = (window as unknown as { webkit?: { messageHandlers?: {
-    maverickServers?: ServerBridge; sensesHost?: unknown; maverickDeviceUse?: unknown; maverickExternalURL?: unknown;
+    loopinoServers?: ServerBridge; sensesHost?: unknown; loopinoDeviceUse?: unknown; loopinoExternalURL?: unknown;
   } } }).webkit?.messageHandlers;
-  if (!handlers?.maverickServers && (handlers?.sensesHost || handlers?.maverickDeviceUse || handlers?.maverickExternalURL)) {
-    throw new Error("Update the Maverick native app to manage servers. Your current login will be preserved.");
+  if (!handlers?.loopinoServers && (handlers?.sensesHost || handlers?.loopinoDeviceUse || handlers?.loopinoExternalURL)) {
+    throw new Error("Update the Loopino native app to manage servers. Your current login will be preserved.");
   }
-  return handlers?.maverickServers;
+  return handlers?.loopinoServers;
 }
 
 export function normalizeServerOrigin(value: string): string {
@@ -20,9 +20,9 @@ export function normalizeServerOrigin(value: string): string {
   return url.origin;
 }
 
-const storageKey = "maverick.server-bookmarks.v1";
+const storageKey = "loopino.server-bookmarks.v1";
 function bookmarks(): ServerProfile[] {
-  const current = { id: window.location.origin, name: "This Maverick", origin: window.location.origin, current: true };
+  const current = { id: window.location.origin, name: "This Loopino", origin: window.location.origin, current: true };
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
     if (!Array.isArray(saved)) return [current];
@@ -37,7 +37,7 @@ function decodeNative(value: unknown): ServerProfiles {
   const data = value as { profiles?: ServerProfile[] };
   if (!Array.isArray(data?.profiles) || !data.profiles.length || data.profiles.some(item =>
     !item || typeof item.id !== "string" || typeof item.name !== "string" || typeof item.origin !== "string" || typeof item.current !== "boolean")) {
-    throw new Error("Update the Maverick native app to manage servers.");
+    throw new Error("Update the Loopino native app to manage servers.");
   }
   return { native: true, profiles: data.profiles };
 }

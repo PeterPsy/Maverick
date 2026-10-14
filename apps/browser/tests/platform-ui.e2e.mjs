@@ -18,7 +18,7 @@ try {
     const cors = {"Access-Control-Allow-Origin": isolated};
     if (url.origin === platform && url.pathname.endsWith(".js")) await bundleReady;
     if (url.origin === platform && url.pathname === "/app/browser") return route.fulfill({contentType: "text/html", body:
-      `<iframe src="${isolated}/apps/browser/?maverick_theme=light&maverick_color_scheme=light" style="width:100%;height:800px"></iframe>`});
+      `<iframe src="${isolated}/apps/browser/?loopino_theme=light&loopino_color_scheme=light" style="width:100%;height:800px"></iframe>`});
     if (url.origin === platform && !url.pathname.startsWith("/apps/browser/assets/")) return route.fulfill({status: 403, body: "app_frame_isolation_required"});
     if (url.pathname === "/api/apps/browser/backend") {
       assert.equal(url.origin, isolated);
@@ -28,7 +28,7 @@ try {
     const relative = url.pathname.replace(/^\/apps\/browser\//u, "") || "index.html", file = resolve(dist, relative);
     if (!file.startsWith(dist) || !existsSync(file)) return route.fulfill({status: 404});
     let body = readFileSync(file);
-    if (extname(file) === ".html") body = Buffer.from(body.toString().replace("<head>", `<head><script>window.__MAVERICK_PLATFORM_ORIGIN__=${JSON.stringify(platform)}</script>`)
+    if (extname(file) === ".html") body = Buffer.from(body.toString().replace("<head>", `<head><script>window.__LOOPINO_PLATFORM_ORIGIN__=${JSON.stringify(platform)}</script>`)
       .replaceAll('"/apps/browser/assets/', `"${platform}/apps/browser/assets/`));
     return route.fulfill({headers: cors, contentType: ({".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml"})[extname(file)] || "application/octet-stream", body});
   });
@@ -39,7 +39,7 @@ try {
   await page.goto(`${platform}/app/browser`, {waitUntil: "commit"});
   const frame = await frameNavigation;
   await frame.waitForFunction(() => document.styleSheets.length && document.querySelector("#app"));
-  assert.equal(await frame.evaluate(() => document.documentElement.dataset.maverickTheme), "light");
+  assert.equal(await frame.evaluate(() => document.documentElement.dataset.loopinoTheme), "light");
   assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
   assert.equal(await frame.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), "rgb(247, 248, 251)", "The light background must render while the app bundle is still pending");
   assert.equal(await frame.locator("#url").count(), 0, "The app bundle has not executed yet");
@@ -51,7 +51,7 @@ try {
   assert.equal(await frame.locator("#url").inputValue(), `${platform}/app/browser?connector=1`);
   const archiveUrl = await frame.locator("#download").getAttribute("href");
   assert.equal(new URL(archiveUrl).origin, platform);
-  assert.match(new URL(archiveUrl).pathname, /^\/apps\/browser\/assets\/maverick-browser-companion-[\w-]+\.zip$/u);
+  assert.match(new URL(archiveUrl).pathname, /^\/apps\/browser\/assets\/loopino-browser-companion-[\w-]+\.zip$/u);
   // Native downloads are verified against the HTTP server in companion.e2e;
   // route interception cannot fulfill Chromium's browser-process download.
   const archive = await frame.evaluate(async () => {
@@ -61,7 +61,7 @@ try {
   assert.equal(archive.status, 200);
   assert(Buffer.from(archive.bytes).equals(readFileSync(resolve(dist, new URL(archiveUrl).pathname.replace("/apps/browser/", "")))));
   const send = message => page.evaluate(({message, isolated}) => document.querySelector("iframe").contentWindow.postMessage(message, isolated), {message, isolated});
-  await send({type: "maverick.app.navigate", app_id: "browser", params: {connector: "1"}});
+  await send({type: "loopino.app.navigate", app_id: "browser", params: {connector: "1"}});
   await frame.waitForFunction(() => !document.querySelector("#connector-actions").hidden);
   assert.equal(await frame.locator("#setup").getAttribute("open"), "");
   assert.equal(await frame.locator("#connect").isDisabled(), true, "Manually opening a connector URL must not claim a shared tab");
@@ -70,36 +70,36 @@ try {
   // A late extension attachment retries the check even if the initial probe failed.
   await frame.evaluate(() => {
     window.addEventListener("message",event=>{
-      if(event.source === window && event.data?.type === "maverick.browser.request" && event.data.action === "status")
-        window.postMessage({type:"maverick.browser.response",id:event.data.id,result:{status:"shared",title:"Selected fixture profile",url:"https://www.instagram.com/fixture/"}},location.origin);
+      if(event.source === window && event.data?.type === "loopino.browser.request" && event.data.action === "status")
+        window.postMessage({type:"loopino.browser.response",id:event.data.id,result:{status:"shared",title:"Selected fixture profile",url:"https://www.instagram.com/fixture/"}},location.origin);
     });
-    window.postMessage({type:"maverick.browser.ready"},location.origin);
+    window.postMessage({type:"loopino.browser.ready"},location.origin);
   });
   await page.clock.runFor(1);
   await frame.waitForFunction(() => !document.querySelector("#connect").disabled);
   assert.match(await frame.locator("#status").textContent(), /Selected fixture profile/u);
-  await send({type: "maverick.shell.theme-changed", theme: {effective: "dark", color_scheme: "dark", mode: "dark"}});
-  await frame.waitForFunction(() => document.documentElement.dataset.maverickTheme === "dark");
-  await frame.evaluate(() => window.postMessage({type: "maverick.shell.theme-changed", theme: {effective: "light"}}, location.origin));
+  await send({type: "loopino.shell.theme-changed", theme: {effective: "dark", color_scheme: "dark", mode: "dark"}});
+  await frame.waitForFunction(() => document.documentElement.dataset.loopinoTheme === "dark");
+  await frame.evaluate(() => window.postMessage({type: "loopino.shell.theme-changed", theme: {effective: "light"}}, location.origin));
   await page.clock.runFor(1);
-  assert.equal(await frame.evaluate(() => document.documentElement.dataset.maverickTheme), "dark", "Messages from a non-parent source are rejected");
-  await send({type: "maverick.app.visibility-changed", app_id: "browser", visible: false});
+  assert.equal(await frame.evaluate(() => document.documentElement.dataset.loopinoTheme), "dark", "Messages from a non-parent source are rejected");
+  await send({type: "loopino.app.visibility-changed", app_id: "browser", visible: false});
   await page.clock.runFor(1);
   const hiddenReads = reads;
   await page.evaluate(() => document.querySelector("iframe").style.display = "none");
   await frame.locator("#refresh").dispatchEvent("click");
-  await send({type: "maverick.app.data-changed", owner_app_id: "browser", resource: "companion"});
+  await send({type: "loopino.app.data-changed", owner_app_id: "browser", resource: "companion"});
   await page.clock.runFor(90000);
   assert.equal(reads, hiddenReads, "Hidden app frames must not poll or refresh on data events");
   assert.equal(await frame.evaluate(() => document.visibilityState), "visible", "Shell hiding does not change document visibility");
   await page.evaluate(() => document.querySelector("iframe").style.display = "block");
   const resumed = page.waitForResponse(response => response.url().endsWith("/api/apps/browser/backend"));
-  await send({type: "maverick.app.visibility-changed", app_id: "browser", visible: true});
+  await send({type: "loopino.app.visibility-changed", app_id: "browser", visible: true});
   await resumed;
   await frame.waitForFunction(() => !document.querySelector("#refresh").disabled);
   assert.equal(reads, hiddenReads + 1, "Showing the app refreshes immediately once");
-  await send({type: "maverick.shell.theme-changed", theme: {effective: "light", color_scheme: "light", mode: "system"}});
-  await frame.waitForFunction(() => document.documentElement.dataset.maverickTheme === "light");
+  await send({type: "loopino.shell.theme-changed", theme: {effective: "light", color_scheme: "light", mode: "system"}});
+  await frame.waitForFunction(() => document.documentElement.dataset.loopinoTheme === "light");
   assert.deepEqual(errors, []);
   await context.close();
   process.stdout.write("Browser platform fixture passed: isolated download/address, light first paint with delayed bundle, initial/live theme, authenticated parent messages, hidden-frame pause and resume.\n");

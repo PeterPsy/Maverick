@@ -83,7 +83,7 @@ def recovery_tool_specs(
         except AuthorizationError as error:
             raise McpInvocationNotAllowedError(error.reason) from error
         result = restart_backend_service(
-            service_name=str(arguments.get("service_name") or "maverick-core.service"),
+            service_name=str(arguments.get("service_name") or "loopino-core.service"),
             health_url=str(arguments.get("health_url") or "http://127.0.0.1:8014/health"),
         )
         return result.to_payload()
@@ -147,7 +147,7 @@ def recovery_tool_specs(
     tool_specs = [
         ("core.recovery.status", "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, None, _recovery_status_handler),
         ("core.recovery.restart", "Execute one runtime-session restart recovery action when allowed.", WORKSPACE_SAFE, None, _recovery_restart_handler),
-        ("core.recovery.restart_backend", "Restart the Maverick backend host service and verify its health.", FULL_ACCESS_WORKSPACE, None, _recovery_backend_restart_handler),
+        ("core.recovery.restart_backend", "Restart the Loopino backend host service and verify its health.", FULL_ACCESS_WORKSPACE, None, _recovery_backend_restart_handler),
         ("core.recovery.failed_start", "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, None, _recovery_failed_start_handler),
         ("core.recovery.health", "Run one recovery health probe on demand.", OPERATOR_ONLY, RECOVERY_HEALTH_INPUT_SCHEMA, _recovery_health_handler),
     ]

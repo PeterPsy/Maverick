@@ -1,6 +1,6 @@
 import { loadCachedCatalog, requestJson } from "./appStoreApi.js";
 import { withRegistryLogo } from "./appIconIdentity.js";
-import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
+import { isExactLoopinoParentMessage } from "@loopino/pwa-cache";
 
 const state = {
   apps: [],
@@ -192,12 +192,12 @@ function categoryLabel(app, installation = null) {
   if (surfaces.includes("mcp")) return "Agent-ready tools";
   if (surfaces.includes("cli")) return "Command utilities";
   if (surfaces.includes("backend")) return "Server extensions";
-  return "Maverick apps";
+  return "Loopino apps";
 }
 
 function frontendPresentation(app = {}, installation = null) {
-  if (window.MaverickFrontendPresentation?.frontendPresentation) {
-    return window.MaverickFrontendPresentation.frontendPresentation(app, installation);
+  if (window.LoopinoFrontendPresentation?.frontendPresentation) {
+    return window.LoopinoFrontendPresentation.frontendPresentation(app, installation);
   }
   const source = installation ? { ...app, ...installation } : app;
   const role = String(source.frontend_role || source.presentation?.frontend_role || "").trim();
@@ -466,7 +466,7 @@ function statusLabel(appId) {
 
 function openApp(appId, workspaceId = null) {
   if (!state.authorityReady) return;
-  const message = { type: "maverick.app.open-app", app_id: appId };
+  const message = { type: "loopino.app.open-app", app_id: appId };
   if (workspaceId) {
     message.workspace_id = workspaceId;
     message.params = { workspace_id: workspaceId };
@@ -477,7 +477,7 @@ function openApp(appId, workspaceId = null) {
 function notifyPinnedAppsChanged() {
   window.parent?.postMessage(
     {
-      type: "maverick.app.data-changed",
+      type: "loopino.app.data-changed",
       owner_app_id: "app-store",
       resource: "pinned-apps",
     },
@@ -513,8 +513,8 @@ function renderWorkspaces() {
 
 function renderAppIcon(app, installation = null) {
   app = withRegistryLogo(app, state.iconRegistry);
-  if (window.MaverickAppIcons?.renderIcon) {
-    return window.MaverickAppIcons.renderIcon(app, "app-row-icon", installation);
+  if (window.LoopinoAppIcons?.renderIcon) {
+    return window.LoopinoAppIcons.renderIcon(app, "app-row-icon", installation);
   }
   const frame = document.createElement("span");
   frame.className = "app-row-icon is-glyph";
@@ -1154,7 +1154,7 @@ function renderFeatured() {
     const title = document.createElement("h2");
     title.textContent = app.name || app.app_id;
     const description = document.createElement("span");
-    description.textContent = app.description || "Ready to install in Maverick.";
+    description.textContent = app.description || "Ready to install in Loopino.";
     copy.append(category, title, description);
     const action = document.createElement("button");
     action.className = "feature-link";
@@ -1200,8 +1200,8 @@ function renderStore() {
     catalogGrid.append(empty);
     return;
   }
-  if (window.MaverickAppFolderView?.render) {
-    window.MaverickAppFolderView.render({
+  if (window.LoopinoAppFolderView?.render) {
+    window.LoopinoAppFolderView.render({
       mount: catalogGrid,
       apps,
       helpers: {
@@ -1232,7 +1232,7 @@ function renderServer() {
   if (!state.serverApps.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "No server apps are registered on this Maverick installation.";
+    empty.textContent = "No server apps are registered on this Loopino installation.";
     serverList.append(empty);
     return;
   }
@@ -1883,9 +1883,9 @@ promotionModal?.addEventListener("click", (event) => {
 });
 
 window.addEventListener("message", (event) => {
-  if (!isExactMaverickParentMessage(event)) return;
+  if (!isExactLoopinoParentMessage(event)) return;
   const payload = event.data;
-  if (payload?.type === "maverick.app.data-changed" && payload.owner_app_id === "app-store"
+  if (payload?.type === "loopino.app.data-changed" && payload.owner_app_id === "app-store"
       && ["records", "catalog"].includes(payload.resource)) {
     // Display recovery cannot confer installation or workspace authority.
     refreshCatalog().catch(() => undefined);

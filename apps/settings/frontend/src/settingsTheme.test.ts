@@ -6,12 +6,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 it('accepts declared light/dark themes and rejects invalid values', () => {
   applySettingsTheme({ effective: 'light' });
-  expect(document.documentElement.dataset.maverickTheme).toBe('light');
+  expect(document.documentElement.dataset.loopinoTheme).toBe('light');
   expect(document.documentElement.style.colorScheme).toBe('light');
   applySettingsTheme({ effective: 'other' });
-  expect(document.documentElement.dataset.maverickTheme).toBe('light');
+  expect(document.documentElement.dataset.loopinoTheme).toBe('light');
   applySettingsTheme({ effective: 'dark' });
-  expect(document.documentElement.dataset.maverickTheme).toBe('dark');
+  expect(document.documentElement.dataset.loopinoTheme).toBe('dark');
 });
 
 it.each(['light', 'dark'])('uses the current %s theme in native select menus', theme => {

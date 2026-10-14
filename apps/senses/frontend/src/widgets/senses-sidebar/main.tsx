@@ -41,14 +41,14 @@ function SensesSidebarWidget() {
         selection?: Record<string, unknown>;
         type?: string;
       };
-      if (payload.type === 'maverick.widget.context-changed') {
+      if (payload.type === 'loopino.widget.context-changed') {
         const tab = tabFromParams(activeAppParamsFromContext(payload.context?.content?.payload));
         if (tab) {
           setSelectedTab(tab);
         }
         return;
       }
-      if (payload.type === 'maverick.app.selection-changed' && payload.owner_app_id === 'senses') {
+      if (payload.type === 'loopino.app.selection-changed' && payload.owner_app_id === 'senses') {
         const tab = tabFromParams(payload.selection || {});
         if (tab) {
           setSelectedTab(tab);
@@ -64,7 +64,7 @@ function SensesSidebarWidget() {
     setSelectedTab(tab);
     window.parent?.postMessage(
       {
-        type: 'maverick.widget.open-app',
+        type: 'loopino.widget.open-app',
         app_id: 'senses',
         params: {
           app_page: tab,
@@ -74,7 +74,7 @@ function SensesSidebarWidget() {
       "*",
     );
     if (isMobileLayoutViewport()) {
-      window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+      window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
     }
   }
 

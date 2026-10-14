@@ -359,7 +359,7 @@ class HostedTextProfilesTest(unittest.TestCase):
 
         with patch.dict(
             "os.environ",
-            {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "text only"},
+            {"LOOPINO_HOSTED_TEXT_FAKE_RESPONSE": "text only"},
             clear=False,
         ):
             result, decision = execute_plain_hosted_text_turn(

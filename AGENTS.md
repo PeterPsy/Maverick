@@ -1,6 +1,6 @@
-# Maverick Working Agreement
+# Loopino Working Agreement
 
-This repository is a clean rebuild of Maverick.
+This repository is a clean rebuild of Loopino.
 
 It must be developed as new software.
 
@@ -18,10 +18,10 @@ workspace cwd such as `workspaces/default`.
 Workspace agents must resolve these canonical documents through the core developer-context
 surface before falling back to direct filesystem reads:
 
-- `maverick core cli run developer-context.list --json`
-- `maverick core cli run developer-context.read --doc-id core_architecture --json`
-- `maverick core cli run developer-context.read --doc-id workspace_root_architecture --json`
-- `maverick core cli run developer-context.read --doc-id app_contract_architecture --json`
+- `loopino core cli run developer-context.list --json`
+- `loopino core cli run developer-context.read --doc-id core_architecture --json`
+- `loopino core cli run developer-context.read --doc-id workspace_root_architecture --json`
+- `loopino core cli run developer-context.read --doc-id app_contract_architecture --json`
 
 Do not assume `docs/architecture/...` exists under the current working directory inside a
 workspace runtime session.
@@ -39,11 +39,11 @@ Storage files, and runtime material outside source commits. Workspace-local
 projects remain an explicit platform capability for future custom forks; do
 not recreate duplicate local copies of the installation's shared apps.
 
-When a task mentions an app id, first resolve app source from the Maverick root
+When a task mentions an app id, first resolve app source from the Loopino root
 repository:
 
 ```text
-/home/ubuntu/projects/maverick-v3/apps/<app_id>
+/projects/loopino/apps/<app_id>
 ```
 
 Built-in and general apps under root `apps/` are the primary source of truth for
@@ -55,7 +55,7 @@ root `apps/`, or when the user explicitly says the task is about a
 workspace-local app/fork:
 
 ```text
-/home/ubuntu/projects/maverick-v3/workspaces/<workspace_id>/apps/<app_id>
+/projects/loopino/workspaces/<workspace_id>/apps/<app_id>
 ```
 
 Do not start app code discovery inside `workspaces/default/apps` for built-in or
@@ -80,11 +80,11 @@ test -d apps/<app_id> && find apps/<app_id> -maxdepth 2 -type f | sort | sed -n 
 
 Do not run broad discovery from the repository parent, such as `find .. -name
 AGENTS.md`, because it scans unrelated projects and may fail on directories
-outside Maverick.
+outside Loopino.
 
 ## Core Development Principles
 
-- treat `maverick` as a clean-slate codebase
+- treat `loopino` as a clean-slate codebase
 - do not preserve legacy names, folders, APIs, or behaviors just because they existed before
 - do not add backward-compatibility shims unless explicitly required by a written implementation decision
 - prefer deletion over compatibility layering when removing a wrong direction taken during development
@@ -156,19 +156,19 @@ Rules:
 
 ## Skills
 
-- Maverick product skills are app-owned extension data, not core assets.
-- bundled Maverick skill templates may live under app-owned source directories such as `apps/skills/skills/`, `apps/chat/skills/`, or `apps/<app_id>/skills/`
+- Loopino product skills are app-owned extension data, not core assets.
+- bundled Loopino skill templates may live under app-owned source directories such as `apps/skills/skills/`, `apps/chat/skills/`, or `apps/<app_id>/skills/`
 - the Skills app seeds bundled templates by scanning `apps/*/skills/` for direct child directories that contain `SKILL.md`
 - the Skills app copies those bundled skill templates into each workspace under `workspaces/<workspace_id>/data/skills/skills/`
 - base runtime sessions may use every enabled workspace-owned skill copy from the workspace Skills app
 - agent-type runtime sessions may narrow that set with the agent type's selected workspace skill ids
-- do not rely on `~/.codex/skills`, plugin skills, or repository `local-skills/` as Maverick runtime skill sources
-- Codex provider-generated system skills under `CODEX_HOME/skills/.system` are not Maverick product skills and must be removed from Maverick-managed runtime homes
+- do not rely on `~/.codex/skills`, plugin skills, or repository `local-skills/` as Loopino runtime skill sources
+- Codex provider-generated system skills under `CODEX_HOME/skills/.system` are not Loopino product skills and must be removed from Loopino-managed runtime homes
 
 ## New App Design Requirements
 
-When creating an app, read and follow `maverick-app-creator` (or the v3 creation
-entrypoint) and, for every mounted frontend, `maverick-app-design` **before writing
+When creating an app, read and follow `loopino-app-creator` (or the v3 creation
+entrypoint) and, for every mounted frontend, `loopino-app-design` **before writing
 UI code**. Use current Storage/Agents native tokens in app-owned source. App copy
 is English unless the user explicitly requests another language. Verify desktop
 and mobile layouts and the app-owned icon in the actual rail and App Store.
@@ -176,18 +176,18 @@ Build/SDK validation alone does not complete design acceptance. Record any
 unverified surface in the work summary. Do not add app-id icon exceptions to
 core, shell, or App Store.
 
-## Maverick CLI And MCP Discovery
+## Loopino CLI And MCP Discovery
 
 - do not guess app CLI or MCP commands, and do not inspect installation-level app source just to discover how to call an installed app
-- use `maverick apps list --json` for compact installed-app discovery
-- use `maverick core cli run developer-context.list --json` to discover canonical developer documents exposed by the core
-- use `maverick core cli run developer-context.read --doc-id <doc_id> --json` to read one canonical developer document through the core
-- use `maverick core cli list --json`, `maverick core cli inspect <command_id> --json`, and `maverick core cli run <command_id> ...` for core CLI commands
-- use `maverick app <app_id> cli list --json`, `maverick app <app_id> cli inspect <command_name> --json`, and `maverick app <app_id> cli run <command_name> ...` for app CLI commands
-- use `maverick app <app_id> frontend build --json` for official app frontend rebuilds so mounted clients receive the core refresh event
-- use `maverick core mcp call developer-context.list` and `maverick core mcp call developer-context.read --doc-id <doc_id>` when the caller needs the same developer context over MCP
-- use `maverick core mcp list --json`, `maverick core mcp inspect <tool_name> --json`, and `maverick core mcp call <tool_name> ...` for core MCP tools
-- use `maverick app <app_id> mcp list --json`, `maverick app <app_id> mcp inspect <tool_name> --json`, and `maverick app <app_id> mcp call <tool_name> ...` for app MCP tools
+- use `loopino apps list --json` for compact installed-app discovery
+- use `loopino core cli run developer-context.list --json` to discover canonical developer documents exposed by the core
+- use `loopino core cli run developer-context.read --doc-id <doc_id> --json` to read one canonical developer document through the core
+- use `loopino core cli list --json`, `loopino core cli inspect <command_id> --json`, and `loopino core cli run <command_id> ...` for core CLI commands
+- use `loopino app <app_id> cli list --json`, `loopino app <app_id> cli inspect <command_name> --json`, and `loopino app <app_id> cli run <command_name> ...` for app CLI commands
+- use `loopino app <app_id> frontend build --json` for official app frontend rebuilds so mounted clients receive the core refresh event
+- use `loopino core mcp call developer-context.list` and `loopino core mcp call developer-context.read --doc-id <doc_id>` when the caller needs the same developer context over MCP
+- use `loopino core mcp list --json`, `loopino core mcp inspect <tool_name> --json`, and `loopino core mcp call <tool_name> ...` for core MCP tools
+- use `loopino app <app_id> mcp list --json`, `loopino app <app_id> mcp inspect <tool_name> --json`, and `loopino app <app_id> mcp call <tool_name> ...` for app MCP tools
 - keep discovery scoped; do not ask the core for a merged list of every command and tool across every app
 - treat `--help` as human command-line syntax help; use `list` and `inspect` for machine-readable agent discovery
 

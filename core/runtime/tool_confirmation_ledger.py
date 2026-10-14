@@ -97,7 +97,7 @@ def confirm_tool_invocation(
         raise RuntimeToolError("tool_confirmation_ttl_invalid")
     state: ToolConfirmationState = "active" if decision == "approve" else "denied"
     grant = ToolConfirmationGrant(
-        grant_id=str(uuid5(NAMESPACE_URL, f"maverick:grant:{invocation_id}:{confirming_actor_id}:{decision}")),
+        grant_id=str(uuid5(NAMESPACE_URL, f"loopino:grant:{invocation_id}:{confirming_actor_id}:{decision}")),
         workspace_id=record.workspace_id,
         session_id=record.session_id,
         turn_id=record.turn_id,

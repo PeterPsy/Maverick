@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { registerMaverickAppHibernation, type MaverickAppSnapshot, type MaverickResumeParams } from '@maverick/pwa-cache';
+import { registerLoopinoAppHibernation, type LoopinoAppSnapshot, type LoopinoResumeParams } from '@loopino/pwa-cache';
 import { hasQueuedMessageMemory } from '../lib/queuedMessages';
 import type { AppReference } from '../api/client';
 import { useChatVisibility } from './useChatVisibility';
@@ -7,7 +7,7 @@ import { useChatVisibility } from './useChatVisibility';
 type Draft = { key: string; text: string; references: AppReference[]; settings: Record<string, string> };
 type ReadingAnchor = { rowId: string; eventId: string; offset: number };
 type ChatSnapshot = { drafts: Draft[]; key: string; scroll: number; visibleMessages: number; anchor?: ReadingAnchor | null };
-type Pending = { snapshot: MaverickAppSnapshot; navigation: MaverickResumeParams; navigated?: boolean;
+type Pending = { snapshot: LoopinoAppSnapshot; navigation: LoopinoResumeParams; navigated?: boolean;
   resolve: () => void; reject: (error: unknown) => void };
 
 function readingPosition() {
@@ -23,9 +23,9 @@ function readingPosition() {
 
 export function useChatHibernation(options: {
   ready: boolean; historyReady: boolean; canHibernate: boolean; conversationKey: string;
-  composer: string; references: AppReference[]; params: MaverickResumeParams;
+  composer: string; references: AppReference[]; params: LoopinoResumeParams;
   settings: Record<string, string>; visibleMessages: number;
-  navigate: (params: MaverickResumeParams) => Promise<void>;
+  navigate: (params: LoopinoResumeParams) => Promise<void>;
   restoreDraft: (draft: Draft) => void;
   setVisibleMessages: (count: number) => void;
   restoreHistory?: (eventId: string) => number;
@@ -51,7 +51,7 @@ export function useChatHibernation(options: {
     return () => document.removeEventListener('scroll', remember, true);
   }, [visible, options.conversationKey]);
 
-  useEffect(() => registerMaverickAppHibernation({
+  useEffect(() => registerLoopinoAppHibernation({
     appId: 'chat',
     capture: () => {
       const value = current.current;

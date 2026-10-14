@@ -1,6 +1,6 @@
-# `@maverick/pwa-cache`
+# `@loopino/pwa-cache`
 
-Framework-neutral browser primitives for Maverick's transparent PWA data
+Framework-neutral browser primitives for Loopino's transparent PWA data
 cache. The package owns mechanics only: mandatory scope keys, IndexedDB
 migrations, TTL/LRU/accounting, quota checks, invalidation, lifecycle cleanup,
 cross-client coordination, OPFS file-cache publication, and bounded RAM retry.
@@ -15,7 +15,7 @@ before it can render.
 
 Apps continue to own their read-model schema, canonical classification,
 sanitizer, stable revision, TTL, and byte budget. Persistent writes fail closed
-unless policy revision `maverick.local-persistence-policy.v2` derives `cache`.
+unless policy revision `loopino.local-persistence-policy.v2` derives `cache`.
 Control-plane resources, secrets, incomplete scopes, expired entries, and
 non-idempotent mutation retries are rejected by construction. String payloads
 are normalized before rejecting object URLs, credential-bearing URLs,
@@ -45,11 +45,11 @@ App event transport and visibility are separate from cache authority.
 receive the shell's stream through exact-parent messages scoped to the current
 workspace/session. Hidden or offline documents pause that transport, and a useful
 resume refreshes display state once. Reconnect uses bounded exponential backoff
-with jitter. `observeMaverickVisibility` intersects shell, document and connectivity
+with jitter. `observeLoopinoVisibility` intersects shell, document and connectivity
 hints so subscribers can suspend nonessential work; these hints never authorize
 cached data or change persistence policy.
 
-`startMaverickReferencePointerDrag` handles mouse/pen reference drags in isolated
+`startLoopinoReferencePointerDrag` handles mouse/pen reference drags in isolated
 app frames: it waits for movement, asks the app for its MIME payload and label,
 captures the pointer, and sends bounded drag messages to the exact shell origin.
 It suppresses a release click and cleans up on Escape, pointer cancellation,
@@ -63,8 +63,8 @@ cache. Network work keeps the default connectivity requirement. Safe HTTP reads
 wait without issuing an initial request while offline or hidden; cached values
 remain available before that network boundary, and abort cancels the wait.
 
-M4 adds a separate `maverick-pwa-file-v1` IndexedDB manifest and the owned
-`maverick-pwa-file-cache-v1` OPFS directory. File names are opaque, writes are
+M4 adds a separate `loopino-pwa-file-v1` IndexedDB manifest and the owned
+`loopino-pwa-file-cache-v1` OPFS directory. File names are opaque, writes are
 streamed into a temporary path, and only a final manifest transaction publishes
 a `ready` record after exact size, strong ETag, source-version, and incremental
 SHA-256 verification. An interrupted same-session transfer may resume with
@@ -79,7 +79,7 @@ independently resolves classification, media URL, size, digest, and policy.
 The port supports RAM-only cancellation and returns either an ordinary Blob or
 an unavailable result that preserves the app's existing network path. It never
 exposes a cache host or browser-storage handle to the frame. The isolated
-document must receive Core's exact `__MAVERICK_PLATFORM_ORIGIN__`; the client
+document must receive Core's exact `__LOOPINO_PLATFORM_ORIGIN__`; the client
 validates that it is a distinct canonical HTTP(S) origin and otherwise declines
 the broker immediately instead of using a wildcard or waiting for a handshake
 that cannot arrive.
@@ -98,8 +98,8 @@ kill switches remain fail-closed. See `docs/runbooks/pwa_data_cache_m5.md` for
 the pilot inventory, rollout, recovery, and verification commands.
 
 Core exposes the authenticated isolated-document scope as the frozen,
-non-configurable `__MAVERICK_APP_FRAME_CONTEXT__` value. The exported
-`readMaverickAppFrameContext()` validates and returns its mounted app and
+non-configurable `__LOOPINO_APP_FRAME_CONTEXT__` value. The exported
+`readLoopinoAppFrameContext()` validates and returns its mounted app and
 workspace ids so app-owned legacy migration code can fail closed without
 treating mutable URL parameters as attestation. The value is scope evidence,
 not an authorization capability.
@@ -109,7 +109,7 @@ an app-declared resource budget, and a maximum 15-minute private access lease
 that fresh server authentication may renew independently of the original cache
 timestamp. An unavailable quota estimate skips the cache write without
 affecting the network result. The RAM retry coordinator pauses for document and
-Maverick frame visibility and uses a 1–30 second jittered backoff. Application
+Loopino frame visibility and uses a 1–30 second jittered backoff. Application
 callbacks enter only `runOpaque()` and are one-shot. Safe API reads use a
 factory-issued `createSafeRequestRetryExecutor()` whose GET/HEAD/OPTIONS request
 is issued by the SDK through `runRequest()`; retrying mutations use the separate
@@ -186,17 +186,17 @@ callbacks, and requires factory source, policy, runtime registry, server
 deduplication, and replay evidence to agree. The runtime also enforces the
 three-attempt cap.
 
-`observeMaverickVisibility` shares one exact-parent/document/connectivity observer
+`observeLoopinoVisibility` shares one exact-parent/document/connectivity observer
 per frame. `connectAppEventSocket` consumes the Shell stream inside registered app
 frames and shares one reconnecting WebSocket only for standalone pages. Hidden
 views stop transport/retry work and refresh once when useful delivery resumes.
 After document background/offline suspension, embedded views wait for the Shell
 stream's resync before refreshing, including frames that were already hidden.
 
-`registerMaverickAppHibernation` is opt-in for frontends whose contract declares
+`registerLoopinoAppHibernation` is opt-in for frontends whose contract declares
 `presentation.frontend_resumable`. The app returns an opaque JSON snapshot or
 `null` when busy, and restores its route/draft/scroll after normal bootstrap.
-`preventMaverickAppHibernation()` pins component-owned work until its idempotent
+`preventLoopinoAppHibernation()` pins component-owned work until its idempotent
 release callback runs. Snapshots stay in authenticated Shell RAM (64 KiB each,
 2 MiB total) and never enable the private persistent cache.
 Playing media and paused media with a retained playback position also keep their

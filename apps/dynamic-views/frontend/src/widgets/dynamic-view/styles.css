@@ -14,8 +14,8 @@ body,
 body {
   margin: 0;
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 p,
@@ -68,8 +68,8 @@ button {
   width: 38px;
   height: 38px;
   border-radius: 16px;
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .dv-widget__open {
@@ -78,7 +78,7 @@ button {
 }
 
 .dv-widget__open:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .dv-widget__title {
@@ -100,12 +100,12 @@ button {
 .dv-widget__title p,
 .dv-widget__meta,
 .dv-widget__empty {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
 .dv-widget__eyebrow {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.65rem;
   font-weight: 400;
   letter-spacing: 0.12em;
@@ -115,8 +115,8 @@ button {
 .dynamic-view-frame {
   width: 100%;
   min-height: 260px;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-control-radius);
   background: white;
 }
 
@@ -127,9 +127,9 @@ button {
 }
 
 .dv-widget__meta span {
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 3px 8px;
 }
 
@@ -137,10 +137,10 @@ button {
   display: grid;
   place-items: center;
   min-height: 320px;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-inner-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-inner-edge);
   padding: 18px;
   text-align: center;
 }

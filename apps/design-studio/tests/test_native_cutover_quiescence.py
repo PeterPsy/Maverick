@@ -63,7 +63,7 @@ class NativeCutoverQuiescenceTests(unittest.TestCase):
             "native_ready": False,
             "rollback_to_legacy_allowed": True,
             "writer": "official-native-opendesign",
-            "semantic_content_copied_to_maverick_state": False,
+            "semantic_content_copied_to_loopino_state": False,
         }
         (self.root / MARKER_FILE).write_text(
             json.dumps(marker),

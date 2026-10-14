@@ -25,7 +25,7 @@ export function ServerProfilesPanel({ beforeSwitch }: { beforeSwitch?: () => voi
   return <section className="bs-account-section" aria-labelledby="bs-servers-heading">
     <div><h3 id="bs-servers-heading">Saved connections</h3><p>{data?.native
       ? "Saved on this device. Each server has its own login, workspaces and data."
-      : "Open another Maverick installation in this browser. Bookmarks are saved for this site; each installation has its own login."}</p></div>
+      : "Open another Loopino installation in this browser. Bookmarks are saved for this site; each installation has its own login."}</p></div>
     {error && <p role="alert">{error}</p>}
     {!data && !error && <p role="status">Loading servers…</p>}
     {data?.profiles.map(profile => <article className={`bs-connected-accounts__account bs-server-card${profile.current ? " is-current" : ""}`} key={profile.id}>
@@ -46,7 +46,7 @@ export function ServerProfilesPanel({ beforeSwitch }: { beforeSwitch?: () => voi
     }); }}>
       <h3>{editing ? "Rename server" : "Add server"}</h3>
       <label>Name<input required maxLength={80} value={name} disabled={busy} onChange={event => setName(event.target.value)} autoComplete="off" /></label>
-      <label>Server address<input required type="url" placeholder="https://maverick.example.com" value={origin} disabled={busy || !!editing} onChange={event => setOrigin(event.target.value)} autoCapitalize="none" autoComplete="url" /></label>
+      <label>Server address<input required type="url" placeholder="https://loopino.example.com" value={origin} disabled={busy || !!editing} onChange={event => setOrigin(event.target.value)} autoCapitalize="none" autoComplete="url" /></label>
       <div className="bs-connected-accounts__actions"><button type="submit" disabled={busy}>{editing ? "Save name" : "Add server"}</button>
         {editing && <button type="button" disabled={busy} onClick={() => { setEditing(null); setName(""); setOrigin(""); }}>Cancel</button>}</div>
     </form>}

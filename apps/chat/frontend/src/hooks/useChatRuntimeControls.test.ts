@@ -66,8 +66,8 @@ describe("genericAgenticRuntimeConfig", () => {
 
   it("builds Research as a clean full-access profile", () => {
     const provider = agenticProvider({
-      runtime_engine_id: "maverick-tool-loop",
-      execution_family: "maverick_agent",
+      runtime_engine_id: "loopino-tool-loop",
+      execution_family: "loopino_agent",
       research_compatible: true,
       agentic_effective_tool_handle_mode: "all_currently_authorized",
       agentic_effective_capabilities: {

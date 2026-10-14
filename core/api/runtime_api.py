@@ -1,4 +1,4 @@
-"""Generic runtime HTTP API for hosted Maverick apps."""
+"""Generic runtime HTTP API for hosted Loopino apps."""
 
 from __future__ import annotations
 

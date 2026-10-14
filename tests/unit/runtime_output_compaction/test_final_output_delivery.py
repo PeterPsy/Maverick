@@ -116,13 +116,13 @@ class FinalOutputDeliveryTest(unittest.TestCase):
             state,
             session_id=session.session_id,
             turn_id="turn-hosted-agentic-final",
-            provider_id=_execution_provider_id(session, "maverick-tool-loop"),
+            provider_id=_execution_provider_id(session, "loopino-tool-loop"),
             output_text="agentic answer",
             complete_text="agentic answer",
             exit_code=0,
         )
 
-        self.assertEqual(_execution_provider_id(session, "maverick-tool-loop"), "openrouter")
+        self.assertEqual(_execution_provider_id(session, "loopino-tool-loop"), "openrouter")
         self.assertEqual(completed, recorded)
 
     @staticmethod
@@ -136,7 +136,7 @@ class FinalOutputDeliveryTest(unittest.TestCase):
     def _state_and_session(self):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -144,9 +144,9 @@ class FinalOutputDeliveryTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(

@@ -163,7 +163,7 @@ provider token counts and production latency remain to be evaluated.
 - Frontend: TypeScript production build and fifteen Vitest tests passed, including
   bounded subgraph merging, parallel edge preservation, native inspector sections
   and confidence/verification distinctions.
-- Official `maverick app memory frontend build` succeeded and generated hosted
+- Official `loopino app memory frontend build` succeeded and generated hosted
   asset metadata. SDK validation returned `valid=true`; scoped unused-import
   checking and `git diff --check` passed.
 - Memory's CLI/MCP audited descriptor and execution hashes were refreshed. A

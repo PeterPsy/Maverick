@@ -2,15 +2,15 @@ import { StrictMode } from "react";
 import { listenForShellReferenceDrops } from "../../lib/shellReferenceDrop";
 import { createRoot } from "react-dom/client";
 import "../../styles/main.css";
-import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
+import { applyInitialLoopinoTheme, listenForLoopinoThemeMessages } from "../../lib/shellTheme";
 import { FloatingWindow } from "./FloatingWindow";
 import type { FloatingChatWindow } from "./floatingState";
 import "./styles.css";
 import "./controls.css";
 import { useFloatingWindows } from "./useFloatingWindows";
 
-applyInitialMaverickTheme();
-listenForMaverickThemeMessages();
+applyInitialLoopinoTheme();
+listenForLoopinoThemeMessages();
 listenForShellReferenceDrops();
 
 function ChatFloatingMount() {

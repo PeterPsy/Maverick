@@ -14,7 +14,7 @@ from core.providers.antigravity_cli_runtime_home import (
 )
 from core.runtime.runtime_cli_wrapper import (
     write_runtime_device_use_mcp_wrapper,
-    write_runtime_maverick_wrapper,
+    write_runtime_loopino_wrapper,
 )
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
@@ -24,7 +24,7 @@ from core.runtime.research_runtime import runtime_session_is_research
 
 
 ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.8-flash-high"
-ANTIGRAVITY_OUTER_SANDBOX_COMMAND_ENV = "MAVERICK_ANTIGRAVITY_BWRAP_COMMAND"
+ANTIGRAVITY_OUTER_SANDBOX_COMMAND_ENV = "LOOPINO_ANTIGRAVITY_BWRAP_COMMAND"
 ANTIGRAVITY_OUTER_SANDBOX_SHA256 = (
     "41c26bc2e4130e32bcf7cbb304f2686343e1aa657b98226e3daafddf0b21322f"
 )
@@ -68,8 +68,8 @@ def antigravity_stream_launch_spec(
     runtime_bin = runtime / "bin"
     runtime_bin.mkdir(parents=True, exist_ok=True, mode=0o700)
     runtime_bin.chmod(0o700)
-    write_runtime_maverick_wrapper(runtime_bin / "maverick")
-    write_runtime_device_use_mcp_wrapper(runtime_bin / "maverick-device-use-mcp")
+    write_runtime_loopino_wrapper(runtime_bin / "loopino")
+    write_runtime_device_use_mcp_wrapper(runtime_bin / "loopino-device-use-mcp")
     log_path = runtime / "antigravity-cli.log"
 
     argv = [
@@ -130,21 +130,21 @@ def antigravity_stream_launch_spec(
         "LANG": "C.UTF-8",
         "NO_COLOR": "1",
         "TMPDIR": str(runtime),
-        "MAVERICK_WORKSPACE_ROOT": str(workspace),
-        "MAVERICK_WORKSPACE_ID": workspace_id,
-        "MAVERICK_RUNTIME_ROOT": str(runtime),
-        "MAVERICK_RUNTIME_BIN": str(runtime_bin),
-        "MAVERICK_RUNTIME_SESSION_ID": str(session.session_id),
-        "MAVERICK_RUNTIME_ENGINE_ID": "antigravity-cli",
-        "MAVERICK_EFFECTIVE_MODE": execution_mode,
-        "MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE": "provider_compact",
-        "MAVERICK_RUNTIME_API_TOKEN": issue_workspace_api_token(
+        "LOOPINO_WORKSPACE_ROOT": str(workspace),
+        "LOOPINO_WORKSPACE_ID": workspace_id,
+        "LOOPINO_RUNTIME_ROOT": str(runtime),
+        "LOOPINO_RUNTIME_BIN": str(runtime_bin),
+        "LOOPINO_RUNTIME_SESSION_ID": str(session.session_id),
+        "LOOPINO_RUNTIME_ENGINE_ID": "antigravity-cli",
+        "LOOPINO_EFFECTIVE_MODE": execution_mode,
+        "LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE": "provider_compact",
+        "LOOPINO_RUNTIME_API_TOKEN": issue_workspace_api_token(
             workspace_id=workspace_id,
             runtime_session_id=str(session.session_id),
             effective_mode=execution_mode,
         ),
-        "MAVERICK_API_BASE": str(
-            os.environ.get("MAVERICK_API_BASE") or "http://127.0.0.1:8014"
+        "LOOPINO_API_BASE": str(
+            os.environ.get("LOOPINO_API_BASE") or "http://127.0.0.1:8014"
         ).rstrip("/"),
     }
     return RuntimeBackendLaunchSpec(

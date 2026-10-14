@@ -31,7 +31,7 @@ from core.providers.provider_codex_research import CodexResearchRuntimeMixin
 from core.providers.provider_codex_runtime_home import CodexRuntimeHomeMixin
 from core.providers.provider_codex_steering import CodexSteeringMixin
 from core.providers.provider_codex_usage import CodexUsageTransport, read_codex_subscription_usage
-from core.providers.provider_codex_wrappers import refresh_workspace_maverick_wrappers
+from core.providers.provider_codex_wrappers import refresh_workspace_loopino_wrappers
 from core.runtime.research_runtime import RESEARCH_NATIVE_WEB_RUNTIME
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ CODEX_MANAGED_RUNTIME_FEATURES = {
 __all__ = [
     "CodexProviderAdapter",
     "build_codex_definition",
-    "refresh_workspace_maverick_wrappers",
+    "refresh_workspace_loopino_wrappers",
     "remove_codex_system_skills",
 ]
 
@@ -62,7 +62,7 @@ def utcnow() -> datetime:
 
 
 def _codex_executable() -> str:
-    configured = os.environ.get("MAVERICK_CODEX_COMMAND", "").strip()
+    configured = os.environ.get("LOOPINO_CODEX_COMMAND", "").strip()
     if configured:
         return configured
     resolved = shutil.which("codex")
@@ -134,7 +134,7 @@ def _fallback_model_options() -> list[ProviderModelOption]:
         ProviderModelOption(
             model_id=CODEX_DEFAULT_MODEL,
             label=CODEX_DEFAULT_MODEL,
-            description="Default Codex model configured by Maverick when the Codex model catalog cannot be read.",
+            description="Default Codex model configured by Loopino when the Codex model catalog cannot be read.",
             default_reasoning_effort=CODEX_DEFAULT_REASONING_EFFORT,
             supported_reasoning_efforts=_fallback_reasoning_options(),
         )
@@ -187,7 +187,7 @@ class CodexProviderAdapter(
         server_args: list[str] | None = None,
         subscription_usage_transport: CodexUsageTransport | None = None,
     ) -> None:
-        self.codex_command = str(codex_command or os.environ.get("MAVERICK_CODEX_COMMAND") or "").strip() or "codex"
+        self.codex_command = str(codex_command or os.environ.get("LOOPINO_CODEX_COMMAND") or "").strip() or "codex"
         self.server_args = list(server_args or ["app-server", "--listen", "stdio://"])
         self.subscription_usage_transport = subscription_usage_transport
 
@@ -211,7 +211,7 @@ class CodexProviderAdapter(
 
 
 def remove_codex_system_skills(runtime_home: Path) -> None:
-    """Remove Codex-generated system skills from a Maverick-managed runtime home."""
+    """Remove Codex-generated system skills from a Loopino-managed runtime home."""
     system_root = Path(runtime_home) / "skills" / CODEX_SYSTEM_SKILLS_ROOT
     if system_root.is_symlink() or system_root.is_file():
         system_root.unlink(missing_ok=True)

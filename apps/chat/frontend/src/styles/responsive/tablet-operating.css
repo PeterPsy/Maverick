@@ -5,7 +5,7 @@
   }
 
   .chatapp-app-topbar__user {
-    color: var(--maverick-text-soft);
+    color: var(--loopino-text-soft);
     font-size: 0.8rem;
     white-space: nowrap;
   }

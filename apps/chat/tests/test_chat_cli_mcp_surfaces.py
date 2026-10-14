@@ -30,7 +30,7 @@ from service import handle_action  # noqa: E402
 
 class ChatCliMcpSurfaceTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.env = patch.dict(os.environ, {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"})
+        self.env = patch.dict(os.environ, {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"})
         self.env.start()
         self.addCleanup(self.env.stop)
 

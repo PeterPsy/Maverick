@@ -31,10 +31,10 @@ function nodeRuntimeDiagnostic(versionText) {
     return `node returned an unrecognized version \`${versionText.trim()}\``;
   }
   if (version[0] > SUPPORTED_NODE_MAJOR) {
-    return `node ${formatNodeVersion(version)} is outside the supported range; Maverick requires ${NODE_RUNTIME_REQUIREMENT}`;
+    return `node ${formatNodeVersion(version)} is outside the supported range; Loopino requires ${NODE_RUNTIME_REQUIREMENT}`;
   }
   if (version[0] < SUPPORTED_NODE_MAJOR || compareNodeVersion(version, MINIMUM_NODE_VERSION) < 0) {
-    return `node ${formatNodeVersion(version)} is too old; Maverick requires ${NODE_RUNTIME_REQUIREMENT}`;
+    return `node ${formatNodeVersion(version)} is too old; Loopino requires ${NODE_RUNTIME_REQUIREMENT}`;
   }
   return null;
 }

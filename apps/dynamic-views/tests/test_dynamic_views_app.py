@@ -29,7 +29,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -82,8 +82,8 @@ class DynamicViewsAppTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -117,7 +117,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
                     "renderer": "sandbox_html_v1",
                     "html": "<main><h1>Revenue</h1><div id=\"root\"></div></main>",
                     "css": "body { font-family: system-ui; }",
-                    "javascript": "document.getElementById('root').textContent = window.MaverickDynamicView.data.value;",
+                    "javascript": "document.getElementById('root').textContent = window.LoopinoDynamicView.data.value;",
                     "tags": ["finance"],
                 },
                 "data": {"value": 42},
@@ -132,7 +132,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "dynamic-views")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
-        self.assertIn("maverick_dynamic_views", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("loopino_dynamic_views", parsed.contract.capabilities.mcp_tools)
         self.assertIn("dynamic_views_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("dynamic_views_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["dynamic-views"])
@@ -282,7 +282,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
 
-        self.assertIn("app.dynamic-views.maverick_dynamic_views", [tool.tool_name for tool in tools])
+        self.assertIn("app.dynamic-views.loopino_dynamic_views", [tool.tool_name for tool in tools])
         self.assertIn("app.dynamic-views.dynamic-views", [command.command_id for command in commands])
 
     @integration_test("dynamic-views platform integration suite; run with scripts/test_suite.py --level integration")
@@ -327,7 +327,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(backend_payload["chat_render"]["kind"], "dynamic.view.instance")
         self.assertEqual(frontend_status, 200)
         self.assertIn("text/html", frontend_headers["Content-Type"])
-        self.assertIn(b"Maverick Dynamic Views", frontend_payload)
+        self.assertIn(b"Loopino Dynamic Views", frontend_payload)
         self.assertEqual(registry_status, 200)
         self.assertEqual(registry_payload["items"][0]["owner_app_id"], "dynamic-views")
         self.assertEqual(registry_payload["items"][0]["widget_id"], "dynamic-view")
@@ -338,7 +338,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertIn(b"Dynamic view widget", mount_payload)
         self.assertEqual(sidebar_mount_status, 200)
         self.assertIn("text/html", sidebar_mount_headers["Content-Type"])
-        self.assertIn(b"Maverick Dynamic Views Sidebar", sidebar_mount_payload)
+        self.assertIn(b"Loopino Dynamic Views Sidebar", sidebar_mount_payload)
 
     @integration_test("dynamic-views platform integration suite; run with scripts/test_suite.py --level integration")
     def test_mcp_and_cli_create_dynamic_view(self) -> None:
@@ -346,7 +346,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         state = bootstrap_platform_state(start_path=repo_root)
 
         mcp_payload = call_mcp_tool(
-            tool_name="app.dynamic-views.maverick_dynamic_views",
+            tool_name="app.dynamic-views.loopino_dynamic_views",
             context=McpInvocationContext(
                 caller_kind="sandbox_agent",
                 workspace_id="default",

@@ -59,7 +59,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         self.assertEqual(events[-1].error_code, "provider_upstream_not_allowed")
 
     def test_accepts_empty_terminal_usage_chunk_repeating_finish_reason(self) -> None:
-        stream = _tool_stream("generation-terminal-usage", "maverick_probe_echo")
+        stream = _tool_stream("generation-terminal-usage", "loopino_probe_echo")
         terminal = stream[-1]
         stream[-1] = {
             **_identity("generation-terminal-usage"),

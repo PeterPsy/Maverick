@@ -24,4 +24,4 @@ data/
 *.sqlite
 *.sqlite3
 *.db
-.maverick-app.json
+.loopino-app.json

@@ -133,7 +133,7 @@ export type ProviderItem = {
   hosted_text_profile?: HostedTextProfileItem | null;
 };
 
-export type ExecutionFamilyId = "native_agent" | "maverick_agent" | "hosted_text";
+export type ExecutionFamilyId = "native_agent" | "loopino_agent" | "hosted_text";
 
 export type ExecutionFamilyItem = {
   family_id: ExecutionFamilyId;
@@ -291,7 +291,7 @@ export type AgenticProfileItem = {
   is_default: boolean;
   selectable?: boolean;
   unavailable_reason?: string | null;
-  execution_family?: "native_agent" | "maverick_agent" | null;
+  execution_family?: "native_agent" | "loopino_agent" | null;
   runtime_status?: string;
   runtime_status_reason?: string | null;
   capabilities?: AgenticEffectiveCapabilities["capabilities"];

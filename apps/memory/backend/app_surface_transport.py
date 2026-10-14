@@ -16,7 +16,7 @@ MAX_APP_SURFACE_TIMEOUT_SECONDS = 300.0
 MAX_APP_SURFACE_RETRIES = 3
 
 
-def run_maverick_app_mcp(
+def run_loopino_app_mcp(
     workspace_root: Path,
     *,
     app_id: str,
@@ -24,12 +24,12 @@ def run_maverick_app_mcp(
     tool_name: str = "",
     arguments: dict[str, Any] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    command = ["maverick", "app", app_id, "mcp", operation, "--json"]
+    command = ["loopino", "app", app_id, "mcp", operation, "--json"]
     if operation == "call":
         if not tool_name:
             raise MemoryValidationError("MCP call requires tool_name.")
         command = [
-            "maverick",
+            "loopino",
             "app",
             app_id,
             "mcp",
@@ -69,7 +69,7 @@ def run_json_subprocess(command: list[str], *, cwd: Path, label: str, input_text
 
 
 def app_surface_timeout_seconds() -> float:
-    raw = os.environ.get("MAVERICK_MEMORY_APP_SURFACE_TIMEOUT_SECONDS", "")
+    raw = os.environ.get("LOOPINO_MEMORY_APP_SURFACE_TIMEOUT_SECONDS", "")
     if not raw.strip():
         return DEFAULT_APP_SURFACE_TIMEOUT_SECONDS
     try:
@@ -82,7 +82,7 @@ def app_surface_timeout_seconds() -> float:
 
 
 def app_surface_retries() -> int:
-    raw = os.environ.get("MAVERICK_MEMORY_APP_SURFACE_RETRIES", "")
+    raw = os.environ.get("LOOPINO_MEMORY_APP_SURFACE_RETRIES", "")
     if not raw.strip():
         return 0
     try:

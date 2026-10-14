@@ -6,7 +6,7 @@ import type {
   FileCacheRecord,
 } from "./fileCacheTypes";
 
-export const PWA_FILE_CACHE_DATABASE_NAME = "maverick-pwa-file-v1";
+export const PWA_FILE_CACHE_DATABASE_NAME = "loopino-pwa-file-v1";
 export const PWA_FILE_CACHE_DATABASE_VERSION = 1;
 const RECORD_STORE = "files";
 const METADATA_STORE = "metadata";

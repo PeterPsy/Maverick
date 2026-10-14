@@ -102,8 +102,8 @@ describe("Mail references dropped into Chat", () => {
   it("ignores malformed deep links and drops while the chat is disabled", async () => {
     await act(async () => root.render(<Harness />));
     const transfer = mailTransfer();
-    const payload = JSON.parse(transfer.getData("application/x-maverick-mail-thread"));
-    transfer.setData("application/x-maverick-mail-thread", JSON.stringify({ ...payload, deep_link: "https://external.example/" }));
+    const payload = JSON.parse(transfer.getData("application/x-loopino-mail-thread"));
+    transfer.setData("application/x-loopino-mail-thread", JSON.stringify({ ...payload, deep_link: "https://external.example/" }));
     expect((await dispatch("drop", transfer)).defaultPrevented).toBe(false);
     await act(async () => root.render(<Harness ready={false} />));
     expect((await dispatch("drop", mailTransfer())).defaultPrevented).toBe(false);

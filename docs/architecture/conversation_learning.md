@@ -167,7 +167,7 @@ duration, not verified per-tool error/timing traces. It must distinguish a
 reported symptom from a proposed diagnosis and cannot assign total turn time
 to a particular tool.
 
-Improvements require Maverick scope, a specific capability/reliability/tool/
+Improvements require Loopino scope, a specific capability/reliability/tool/
 performance/workflow problem, an explanation of value for other tasks, and a
 verification criterion. Task-local requests, work already requested, in
 progress, resolved or duplicated are filtered. Reconciliations cite current

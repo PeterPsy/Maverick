@@ -9,7 +9,7 @@ import type {
   TouchEvent as ReactTouchEvent,
 } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
-import type { MaverickFrameScope } from "../iframePolicy";
+import type { LoopinoFrameScope } from "../iframePolicy";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
 import { CHAT_APP_ID, SETTINGS_APP_ID, shellAppRailApps, shellVisibleApps } from "../navigation";
 import { clampSidebarDetailsWidth, DEFAULT_SIDEBAR_DETAILS_WIDTH_PX } from "../session";
@@ -67,7 +67,7 @@ export function Sidebar({
   activeAppParams: Record<string, string | boolean | null>;
   apps: AppRegistryItem[];
   activeWorkspaceId: string;
-  frameScope: MaverickFrameScope;
+  frameScope: LoopinoFrameScope;
   isOpen: boolean;
   isLoading?: boolean;
   isWorkspacesLoading?: boolean;
@@ -343,7 +343,7 @@ export function Sidebar({
             onReorderPinnedApps={onReorderPinnedApps}
             settingsApp={settingsApp}
           />
-          {!sidebarEnabled ? <SidebarRailMenu icon="tune" label="Controlli Maverick" placement="bottom">
+          {!sidebarEnabled ? <SidebarRailMenu icon="tune" label="Controlli Loopino" placement="bottom">
             <SidebarShellControls mode={mode} onModeChange={onModeChange} onThemeModeChange={onThemeModeChange}
               shellTheme={shellTheme} themeMode={themeMode} showSidebarModeControls={false} />
           </SidebarRailMenu> : null}

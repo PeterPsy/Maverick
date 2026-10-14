@@ -14,7 +14,7 @@ export type PendingProjectDeletion = {
 export function notifyShell(thread?: ChatThread, params: Record<string, string | boolean | null> = {}) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: "chat",
       params: thread
         ? { app_page: `threads/${thread.thread_id}` }

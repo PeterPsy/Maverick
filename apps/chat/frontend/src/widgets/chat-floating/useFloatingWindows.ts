@@ -77,7 +77,7 @@ export function useFloatingWindows() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") return;
       const payload = event.data;
       if (payload.owner_app_id !== "chat") return;
-      if (payload.type === "maverick.widget.context-changed" && payload.widget_id === "chat-floating") {
+      if (payload.type === "loopino.widget.context-changed" && payload.widget_id === "chat-floating") {
         latestContextRef.current = payload.context?.content;
         if (!isWindowStateReady) return;
         setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
@@ -89,7 +89,7 @@ export function useFloatingWindows() {
 
         return;
       }
-      if (isWindowStateReady && payload.type === "maverick.chat.active-thread-changed") {
+      if (isWindowStateReady && payload.type === "loopino.chat.active-thread-changed") {
         const scope = typeof payload.navigation_scope === "string" ? payload.navigation_scope : "";
         const threadId = typeof payload.active_thread_id === "string" ? payload.active_thread_id : "";
         if (!scope || !threadId) return;
@@ -131,7 +131,7 @@ export function useFloatingWindows() {
     if (!selected) return;
     setHostNavigationScope(selected.id);
     window.parent.postMessage({
-      type: "maverick.widget.dock.open", owner_app_id: "chat", widget_id: "chat-floating", placement: "right",
+      type: "loopino.widget.dock.open", owner_app_id: "chat", widget_id: "chat-floating", placement: "right",
       params: { navigation_scope: selected.id, thread_id: selected.threadId },
     }, "*");
   }

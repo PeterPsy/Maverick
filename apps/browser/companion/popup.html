@@ -10,16 +10,16 @@
 <body>
   <header class="app-header">
     <span class="app-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18Z"/></svg></span>
-    <div class="header-copy"><h1>Browser</h1><p>Maverick agent tab</p></div>
+    <div class="header-copy"><h1>Browser</h1><p>Loopino agent tab</p></div>
     <span id="version" class="badge"></span>
   </header>
   <main>
     <section class="selected panel" aria-labelledby="tab-title">
       <strong id="tab-title">A tab for your agent</strong>
-      <p id="tab-url" class="note">Open a dedicated tab. Maverick chooses pages when you ask.</p>
+      <p id="tab-url" class="note">Open a dedicated tab. Loopino chooses pages when you ask.</p>
       <button id="share" disabled hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/></svg><span id="share-label">Connect agent tab</span></button>
       <button id="open-agent"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></svg>Open agent tab</button>
-      <p class="destination note">Keep the agent tab open.<br>Maverick can close after connecting.</p>
+      <p class="destination note">Keep the agent tab open.<br>Loopino can close after connecting.</p>
     </section>
     <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
     <p class="agent-note note">Browse, click and fill forms<br>on HTTPS websites</p>
@@ -27,18 +27,18 @@
       <summary>Connection settings<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
       <div class="details-body">
         <p id="destination" class="note"></p>
-        <label for="connector">Maverick address</label>
+        <label for="connector">Loopino address</label>
         <input id="connector" type="url" placeholder="https://…/app/browser?connector=1" spellcheck="false" autocomplete="off">
-        <label class="reuse"><input id="reuse" type="checkbox" checked><span>Reuse an open Maverick tab in this Chrome profile</span></label>
+        <label class="reuse"><input id="reuse" type="checkbox" checked><span>Reuse an open Loopino tab in this Chrome profile</span></label>
       </div>
     </details>
     <details class="help">
       <summary>How sharing works<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
       <div class="details-body note">
-        <p>Choose Open agent tab, then open Companion in Chrome’s toolbar on that tab and connect once. Allow access if Chrome asks. Sign in to Maverick if needed; your agent tab connects automatically.</p>
+        <p>Choose Open agent tab, then open Companion in Chrome’s toolbar on that tab and connect once. Allow access if Chrome asks. Sign in to Loopino if needed; your agent tab connects automatically.</p>
         <p>The agent can browse HTTPS websites, click, fill fields, choose options and use the keyboard. It can submit forms and change your account when you request it.</p>
         <p>Chrome asks for website access and browser control. Only your connected agent tab is operated. Sign-in and file selection stay in Chrome.</p>
-        <p>Companion looks for Maverick in this Chrome profile. Desktop apps and other profiles use a tab here for initial authorization. Once connected, you can close that Maverick tab and continue from the macOS app.</p>
+        <p>Companion looks for Loopino in this Chrome profile. Desktop apps and other profiles use a tab here for initial authorization. Once connected, you can close that Loopino tab and continue from the macOS app.</p>
       </div>
     </details>
   </main>

@@ -58,7 +58,7 @@ def execute_runtime_turn(
     command_runner=subprocess.Popen,
 ) -> RuntimeExecutionResult:
     """Execute one turn through the selected provider."""
-    fake_response = os.environ.get("MAVERICK_RUNTIME_FAKE_RESPONSE")
+    fake_response = os.environ.get("LOOPINO_RUNTIME_FAKE_RESPONSE")
     if fake_response is not None:
         if on_provider_startup_event is not None:
             for phase in (
@@ -227,7 +227,7 @@ def _record_process_line(
 def _emit_fake_events(event_sink: RuntimeExecutionEventSink | None) -> None:
     if event_sink is None:
         return
-    raw_events = os.environ.get("MAVERICK_RUNTIME_FAKE_EVENTS", "").strip()
+    raw_events = os.environ.get("LOOPINO_RUNTIME_FAKE_EVENTS", "").strip()
     if not raw_events:
         return
     try:

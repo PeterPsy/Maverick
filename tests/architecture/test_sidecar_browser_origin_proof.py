@@ -16,7 +16,7 @@ import unittest
 
 SIDECAR_HOST = "proof-instance.sidecars.localhost"
 SIDECAR_ORIGIN = f"http://{SIDECAR_HOST}"
-COOKIE_NAME = "maverick_sidecar_session"
+COOKIE_NAME = "loopino_sidecar_session"
 
 
 class _ProofState:
@@ -56,7 +56,7 @@ class _ProofHandler(BaseHTTPRequestHandler):
         if self.headers.get("Host") != SIDECAR_HOST:
             self._json(421, {"error": "wrong_host"})
             return
-        if self.path == "/.well-known/maverick-sidecar-bootstrap":
+        if self.path == "/.well-known/loopino-sidecar-bootstrap":
             payload = self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode("utf-8")
             ticket = parse_qs(payload).get("ticket", [""])[0]
             if not self.server.state.consume_ticket(ticket):
@@ -147,11 +147,11 @@ class SidecarBrowserOriginDecisionProof(unittest.TestCase):
         bootstrap = self._request(
             server,
             "POST",
-            "/.well-known/maverick-sidecar-bootstrap",
+            "/.well-known/loopino-sidecar-bootstrap",
             body=f"ticket={ticket}",
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Cookie": "maverick_session=must-not-cross",
+                "Cookie": "loopino_session=must-not-cross",
             },
         )
         self.assertEqual(bootstrap[0], 303)
@@ -173,7 +173,7 @@ class SidecarBrowserOriginDecisionProof(unittest.TestCase):
         wrong_host = self._request(
             server,
             "POST",
-            "/.well-known/maverick-sidecar-bootstrap",
+            "/.well-known/loopino-sidecar-bootstrap",
             body=f"ticket={host_bound_ticket}",
             headers={"Host": "another.sidecars.localhost"},
         )
@@ -182,7 +182,7 @@ class SidecarBrowserOriginDecisionProof(unittest.TestCase):
         replay = self._request(
             server,
             "POST",
-            "/.well-known/maverick-sidecar-bootstrap",
+            "/.well-known/loopino-sidecar-bootstrap",
             body=f"ticket={ticket}",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )

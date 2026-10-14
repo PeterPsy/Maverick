@@ -18,7 +18,7 @@ def complete(root: Path, core_unit: str) -> None:
         raise ValueError("Invalid Core unit")
     bus = dbus.SystemBus()
     manager = dbus.Interface(bus.get_object("org.freedesktop.systemd1", "/org/freedesktop/systemd1"), "org.freedesktop.systemd1.Manager")
-    metadata = root / ".maverick/installation"
+    metadata = root / ".loopino/installation"
     configuration = metadata / "configuration/current.json"
     marker = metadata / "private/restart-required"
     def is_active(name):
@@ -47,6 +47,6 @@ def complete(root: Path, core_unit: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--core-unit", default="maverick-core.service")
+    parser.add_argument("--core-unit", default="loopino-core.service")
     args = parser.parse_args()
     complete(args.root, args.core_unit)

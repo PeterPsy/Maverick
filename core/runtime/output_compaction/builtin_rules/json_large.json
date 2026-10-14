@@ -5,7 +5,7 @@
   "reducer": "json_large",
   "match": {
     "command_regex_any": [
-      "(^|\\s)(curl|maverick|python)(\\s|$)"
+      "(^|\\s)(curl|loopino|python)(\\s|$)"
     ],
     "text_regex_any": [
       "^\\s*[\\[{]"

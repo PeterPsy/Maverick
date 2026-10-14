@@ -1,10 +1,10 @@
 ---
 name: installation-ops
-description: Configure or move this standalone Maverick installation’s public address, DNS and TLS through native Core installation plans and durable jobs.
+description: Configure or move this standalone Loopino installation’s public address, DNS and TLS through native Core installation plans and durable jobs.
 ---
 
 Use native Core installation operations for address setup and recovery. Discover
-`core.installation.inspect` with `maverick core cli inspect`, then reuse the
+`core.installation.inspect` with `loopino core cli inspect`, then reuse the
 published schemas for `plan`, `apply`, `status`, `confirm`, `retry`, `verify` and
 `rollback`. The same operation ids are available over Core MCP. Full-access
 platform administrator context is required.

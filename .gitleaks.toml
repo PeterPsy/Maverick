@@ -1,4 +1,4 @@
-title = "Maverick gitleaks config"
+title = "Loopino gitleaks config"
 
 [extend]
 useDefault = true

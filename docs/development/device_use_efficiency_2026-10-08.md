@@ -2,7 +2,7 @@
 
 Core commits `9e860d1c` and `50ca1ffe` are published on `design`. Native commit
 `975c0cea1944e19d0f28a4b495ccff0d29ee4505` is published on
-`giuntiocram/maverick-glasses-ios`, `maverick-integration`.
+`giuntiocram/loopino-glasses-ios`, `loopino-integration`.
 
 The paired contract is `macos-v50`, digest
 `4dd7bf89e6dd520294199f7b997e9388debf6004aaa6f618715033b77ed4b238`.
@@ -40,8 +40,8 @@ editor, project, source filename or subtitle style.
 ## Verified rollout
 
 Backend restart changed PID `1016581` to `1048813`; the existing
-`maverick-core.service` is active/running and `/health` returned
-`{"status":"ok","service":"maverick-core"}`. The ordinary restart command could
+`loopino-core.service` is active/running and `/health` returned
+`{"status":"ok","service":"loopino-core"}`. The ordinary restart command could
 not reach systemd in its mount namespace; the existing host-namespace systemctl
 route completed the authorized restart. The managed process uses SQLite 3.51.3.
 

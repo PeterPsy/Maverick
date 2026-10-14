@@ -1,6 +1,6 @@
 # Core domain map
 
-The Maverick core is the headless platform layer. It should be understandable as a set of small platform domains, not as a generic web backend.
+The Loopino core is the headless platform layer. It should be understandable as a set of small platform domains, not as a generic web backend.
 
 ## Domain responsibilities
 

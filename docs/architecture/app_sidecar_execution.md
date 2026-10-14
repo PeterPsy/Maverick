@@ -2,7 +2,7 @@
 
 Date: 2026-08-03
 Status: Accepted and implemented for the generic WP1 boundary
-Owners: Maverick Core app hosting and app contract domains
+Owners: Loopino Core app hosting and app contract domains
 
 ## Context
 
@@ -83,7 +83,7 @@ socket from another workspace, process without the relay capability, or stale
 data-root identity is rejected, and lifecycle cleanup unlinks the socket.
 
 No generic TCP/HTTP CONNECT proxy is mounted. Any future outbound operation
-must use a separately declared Maverick broker. If G3 selects A-ACP, only the
+must use a separately declared Loopino broker. If G3 selects A-ACP, only the
 curated runtime shim receives a distinct per-run Unix broker socket; it is not
 available to the OpenDesign daemon generally and cannot reach arbitrary
 destinations.

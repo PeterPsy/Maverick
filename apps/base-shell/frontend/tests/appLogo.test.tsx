@@ -14,7 +14,7 @@ function app(app_id: string): AppRegistryItem {
     frontend_launchable: true,
     logo: null,
     name: app_id,
-    publisher: "maverick",
+    publisher: "loopino",
     source_access: "none",
     status: "enabled",
     version: "1.0.0",
@@ -30,13 +30,13 @@ function renderedLogo(appId: string): string {
 
 describe("AppLogo", () => {
   it("uses an app-owned compact silhouette with the native theme colour", () => {
-    const custom = { ...app("example"), logo: { kind: "image" as const, value: "/apps/example/maverick-icon-compact.png" } };
+    const custom = { ...app("example"), logo: { kind: "image" as const, value: "/apps/example/loopino-icon-compact.png" } };
     const markup = renderToStaticMarkup(<AppLogo app={custom} className="bs-app-logo--rail" />);
     expect(markup).toContain("is-glyph");
     expect(markup).toContain("bs-app-logo__compact");
     expect(markup).toContain("background-color:currentColor");
     expect(markup).toContain("mask:");
-    expect(markup).toContain("/apps/example/maverick-icon-compact.png");
+    expect(markup).toContain("/apps/example/loopino-icon-compact.png");
     expect(markup).not.toContain("<img");
   });
 

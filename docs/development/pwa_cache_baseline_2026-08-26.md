@@ -11,7 +11,7 @@ release gate in `docs/runbooks/pwa_cache_baseline.md`.
 
 ## Capture
 
-- probe schema: `maverick.pwa-cache-baseline.v1`;
+- probe schema: `loopino.pwa-cache-baseline.v1`;
 - engine: system Chromium through Playwright;
 - profiles: Desktop Safari and iPhone 15 browser/device emulation;
 - samples: five new browser contexts per profile;
@@ -51,5 +51,5 @@ profile. The browser failed the navigation with
 The expectation in the original checkpoint was a dedicated connectivity
 indicator after M2. That expectation is retained here only as history and was
 superseded by M2R. Current evidence uses probe schema
-`maverick.pwa-cache-baseline.v2` and requires the standard shell, normal loading
+`loopino.pwa-cache-baseline.v2` and requires the standard shell, normal loading
 for missing network results, and zero dedicated connectivity marker or copy.

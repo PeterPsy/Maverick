@@ -209,7 +209,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         return error_payload(
             400,
             "missing_workspace_id",
-            "Senses requires a workspace_id from the Maverick host payload.",
+            "Senses requires a workspace_id from the Loopino host payload.",
         )
 
     dependencies = dependency_resolution_payload(payload.get("_app_dependencies") or payload.get("app_dependencies"))
@@ -356,7 +356,7 @@ def require_authenticated(actor: dict[str, str | None]) -> tuple[int, dict[str, 
     return error_payload(
         401,
         "authentication_required",
-        "Senses Phase 8 actions require a Maverick user session.",
+        "Senses Phase 8 actions require a Loopino user session.",
     )
 
 
@@ -435,8 +435,8 @@ def manifest_payload(
         "dependency_resolution": dependencies,
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
-            "Senses Phase 8 uses Maverick user sessions for pairing, device registry, frame/audio ingestion, routing, and the workspace frontend.",
-            "ingest.frame is available with a Maverick user session and active device_session_id.",
+            "Senses Phase 8 uses Loopino user sessions for pairing, device registry, frame/audio ingestion, routing, and the workspace frontend.",
+            "ingest.frame is available with a Loopino user session and active device_session_id.",
             "ingest.audio accepts bounded push-to-talk audio, writes Storage, and uses Speech transcription when the optional dependency is resolved.",
             "ingest.bundle.start and ingest.bundle_part group one frame plus one audio capture for a single multimodal dispatch.",
             "ingest.frame stores captures through the declared Storage dependency and never launches runtime turns.",
@@ -671,7 +671,7 @@ def pairing_start(
     pairing = pairing_payload(row)
     pairing["code"] = code
     pairing["qr_payload"] = {
-        "type": "maverick.senses.pairing",
+        "type": "loopino.senses.pairing",
         "version": 1,
         "app_id": APP_ID,
         "workspace_id": workspace_id,
@@ -3867,7 +3867,7 @@ def validate_device_for_ingest(
     if device is None:
         return error_payload(404, "device_not_found", "No matching Senses device was found.")
     if str(device["status"]) != "active" or str(device["owner_user_id"]) != actor_user_id:
-        return error_payload(403, "device_not_authorized", "This Maverick user session cannot ingest for that device.")
+        return error_payload(403, "device_not_authorized", "This Loopino user session cannot ingest for that device.")
     device_session = db.execute(
         """
         SELECT * FROM device_sessions
@@ -5522,50 +5522,50 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     normalized = normalize_action(action)
     if normalized == "pairing.complete":
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "pairing"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "pairing"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
         ]
     if normalized in {"pairing.start", "pairing.status"}:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "pairing"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "pairing"}]
     if normalized in {"devices.revoke"}:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"}]
     if normalized == "settings.update":
-        return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "settings"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "settings"}]
     if normalized in {"ingest.frame", "ingest.audio"}:
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
         ]
     if normalized in {"ingest.bundle.start", "ingest.bundle_part"}:
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
         ]
     if normalized in {"storage_write.completed", SPEECH_TRANSCRIPTION_CALLBACK_ACTION}:
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
         ]
     if normalized == "background.tick":
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
         ]
     if normalized in {"routing.dispatch_capture", "routing.reset"}:
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
         ]
     if normalized in {"routing.dispatch_bundle", RUNTIME_DISPATCH_CALLBACK_ACTION}:
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
-            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
+            {"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
         ]
     if normalized in {"set_view_filter", "set_custom_view", "clear_custom_view", "view-state.changed"}:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "view-state"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": "view-state"}]
     return []
 
 

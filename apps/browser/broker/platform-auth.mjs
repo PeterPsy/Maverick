@@ -1,4 +1,4 @@
-/** Private Core-issued authentication for an ephemeral Maverick context. */
+/** Private Core-issued authentication for an ephemeral Loopino context. */
 export function isPlatformTarget(rawUrl, policy) {
   if (!policy?.platform_origin) return false;
   try {
@@ -19,8 +19,8 @@ export function privatePlatformGrant(payload, now = Date.now()) {
   try { origin = new URL(grant.origin); } catch { throw new Error("Invalid platform browser origin."); }
   if (origin.origin !== grant.origin || origin.username || origin.password ||
       !["http:", "https:"].includes(origin.protocol) ||
-      (origin.protocol === "http:" && origin.hostname !== "maverick.localhost") ||
-      grant.cookie_name !== "maverick_session" || !/^[0-9a-f-]{36}$/.test(grant.cookie_value || "") ||
+      (origin.protocol === "http:" && origin.hostname !== "loopino.localhost") ||
+      grant.cookie_name !== "loopino_session" || !/^[0-9a-f-]{36}$/.test(grant.cookie_value || "") ||
       !Number.isFinite(grant.expires_at) || grant.expires_at * 1000 <= now || grant.expires_at * 1000 > now + 4 * 60 * 60 * 1000 ||
       !grant.user_id || grant.user_id !== caller.user_id || !grant.workspace_id || grant.workspace_id !== caller.workspace_id ||
       !/^\.sidecars\.[a-z0-9.-]+$/.test(grant.frame_host_suffix || "")) {

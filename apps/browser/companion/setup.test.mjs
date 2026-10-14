@@ -5,14 +5,14 @@ import {connectorUrl} from "./scope.mjs";
 
 test("only an agent tab is connectable; ordinary platform and Chrome pages direct users to Open agent tab", () => {
   const agentUrl="chrome-extension://fixture/agent-tab.html";
-  for (const tab of [{id: 10}, {id: 10, url: "chrome://extensions/"}, {id: 10, url: "https://maverick.test/app/browser"}, {id:10,url:"https://www.instagram.com/fixture/"}]) {
+  for (const tab of [{id: 10}, {id: 10, url: "chrome://extensions/"}, {id: 10, url: "https://loopino.test/app/browser"}, {id:10,url:"https://www.instagram.com/fixture/"}]) {
     let failure; try {selectedAgentTab(tab,agentUrl);} catch (error) {failure=error;}
     assert(failure); assert.match(setupError(failure), /Open agent tab/u);
     assert(!setupError(failure).includes("invalid_platform_url"));
   }
   assert.match(setupError(new Error("platform_route_unavailable")), /messages and settings/u);
   assert.match(setupError(new Error("browser_connector_url_required")), /Connection settings/u);
-  assert.equal(connectorUrl(defaultConnectorUrl).origin, "https://maverick.loopino.ai");
+  assert.equal(connectorUrl(defaultConnectorUrl).origin, "https://loopino.giuntitrail.com");
   assert.match(setupError(new Error("permission_denied")), /Allow HTTPS website access/u);
 });
 

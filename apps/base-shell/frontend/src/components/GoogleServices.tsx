@@ -16,7 +16,7 @@ export function GoogleServices({ selected, onChange, disabled = false }: {
         ? [...selected, service.id] : selected.filter(item => item !== service.id))} />
       <span><strong>{service.label}</strong><small>{service.detail}</small></span>
     </label>)}
-    <small>Optional. You can add services later. New Maverick apps can reuse the services you approve.</small>
+    <small>Optional. You can add services later. New Loopino apps can reuse the services you approve.</small>
   </fieldset>;
 }
 
@@ -33,14 +33,14 @@ export function googleCallbackMessage(code: string | null): string | null {
   if (!code) return null;
   const messages: Record<string, string> = {
     google_workspace_pending: "Your Google account is registered. Ask an administrator to assign you a workspace, then sign in again.",
-    google_account_link_required: "Sign in with your Maverick password first, then link Google from Connected accounts.",
-    google_account_already_linked: "This Google account is linked to another Maverick user.",
+    google_account_link_required: "Sign in with your Loopino password first, then link Google from Connected accounts.",
+    google_account_already_linked: "This Google account is linked to another Loopino user.",
     google_consent_cancelled: "Google sign-in was cancelled. You can try again or sign in with your password.",
     google_offline_consent_required: "Google did not grant background access. Try connecting again and approve the selected services.",
     google_not_configured: "Google sign-in is not configured. Contact your administrator.",
-    google_flow_session_changed: "Your Maverick session changed. Start the Google connection again.",
+    google_flow_session_changed: "Your Loopino session changed. Start the Google connection again.",
     google_registration_disabled: "This Google account is not authorised to sign in. Contact your administrator.",
-    google_native_update_required: "Update the Maverick app to connect Google, then try again.",
+    google_native_update_required: "Update the Loopino app to connect Google, then try again.",
     google_browser_unavailable: "Unable to open your browser. Please try again.",
     google_flow_expired: "The Google connection timed out. Please try again.",
     google_flow_invalid: "This Google connection has expired. Please start again.",

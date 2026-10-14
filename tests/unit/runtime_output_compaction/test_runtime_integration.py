@@ -21,7 +21,7 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -33,9 +33,9 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
@@ -96,9 +96,9 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
@@ -135,9 +135,9 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
@@ -185,9 +185,9 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
@@ -234,9 +234,9 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
@@ -288,9 +288,9 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
@@ -354,7 +354,7 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         item = {
             "id": "cmd-chat-render-long",
             "type": "commandExecution",
-            "command": "maverick app dynamic-views mcp call render",
+            "command": "loopino app dynamic-views mcp call render",
             "exitCode": 0,
             "aggregatedOutput": cli_output,
         }
@@ -367,9 +367,9 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)

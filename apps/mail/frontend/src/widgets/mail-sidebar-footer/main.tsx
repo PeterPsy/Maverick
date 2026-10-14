@@ -10,7 +10,7 @@ const WIDGET_ID = 'mail-sidebar-footer';
 function postPrimaryActionState(appId: string, available: boolean) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.primary-action.state',
+      type: 'loopino.widget.primary-action.state',
       owner_app_id: appId,
       widget_id: WIDGET_ID,
       available,
@@ -23,7 +23,7 @@ function postPrimaryActionState(appId: string, available: boolean) {
 function openAccountModal(appId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: appId,
       params: {
         add_account: true,
@@ -55,7 +55,7 @@ function MailSidebarFooterWidget() {
       if (
         payload.owner_app_id === appId &&
         payload.widget_id === WIDGET_ID &&
-        payload.type === 'maverick.widget.primary-action.query'
+        payload.type === 'loopino.widget.primary-action.query'
       ) {
         postPrimaryActionState(appId, !busy);
         return;
@@ -63,7 +63,7 @@ function MailSidebarFooterWidget() {
       if (
         payload.owner_app_id === appId &&
         payload.widget_id === WIDGET_ID &&
-        payload.type === 'maverick.widget.primary-action.invoke'
+        payload.type === 'loopino.widget.primary-action.invoke'
       ) {
         openAddAccount();
       }

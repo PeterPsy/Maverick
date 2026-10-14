@@ -97,7 +97,7 @@ class StorageDriveContractTest(unittest.TestCase):
             with self.subTest(surface=surface_name):
                 selectors = selector_loader(
                     STORAGE_ROOT,
-                    "storage" if surface_name == "cli" else "maverick_storage",
+                    "storage" if surface_name == "cli" else "loopino_storage",
                     declared_secret_names=parsed.contract.permissions.secrets.read,
                 )
                 self.assertTrue(
@@ -159,7 +159,7 @@ class StorageDriveContractTest(unittest.TestCase):
 
         mcp_schemas = json.loads((STORAGE_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
         self.assertNotIn("storage_drive_connections_complete_oauth", mcp_schemas["tools"])
-        generic_action_enum = mcp_schemas["tools"]["maverick_storage"]["input_schema"]["properties"]["action"]["enum"]
+        generic_action_enum = mcp_schemas["tools"]["loopino_storage"]["input_schema"]["properties"]["action"]["enum"]
         self.assertNotIn("drive_connections.complete_oauth", generic_action_enum)
 
     def test_drive_mcp_selectors_and_schemas_keep_remote_identity_explicit(self) -> None:

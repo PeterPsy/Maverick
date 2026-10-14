@@ -47,7 +47,7 @@ class StorageDriveOAuthTest(unittest.TestCase):
                 root,
                 {
                     "action": "drive_connections.start_oauth",
-                    "redirect_uri": "https://maverick.local/apps/storage/oauth/callback",
+                    "redirect_uri": "https://loopino.local/apps/storage/oauth/callback",
                     "_app_secrets": {
                         "google-drive-oauth-client-id": "client-id",
                         "google-drive-oauth-client-secret": "client-secret",
@@ -66,7 +66,7 @@ class StorageDriveOAuthTest(unittest.TestCase):
         self.assertEqual(started["access_mode"], "full_rw")
         query = parse_qs(urlparse(started["authorization_url"]).query)
         self.assertEqual(query["client_id"], ["client-id"])
-        self.assertEqual(query["redirect_uri"], ["https://maverick.local/apps/storage/oauth/callback"])
+        self.assertEqual(query["redirect_uri"], ["https://loopino.local/apps/storage/oauth/callback"])
         self.assertEqual(query["access_type"], ["offline"])
         self.assertEqual(query["prompt"], ["consent"])
         self.assertIn("https://www.googleapis.com/auth/drive", query["scope"][0].split())
@@ -81,7 +81,7 @@ class StorageDriveOAuthTest(unittest.TestCase):
                 root,
                 {
                     "action": "drive_connections.start_oauth",
-                    "redirect_uri": "https://maverick.local/apps/storage/oauth/callback",
+                    "redirect_uri": "https://loopino.local/apps/storage/oauth/callback",
                     "_app_secrets": {"google-drive-oauth-client-id": "client-id"},
                 },
             )

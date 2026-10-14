@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { viewFromAppPage } from '../../domain/routing';
 import { postToShell } from '../../domain/shellMessaging';
 import { ViewId } from '../../domain/types';
@@ -39,8 +39,8 @@ function CrmSidebar() {
       setIsShellMobile(payload?.is_mobile_layout === true);
     }
     function handleMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event)) return;
-      if (event.data?.type === 'maverick.widget.context-changed' && event.data.context) {
+      if (!isExactLoopinoParentMessage(event)) return;
+      if (event.data?.type === 'loopino.widget.context-changed' && event.data.context) {
         receivedContext = true;
         applyContext(event.data.context);
       }
@@ -50,12 +50,12 @@ function CrmSidebar() {
       // A slow initial token response must not undo a newer navigation/context.
       if (!controller.signal.aborted && !receivedContext) applyContext(context);
     }).catch(() => undefined); // Ready handshake also supplies the current context.
-    postToShell({ type: 'maverick.widget.ready', owner_app_id: 'crm', widget_id: 'crm-sidebar' });
+    postToShell({ type: 'loopino.widget.ready', owner_app_id: 'crm', widget_id: 'crm-sidebar' });
     return () => { controller.abort(); window.removeEventListener('message', handleMessage); };
   }, []);
 
   function navigate(page: ViewId) {
-    postToShell({ type: 'maverick.widget.open-app', app_id: 'crm', params: { app_page: page } });
+    postToShell({ type: 'loopino.widget.open-app', app_id: 'crm', params: { app_page: page } });
   }
 
   return <main className={`crm-sidebar-widget ${isShellMobile ? 'is-shell-mobile' : ''}`}>

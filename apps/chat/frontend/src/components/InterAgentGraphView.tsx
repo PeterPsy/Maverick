@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
-import { requestParentExternalUrl } from "@maverick/pwa-cache";
+import { requestParentExternalUrl } from "@loopino/pwa-cache";
 import {
   applyNodeChanges,
   Background,
@@ -933,7 +933,7 @@ function GraphFlowCanvas({
       >
         <Background
           className="chatapp-inter-agent-graph__background"
-          color="rgba(var(--maverick-contrast-rgb), 0.24)"
+          color="rgba(var(--loopino-contrast-rgb), 0.24)"
           gap={28}
           size={1.25}
           variant={BackgroundVariant.Dots}
@@ -1066,7 +1066,7 @@ export function graphFlowEdges(edges: GraphEdge[], nodesById: Map<string, GraphB
         labelBgPadding: [7, 4],
         labelShowBg: true,
         markerEnd: {
-          color: "var(--chatapp-graph-edge-marker, var(--maverick-accent))",
+          color: "var(--chatapp-graph-edge-marker, var(--loopino-accent))",
           type: MarkerType.ArrowClosed,
         },
         pathOptions: {

@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Maverick must support workspace-scoped agent execution without granting every runtime session access to the full host or repository tree.
+Loopino must support workspace-scoped agent execution without granting every runtime session access to the full host or repository tree.
 
 ## Decision
 

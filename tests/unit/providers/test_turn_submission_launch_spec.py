@@ -36,7 +36,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             )
             append_log.assert_not_called()
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_TURN_DEBUG_LOGS": "1"}), patch(
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_TURN_DEBUG_LOGS": "1"}), patch(
             "core.runtime.turn_submission_service_events.append_platform_log"
         ) as append_log:
             _debug_log_runtime_turn(

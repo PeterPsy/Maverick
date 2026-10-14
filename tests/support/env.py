@@ -12,8 +12,8 @@ import os
 def apply_test_environment_defaults() -> None:
     """Set test-only defaults for secrets required by core bootstrap paths."""
 
-    os.environ.setdefault("MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS", "1")
-    os.environ.setdefault("MAVERICK_ADMIN_USERNAME", "admin")
-    os.environ.setdefault("MAVERICK_ADMIN_PASSWORD", "maverick")
-    os.environ.setdefault("MAVERICK_RUNTIME_API_SECRET", "maverick-test-runtime-api-secret")
-    os.environ.setdefault("MAVERICK_SECRET_STORE_KEY", "maverick-test-secret-store-key")
+    os.environ.setdefault("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS", "1")
+    os.environ.setdefault("LOOPINO_ADMIN_USERNAME", "admin")
+    os.environ.setdefault("LOOPINO_ADMIN_PASSWORD", "loopino")
+    os.environ.setdefault("LOOPINO_RUNTIME_API_SECRET", "loopino-test-runtime-api-secret")
+    os.environ.setdefault("LOOPINO_SECRET_STORE_KEY", "loopino-test-secret-store-key")

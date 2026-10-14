@@ -1,5 +1,5 @@
 {
-  "schema": "maverick.pwa-cache-device-regression.v1",
+  "schema": "loopino.pwa-cache-device-regression.v1",
   "captured_at": null,
   "environment": "physical-device",
   "redaction_reviewed": false,

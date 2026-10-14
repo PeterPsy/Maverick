@@ -33,7 +33,7 @@ class ProviderCredentialAuthorization:
 
 def provider_secret_target(provider_id: str, mode: str) -> str:
     """Return the stable grant target used for app-mediated provider secret use."""
-    return f"maverick://providers/{provider_id}/{mode}"
+    return f"loopino://providers/{provider_id}/{mode}"
 
 
 def check_provider_credential_authorization(

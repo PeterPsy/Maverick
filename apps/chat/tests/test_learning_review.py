@@ -41,7 +41,7 @@ class LearningReviewTests(unittest.TestCase):
             'status': 'completed', 'output_text': json.dumps(output), 'usage': {'total_tokens': 50}})
 
     def proposal(self, quote='La ricerca è completata e verificata.', **changes):
-        fields = {'scope':'maverick', 'memory_type':'none', 'problem_kind':'capability_gap',
+        fields = {'scope':'loopino', 'memory_type':'none', 'problem_kind':'capability_gap',
                   'generalization':'Enable reliable work with any workbook', 'verification':'Compare formulas before and after editing',
                   'evidence':[{'turn_id':'turn-1','role':'assistant','quote':quote}], **changes}
         return candidate(quote, **fields)

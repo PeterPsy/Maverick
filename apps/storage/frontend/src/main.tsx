@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
-import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility, isExactMaverickParentMessage, requestParentExternalUrl } from '@maverick/pwa-cache';
+import { connectAppEventSocket, loopinoAppIsVisible, observeLoopinoVisibility, isExactLoopinoParentMessage, requestParentExternalUrl } from '@loopino/pwa-cache';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
 import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, folderMediaDownloadUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, storageMediaStreamUrl, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
@@ -27,7 +27,7 @@ import { CatalogChangedError, loadCatalogSummary, loadDirectoryChildren, searchD
 import { folderTargetFromMissingFileTarget, storageFolderTargetMatchesLocalView, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storagePickerAcceptsFile, storagePickerContextFromParams, storagePickerResultForFile, type StoragePickerContext } from './lib/storagePicker';
 import {
-  maverickPlatformOrigin,
+  loopinoPlatformOrigin,
   storageOAuthCallbackFromLocation,
   storageOAuthNavigationDisposition,
   type StorageOAuthCallback,
@@ -551,7 +551,7 @@ function App() {
   const catalogRequestsRef = useRef(new StorageCatalogRequests());
   const viewFilterWriteVersionRef = useRef(0);
   const viewFilterWritesRef = useRef(Promise.resolve());
-  const appVisibleRef = useRef(maverickAppIsVisible());
+  const appVisibleRef = useRef(loopinoAppIsVisible());
   const catalogRefreshRequestRef = useRef(0);
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
   const catalogTransitionTokenRef = useRef(0);
@@ -995,7 +995,7 @@ function App() {
       );
       await refresh();
       if (window.top === window && storageOAuthNavigationDisposition() === 'same-window') {
-        window.location.replace(maverickPlatformOrigin());
+        window.location.replace(loopinoPlatformOrigin());
         return;
       }
       window.history.replaceState({}, '', `/apps/${encodeURIComponent(appId)}/`);
@@ -1009,7 +1009,7 @@ function App() {
     const oauthCallback = storageOAuthCallbackFromLocation(
       window.location.pathname,
       window.location.search,
-      maverickPlatformOrigin(),
+      loopinoPlatformOrigin(),
     );
     const initialTarget = oauthCallback ? null : pendingNavigationTargetRef.current;
     const initialLoad = oauthCallback
@@ -1088,10 +1088,10 @@ function App() {
   }, [driveTarget]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'storage' }, "*");
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'storage' }, "*");
   }, []);
 
-  useEffect(() => observeMaverickVisibility((visible) => {
+  useEffect(() => observeLoopinoVisibility((visible) => {
     appVisibleRef.current = visible;
     catalogRequestsRef.current.setVisible(visible);
     if (!visible) {
@@ -1120,15 +1120,15 @@ function App() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data;
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === storageAppId)) {
+      if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === storageAppId)) {
         handleNavigationParams(payload.params || {});
       }
     }
     type StorageEvent = { type?: string; owner_app_id?: string; resource?: string; detail?: Record<string, unknown>; scope_keys?: string[] };
     const stop = connectAppEventSocket<StorageEvent>((payload) => {
-      if (payload.type !== 'maverick.app.data-changed' || payload.owner_app_id !== storageAppId) return;
+      if (payload.type !== 'loopino.app.data-changed' || payload.owner_app_id !== storageAppId) return;
       if (payload.resource === 'files' || payload.resource === 'drive-connections') {
         if (payload.resource === 'files' && !storageEventAffectsView(payload.scope_keys, {
           role: activeRoleRef.current, folder: currentFolderPathRef.current, query: queryRef.current,
@@ -1447,7 +1447,7 @@ function App() {
     const result = storagePickerResultForFile(selectedFile, driveTargetRef.current);
     window.parent?.postMessage(
       {
-        type: 'maverick.app.open-app',
+        type: 'loopino.app.open-app',
         app_id: pickerContext.returnAppId,
         params: {
           picker_mode: pickerContext.mode,

@@ -1,4 +1,4 @@
-"""Core and app surface runners for the Maverick SDK CLI."""
+"""Core and app surface runners for the Loopino SDK CLI."""
 
 from __future__ import annotations
 
@@ -39,10 +39,10 @@ def _run_core_cli(
     ]
     if operation == "list":
         if tokens:
-            _die("usage: maverick core cli list --json")
+            _die("usage: loopino core cli list --json")
         return {"workspace_id": workspace_id, "commands": [_command_summary(command) for command in commands]}
     if operation == "inspect":
-        command_id = _single_id(tokens, "maverick core cli inspect <command_id> --json")
+        command_id = _single_id(tokens, "loopino core cli inspect <command_id> --json")
         _reject_app_cli_command_in_core_scope(
             command_id,
             allowed_command_ids={command.command_id for command in commands},
@@ -98,7 +98,7 @@ def _reject_app_cli_command_in_core_scope(
     command_name = ".".join(parts[2:])
     _die(
         "This is an app CLI command. Use: "
-        f"`maverick app {app_id} cli run {command_name} --json`"
+        f"`loopino app {app_id} cli run {command_name} --json`"
     )
 
 
@@ -121,10 +121,10 @@ def _run_app_cli(
     ]
     if operation == "list":
         if tokens:
-            _die(f"usage: maverick app {app_id} cli list --json")
+            _die(f"usage: loopino app {app_id} cli list --json")
         return {"workspace_id": workspace_id, "app_id": app_id, "commands": [_command_summary(command, app_prefix=prefix) for command in commands]}
     if operation == "inspect":
-        command = _require_cli_command(commands, _app_scoped_id(prefix, _single_id(tokens, f"maverick app {app_id} cli inspect <command_name> --json")))
+        command = _require_cli_command(commands, _app_scoped_id(prefix, _single_id(tokens, f"loopino app {app_id} cli inspect <command_name> --json")))
         return {"workspace_id": workspace_id, "app_id": app_id, "command": _command_detail(command, app_prefix=prefix)}
     if operation == "run":
         command_name, arguments = _run_target_and_arguments(tokens, options)
@@ -168,10 +168,10 @@ def _run_core_mcp(
     tools = [tool for tool in _mcp_tools(state, workspace_id, options=options, trusted_context=trusted_context) if tool.owner_kind == "core"]
     if operation == "list":
         if tokens:
-            _die("usage: maverick core mcp list --json")
+            _die("usage: loopino core mcp list --json")
         return {"workspace_id": workspace_id, "tools": [_tool_summary(tool) for tool in tools]}
     if operation == "inspect":
-        tool = _require_mcp_tool(tools, _single_id(tokens, "maverick core mcp inspect <tool_name> --json"))
+        tool = _require_mcp_tool(tools, _single_id(tokens, "loopino core mcp inspect <tool_name> --json"))
         return {"workspace_id": workspace_id, "tool": _tool_detail(tool)}
     if operation == "call":
         tool_name, arguments = _run_target_and_arguments(tokens, options)
@@ -219,10 +219,10 @@ def _run_app_mcp(
     ]
     if operation == "list":
         if tokens:
-            _die(f"usage: maverick app {app_id} mcp list --json")
+            _die(f"usage: loopino app {app_id} mcp list --json")
         return {"workspace_id": workspace_id, "app_id": app_id, "tools": [_tool_summary(tool, app_prefix=prefix) for tool in tools]}
     if operation == "inspect":
-        tool = _require_mcp_tool(tools, _app_scoped_id(prefix, _single_id(tokens, f"maverick app {app_id} mcp inspect <tool_name> --json")))
+        tool = _require_mcp_tool(tools, _app_scoped_id(prefix, _single_id(tokens, f"loopino app {app_id} mcp inspect <tool_name> --json")))
         return {"workspace_id": workspace_id, "app_id": app_id, "tool": _tool_detail(tool, app_prefix=prefix)}
     if operation == "call":
         tool_name, arguments = _run_target_and_arguments(tokens, options)

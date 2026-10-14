@@ -20,7 +20,7 @@ The shell sidebar and main view use the same backend actions.
 ## SDK Flow
 
 ```bash
-./scripts/maverick core cli run core.app-sdk.validate --app-id agents --workspace default --json
-./scripts/maverick core cli run core.app-sdk.register-local --app-id agents --workspace default --json
-./scripts/maverick core cli run core.app-sdk.install-local --app-id agents --workspace default --json
+./scripts/loopino core cli run core.app-sdk.validate --app-id agents --workspace default --json
+./scripts/loopino core cli run core.app-sdk.register-local --app-id agents --workspace default --json
+./scripts/loopino core cli run core.app-sdk.install-local --app-id agents --workspace default --json
 ```

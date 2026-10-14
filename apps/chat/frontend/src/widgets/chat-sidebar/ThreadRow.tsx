@@ -122,7 +122,7 @@ export function ThreadRow({
     attachChatThreadDragImage(event, threadLabel);
     setIsDragging(true);
     if (isShellMobileLayout) {
-      window.parent.postMessage({ type: "maverick.shell.sidebar.close" }, "*");
+      window.parent.postMessage({ type: "loopino.shell.sidebar.close" }, "*");
     }
   }
 

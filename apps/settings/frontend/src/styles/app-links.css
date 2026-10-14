@@ -17,10 +17,10 @@
   align-items: center;
   gap: 8px;
   min-height: 2.12rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.045);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0.4rem 0.62rem;
   text-decoration: none;
 }
@@ -42,7 +42,7 @@
   height: 1.28rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.11);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
   line-height: 1;
 }
@@ -51,8 +51,8 @@
   display: grid;
   scroll-margin-top: 18px;
   gap: 12px;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.035);
   padding: 12px;
 }
@@ -68,7 +68,7 @@
 .settings-app-link-row {
   display: grid;
   gap: 10px;
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   padding-top: 12px;
 }
 
@@ -87,14 +87,14 @@
 .settings-app-link-row__copy strong,
 .settings-app-link-candidate strong {
   overflow: hidden;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .settings-app-link-row__copy small,
 .settings-app-link-candidate small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.75rem;
   line-height: 1.35;
 }
@@ -105,8 +105,8 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.04);
   padding: 10px;
 }
@@ -119,7 +119,7 @@
 .settings-app-link-candidate input {
   width: auto;
   min-height: auto;
-  accent-color: var(--maverick-accent);
+  accent-color: var(--loopino-accent);
 }
 
 .settings-app-link-candidate span {
@@ -134,11 +134,11 @@
   width: 2.2rem;
   height: 2.2rem;
   overflow: hidden;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 0.78rem;
   background: rgba(255, 255, 255, 0.06);
-  box-shadow: var(--maverick-inner-edge);
-  color: var(--maverick-accent);
+  box-shadow: var(--loopino-inner-edge);
+  color: var(--loopino-accent);
 }
 
 .settings-app-link-logo img {

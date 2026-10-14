@@ -8,12 +8,12 @@
         var search = new URLSearchParams(window.location.search);
         var hash = new URLSearchParams(window.location.hash.slice(1));
         var theme =
-          search.get("maverick_theme") ||
-          hash.get("maverick_theme") ||
-          search.get("maverick_color_scheme") ||
-          hash.get("maverick_color_scheme");
+          search.get("loopino_theme") ||
+          hash.get("loopino_theme") ||
+          search.get("loopino_color_scheme") ||
+          hash.get("loopino_color_scheme");
         var effective = theme === "light" ? "light" : "dark";
-        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.loopinoTheme = effective;
         document.documentElement.dataset.theme = effective;
         document.documentElement.style.colorScheme = effective;
       })();

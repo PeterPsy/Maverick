@@ -19,7 +19,7 @@
   border: 1px solid var(--chat-sidebar-soft-border);
   border-radius: 10px;
   background: var(--chat-sidebar-soft-surface);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   cursor: pointer;
 }
 
@@ -106,7 +106,7 @@
   display: block;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(var(--maverick-contrast-rgb), 0.08);
+  background: rgba(var(--loopino-contrast-rgb), 0.08);
 }
 
 .bs-chat-sidebar-skeleton__line::after,
@@ -114,7 +114,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(var(--maverick-contrast-rgb), 0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--loopino-contrast-rgb), 0.12), transparent);
   transform: translateX(-100%);
   animation: chat-sidebar-skeleton-shimmer 1.45s ease-in-out infinite;
 }
@@ -184,7 +184,7 @@
   flex: 1;
   font-size: 0.8rem;
   font-weight: 500;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -207,7 +207,7 @@
   border-radius: calc(var(--chat-sidebar-control-radius) / var(--chat-sidebar-project-edit-scale));
   background: var(--chat-sidebar-edit-surface);
   box-shadow: var(--chat-sidebar-inner-edge);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font: inherit;
   font-size: 16px;
   font-weight: 400;
@@ -228,7 +228,7 @@
   padding: 0.12rem 0.35rem;
   border-radius: var(--chat-sidebar-control-radius);
   background: var(--chat-sidebar-soft-surface);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   box-shadow: var(--chat-sidebar-inner-edge);
   font-size: 0.68rem;
   font-weight: 400;
@@ -245,7 +245,7 @@
   padding: 6px 5px;
   border-radius: 8px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   text-align: left;
   transition: background 140ms ease;
 }
@@ -259,7 +259,7 @@
 }
 
 .bs-chat-folder__toggle:focus-visible {
-  outline: 2px solid var(--maverick-accent);
+  outline: 2px solid var(--loopino-accent);
   outline-offset: -2px;
 }
 
@@ -277,7 +277,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
 }
 
 .bs-chat-folder__status.is-busy {
@@ -299,7 +299,7 @@
 .bs-chat-folder__empty {
   margin: 0;
   padding: 0 0.55rem 0.2rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.7rem;
   line-height: 1.5;
 }
@@ -309,7 +309,7 @@
   gap: 0.52rem;
   margin: 0.08rem 0.2rem 0.12rem;
   padding: 0.58rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.14);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.14);
   border-radius: var(--chat-sidebar-control-radius);
   background: var(--chat-sidebar-edit-surface-strong);
   box-shadow: var(--chat-sidebar-inner-edge);
@@ -317,7 +317,7 @@
 
 .bs-chat-project-delete-confirm__message {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
   line-height: 1.4;
 }
@@ -334,9 +334,9 @@
   padding: 0 0.58rem;
   border: 1px solid var(--chat-sidebar-soft-border);
   border-radius: var(--chat-sidebar-control-radius);
-  background: rgba(var(--maverick-contrast-rgb), 0.055);
+  background: rgba(var(--loopino-contrast-rgb), 0.055);
   box-shadow: var(--chat-sidebar-inner-edge);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.68rem;
   font-weight: 400;
   line-height: 1.1;
@@ -350,14 +350,14 @@
 
 .bs-chat-project-delete-confirm__button:hover:not(:disabled),
 .bs-chat-project-delete-confirm__button:focus-visible {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.18);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.18);
   background: var(--chat-sidebar-soft-surface-hover);
   outline: none;
 }
 
 .bs-chat-project-delete-confirm__button.is-danger {
-  background: rgba(var(--maverick-contrast-rgb), 0.12);
-  color: var(--maverick-text);
+  background: rgba(var(--loopino-contrast-rgb), 0.12);
+  color: var(--loopino-text);
 }
 
 .bs-chat-project-delete-confirm__button:disabled {

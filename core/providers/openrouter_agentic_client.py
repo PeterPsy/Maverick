@@ -11,7 +11,7 @@ from core.providers.agentic_protocol import (
     EphemeralCredential,
 )
 from core.providers.agentic_models import RoutingConstraint
-from core.providers.maverick_agent_provider_config import MaverickTokenCostPolicy
+from core.providers.loopino_agent_provider_config import LoopinoTokenCostPolicy
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_MODEL_ID,
     OpenRouterAgenticProtocolError,
@@ -33,7 +33,7 @@ class OpenRouterAgenticClient:
         *,
         model_id: str = OPENROUTER_AGENTIC_MODEL_ID,
         transport: OpenRouterAgenticTransport | None = None,
-        token_cost_policy: MaverickTokenCostPolicy | None = None,
+        token_cost_policy: LoopinoTokenCostPolicy | None = None,
         routing_constraint: RoutingConstraint | None = None,
         allowed_upstream_ids: tuple[str, ...] | None = None,
         upstream_provider_names: tuple[str, ...] | None = None,
@@ -50,7 +50,7 @@ class OpenRouterAgenticClient:
             or upstream_provider_names is None
             or resolved_model_ids is None
         ):
-            from core.providers.maverick_agent_builtins import (
+            from core.providers.loopino_agent_builtins import (
                 OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
             )
 

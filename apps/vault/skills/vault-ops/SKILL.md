@@ -10,8 +10,8 @@ Vault is the Active Credentials, Connection Issues, and Advanced details surface
 Use Vault's app-owned CLI or MCP surface first to confirm the redaction-safe operating model:
 
 ```bash
-maverick app vault cli run vault --json
-maverick app vault mcp call maverick_vault
+loopino app vault cli run vault --json
+loopino app vault mcp call loopino_vault
 ```
 
 For actual secret metadata and mutations, use the core-owned secret surfaces exposed by that manifest. Never ask Vault, app data files, workspace files, chat transcripts, generated artifacts, or browser bundles for raw secret values.
@@ -25,7 +25,7 @@ Authority rules:
 Grant review rules:
 
 - `app.backend` grants must target logical names declared by the app contract under `permissions.secrets.read`.
-- `app.backend` delivery targets use `maverick://app.backend/*` or a narrower `maverick://app.backend/<surface>` target.
+- `app.backend` delivery targets use `loopino://app.backend/*` or a narrower `loopino://app.backend/<surface>` target.
 - Expired, disabled, revoked, missing, or non-deliverable grants should be treated as configuration findings, not as usable secret access.
 - Browser or user-directed actions are not a Vault UI workflow unless a controlled consumer is implemented and documented.
 

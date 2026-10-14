@@ -117,7 +117,7 @@ describe("FloatingChatHost mount gate", () => {
         name: "Design Studio",
         version: "0.1.0",
         description: "OpenDesign",
-        publisher: "Maverick",
+        publisher: "Loopino",
         status: "enabled",
         distribution_mode: "bundled",
         source_access: "built-in",

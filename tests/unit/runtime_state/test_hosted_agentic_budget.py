@@ -13,7 +13,7 @@ from core.providers.google_agentic_profile import (
     google_agentic_preview_policy,
     google_interactions_routing_constraint,
 )
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
     OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )

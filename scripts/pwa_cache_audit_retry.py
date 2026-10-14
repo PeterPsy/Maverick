@@ -11,7 +11,7 @@ from scripts.pwa_cache_audit_io import read_text
 
 
 MUTATION_RETRY_REGISTRY_PATH = Path("packages/pwa-cache/src/mutationRetryRegistry.v2.json")
-MUTATION_RETRY_REGISTRY_SCHEMA = "maverick.pwa-mutation-retry-registry.v2"
+MUTATION_RETRY_REGISTRY_SCHEMA = "loopino.pwa-mutation-retry-registry.v2"
 AUDIT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{4,126}\.v[1-9][0-9]*$")
 ACTION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{1,127}$")
 ENDPOINT_PATTERN = re.compile(r"^/api/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,506}$")
@@ -37,7 +37,7 @@ PRODUCTION_SOURCE_SUFFIXES = frozenset({
 PRODUCTION_SOURCE_ROOTS = ("apps", "core", "packages", "scripts")
 EXCLUDED_SOURCE_PARTS = frozenset({
     ".git",
-    ".maverick",
+    ".loopino",
     ".next",
     ".venv",
     "__tests__",

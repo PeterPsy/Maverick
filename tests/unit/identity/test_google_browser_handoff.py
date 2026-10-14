@@ -22,7 +22,7 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
     def setUp(self):
         fixtures.ConnectedAccountsTests.setUp(self)
         self.identity.save_auth_session(self.context.session)
-        self.native = {"maverick_session": self.context.session.session_id}
+        self.native = {"loopino_session": self.context.session.session_id}
         self.browser = {}
         self.tokens = patch("core.connected_accounts.google.json_request", return_value={
             "id_token": "provider-signed-id", "scope": "openid email profile", "refresh_token": "provider-refresh"})
@@ -31,14 +31,14 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         self.tokens.start(); self.claims.start()
         self.addCleanup(self.tokens.stop); self.addCleanup(self.claims.stop)
 
-    def request(self, path, *, jar=None, body=None, query=None, origin="https://maverick.example", proxy=False):
+    def request(self, path, *, jar=None, body=None, query=None, origin="https://loopino.example", proxy=False):
         jar = self.native if jar is None else jar
         data = json.dumps(body).encode() if body is not None else b""
         environ = {"PATH_INFO": path, "REQUEST_METHOD": "POST" if body is not None else "GET",
-            "HTTP_HOST": "maverick.example", "wsgi.url_scheme": "https", "HTTP_ORIGIN": origin,
+            "HTTP_HOST": "loopino.example", "wsgi.url_scheme": "https", "HTTP_ORIGIN": origin,
             "HTTP_COOKIE": "; ".join(f"{key}={value}" for key, value in jar.items()),
             "QUERY_STRING": urlencode(query or {}), "wsgi.input": BytesIO(data), "CONTENT_LENGTH": str(len(data)),
-            "CONTENT_TYPE": "application/json", "maverick.app_frame_proxy": proxy}
+            "CONTENT_TYPE": "application/json", "loopino.app_frame_proxy": proxy}
         captured = {}
         def respond(status, headers): captured.update(status=status, headers=headers)
         content = b"".join(handle_connected_accounts_api(self.state, environ, respond))
@@ -71,23 +71,23 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
 
     def test_native_connection_completes_with_independent_browser_cookies(self):
         flow_id, raw_state, handoff = self.start()
-        native_cookie = self.native["maverick_google_flow"]
+        native_cookie = self.native["loopino_google_flow"]
         self.assertEqual(self.request("/api/auth/google/result", body={"flow_id": flow_id})["body"], {"status": "pending"})
         query = self.launch(raw_state, handoff)
-        self.assertNotEqual(native_cookie, self.browser["maverick_google_flow"])
-        self.assertEqual(query["nonce"], [digest(self.browser["maverick_google_flow"])])
+        self.assertNotEqual(native_cookie, self.browser["loopino_google_flow"])
+        self.assertEqual(query["nonce"], [digest(self.browser["loopino_google_flow"])])
         self.assertEqual(self.callback(raw_state)["status"], "303 See Other")
         self.assertEqual(len(self.accounts.list_accounts(self.user.user_id)), 1)
-        self.assertNotIn("maverick_session", self.browser)
+        self.assertNotIn("loopino_session", self.browser)
         result = self.request("/api/auth/google/result", body={"flow_id": flow_id})
         self.assertEqual(result["body"], {"status": "completed"})
-        self.assertEqual(self.native["maverick_session"], self.context.session.session_id)
-        self.assertNotIn("maverick_google_flow", self.native)
+        self.assertEqual(self.native["loopino_session"], self.context.session.session_id)
+        self.assertNotIn("loopino_google_flow", self.native)
 
     def test_handoff_and_receipt_are_one_use_and_store_no_raw_secrets(self):
         flow_id, raw_state, handoff = self.start()
         metadata = repr(self.accounts.collections.flows.find({}))
-        for secret in [raw_state, handoff, self.native["maverick_google_flow"], self.context.session.session_id]:
+        for secret in [raw_state, handoff, self.native["loopino_google_flow"], self.context.session.session_id]:
             self.assertNotIn(secret, metadata)
         self.launch(raw_state, handoff)
         replay = self.request("/api/auth/google/handoff", jar={}, body={"state": raw_state, "handoff": handoff})
@@ -100,7 +100,7 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
     def test_wrong_or_missing_external_cookie_does_not_complete_connection(self):
         flow_id, raw_state, handoff = self.start()
         self.launch(raw_state, handoff)
-        for jar in [{}, self.native, {"maverick_google_flow": "wrong"}]:
+        for jar in [{}, self.native, {"loopino_google_flow": "wrong"}]:
             response = self.request("/api/auth/google/callback", jar=dict(jar), query={"state": raw_state, "code": "code"})
             self.assertIn("google_flow_invalid", dict(response["headers"])["Location"])
         self.assertFalse(self.accounts.list_accounts(self.user.user_id))
@@ -111,7 +111,7 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         self.launch(raw_state, handoff)
         external_cookie = dict(self.browser)
         self.callback(raw_state)
-        for jar in [{}, external_cookie, {"maverick_session": self.context.session.session_id}]:
+        for jar in [{}, external_cookie, {"loopino_session": self.context.session.session_id}]:
             result = self.request("/api/auth/google/result", jar=jar, body={"flow_id": flow_id})
             self.assertEqual(result["body"]["error"], "google_flow_invalid")
         self.assertEqual(self.accounts.get_flow(flow_id).status, "completed")
@@ -142,7 +142,7 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
     def test_callback_replay_cannot_overwrite_a_result_in_progress(self):
         flow_id, raw_state, handoff = self.start()
         self.launch(raw_state, handoff)
-        cookie = self.browser["maverick_google_flow"]
+        cookie = self.browser["loopino_google_flow"]
         flow = self.accounts.consume_flow(flow_id, digest(cookie), self.now)
         self.assertIsNotNone(flow)
         response = self.callback(raw_state, error="access_denied")
@@ -169,7 +169,7 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         self.launch(raw_state, handoff); self.callback(raw_state)
         newer = replace(self.context.session, session_id="new-alice-session")
         self.identity.save_auth_session(newer)
-        wrong_session = {**self.native, "maverick_session": newer.session_id}
+        wrong_session = {**self.native, "loopino_session": newer.session_id}
         response = self.request("/api/auth/google/result", jar=wrong_session, body={"flow_id": flow_id})
         self.assertEqual(response["body"]["error"], "google_flow_session_changed")
         self.assertEqual(self.accounts.get_flow(flow_id).status, "completed")
@@ -179,10 +179,10 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         fixtures.ensure_workspace_membership(self.workspace, membership_id="bob-default", workspace_id="default", user_id=other.user_id, role="member")
         session = self.identity.save_auth_session(fixtures.build_auth_session(session_id="session-bob", user_id=other.user_id,
                                                                               expires_at=self.now + timedelta(days=1)))
-        self.browser["maverick_session"] = session.session_id
+        self.browser["loopino_session"] = session.session_id
         flow_id, raw_state, handoff = self.start()
         self.launch(raw_state, handoff); self.callback(raw_state)
-        self.assertEqual(self.browser["maverick_session"], session.session_id)
+        self.assertEqual(self.browser["loopino_session"], session.session_id)
         self.assertEqual(len(self.accounts.list_accounts(self.user.user_id)), 1)
         self.assertFalse(self.accounts.list_accounts(other.user_id))
         self.assertEqual(self.request("/api/auth/google/result", body={"flow_id": flow_id})["body"], {"status": "completed"})
@@ -202,11 +202,11 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         flow_id, raw_state, handoff = self.start("login")
         self.launch(raw_state, handoff)
         callback = self.callback(raw_state)
-        self.assertFalse(any("maverick_session=" in value for _, value in callback["headers"]))
+        self.assertFalse(any("loopino_session=" in value for _, value in callback["headers"]))
         result = self.request("/api/auth/google/result", body={"flow_id": flow_id})
         self.assertEqual(result["body"], {"status": "completed"})
-        self.assertIn("maverick_session", self.native)
-        session = self.identity.get_auth_session(self.native["maverick_session"])
+        self.assertIn("loopino_session", self.native)
+        session = self.identity.get_auth_session(self.native["loopino_session"])
         self.assertEqual(session.user_id, self.user.user_id)
         self.assertNotIn(session.session_id, repr(result["body"]))
 
@@ -214,7 +214,7 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         flow_id, raw_state, handoff = self.start()
         for path, body in [("/api/auth/google/handoff", {"state": raw_state, "handoff": handoff}),
                            ("/api/auth/google/result", {"flow_id": flow_id}), ("/api/auth/google/cancel", {"flow_id": flow_id})]:
-            for origin, proxy in [("https://evil.example", False), ("https://maverick.example", True)]:
+            for origin, proxy in [("https://evil.example", False), ("https://loopino.example", True)]:
                 self.assertEqual(self.request(path, body=body, origin=origin, proxy=proxy)["status"], "403 Forbidden")
         flow = self.accounts.get_flow(flow_id)
         self.accounts.save_flow(replace(flow, expires_at=self.now - timedelta(seconds=1)))
@@ -231,7 +231,7 @@ class GoogleBrowserHandoffTests(unittest.TestCase):
         thread = Thread(target=server.serve_forever)
         thread.start()
         try:
-            with patch.dict("os.environ", {"MAVERICK_GOOGLE_REDIRECT_URI": origin + "/api/auth/google/callback"}), redirect_stdout(StringIO()) as output:
+            with patch.dict("os.environ", {"LOOPINO_GOOGLE_REDIRECT_URI": origin + "/api/auth/google/callback"}), redirect_stdout(StringIO()) as output:
                 run(origin)
             self.assertIn("original native session receives the cancelled result", output.getvalue())
             self.assertNotIn("provider-refresh", output.getvalue())

@@ -876,7 +876,7 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
         )
         with patch("core.cli.recovery_commands.restart_backend_service") as restart_backend:
             restart_backend.return_value.to_payload.return_value = {
-                "service_name": "maverick-core.service",
+                "service_name": "loopino-core.service",
                 "health_url": "http://127.0.0.1:8014/health",
                 "restarted": True,
                 "method": "signal",
@@ -905,7 +905,7 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
         )
         with patch("core.mcp.recovery_tools.restart_backend_service") as restart_backend:
             restart_backend.return_value.to_payload.return_value = {
-                "service_name": "maverick-core.service",
+                "service_name": "loopino-core.service",
                 "health_url": "http://127.0.0.1:8014/health",
                 "restarted": True,
                 "method": "signal",

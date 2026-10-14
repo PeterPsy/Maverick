@@ -1,6 +1,6 @@
-# OpenWA for Maverick
+# OpenWA for Loopino
 
-A native Maverick app for WhatsApp sessions, contacts, conversations and text messaging, powered by [rmyndharis/OpenWA](https://github.com/rmyndharis/OpenWA). The app uses Maverick authentication, Core Secrets, the central notification inbox and declared CLI/MCP operations.
+A native Loopino app for WhatsApp sessions, contacts, conversations and text messaging, powered by [rmyndharis/OpenWA](https://github.com/rmyndharis/OpenWA). The app uses Loopino authentication, Core Secrets, the central notification inbox and declared CLI/MCP operations.
 
 ## Use the app
 
@@ -12,17 +12,17 @@ An active send or retry shows **Sending…**, with recovery warnings hidden unti
 
 The default workspace has a dedicated local provider at `http://127.0.0.1:2785`. Administrators can configure another public HTTPS OpenWA gateway in the app after binding its key through Vault. API keys go through Core Secrets; app configuration stores only connection metadata. Remote private addresses, redirects and URL credentials are rejected.
 
-The app supports session creation/start/stop/logout, QR and phone pairing, bounded chat/contact/message reads, image viewing, text sends/replies and read-only webhook/template inspection. Select **View image** on an image message to load it; captions remain visible. Incoming messages refresh while the conversation is visible and its session is ready. Connection and uncertain-send notifications appear in Maverick's central inbox.
+The app supports session creation/start/stop/logout, QR and phone pairing, bounded chat/contact/message reads, image viewing, text sends/replies and read-only webhook/template inspection. Select **View image** on an image message to load it; captions remain visible. Incoming messages refresh while the conversation is visible and its session is ready. Connection and uncertain-send notifications appear in Loopino's central inbox.
 
 Reads run one at a time per panel, schedule the next poll after completion, and stop when the app is hidden or offline. Repeated failures gradually increase the polling interval up to one minute; **Retry** and returning to the app refresh immediately. Every browser request has a 28-second deadline. Switching sessions, gateways, tabs or pages cancels obsolete reads and clears previous-query rows. A failed refresh of the current page retains its rows and presents a local retry action. Sending keeps its separate confirmation and recovery flow, including across navigation.
 
-The interface uses app-owned Maverick dark/light tokens, neutral primary controls, compact session navigation and a search field labelled as filtering the current page. Connected indicators, unread counters and outgoing message surfaces use the monochrome palette; connected sessions omit the redundant `ready` badge, while linking and unavailable states remain visible. Text fields, including search, the composer and dialogs, indicate focus with a subtle neutral border. Keyboard focus on buttons and disclosure controls uses a thin inset line; controls have no external focus halo. Session navigation scrolls independently on desktop and horizontally on mobile. QR failures are visible and retryable; outdated QR images disappear on a failed refresh. A provider outage is presented separately from phone linking and disables unavailable session creation. Theme bootstrap runs before first paint, with live shell updates accepted only through the trusted parent relay.
+The interface uses app-owned Loopino dark/light tokens, neutral primary controls, compact session navigation and a search field labelled as filtering the current page. Connected indicators, unread counters and outgoing message surfaces use the monochrome palette; connected sessions omit the redundant `ready` badge, while linking and unavailable states remain visible. Text fields, including search, the composer and dialogs, indicate focus with a subtle neutral border. Keyboard focus on buttons and disclosure controls uses a thin inset line; controls have no external focus halo. Session navigation scrolls independently on desktop and horizontally on mobile. QR failures are visible and retryable; outdated QR images disappear on a failed refresh. A provider outage is presented separately from phone linking and disables unavailable session creation. Theme bootstrap runs before first paint, with live shell updates accepted only through the trusted parent relay.
 
 Backspace deletes text in editable controls. On the page or a locked send draft it suppresses the browser's default history navigation, so deleting cannot leave the app. A locked attempt keeps its exact text until resolved through send recovery. Explicit browser navigation shortcuts retain their normal behavior.
 
 ## Integration
 
-- Official SDK lifecycle and native React interface, with Maverick theme and mobile spacing.
+- Official SDK lifecycle and native React interface, with Loopino theme and mobile spacing.
 - A dedicated WhatsApp silhouette in app-owned SVG and transparent PNG assets. Rail and App Store tint the same compact asset with their native theme colours, frames and spacing.
 - Workspace-owned SQLite configuration and per-user notification receipts.
 - Provider readiness included in the health hook, independently of whether a phone is linked.
@@ -30,13 +30,13 @@ Backspace deletes text in editable controls. On the page or a locked send draft 
 - Declared `openwa` and administrator-only `provider` CLI commands and 18 MCP tools, with effects and secret requirements. Provider maintenance does not request the WhatsApp API key. Core continues to decide whether a runtime may invoke them.
 - A bundled `openwa-ops` skill. Sending requires authorization for the recipient and message; installation or account linking does not authorize messages.
 
-The shared source lives in the Maverick `design` repository at `apps/openwa`, registered as a forkable platform app. Installation data remains in each workspace's `data/openwa`; moving the source does not reset an existing account. This local provider targets the `default` full-access workspace and runs independently of app entrypoints because WhatsApp needs persistent browser state and network access. An explicit provider start enables recovery through Maverick's backend recovery and background tick hooks; an explicit stop disables it. See [OPERATIONS.md](OPERATIONS.md) for lifecycle, isolation and verification limits.
+The shared source lives in the Loopino `design` repository at `apps/openwa`, registered as a forkable platform app. Installation data remains in each workspace's `data/openwa`; moving the source does not reset an existing account. This local provider targets the `default` full-access workspace and runs independently of app entrypoints because WhatsApp needs persistent browser state and network access. An explicit provider start enables recovery through Loopino's backend recovery and background tick hooks; an explicit stop disables it. See [OPERATIONS.md](OPERATIONS.md) for lifecycle, isolation and verification limits.
 
 ## Validate
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-root /home/ubuntu/projects/maverick-v3/apps/openwa --json
-maverick core cli run core.app-sdk.status --app-id openwa --workspace default --json
+loopino core cli run core.app-sdk.validate --app-root /projects/loopino/apps/openwa --json
+loopino core cli run core.app-sdk.status --app-id openwa --workspace default --json
 python3 -m unittest discover -s apps/openwa/tests -v
 cd apps/openwa && npm test
 ```

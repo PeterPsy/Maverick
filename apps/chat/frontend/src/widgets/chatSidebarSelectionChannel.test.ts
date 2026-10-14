@@ -15,7 +15,7 @@ describe("chat sidebar multi-select channel", () => {
     const sidebar = readWidgetSource("chat-sidebar/useChatSidebarState.ts");
     const footer = readWidgetSource("chat-sidebar-footer/main.tsx");
 
-    expect(channel).toContain("maverick.chat.sidebar.selection-state");
+    expect(channel).toContain("loopino.chat.sidebar.selection-state");
     expect(channel).toContain("BroadcastChannel");
     expect(sidebar).toContain("confirmSelectedThreadDeletion");
     expect(footer).toContain("CHAT_SIDEBAR_SELECTION_CONFIRM_DELETE");

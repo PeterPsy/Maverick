@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  --maverick-text: #ececec;
+  --loopino-text: #ececec;
   --calendar-sidebar-cell-radius: 22px;
   --calendar-sidebar-composer-border: rgba(255, 255, 255, 0.05);
   --calendar-sidebar-composer-surface: rgba(12, 12, 14, 0.58);
@@ -24,7 +24,7 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-family: "Avenir Next", "Sohne", "Segoe UI", sans-serif;
 }
 
@@ -62,7 +62,7 @@ button {
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
   box-shadow: var(--calendar-sidebar-edge);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.76rem;
   font-weight: 400;
   letter-spacing: 0;

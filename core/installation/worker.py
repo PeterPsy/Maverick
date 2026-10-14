@@ -88,7 +88,7 @@ class InstallationWorker:
             worker["renewal_checked_at"] = checked
             return
         worker["renewal_checked_at"] = timestamp()
-        paths = configuration.get("certificates") or certificate_paths(certificate_names(configuration["hostname"]))
+        paths = configuration.get("certificates") or certificate_paths(certificate_names(configuration["hostname"]), repository_root=self.store.repository_root)
         try:
             due = any(x509.load_pem_x509_certificate(Path(pair["fullchain"]).read_bytes()).not_valid_after_utc
                       - now < timedelta(days=30) for pair in paths.values())

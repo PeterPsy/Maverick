@@ -149,7 +149,7 @@ describe("searchComposerReferences", () => {
     mockedListRuntimeThreads.mockResolvedValueOnce({
       threads: [
         {
-          agent_label: "Maverick",
+          agent_label: "Loopino",
           agent_role_id: "",
           agent_type_id: "",
           archived: false,

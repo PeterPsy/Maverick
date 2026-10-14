@@ -26,7 +26,7 @@
 
 ## Change shape
 
-Prefer changes that are easy to review in one sitting. A good Maverick change usually has:
+Prefer changes that are easy to review in one sitting. A good Loopino change usually has:
 
 - one clear owner
 - one contract or UI behavior being improved

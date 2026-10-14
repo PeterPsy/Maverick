@@ -10,8 +10,8 @@ import time
 from typing import Callable
 
 
-SIDECAR_BROWSER_COOKIE_NAME = "maverick_sidecar_session"
-SIDECAR_BROWSER_RESOURCE_COOKIE_NAME = "__Host-maverick_sidecar_resource_session"
+SIDECAR_BROWSER_COOKIE_NAME = "loopino_sidecar_session"
+SIDECAR_BROWSER_RESOURCE_COOKIE_NAME = "__Host-loopino_sidecar_resource_session"
 MAX_TICKET_TTL_SECONDS = 30
 BOOTSTRAP_CONFIRMATION_TTL_SECONDS = 30
 SESSION_IDLE_TTL_SECONDS = 5 * 60

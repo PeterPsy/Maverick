@@ -439,7 +439,7 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         harness = HostedAgenticHarness(self)
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(

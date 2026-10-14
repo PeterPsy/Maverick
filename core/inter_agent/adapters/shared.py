@@ -18,7 +18,7 @@ from core.inter_agent.adapters.base import (
 )
 
 
-MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK = "MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK"
+LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK = "LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK"
 _ENABLED_VALUE = "1"
 _ORCHESTRATIONS_MODULE = "agent_framework_orchestrations"
 _CORE_MODULE = "agent_framework"
@@ -34,9 +34,9 @@ class MafModules:
 
 def load_maf_modules() -> MafModules:
     """Lazy import the selected MAF packages behind the explicit feature flag."""
-    if os.environ.get(MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK) != _ENABLED_VALUE:
+    if os.environ.get(LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK) != _ENABLED_VALUE:
         raise InterAgentAdapterUnavailableError(
-            f"Microsoft Agent Framework adapter requires {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1."
+            f"Microsoft Agent Framework adapter requires {LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK}=1."
         )
     try:
         orchestrations = importlib.import_module(_ORCHESTRATIONS_MODULE)

@@ -36,7 +36,7 @@ def sample_need(*, user_action: str = "create_grant") -> dict[str, object]:
         "scope": {"type": "workspace", "label": "Workspace"},
         "recommended_grant": {
             "actions": ["app.backend"],
-            "target_patterns": ["maverick://app.backend/backend"],
+            "target_patterns": ["loopino://app.backend/backend"],
             "resource_type": None,
             "resource_id": None,
             "reason": "Allow browser to use api-token through backend.",
@@ -74,7 +74,7 @@ def sample_mail_app_managed_need() -> dict[str, object]:
         "scope": {"type": "resource", "resource_type": "mail_connection", "resource_id": None, "label": "Mail Connection"},
         "recommended_grant": {
             "actions": ["app.backend"],
-            "target_patterns": ["maverick://app.backend/backend", "maverick://app.backend/cli/mail"],
+            "target_patterns": ["loopino://app.backend/backend", "loopino://app.backend/cli/mail"],
             "resource_type": "mail_connection",
             "resource_id": None,
             "reason": "Allow mail to use gmail-refresh-token after app setup.",
@@ -134,7 +134,7 @@ class VaultAppTest(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("apps", "workspaces", "scripts", "docs"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -197,7 +197,7 @@ class VaultAppTest(unittest.TestCase):
         self.assertEqual(contract.entrypoints.mcp, "mcp/server.py")
         self.assertEqual(contract.entrypoints.skills_root, "skills")
         self.assertEqual(contract.capabilities.cli_commands, ["vault"])
-        self.assertEqual(contract.capabilities.mcp_tools, ["maverick_vault"])
+        self.assertEqual(contract.capabilities.mcp_tools, ["loopino_vault"])
         self.assertEqual(contract.capabilities.skills, ["vault-ops"])
         self.assertEqual(contract.storage.storage_kind, "none")
         self.assertEqual(contract.storage.primary_paths, [])
@@ -205,10 +205,10 @@ class VaultAppTest(unittest.TestCase):
         self.assertTrue(all(widget.host == "base-shell" for widget in contract.widgets))
         self.assertTrue((APP_ROOT / "skills" / "vault-ops" / "SKILL.md").is_file())
 
-    def test_maverick_cli_and_mcp_surfaces_are_redaction_safe_manifests(self) -> None:
+    def test_loopino_cli_and_mcp_surfaces_are_redaction_safe_manifests(self) -> None:
         cli = self.invoke_runtime_cli(["app", "vault", "cli", "run", "vault", "--json", "--action", "manifest"])
         mcp = self.invoke_runtime_cli(
-            ["app", "vault", "mcp", "call", "maverick_vault", "--json", "--action", "manifest"]
+            ["app", "vault", "mcp", "call", "loopino_vault", "--json", "--action", "manifest"]
         )
 
         payloads = [cli, mcp]
@@ -235,13 +235,13 @@ class VaultAppTest(unittest.TestCase):
             )
             self.assertNotIn("raw_value", json.dumps(payload))
 
-    def test_maverick_cli_and_mcp_surfaces_reject_unsupported_operations(self) -> None:
+    def test_loopino_cli_and_mcp_surfaces_reject_unsupported_operations(self) -> None:
         cli = self.invoke_runtime_cli(
             ["app", "vault", "cli", "run", "vault", "--json", "--action", "bad"],
             expected_status="400 Bad Request",
         )
         mcp = self.invoke_runtime_cli(
-            ["app", "vault", "mcp", "call", "maverick_vault", "--json", "--action", "bad"],
+            ["app", "vault", "mcp", "call", "loopino_vault", "--json", "--action", "bad"],
             expected_status="400 Bad Request",
         )
         bad_tool = self.invoke_runtime_cli(
@@ -278,7 +278,7 @@ class VaultAppTest(unittest.TestCase):
                 "vault",
                 "mcp",
                 "call",
-                "maverick_vault",
+                "loopino_vault",
                 "--json",
                 "--arguments-json",
                 json.dumps({"action": "connection_issues", "needs": [sample_need()]}),
@@ -316,13 +316,13 @@ class VaultAppTest(unittest.TestCase):
         self.assertEqual(payload["issue_count"], 1)
         self.assertEqual(payload["issues"][0]["recommended_action"], "create_grant")
 
-    def test_agent_operations_do_not_require_nested_maverick_binary(self) -> None:
+    def test_agent_operations_do_not_require_nested_loopino_binary(self) -> None:
         with patch.dict(os.environ, {"PATH": ""}):
             cli = self.invoke_runtime_cli(
                 ["app", "vault", "cli", "run", "vault", "--json", "--action", "diagnose"]
             )
             mcp = self.invoke_runtime_cli(
-                ["app", "vault", "mcp", "call", "maverick_vault", "--json", "--action", "diagnose"]
+                ["app", "vault", "mcp", "call", "loopino_vault", "--json", "--action", "diagnose"]
             )
 
         for result in (cli, mcp):
@@ -387,7 +387,7 @@ class VaultAppTest(unittest.TestCase):
         self.assertEqual(payload["status"], "explained")
         self.assertIn("Browser has a matching saved credential", payload["message"])
         self.assertNotIn("target_patterns", payload["message"])
-        self.assertNotIn("maverick://", payload["message"])
+        self.assertNotIn("loopino://", payload["message"])
         self.assertNotIn("grant_state", payload["message"])
 
     def test_apply_fix_without_confirmation_or_core_surface_does_not_mutate(self) -> None:
@@ -484,7 +484,7 @@ class VaultAppTest(unittest.TestCase):
         self.assertIn("GrantsView", source)
         self.assertIn("AuditView", source)
         self.assertIn("selectCredential", source)
-        self.assertIn("maverick.shell.sidebar.open", source)
+        self.assertIn("loopino.shell.sidebar.open", source)
         self.assertIn("selectedSecretId", source)
         self.assertIn("tab === 'advanced'", source)
         self.assertNotIn("Readiness issues", source)

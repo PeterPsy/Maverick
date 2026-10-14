@@ -24,8 +24,8 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    LOOPINO_FEATURE_AGENTIC_PROFILES,
     feature_enabled,
 )
 from core.runtime.authority import intersect_runtime_policies
@@ -129,7 +129,7 @@ def resolve_workspace_agentic_profile(
     workspace_store: object | None = None,
 ) -> tuple[AgenticProfileDefinition, WorkspaceAgenticProfileBinding]:
     """Resolve one direct, enabled workspace provider/model configuration."""
-    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+    if not feature_enabled(LOOPINO_FEATURE_AGENTIC_PROFILES):
         raise AgenticProfileError("agentic_profiles_disabled")
     bindings = store.list_workspace_agentic_profile_bindings(workspace_id)
     if binding_id:
@@ -173,7 +173,7 @@ def build_pinned_execution_binding(
     workspace_store: object | None = None,
 ) -> RuntimeExecutionBinding:
     """Resolve direct workspace settings into the small session binding."""
-    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT):
+    if not feature_enabled(LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT):
         raise AgenticProfileError("agentic_adapter_contract_disabled")
     definition, binding = resolve_workspace_agentic_profile(
         store,

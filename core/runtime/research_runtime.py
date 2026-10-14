@@ -69,7 +69,7 @@ def research_runtime_kind(binding: object, adapter: object) -> str | None:
         provider_protocol=str(getattr(binding, "provider_protocol", "") or ""),
     )
     declared = str(getattr(adapter, "research_runtime_kind", "") or "")
-    if family == "maverick_agent" and declared == RESEARCH_HOSTED_WEB_RUNTIME:
+    if family == "loopino_agent" and declared == RESEARCH_HOSTED_WEB_RUNTIME:
         return declared
     if family == "native_agent" and declared == RESEARCH_NATIVE_WEB_RUNTIME:
         attest = getattr(adapter, "research_runtime_available", None)

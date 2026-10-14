@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { maverickAppIsVisible, observeMaverickVisibility } from '@maverick/pwa-cache';
+import { loopinoAppIsVisible, observeLoopinoVisibility } from '@loopino/pwa-cache';
 
 export const ChatVisibilityContext = createContext(true);
 
 export function useChatVisibility(): boolean {
   const surfaceVisible = useContext(ChatVisibilityContext);
-  const [visible, setVisible] = useState(maverickAppIsVisible);
-  useEffect(() => observeMaverickVisibility(setVisible), []);
+  const [visible, setVisible] = useState(loopinoAppIsVisible);
+  useEffect(() => observeLoopinoVisibility(setVisible), []);
   return visible && surfaceVisible;
 }

@@ -1,10 +1,10 @@
-export const CHAT_SIDEBAR_SELECTION_STATE = "maverick.chat.sidebar.selection-state";
-export const CHAT_SIDEBAR_SELECTION_QUERY = "maverick.chat.sidebar.selection-query";
-export const CHAT_SIDEBAR_SELECTION_CONFIRM_DELETE = "maverick.chat.sidebar.selection-confirm-delete";
-export const CHAT_SIDEBAR_SELECTION_CANCEL_DELETE = "maverick.chat.sidebar.selection-cancel-delete";
+export const CHAT_SIDEBAR_SELECTION_STATE = "loopino.chat.sidebar.selection-state";
+export const CHAT_SIDEBAR_SELECTION_QUERY = "loopino.chat.sidebar.selection-query";
+export const CHAT_SIDEBAR_SELECTION_CONFIRM_DELETE = "loopino.chat.sidebar.selection-confirm-delete";
+export const CHAT_SIDEBAR_SELECTION_CANCEL_DELETE = "loopino.chat.sidebar.selection-cancel-delete";
 
-const CHANNEL_NAME = "maverick.chat.sidebar.selection";
-const STORAGE_FALLBACK_KEY = "__maverick_chat_sidebar_selection__";
+const CHANNEL_NAME = "loopino.chat.sidebar.selection";
+const STORAGE_FALLBACK_KEY = "__loopino_chat_sidebar_selection__";
 
 export type ChatSidebarSelectionStateMessage = {
   app_id: string;

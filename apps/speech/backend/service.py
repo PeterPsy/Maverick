@@ -55,7 +55,7 @@ REMOTE_SYNTHESIS_ENGINES = {"kokoro-openrouter", "kokoro-deepinfra", "gemini"}
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action in DATA_CHANGED_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "resource": "configuration"}]
+        return [{"type": "loopino.app.data-changed", "resource": "configuration"}]
     return []
 
 

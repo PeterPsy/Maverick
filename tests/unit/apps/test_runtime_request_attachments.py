@@ -147,7 +147,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
                 {
                     "request_id": "capture-1",
                     "agent_id": "chat",
-                    "agent_label": "Maverick",
+                    "agent_label": "Loopino",
                     "title": "Device visual input",
                     "input_text": "Inspect this device frame.",
                     "attachments": [self._attachment_request(relative_path)],
@@ -222,7 +222,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
                 {
                     "request_id": "capture-1",
                     "agent_id": "chat",
-                    "agent_label": "Maverick",
+                    "agent_label": "Loopino",
                     "title": "Device visual input",
                     "input_text": "Inspect this device frame.",
                     "attachments": [self._attachment_request(relative_path)],

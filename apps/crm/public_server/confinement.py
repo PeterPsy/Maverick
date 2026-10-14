@@ -1,4 +1,4 @@
-"""No-network CRM runtime closure, independently revocable from Maverick."""
+"""No-network CRM runtime closure, independently revocable from Loopino."""
 from pathlib import Path
 import shutil
 import sys

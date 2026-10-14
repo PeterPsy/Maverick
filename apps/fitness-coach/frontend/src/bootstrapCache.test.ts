@@ -30,7 +30,7 @@ function stubWindow(context?: { app_id: string; workspace_id: string }) {
     get length() { return values.size; }
   } as Storage;
   vi.stubGlobal('window', {
-    ...(context ? { __MAVERICK_APP_FRAME_CONTEXT__: Object.freeze(context) } : {}),
+    ...(context ? { __LOOPINO_APP_FRAME_CONTEXT__: Object.freeze(context) } : {}),
     location: { pathname: '/apps/fitness-coach/', search: '' },
     sessionStorage
   });

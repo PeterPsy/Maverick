@@ -9,7 +9,7 @@ from tests.support.cases import provider_cases as cases
 _SELECTED = {
     'test_codex_runtime_home_is_prepared_from_configured_source_home',
     'test_codex_runtime_home_ignores_unreadable_source_config',
-    'test_existing_runtime_maverick_wrapper_is_refreshed',
+    'test_existing_runtime_loopino_wrapper_is_refreshed',
     'test_launch_spec_receives_provider_secret_via_platform_delivery',
 }
 

@@ -20,10 +20,11 @@ from core.api.control_store import ControlStoreSettings, build_control_plane_col
 from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 from core.secrets.store import SecretDocumentStore
-from core.shared.env_file import read_env_file
+from core.shared.env_file import read_env_file, service_env_path
+from core.shared.installation_material import dns_credentials_root
 
 SECRET_REF = "platform:secret-alias/cloudflare-dns-api-token"
-DEFAULT_CREDENTIALS = Path("/etc/letsencrypt/maverick/cloudflare.ini")
+DEFAULT_CREDENTIALS = dns_credentials_root(ROOT) / "cloudflare.ini"
 
 
 def resolve_token(secret_ref: str = SECRET_REF) -> str:
@@ -52,8 +53,8 @@ def refresh_credentials(path: Path, *, resolver=resolve_token) -> None:
     """Replace the private runtime projection, discarding any stale credential."""
     if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
         raise ValueError("An absolute non-symlink credential path is required")
-    if path == ROOT or ROOT in path.parents:
-        raise ValueError("Credentials must stay outside the repository")
+    if path.parent != dns_credentials_root(ROOT):
+        raise ValueError("Credentials must stay in the designated installation TLS credential directory")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.parent.chmod(0o700)
     # Certbot does not abort on a failed pre-hook. Remove the old projection
@@ -117,7 +118,7 @@ def inspect_zone(zone_id: str, *, resolver=resolve_token, getter=cloudflare_get)
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
+    parser.add_argument("--env-file", type=Path, default=service_env_path(ROOT))
     parser.add_argument("--credentials", type=Path, default=DEFAULT_CREDENTIALS)
     parser.add_argument("--inspect-zone", metavar="ZONE_ID")
     parser.add_argument("--secret-ref", default=SECRET_REF)

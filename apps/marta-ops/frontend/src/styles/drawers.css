@@ -8,7 +8,7 @@
 .record-drawer {
   position: fixed;
   z-index: 101;
-  top: var(--maverick-shell-mobile-content-top-offset, 0px);
+  top: var(--loopino-shell-mobile-content-top-offset, 0px);
   bottom: 0;
   right: 0;
   display: grid;

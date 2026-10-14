@@ -6,36 +6,36 @@ import { SessionLifecycle } from "./session-lifecycle.mjs";
 const now = 1_000_000;
 function payload() {
   return { caller_context: { user_id: "user:one", workspace_id: "default" }, platform_browser_session: {
-    origin: "http://maverick.localhost:8014", frame_host_suffix: ".sidecars.maverick.localhost",
-    cookie_name: "maverick_session", cookie_value: "00000000-0000-4000-8000-000000000001",
+    origin: "http://loopino.localhost:8014", frame_host_suffix: ".sidecars.loopino.localhost",
+    cookie_name: "loopino_session", cookie_value: "00000000-0000-4000-8000-000000000001",
     expires_at: (now + 4 * 60 * 60 * 1000) / 1000, user_id: "user:one", workspace_id: "default",
   } };
 }
 
 test("private authentication accepts only a live bounded grant for its actor and workspace", () => {
-  assert.equal(privatePlatformGrant(payload(), now).origin, "http://maverick.localhost:8014");
+  assert.equal(privatePlatformGrant(payload(), now).origin, "http://loopino.localhost:8014");
   for (const patch of [{ user_id: "user:two" }, { workspace_id: "another" }, { expires_at: now / 1000 },
     { expires_at: (now + 5 * 60 * 60 * 1000) / 1000 }, { origin: "http://example.com" },
-    { origin: "http://maverick.localhost:8014/path" }, { cookie_name: "another" }]) {
+    { origin: "http://loopino.localhost:8014/path" }, { cookie_name: "another" }]) {
     const input = payload(); Object.assign(input.platform_browser_session, patch);
     assert.throws(() => privatePlatformGrant(input, now));
   }
 });
 
 test("a delegated policy permits only the exact platform and generated app frames", () => {
-  const policy = { platform_origin: payload().platform_browser_session.origin, frame_host_suffix: ".sidecars.maverick.localhost" };
-  assert.ok(isPlatformTarget("http://maverick.localhost:8014/app/chat", policy));
-  assert.ok(isPlatformTarget(`http://af-${"a".repeat(24)}.sidecars.maverick.localhost:8014/api/session`, policy));
-  for (const url of ["http://hostmachine:8014", "http://maverick.localhost:8000", "https://maverick.localhost:8014",
-    "http://maverick.localhost.evil.test:8014", "http://other.sidecars.maverick.localhost:8014",
-    "http://user:secret@maverick.localhost:8014"]) assert.equal(isPlatformTarget(url, policy), false, url);
+  const policy = { platform_origin: payload().platform_browser_session.origin, frame_host_suffix: ".sidecars.loopino.localhost" };
+  assert.ok(isPlatformTarget("http://loopino.localhost:8014/app/chat", policy));
+  assert.ok(isPlatformTarget(`http://af-${"a".repeat(24)}.sidecars.loopino.localhost:8014/api/session`, policy));
+  for (const url of ["http://hostmachine:8014", "http://loopino.localhost:8000", "https://loopino.localhost:8014",
+    "http://loopino.localhost.evil.test:8014", "http://other.sidecars.loopino.localhost:8014",
+    "http://user:secret@loopino.localhost:8014"]) assert.equal(isPlatformTarget(url, policy), false, url);
 });
 
 test("cookies are host scoped and HttpOnly and do not use a persistent profile", async () => {
   let cookies;
   await installPlatformAuthentication({ addCookies: async value => { cookies = value; } }, payload().platform_browser_session);
   assert.equal(cookies.length, 1);
-  assert.equal(cookies[0].url, "http://maverick.localhost:8014");
+  assert.equal(cookies[0].url, "http://loopino.localhost:8014");
   assert.equal(cookies[0].domain, undefined);
   assert.equal(cookies[0].httpOnly, true);
   assert.equal(cookies[0].sameSite, "Lax");
@@ -56,8 +56,8 @@ test("expiry and explicit close release the login before destroying the proxy an
     const session = { id: "session", proxyPassword: "proxy", platformAuthentication: payload().platform_browser_session,
       context: { request: { post: async (url, options) => {
         assert.ok(lifecycle.proxyPolicy("proxy"));
-        assert.equal(url, "http://maverick.localhost:8014/api/auth/logout");
-        assert.equal(options.headers.Origin, "http://maverick.localhost:8014"); loggedOut = true;
+        assert.equal(url, "http://loopino.localhost:8014/api/auth/logout");
+        assert.equal(options.headers.Origin, "http://loopino.localhost:8014"); loggedOut = true;
       } }, close: async () => { assert.ok(loggedOut); closed = true; } } };
     session.beforeClose = () => releasePlatformAuthentication(session);
     lifecycle.authorizeProxy("proxy", {}); lifecycle.register(session);

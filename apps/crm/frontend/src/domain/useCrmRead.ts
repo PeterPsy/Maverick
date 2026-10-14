@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { isExactMaverickParentMessage, type AppReadModelOptions } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage, type AppReadModelOptions } from '@loopino/pwa-cache';
 import { callBackend } from '../api';
 import { readCrmDisplay } from '../pwaCache';
 import { useCrmVisibility } from './useCrmVisibility';
@@ -47,7 +47,7 @@ function useCrmRead<T>(request: Record<string, unknown>, read: typeof readCrmDis
   }, [key, revision, read, visible]);
   useEffect(() => {
     const changed = (event: MessageEvent) => {
-      if (isExactMaverickParentMessage(event) && ['maverick.app.data-changed', 'maverick.widget.data-changed'].includes(event.data?.type) && event.data?.owner_app_id === 'crm') refresh();
+      if (isExactLoopinoParentMessage(event) && ['loopino.app.data-changed', 'loopino.widget.data-changed'].includes(event.data?.type) && event.data?.owner_app_id === 'crm') refresh();
     };
     window.addEventListener('message', changed);
     window.addEventListener('crm-workspace-refresh', refresh);

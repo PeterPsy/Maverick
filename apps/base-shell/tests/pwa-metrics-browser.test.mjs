@@ -18,7 +18,7 @@ test("metrics survive real document reload only as history and prune expired loc
     },
   });
   const module = (Array.isArray(bundle) ? bundle[0] : bundle).output.find((output) => output.type === "chunk").code;
-  const profile = mkdtempSync(resolve(tmpdir(), "maverick-metrics-browser-"));
+  const profile = mkdtempSync(resolve(tmpdir(), "loopino-metrics-browser-"));
   context.after(() => rmSync(profile, { recursive: true, force: true }));
   const server = createServer((request, response) => {
     send(response, request.url === "/metrics.js" ? module : documentSource,
@@ -55,7 +55,7 @@ try {
     collector.recordRetry({ attempt: 0, keyHash: 'current', kind: 'wait_started', waitMs: 100 });
     if (collector.snapshot().requestWait.pendingCount !== 1) throw Error('live');
     createPwaCacheMetricsCollector({ now: () => 8 * 24 * 60 * 60 * 1000 });
-    if (Object.keys(localStorage).some((key) => key.startsWith('maverick.pwa-cache.metrics.v1:writer:'))) throw Error('retention');
+    if (Object.keys(localStorage).some((key) => key.startsWith('loopino.pwa-cache.metrics.v1:writer:'))) throw Error('retention');
     if (localStorage.getItem('unrelated') !== 'preserve') throw Error('ownership');
     document.body.dataset.result = 'pass';
   }

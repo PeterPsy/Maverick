@@ -42,7 +42,7 @@ The reviewed Base Shell build has id
 `bd942620ec5380adf200623b970137dd741ac87562eb7204bbf940712f488a07`
 and contains:
 
-- schema `maverick.frontend-assets.v2`;
+- schema `loopino.frontend-assets.v2`;
 - one normal HTML entrypoint, `index.html`;
 - `navigation_fallback: "index.html"` selected at URL `/`;
 - three Rollup-verified immutable bundles;
@@ -83,12 +83,12 @@ The worker harness verifies:
 
 The component/API tests verify that transport failures retain normal loading,
 `429/502/503/504` read retries remain bounded, browser events are only retry
-hints, another successful Maverick response can wake pending work, mounted
+hints, another successful Loopino response can wake pending work, mounted
 shell state remains rendered during revalidation, and `403` is terminal.
 
 ## Rollout configuration
 
-The public projection is `maverick.pwa-config.v2` and exposes only:
+The public projection is `loopino.pwa-config.v2` and exposes only:
 
 - `service_worker.enabled` with generation `v2`;
 - `features.data_cache`;
@@ -102,20 +102,20 @@ Malformed values remain fail-closed.
 The deferred shared-backend activation was completed after the active runtime
 sessions stopped:
 
-1. `maverick-core.service` restarted successfully and has been active since
+1. `loopino-core.service` restarted successfully and has been active since
    `2026-08-31T13:19:49Z`;
 2. `/health` returned `status: ok` and `/api/pwa/config` matched
-   `maverick.pwa-config.v2` exactly, including generation `v2` and both
+   `loopino.pwa-config.v2` exactly, including generation `v2` and both
    cache-centric feature flags disabled;
-3. `maverick app base-shell frontend build --json` completed with status
+3. `loopino app base-shell frontend build --json` completed with status
    `built`, build id
    `bd942620ec5380adf200623b970137dd741ac87562eb7204bbf940712f488a07`,
    three immutable assets, fourteen revalidated assets, and a published
-   `maverick.app.frontend-changed` event;
+   `loopino.app.frontend-changed` event;
 4. `scripts/pwa_shell_cache_smoke.mjs` passed against
    `http://127.0.0.1:8014` in Chromium at `2026-08-31T13:21:18.022Z`.
 
-The smoke result used schema `maverick.pwa-shell-cache-smoke.v2` and passed the
+The smoke result used schema `loopino.pwa-shell-cache-smoke.v2` and passed the
 online install, mounted-tree preservation, standard-shell restart without
 network, non-shell navigation bypass, excluded dynamic requests, transparent
 transport recovery, and absence of superseded mode UI. This closes the shared

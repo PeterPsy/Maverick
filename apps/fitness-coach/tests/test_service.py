@@ -6,8 +6,8 @@ import tempfile
 import unittest
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-MAVERICK_ROOT = Path(__file__).resolve().parents[5]
-sys.path.insert(0, str(MAVERICK_ROOT))
+LOOPINO_ROOT = Path(__file__).resolve().parents[5]
+sys.path.insert(0, str(LOOPINO_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from service import FitnessCoachError, app_events_for_action, handle_action, validate_workout  # noqa: E402

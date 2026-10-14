@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
 import { useShellAppEvents } from "../src/hooks/useShellAppEvents";
 import { AppFrameHost } from "../src/components/AppFrameHost";
-import { registeredMaverickAppIds, type MaverickFrameScope } from "../src/iframePolicy";
+import { registeredLoopinoAppIds, type LoopinoFrameScope } from "../src/iframePolicy";
 import { StorageFileCacheBroker } from "../src/storageFileCacheBroker";
 import type { ShellThemeState } from "../src/theme";
 
@@ -38,7 +38,7 @@ function app(app_id: string, name = app_id): AppRegistryItem {
     frontend_launchable: true,
     logo: null,
     name,
-    publisher: "maverick",
+    publisher: "loopino",
     source_access: "none",
     status: "enabled",
     version: "1.0.0",
@@ -103,42 +103,42 @@ describe("AppFrameHost app frame readiness", () => {
     await renderHost(root, agents, {}, defaultTheme, FRAME_SCOPE);
     const third = await waitForFrame(container, "Agents viewport", "agents");
     await dispatchAppReady(third, "agents");
-    const request = posted.mock.calls.map(([message]) => message).find((message) => message.type === 'maverick.app.hibernate');
+    const request = posted.mock.calls.map(([message]) => message).find((message) => message.type === 'loopino.app.hibernate');
     expect(request).toBeDefined();
-    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["chat", "storage", "agents"]);
+    expect(registeredLoopinoAppIds(FRAME_SCOPE)).toEqual(["chat", "storage", "agents"]);
     const snapshot = { params: { thread_id: 'thread-a' }, state: { composer: 'unsent', scroll: 400 } };
-    const reply = { type: 'maverick.app.hibernated', app_id: 'chat', request_id: request.request_id, snapshot };
+    const reply = { type: 'loopino.app.hibernated', app_id: 'chat', request_id: request.request_id, snapshot };
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
-      data: reply, source: second.contentWindow, origin: first.dataset.maverickFrameOrigin,
+      data: reply, source: second.contentWindow, origin: first.dataset.loopinoFrameOrigin,
     })));
     expect(container.querySelectorAll('iframe')).toHaveLength(3);
-    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["chat", "storage", "agents"]);
+    expect(registeredLoopinoAppIds(FRAME_SCOPE)).toEqual(["chat", "storage", "agents"]);
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
-      data: reply, source: first.contentWindow, origin: first.dataset.maverickFrameOrigin,
+      data: reply, source: first.contentWindow, origin: first.dataset.loopinoFrameOrigin,
     })));
     expect(container.querySelectorAll('iframe')).toHaveLength(2);
-    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["storage", "agents"]);
+    expect(registeredLoopinoAppIds(FRAME_SCOPE)).toEqual(["storage", "agents"]);
     expect(container.querySelector('iframe[title="Storage viewport"]')).toBe(second);
     await renderHost(root, resumableChat, {}, defaultTheme, FRAME_SCOPE);
     const resumed = await waitForFrame(container, "Chat viewport", "chat");
     expect(resumed).not.toBe(first);
-    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["storage", "agents", "chat"]);
+    expect(registeredLoopinoAppIds(FRAME_SCOPE)).toEqual(["storage", "agents", "chat"]);
     const resumePost = vi.spyOn(resumed.contentWindow!, 'postMessage');
     await dispatchAppReady(resumed, 'chat');
-    expect(resumePost.mock.calls.some(([message]) => message.type === 'maverick.app.resume'
+    expect(resumePost.mock.calls.some(([message]) => message.type === 'loopino.app.resume'
       && message.snapshot.state.composer === 'unsent' && message.snapshot.state.scroll === 400)).toBe(true);
   });
 
   it("reports only current-scope mounted apps and clears them when the host unmounts", async () => {
     await renderHost(root, chat, {}, defaultTheme, FRAME_SCOPE);
     await renderHost(root, agents, {}, defaultTheme, FRAME_SCOPE);
-    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual(["chat", "agents"]);
+    expect(registeredLoopinoAppIds(FRAME_SCOPE)).toEqual(["chat", "agents"]);
     const nextScope = Object.freeze({ sessionGeneration: "session-next", workspaceId: "default" });
     await renderHost(root, storage, {}, defaultTheme, nextScope);
-    expect(registeredMaverickAppIds(FRAME_SCOPE)).toEqual([]);
-    expect(registeredMaverickAppIds(nextScope)).toEqual(["storage"]);
+    expect(registeredLoopinoAppIds(FRAME_SCOPE)).toEqual([]);
+    expect(registeredLoopinoAppIds(nextScope)).toEqual(["storage"]);
     await act(async () => root.render(null));
-    expect(registeredMaverickAppIds(nextScope)).toEqual([]);
+    expect(registeredLoopinoAppIds(nextScope)).toEqual([]);
   });
 
   it.each([
@@ -151,13 +151,13 @@ describe("AppFrameHost app frame readiness", () => {
     await waitForFrame(container, title, owner.app_id);
     const frame = frameByTitle(container, title);
     MockWebSocket.instances[0].onopen?.();
-    expect(post.mock.calls.some(([message]) => message.type === "maverick.app.data-changed")).toBe(false);
+    expect(post.mock.calls.some(([message]) => message.type === "loopino.app.data-changed")).toBe(false);
     MockWebSocket.instances[0].onclose?.();
     await act(async () => { vi.advanceTimersByTime(1_200); });
     expect(MockWebSocket.instances).toHaveLength(2);
     await act(async () => { MockWebSocket.instances[1].onopen?.(); });
     expect(post).toHaveBeenCalledWith({
-      type: "maverick.app.data-changed", owner_app_id: owner.app_id, resource, workspace_id: "default", resync: true, frames_notified: true,
+      type: "loopino.app.data-changed", owner_app_id: owner.app_id, resource, workspace_id: "default", resync: true, frames_notified: true,
     }, window.location.origin);
     expect(frameByTitle(container, title)).toBe(frame);
   });
@@ -225,7 +225,7 @@ describe("AppFrameHost app frame readiness", () => {
         app_id: "agents",
         params: { thread_id: "thread-1", include_archived: true },
         theme: defaultTheme,
-        type: "maverick.app.navigate",
+        type: "loopino.app.navigate",
       },
     ]);
 
@@ -236,13 +236,13 @@ describe("AppFrameHost app frame readiness", () => {
         app_id: "agents",
         params: { thread_id: "thread-1", include_archived: true },
         theme: defaultTheme,
-        type: "maverick.app.navigate",
+        type: "loopino.app.navigate",
       },
       {
         app_id: "agents",
         params: { thread_id: "thread-1", include_archived: true },
         theme: defaultTheme,
-        type: "maverick.app.navigate",
+        type: "loopino.app.navigate",
       },
     ]);
 
@@ -265,7 +265,7 @@ describe("AppFrameHost app frame readiness", () => {
     expect(themeMessages(postMessageSpy)).toEqual([
       {
         theme: lightTheme,
-        type: "maverick.shell.theme-changed",
+        type: "loopino.shell.theme-changed",
       },
     ]);
   });
@@ -320,13 +320,13 @@ describe("AppFrameHost app frame readiness", () => {
       expect.objectContaining({
         owner_app_id: "website-studio",
         resource: "source",
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
       }),
     ]);
   });
 });
 
-function ShellEvents({ scope }: { scope: MaverickFrameScope }) {
+function ShellEvents({ scope }: { scope: LoopinoFrameScope }) {
   useShellAppEvents(scope);
   return null;
 }
@@ -336,7 +336,7 @@ async function renderHost(
   activeApp: AppRegistryItem,
   activeAppParams: AppFrameParams = {},
   shellTheme: ShellThemeState = defaultTheme,
-  frameScope: MaverickFrameScope = FRAME_SCOPE,
+  frameScope: LoopinoFrameScope = FRAME_SCOPE,
 ) {
   await act(async () => {
     root.render(
@@ -363,20 +363,20 @@ async function waitForFrame(
   parent: HTMLElement,
   title: string,
   ownerAppId: string,
-  frameScope: MaverickFrameScope = FRAME_SCOPE,
+  frameScope: LoopinoFrameScope = FRAME_SCOPE,
 ): Promise<HTMLIFrameElement> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const frame = parent.querySelector(`iframe[title="${title}"]`);
     if (frame instanceof HTMLIFrameElement) {
-      const bootstrapId = frame.srcdoc.match(/data-maverick-loader="([^"]+)"/)?.[1];
-      if (frame.dataset.maverickFrameOrigin && bootstrapId) {
+      const bootstrapId = frame.srcdoc.match(/data-loopino-loader="([^"]+)"/)?.[1];
+      if (frame.dataset.loopinoFrameOrigin && bootstrapId) {
         await act(async () => {
           frame.dispatchEvent(new Event("load"));
           await Promise.resolve();
           window.dispatchEvent(new MessageEvent("message", {
             data: {
               bootstrap_id: bootstrapId,
-              type: "maverick.app-frame.bootstrap-submitted",
+              type: "loopino.app-frame.bootstrap-submitted",
             },
             origin: window.location.origin,
             source: frame.contentWindow,
@@ -411,7 +411,7 @@ function navigateMessages(postMessageSpy: { mock: { calls: unknown[][] } }): Pos
       if (!message || typeof message !== "object" || Array.isArray(message)) {
         return false;
       }
-      return (message as PostedMessage).type === "maverick.app.navigate";
+      return (message as PostedMessage).type === "loopino.app.navigate";
     });
 }
 
@@ -422,7 +422,7 @@ function themeMessages(postMessageSpy: { mock: { calls: unknown[][] } }): Posted
       if (!message || typeof message !== "object" || Array.isArray(message)) {
         return false;
       }
-      return (message as PostedMessage).type === "maverick.shell.theme-changed";
+      return (message as PostedMessage).type === "loopino.shell.theme-changed";
     });
 }
 
@@ -433,7 +433,7 @@ function dataChangedMessages(postMessageSpy: { mock: { calls: unknown[][] } }): 
       Boolean(message)
       && typeof message === "object"
       && !Array.isArray(message)
-      && (message as PostedMessage).type === "maverick.app.data-changed"
+      && (message as PostedMessage).type === "loopino.app.data-changed"
     ));
 }
 
@@ -450,9 +450,9 @@ async function dispatchAppReady(frame: HTMLIFrameElement, appId: string) {
       new MessageEvent("message", {
         data: {
           app_id: appId,
-          type: "maverick.app.ready",
+          type: "loopino.app.ready",
         },
-        origin: frame.dataset.maverickFrameOrigin,
+        origin: frame.dataset.loopinoFrameOrigin,
         source: frame.contentWindow,
       }),
     );
@@ -465,7 +465,7 @@ async function dispatchExternalUrl(source: MessageEventSource, url: string) {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          type: "maverick.app.external-url",
+          type: "loopino.app.external-url",
           url,
         },
         origin: messageOrigin(source),
@@ -482,7 +482,7 @@ async function dispatchDataChanged(source: MessageEventSource, ownerAppId: strin
       data: {
         owner_app_id: ownerAppId,
         resource,
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
       },
       origin: messageOrigin(source),
       source,
@@ -495,14 +495,14 @@ function messageOrigin(source: MessageEventSource): string {
   if (source === window) return window.location.origin;
   const frame = [...document.querySelectorAll("iframe")]
     .find((candidate) => candidate.contentWindow === source);
-  return frame?.dataset.maverickFrameOrigin || "https://foreign-frame.invalid";
+  return frame?.dataset.loopinoFrameOrigin || "https://foreign-frame.invalid";
 }
 
 function isolatedLaunchResponse(): Response {
   return new Response(JSON.stringify({
-    bootstrap_url: "https://af-test.sidecars.maverick.test/.well-known/maverick-app-frame-bootstrap",
+    bootstrap_url: "https://af-test.sidecars.loopino.test/.well-known/loopino-app-frame-bootstrap",
     method: "POST",
-    origin: "https://af-test.sidecars.maverick.test",
+    origin: "https://af-test.sidecars.loopino.test",
     ticket: "test-ticket",
     ticket_field: "ticket",
   }), { headers: { "Content-Type": "application/json" }, status: 200 });

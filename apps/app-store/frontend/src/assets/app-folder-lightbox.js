@@ -1,9 +1,9 @@
 (function () {
-  const data = window.MaverickAppFolderData;
+  const data = window.LoopinoAppFolderData;
   let activeLightbox = null;
 
   if (!data) {
-    window.MaverickAppFolderLightbox = { open: () => null };
+    window.LoopinoAppFolderLightbox = { open: () => null };
     return;
   }
 
@@ -91,7 +91,7 @@
 
     lightbox.iconSlot.replaceChildren(renderLightboxIcon(app, helpers, presentationInstallation));
     lightbox.title.textContent = app.name || app.app_id;
-    lightbox.description.textContent = app.description || "Ready to install in Maverick.";
+    lightbox.description.textContent = app.description || "Ready to install in Loopino.";
     lightbox.counter.textContent = `${lightbox.index + 1} / ${lightbox.folder.apps.length}`;
     lightbox.meta.replaceChildren(
       renderMetaPill(version.version || app.latest_version || "unknown"),
@@ -289,5 +289,5 @@
     return button;
   }
 
-  window.MaverickAppFolderLightbox = { open };
+  window.LoopinoAppFolderLightbox = { open };
 })();

@@ -53,7 +53,7 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn("bs-chat-sidebar-footer__new-chat", footer_source)
         self.assertIn('const PRIMARY_ACTION_LABEL = "New chat";', footer_source)
         self.assertIn("<span>{primaryActionLabel}</span>", footer_source)
-        self.assertIn("maverick.widget.open-app", footer_source)
+        self.assertIn("loopino.widget.open-app", footer_source)
         self.assertIn("new_chat_request_id", footer_source)
 
         footer_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/styles.css").read_text()
@@ -135,7 +135,7 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn("record.owner_app_id !== widget.owner_app_id", launch_source)
         self.assertIn("event.origin !== launch.origin", launch_source)
         self.assertIn("event.source !== frame?.contentWindow", launch_source)
-        self.assertIn("sandbox={MAVERICK_WIDGET_IFRAME_SANDBOX}", host_source)
+        self.assertIn("sandbox={LOOPINO_WIDGET_IFRAME_SANDBOX}", host_source)
         self.assertNotIn("widgetContextTokenFromLocation", host_source)
 
     def test_chat_widget_host_leaves_visual_chrome_to_widget_owner(self) -> None:

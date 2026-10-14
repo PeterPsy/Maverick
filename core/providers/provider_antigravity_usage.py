@@ -82,7 +82,7 @@ def _run_usage_command(
         binary = Path(executable).resolve(strict=True)
         if inspect_native_runtime_artifact(str(binary)) != ANTIGRAVITY_CLI_RUNTIME_ARTIFACT:
             raise ProviderUsageUnavailableError("provider_unavailable")
-        with tempfile.TemporaryDirectory(prefix="maverick-antigravity-usage-") as folder:
+        with tempfile.TemporaryDirectory(prefix="loopino-antigravity-usage-") as folder:
             runtime = Path(folder)
             home = prepare_antigravity_runtime_home(
                 runtime,

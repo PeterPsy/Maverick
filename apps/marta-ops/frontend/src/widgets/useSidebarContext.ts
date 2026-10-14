@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isMaverickParentMessage, postToShell } from "../lib/shellNavigation";
+import { isLoopinoParentMessage, postToShell } from "../lib/shellNavigation";
 
 type Params = Record<string, unknown>;
 type WidgetContext = {
@@ -50,10 +50,10 @@ export function useSidebarContext(appId: string, widgetId: string) {
     }
 
     function handleMessage(event: MessageEvent) {
-      if (!isMaverickParentMessage(event)) return;
+      if (!isLoopinoParentMessage(event)) return;
       const message = event.data;
       if (
-        message.type === "maverick.widget.context-changed" &&
+        message.type === "loopino.widget.context-changed" &&
         message.context &&
         matchesContext(message.context)
       ) {
@@ -61,7 +61,7 @@ export function useSidebarContext(appId: string, widgetId: string) {
         applyContext(message.context);
       }
       if (
-        message.type === "maverick.app.selection-changed" &&
+        message.type === "loopino.app.selection-changed" &&
         message.owner_app_id === appId &&
         message.selection &&
         typeof message.selection === "object"
@@ -110,7 +110,7 @@ export function useSidebarContext(appId: string, widgetId: string) {
     window.addEventListener("message", handleMessage);
     void load();
     postToShell({
-      type: "maverick.widget.ready",
+      type: "loopino.widget.ready",
       owner_app_id: appId,
       widget_id: widgetId,
     });

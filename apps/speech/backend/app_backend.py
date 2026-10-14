@@ -135,7 +135,7 @@ def handle_inline_stream(payload: dict) -> None:
 def streaming_response_requested(payload: dict) -> bool:
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
     return (
-        str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1"
+        str(payload.get("stream_response_protocol") or "") == "loopino.backend.stream.v1"
         and str(body.get("response_mode") or "").strip().lower() == "stream"
     )
 
@@ -203,7 +203,7 @@ def backend_entrypoint_milliseconds(payload: dict) -> float:
 
 
 def backend_worker_mode() -> str:
-    return os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER", "auto").strip().lower() or "auto"
+    return os.environ.get("LOOPINO_SPEECH_BACKEND_WORKER", "auto").strip().lower() or "auto"
 
 
 def persistent_backend_worker_enabled() -> bool:

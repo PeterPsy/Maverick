@@ -1,6 +1,6 @@
 {
-  "installation_domain": "maverick.example.com",
-  "state_directory": "/run/maverick-external-apps-state",
-  "listener_directory": "/run/maverick-external-apps-listener",
+  "installation_domain": "loopino.example.com",
+  "state_directory": "/projects/loopino/runtime/external-apps-state",
+  "listener_directory": "/projects/loopino/runtime/external-apps-listener",
   "workspaces": [{"workspace_id": "default", "local_app_id": "external-apps"}]
 }

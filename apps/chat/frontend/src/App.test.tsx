@@ -98,7 +98,7 @@ vi.mock("./api/client", () => ({
   getSpeechCapabilities: vi.fn(),
   getWidgetContext: vi.fn(),
   getInterAgentRun: vi.fn(),
-  interAgentWebSocketUrl: vi.fn(() => "ws://maverick.test/ws/inter-agent/runs/run-1"),
+  interAgentWebSocketUrl: vi.fn(() => "ws://loopino.test/ws/inter-agent/runs/run-1"),
   interruptInterAgentRun: vi.fn(),
   interruptRuntimeTurn: vi.fn(),
   isRuntimeSessionUnavailableError: vi.fn(() => false),
@@ -569,7 +569,7 @@ describe("App agent catalog dependency refresh", () => {
         new MessageEvent("message", {
           origin: window.location.origin,
           data: {
-            type: "maverick.app.dependencies",
+            type: "loopino.app.dependencies",
             app_id: "chat",
             dependencies: dependencyPayload(["agents"]),
           },
@@ -741,7 +741,7 @@ describe("App thread navigation", () => {
           active_thread_id: secondThread.thread_id,
           navigation_scope: "floating-window",
           owner_app_id: "chat",
-          type: "maverick.chat.active-thread-changed",
+          type: "loopino.chat.active-thread-changed",
         }),
         "*",
       );
@@ -793,7 +793,7 @@ describe("App thread navigation", () => {
           active_thread_id: existingThread.thread_id,
           navigation_scope: "floating-window",
           owner_app_id: "chat",
-          type: "maverick.chat.active-thread-changed",
+          type: "loopino.chat.active-thread-changed",
         }),
         "*",
       );
@@ -814,7 +814,7 @@ describe("App thread navigation", () => {
         active_thread_id: createdThread.thread_id,
         navigation_scope: "floating-window",
         owner_app_id: "chat",
-        type: "maverick.chat.active-thread-changed",
+        type: "loopino.chat.active-thread-changed",
       }),
       "*",
     );
@@ -1515,7 +1515,7 @@ describe("App thread navigation", () => {
         new MessageEvent("message", {
           origin: window.location.origin,
           data: {
-            type: "maverick.app.navigate",
+            type: "loopino.app.navigate",
             app_id: "chat",
             params: {
               app_page: "runtime-sessions/session-runtime",
@@ -1550,7 +1550,7 @@ describe("App thread navigation", () => {
         new MessageEvent("message", {
           origin: window.location.origin,
           data: {
-            type: "maverick.app.navigate",
+            type: "loopino.app.navigate",
             app_id: "chat",
             navigation_scope: "floating-window",
             params: { app_page: "runtime-sessions/scoped-session" },
@@ -1572,7 +1572,7 @@ describe("App thread navigation", () => {
         new MessageEvent("message", {
           origin: window.location.origin,
           data: {
-            type: "maverick.app.navigate",
+            type: "loopino.app.navigate",
             app_id: "chat",
             params: { app_page: "runtime-sessions/session-runtime" },
           },
@@ -1605,7 +1605,7 @@ describe("App shell message scope", () => {
         new MessageEvent("message", {
           origin: window.location.origin,
           data: {
-            type: "maverick.widget.capture-area.complete",
+            type: "loopino.widget.capture-area.complete",
             navigation_scope: "floating-window",
             files: [file],
           },
@@ -1620,7 +1620,7 @@ describe("App shell message scope", () => {
         new MessageEvent("message", {
           origin: window.location.origin,
           data: {
-            type: "maverick.widget.capture-area.complete",
+            type: "loopino.widget.capture-area.complete",
             files: [file],
           },
         }),

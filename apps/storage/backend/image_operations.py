@@ -357,7 +357,7 @@ def _compose_side_by_side(
     if not ffmpeg:
         raise StorageValidationError("ffmpeg is required for Storage image composition.", operation="image.compose_pair")
     suffix = f".{output_format}"
-    handle = tempfile.NamedTemporaryFile(delete=False, dir=target_dir, prefix=".maverick-image-compose-", suffix=suffix)
+    handle = tempfile.NamedTemporaryFile(delete=False, dir=target_dir, prefix=".loopino-image-compose-", suffix=suffix)
     temp_path = Path(handle.name)
     handle.close()
     try:

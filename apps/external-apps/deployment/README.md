@@ -1,17 +1,17 @@
 # Public hosting on the installation domain
 
-The rule is **`<app>.apps.<Maverick installation hostname>`**, on every machine.
-Here it is `<app>.apps.maverick.loopino.ai`. `<app>` is the stable readable slug
+The rule is **`<app>.apps.<Loopino installation hostname>`**, on every machine.
+Here it is `<app>.apps.loopino.giuntitrail.com`. `<app>` is the stable readable slug
 plus opaque publication id, not a private workspace id. No sslip.io fallback,
 new domain purchase, private same-origin path, or public Core route.
 
 This is operator setup. Saving app settings does not provision infrastructure.
-It never requires restarting Maverick Core or the chat.
+It never requires restarting Loopino Core or the chat.
 
 ## 1. Domain and DNS
 
-Use the canonical Maverick installation hostname (the same value configured as
-`MAVERICK_SIDECAR_INSTALLATION_DOMAIN`), without scheme, port, wildcard or path.
+Use the canonical Loopino installation hostname (the same value configured as
+`LOOPINO_SIDECAR_INSTALLATION_DOMAIN`), without scheme, port, wildcard or path.
 Do not infer it from a browser Host, forwarded header or app-frame origin.
 
 The base `apps.<hostname>` and a fresh random `*.apps.<hostname>` must resolve to
@@ -23,20 +23,20 @@ caching: every request must revalidate public serving authority.
 
 ## 2. App and isolated listener
 
-Install/enable the sealed platform External Apps source through Maverick, select
+Install/enable the sealed platform External Apps source through Loopino, select
 Website Studio for `static-exporter`, and configure **installation_domain** in
 the authenticated app UI or its discovered official CLI. The public suffix is
 always derived as `apps.<installation_domain>`. An existing nonempty catalog
 blocks a domain change, rather than rewriting approved URLs. No site is published
 by infrastructure setup; exact-plan human UI approval is still mandatory.
 
-Render `supervisor.example.json` into `/etc/maverick/external-apps.json` with the
+Render `supervisor.example.json` into `/projects/loopino/installation/config/external-apps.json` with the
 same installation hostname and only explicitly selected workspace/app ids.
-Render `maverick-external-apps.service.example`, replacing:
+Render `loopino-external-apps.service.example`, replacing:
 
 | Token | Value |
 | --- | --- |
-| `INSTALL_ROOT` | Canonical Maverick checkout without symlink ancestors |
+| `INSTALL_ROOT` | Canonical Loopino checkout without symlink ancestors |
 | `SERVICE_USER` | Trusted backend service account, not root |
 | `SERVICE_GROUP` | Account group for app data and canonical JSON lock files |
 | `INGRESS_GROUP` | nginx worker group, commonly `www-data` |
@@ -54,17 +54,17 @@ Before replacing owned operator files, preserve a private backup and check no
 other agent/operator is editing them. Validate and enable only this service:
 
 ```bash
-systemd-analyze verify ./maverick-external-apps.service
-sudo install -d -m 0755 /etc/maverick
-sudo install -m 0644 ./external-apps.json /etc/maverick/external-apps.json
-sudo install -m 0644 ./maverick-external-apps.service /etc/systemd/system/
+systemd-analyze verify ./loopino-external-apps.service
+sudo install -d -m 0755 /etc/loopino
+sudo install -m 0644 ./external-apps.json /projects/loopino/installation/config/external-apps.json
+sudo install -m 0644 ./loopino-external-apps.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now maverick-external-apps.service
-sudo -u www-data curl --unix-socket /run/maverick-external-apps-listener/public.sock \
+sudo systemctl enable --now loopino-external-apps.service
+sudo -u www-data curl --unix-socket /projects/loopino/runtime/external-apps-listener/public.sock \
   -sS -o /dev/null -w '%{http_code}\n' -H 'Host: invalid' http://localhost/
 ```
 
-Expect 404. Confirm `/run/maverick-external-apps-state/mounts.json` has the intended
+Expect 404. Confirm `/projects/loopino/runtime/external-apps-state/mounts.json` has the intended
 namespace and fresh expiry. A healthy socket with an empty mount list does not
 prove workspace availability.
 
@@ -78,7 +78,7 @@ SAN certificates only for catalog-derived names, never arbitrary incoming SNI.
 From this directory, render the dedicated ingress in a staging directory:
 
 ```bash
-python3 -B -c 'from tls_config import render_ingress; print(render_ingress("maverick.example.com"))' > /tmp/external-apps-nginx.conf
+python3 -B -c 'from tls_config import render_ingress; print(render_ingress("loopino.example.com"))' > /tmp/external-apps-nginx.conf
 ```
 
 Use the actual installation hostname. Keep the generated upstream, HTTP-01 root,
@@ -89,21 +89,21 @@ base certificate serves only a runtime 404; it is not an application.
 Review nginx's existing `http`-context hash policy: long exact publication names
 need `server_names_hash_bucket_size 256`; the 64 × 100 cap is covered by
 `server_names_hash_max_size 8192`. If neither directive already exists, install
-`nginx-http.conf` as `/etc/nginx/conf.d/maverick-external-apps-hash.conf`. Otherwise
+`nginx-http.conf` as `/etc/nginx/conf.d/loopino-external-apps-hash.conf`. Otherwise
 review the existing owner's values; do not add duplicate global directives.
 
 Install root-owned operator material (not writable by the app/public child):
 
 ```bash
-sudo install -d -m 0700 /var/lib/maverick/external-apps-tls
-sudo install -d -m 0755 /var/lib/maverick/external-apps-acme
-sudo install -d -m 0755 /usr/local/libexec/maverick-external-apps /etc/nginx/snippets
-sudo install -m 0644 tls.py tls_config.py /usr/local/libexec/maverick-external-apps/
-sudo install -m 0644 nginx-proxy.conf /etc/nginx/snippets/maverick-external-apps-proxy.conf
+sudo install -d -m 0700 /projects/loopino/data/external-apps-tls
+sudo install -d -m 0755 /projects/loopino/data/external-apps-acme
+sudo install -d -m 0755 /usr/local/libexec/loopino-external-apps /etc/nginx/snippets
+sudo install -m 0644 tls.py tls_config.py /usr/local/libexec/loopino-external-apps/
+sudo install -m 0644 nginx-proxy.conf /etc/nginx/snippets/loopino-external-apps-proxy.conf
 # First installation ONLY; never truncate an existing hosts.conf:
-sudo test -e /var/lib/maverick/external-apps-tls/hosts.conf || \
-  sudo install -m 0644 /dev/null /var/lib/maverick/external-apps-tls/hosts.conf
-sudo install -m 0644 /tmp/external-apps-nginx.conf /etc/nginx/sites-available/maverick-external-apps.conf
+sudo test -e /projects/loopino/data/external-apps-tls/hosts.conf || \
+  sudo install -m 0644 /dev/null /projects/loopino/data/external-apps-tls/hosts.conf
+sudo install -m 0644 /tmp/external-apps-nginx.conf /etc/nginx/sites-available/loopino-external-apps.conf
 # Create the matching sites-enabled symlink only if absent.
 sudo nginx -t && sudo systemctl reload nginx
 ```
@@ -111,12 +111,12 @@ sudo nginx -t && sudo systemctl reload nginx
 The ACME challenge path must now be reachable. Test staging HTTP-01 against the
 same webroot, using separate temporary Certbot config/work/log directories; never
 install an untrusted staging certificate in production nginx. Then install
-`maverick-external-apps-tls.service` and `.timer` in `/etc/systemd/system/`, run
+`loopino-external-apps-tls.service` and `.timer` in `/etc/systemd/system/`, run
 `systemd-analyze verify`, `systemctl daemon-reload`, and
-`systemctl enable --now maverick-external-apps-tls.timer`. For initial provisioning,
-`systemctl start maverick-external-apps-tls.service` runs one pass synchronously.
+`systemctl enable --now loopino-external-apps-tls.timer`. For initial provisioning,
+`systemctl start loopino-external-apps-tls.service` runs one pass synchronously.
 
-The worker uses its own `/var/lib/maverick/external-apps-tls/{config,work,logs}`;
+The worker uses its own `/projects/loopino/data/external-apps-tls/{config,work,logs}`;
 existing `/etc/letsencrypt` lineages and `certbot.timer` are untouched. It checks
 fresh supervisor intent and renews within 30 days of expiry, once per minute.
 Certificates group up to 100 names per app namespace, plus a separate base lineage.
@@ -142,7 +142,7 @@ Cookie/Authorization/Set-Cookie and has no private/error-page fallback.
 This is a stateless static/SPA product; authenticated apps require a separate design.
 
 Verify trusted HTTPS for the base and provisioned hosts without `-k`. Unknown
-names must reject TLS (not request a certificate or show Maverick). Check HTTP-01,
+names must reject TLS (not request a certificate or show Loopino). Check HTTP-01,
 GET/HEAD, ETag revalidation, private-route rejection, listener loss and Core health.
 Complete the [publication acceptance gates](../README.md#deployment-acceptance)
 with an explicitly approved synthetic static build and SPA from an external browser.
@@ -151,17 +151,17 @@ Local tests/base TLS are not proof of a published application.
 ## Status, renewal proof and stop
 
 ```bash
-sudo systemctl status maverick-external-apps.service maverick-external-apps-tls.timer
-sudo journalctl -u maverick-external-apps-tls.service -n 30 --no-pager
+sudo systemctl status loopino-external-apps.service loopino-external-apps-tls.timer
+sudo journalctl -u loopino-external-apps-tls.service -n 30 --no-pager
 sudo certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
-  --config-dir /var/lib/maverick/external-apps-tls/config \
-  --work-dir /var/lib/maverick/external-apps-tls/work \
-  --logs-dir /var/lib/maverick/external-apps-tls/logs
+  --config-dir /projects/loopino/data/external-apps-tls/config \
+  --work-dir /projects/loopino/data/external-apps-tls/work \
+  --logs-dir /projects/loopino/data/external-apps-tls/logs
 # Stop future issuance/renewal; this does not revoke already served content:
-sudo systemctl disable --now maverick-external-apps-tls.timer
-sudo systemctl stop maverick-external-apps-tls.service
+sudo systemctl disable --now loopino-external-apps-tls.timer
+sudo systemctl stop loopino-external-apps-tls.service
 # Revoke content without touching Core or other apps:
-sudo systemctl disable --now maverick-external-apps.service
+sudo systemctl disable --now loopino-external-apps.service
 ```
 
 Do not remove the dedicated nginx catch-all while DNS still points here; retain

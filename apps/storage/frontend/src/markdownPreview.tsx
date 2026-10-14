@@ -1,4 +1,4 @@
-import { requestParentExternalUrl } from '@maverick/pwa-cache';
+import { requestParentExternalUrl } from '@loopino/pwa-cache';
 import type { MouseEvent, ReactNode } from 'react';
 
 type TableBlock = {

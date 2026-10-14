@@ -1,4 +1,4 @@
-import { readAppCacheModel, type AppReadModelOptions } from '@maverick/pwa-cache';
+import { readAppCacheModel, type AppReadModelOptions } from '@loopino/pwa-cache';
 import { sanitizeChatReadModel } from './pwaReadModel';
 
 export async function readChatDisplay<T>(parameters: Record<string, unknown>, options: AppReadModelOptions<T> = {}): Promise<T> {
@@ -32,7 +32,7 @@ export function displayThread(value: Record<string, unknown>): import('./api/cli
 }
 
 export function invalidateChatDisplay(resource: 'runtime-threads' | 'messages'): void {
-  const origin = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }).__MAVERICK_PLATFORM_ORIGIN__;
+  const origin = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string }).__LOOPINO_PLATFORM_ORIGIN__;
   if (!origin || window.parent === window) return;
-  window.parent.postMessage({ type: 'maverick.app.data-changed', owner_app_id: 'chat', resource }, origin);
+  window.parent.postMessage({ type: 'loopino.app.data-changed', owner_app_id: 'chat', resource }, origin);
 }

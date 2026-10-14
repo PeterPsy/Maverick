@@ -218,7 +218,7 @@ def percentile(values: list[float], quantile: float) -> float:
 
 
 def benchmark_text(length: int) -> str:
-    seed = "Maverick measures Kokoro streaming latency with a stable sentence. "
+    seed = "Loopino measures Kokoro streaming latency with a stable sentence. "
     return (seed * ((length // len(seed)) + 1))[:length]
 
 

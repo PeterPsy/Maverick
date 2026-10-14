@@ -37,7 +37,7 @@ if tool_name == "chat_learning_memory":
         changed = result.pop("_changed", False)
         response = {"status_code": 200, **result}
         if changed:
-            response["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
+            response["app_events"] = [{"type": "loopino.app.data-changed", "resource": "learning"}]
     except PermissionError as error:
         response = {"status_code": 403, "error": str(error)}
     except ValueError as error:

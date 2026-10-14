@@ -17,8 +17,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -58,15 +58,15 @@ button {
   min-height: var(--checklist-sidebar-search-height);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   padding: 0 0.72rem;
 }
 
 .checklist-sidebar-search-frame svg {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   flex: none;
 }
 
@@ -74,17 +74,17 @@ button {
   width: 100%;
   min-width: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .checklist-sidebar-search::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .checklist-sidebar-search-frame:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 @media (max-width: 979px) {
@@ -132,7 +132,7 @@ button {
   border: 1px solid transparent;
   border-radius: 22px;
   background: transparent;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0 0.7rem;
   text-align: left;
   transition: background 150ms ease, border-color 150ms ease, filter 150ms ease, opacity 150ms ease, transform 150ms ease;
@@ -153,16 +153,16 @@ button {
 
 .checklist-sidebar-row:hover,
 .checklist-sidebar-row.is-active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .checklist-sidebar-row:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .checklist-sidebar-row.is-active {
-  background: var(--maverick-surface-active);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-surface-active);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .checklist-sidebar-row:active {
@@ -175,11 +175,11 @@ button {
   width: 2rem;
   height: 2rem;
   border-radius: 15px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .checklist-sidebar-row.is-active .checklist-sidebar-row__icon {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .checklist-sidebar-row__copy {
@@ -200,20 +200,20 @@ button {
 }
 
 .checklist-sidebar-row__copy strong.is-completed {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   text-decoration: line-through;
   text-decoration-color: currentColor;
   text-decoration-thickness: 0.08em;
 }
 
 .checklist-sidebar-row__copy span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .checklist-sidebar-empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -230,7 +230,7 @@ button {
   gap: 0.65rem;
   min-height: 3.05rem;
   border-radius: 22px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.58rem 0.7rem;
 }
 
@@ -291,11 +291,11 @@ button {
   min-height: 2.65rem;
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0 0.82rem;
   font-size: 0.76rem;
   font-weight: 400;
@@ -305,7 +305,7 @@ button {
 
 .checklist-sidebar-footer-button:hover,
 .checklist-sidebar-footer-button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 

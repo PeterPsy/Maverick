@@ -28,13 +28,13 @@ export async function runGoogleFlow(mode: "login" | "connect", services: GoogleS
   const controller = new AbortController();
   const cancel = () => controller.abort();
   signal?.addEventListener("abort", cancel, { once: true });
-  window.addEventListener("maverick.server-will-change", cancel);
+  window.addEventListener("loopino.server-will-change", cancel);
   window.addEventListener("pagehide", cancel);
   if (signal?.aborted) cancel();
   try { return await runScopedGoogleFlow(mode, services, post, controller.signal); }
   finally {
     signal?.removeEventListener("abort", cancel);
-    window.removeEventListener("maverick.server-will-change", cancel);
+    window.removeEventListener("loopino.server-will-change", cancel);
     window.removeEventListener("pagehide", cancel);
   }
 }
@@ -42,10 +42,10 @@ export async function runGoogleFlow(mode: "login" | "connect", services: GoogleS
 async function runScopedGoogleFlow(mode: "login" | "connect", services: GoogleService[], post: Post,
   signal: AbortSignal): Promise<"redirecting" | "completed"> {
   const handlers = (window as unknown as { webkit?: { messageHandlers?: {
-    maverickExternalURL?: NativeOpener; sensesHost?: unknown; maverickDeviceUse?: unknown;
+    loopinoExternalURL?: NativeOpener; sensesHost?: unknown; loopinoDeviceUse?: unknown;
   } } }).webkit?.messageHandlers;
-  const opener = handlers?.maverickExternalURL;
-  if (!opener && (handlers?.sensesHost || handlers?.maverickDeviceUse)) throw new GoogleAuthError("google_native_update_required");
+  const opener = handlers?.loopinoExternalURL;
+  if (!opener && (handlers?.sensesHost || handlers?.loopinoDeviceUse)) throw new GoogleAuthError("google_native_update_required");
   const result = await post<{ authorization_url?: string; browser_url?: string; flow_id?: string }>(
     "/api/auth/google/start", { mode, services, transport: opener ? "system-browser" : "browser" }, signal);
   if (!opener) {

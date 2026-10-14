@@ -1,6 +1,6 @@
 # Mail
 
-Mail is a source-available Maverick app for operating on email threads from inside a workspace. The repo source is contract-first and includes a React/Vite frontend, Python JSON backend, SQLite app-owned storage, CLI/MCP surfaces, reference entities, and a bundled `mail-ops` skill.
+Mail is a source-available Loopino app for operating on email threads from inside a workspace. The repo source is contract-first and includes a React/Vite frontend, Python JSON backend, SQLite app-owned storage, CLI/MCP surfaces, reference entities, and a bundled `mail-ops` skill.
 
 This implementation has real app surfaces with Gmail and Private Email providers. Gmail uses OAuth and the Gmail REST APIs. Private Email uses IMAP for sync/read state/attachment fetch and SMTP for sending, with mailbox credentials delivered only through Vault/Core Secrets.
 
@@ -212,10 +212,10 @@ Gmail thread fetches parse recursive MIME payloads and preserve both `text/plain
 ## SDK Flow
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-root apps/mail --json
-maverick app mail frontend build --json
-maverick app mail cli list --json
-maverick app mail mcp list --json
+loopino core cli run core.app-sdk.validate --app-root apps/mail --json
+loopino app mail frontend build --json
+loopino app mail cli list --json
+loopino app mail mcp list --json
 ```
 
 ## Contract Notes
@@ -225,10 +225,10 @@ Mail is a source-available, forkable platform app. Its contract declares sandbox
 ## Verification
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-root apps/mail --json
-maverick app mail frontend build --json
-maverick app mail cli list --json
-maverick app mail mcp list --json
+loopino core cli run core.app-sdk.validate --app-root apps/mail --json
+loopino app mail frontend build --json
+loopino app mail cli list --json
+loopino app mail mcp list --json
 python3 -m unittest discover -s apps/mail/tests -p 'test_*.py'
 npm --prefix apps/mail test
 npm --prefix apps/mail audit
@@ -237,7 +237,7 @@ npm --prefix apps/mail audit
 The regression suite uses temporary databases, simulated providers and a local
 TLS server. For desktop/mobile verification without mailbox access, run
 `python3 apps/mail/tests/mail_ui_fixture_server.py --port 8000` and open
-`http://maverick.localhost:8000/apps/mail/` in the approved development inspector.
+`http://loopino.localhost:8000/apps/mail/` in the approved development inspector.
 The fixture serves 251 synthetic threads, 205 drafts (including partial, unknown
 and sending states with simulated recipient outcomes), and a wide HTML message;
 all backend mutations return 405. Stop the fixture server after verification.

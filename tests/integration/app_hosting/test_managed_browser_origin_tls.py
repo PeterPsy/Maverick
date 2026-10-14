@@ -39,14 +39,14 @@ class ManagedBrowserOriginTlsIntegrationTests(
             repo_root = self._repo_root(Path(temp_dir))
             state = AppFrameBrowserOriginIntegrationTests._state_with_frontend(repo_root)
             app = PlatformAsgiHost(state)
-            host = "maverick.example.test"
+            host = "loopino.example.test"
             origin = f"https://{host}"
             cookie = await self._login(app, host=host, scheme="https")
             environment = {
-                "MAVERICK_SIDECAR_ORIGIN_MODE": "hosted",
-                "MAVERICK_SIDECAR_INSTALLATION_DOMAIN": host,
-                "MAVERICK_SIDECAR_PLATFORM_ORIGIN": origin,
-                "MAVERICK_BROWSER_ORIGIN_TLS_MODE": "managed_exact",
+                "LOOPINO_SIDECAR_ORIGIN_MODE": "hosted",
+                "LOOPINO_SIDECAR_INSTALLATION_DOMAIN": host,
+                "LOOPINO_SIDECAR_PLATFORM_ORIGIN": origin,
+                "LOOPINO_BROWSER_ORIGIN_TLS_MODE": "managed_exact",
             }
             request_body = json.dumps(
                 {"app_id": "frame-demo", "path": "/apps/frame-demo/"}
@@ -100,14 +100,14 @@ class ManagedBrowserOriginTlsIntegrationTests(
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
             app = PlatformAsgiHost(state, shutdown_controller=shutdown)
-            host = "maverick.example.test"
+            host = "loopino.example.test"
             origin = f"https://{host}"
             cookie = await self._login(app, host=host, scheme="https")
             environment = {
-                "MAVERICK_SIDECAR_ORIGIN_MODE": "hosted",
-                "MAVERICK_SIDECAR_INSTALLATION_DOMAIN": host,
-                "MAVERICK_SIDECAR_PLATFORM_ORIGIN": origin,
-                "MAVERICK_BROWSER_ORIGIN_TLS_MODE": "managed_exact",
+                "LOOPINO_SIDECAR_ORIGIN_MODE": "hosted",
+                "LOOPINO_SIDECAR_INSTALLATION_DOMAIN": host,
+                "LOOPINO_SIDECAR_PLATFORM_ORIGIN": origin,
+                "LOOPINO_BROWSER_ORIGIN_TLS_MODE": "managed_exact",
             }
             with patch.dict(os.environ, environment, clear=False), patch(
                 "core.api.sidecar_browser.ensure_browser_origin_tls"

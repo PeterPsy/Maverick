@@ -6,7 +6,7 @@ import { useAppNavigation } from "./useAppNavigation";
 import { useShellTheme } from "./lib/shellTheme";
 import { ViewStateProvider } from "./lib/viewState";
 import {
-  isMaverickParentMessage,
+  isLoopinoParentMessage,
   mountedAppIdFromPath,
   postToShell,
 } from "./lib/shellNavigation";
@@ -45,8 +45,8 @@ function MartaOpsApp() {
   const embedded =
     window.parent !== window ||
     Boolean(
-      (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string })
-        .__MAVERICK_PLATFORM_ORIGIN__,
+      (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string })
+        .__LOOPINO_PLATFORM_ORIGIN__,
     );
   const [ideaCaptureRequest, setIdeaCaptureRequest] = useState(0);
   const controller = useRecordPanels();
@@ -80,14 +80,14 @@ function MartaOpsApp() {
   );
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (!isMaverickParentMessage(event)) return;
+      if (!isLoopinoParentMessage(event)) return;
       const message = event.data as {
         app_id?: string;
         params?: Record<string, unknown>;
         type?: string;
       };
       if (
-        message.type !== "maverick.app.navigate" ||
+        message.type !== "loopino.app.navigate" ||
         (message.app_id && message.app_id !== appId)
       )
         return;
@@ -112,7 +112,7 @@ function MartaOpsApp() {
       }
     }
     window.addEventListener("message", handleMessage);
-    postToShell({ type: "maverick.app.ready", app_id: appId });
+    postToShell({ type: "loopino.app.ready", app_id: appId });
     const initialParams = Object.fromEntries(
       new URLSearchParams(window.location.search),
     );

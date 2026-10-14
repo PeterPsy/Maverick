@@ -91,7 +91,7 @@ class StructuredRuntimeFailureTest(unittest.TestCase):
             ),
             session_id=session.session_id,
             turn_id="structured-failure-turn",
-            provider_id="maverick-tool-loop",
+            provider_id="loopino-tool-loop",
             exit_code=1,
             failure_reason_code="tool_not_found",
             public_error_message=PUBLIC_TOOL_ERROR,

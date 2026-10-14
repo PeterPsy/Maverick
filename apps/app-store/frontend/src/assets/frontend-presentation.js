@@ -77,7 +77,7 @@
     };
   }
 
-  window.MaverickFrontendPresentation = {
+  window.LoopinoFrontendPresentation = {
     frontendPresentation,
     frontendRole: (app, installation = null) => frontendPresentation(app, installation).role,
     frontendLaunchable: (app, installation = null) => frontendPresentation(app, installation).launchable,

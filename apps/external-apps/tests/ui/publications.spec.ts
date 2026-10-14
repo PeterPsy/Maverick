@@ -55,26 +55,26 @@ test('safe backend errors and honest deployment setup', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Prepara pubblicazione' })).toBeDisabled();
   await page.unroute('**/api/apps/external-apps/backend');
   await page.route('**/api/apps/external-apps/backend', route => route.fulfill({ status: 403, json: { error_code: 'admin_required' } }));
-  await page.getByLabel('Dominio di Maverick').fill('maverick.example.test');
+  await page.getByLabel('Dominio di Loopino').fill('loopino.example.test');
   await page.getByRole('button', { name: 'Salva dominio' }).click();
   await expect(page.getByRole('alert')).toHaveText('admin_required');
 });
 
 test('Core frame identity, exact-parent theme and navigation reset', async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(window, '__MAVERICK_APP_FRAME_CONTEXT__', { value: { app_id: 'publisher', workspace_id: 'synthetic' }, writable: false }));
+  await page.addInitScript(() => Object.defineProperty(window, '__LOOPINO_APP_FRAME_CONTEXT__', { value: { app_id: 'publisher', workspace_id: 'synthetic' }, writable: false }));
   await page.route('**/api/apps/publisher/backend', route => {
     const action = route.request().postDataJSON().action;
     return route.fulfill({ json: action === 'list' ? { items: [publication] } : action === 'get' ? { app: publication, plans: [plan], releases: [], history: [] } : { status: 'configured' } });
   });
-  await page.goto('/apps/external-apps/?maverick_theme=dark');
+  await page.goto('/apps/external-apps/?loopino_theme=dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.getByRole('button', { name: /Demo sintetica/ }).click();
   await page.getByRole('checkbox').check();
-  await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { source: window, origin: 'https://wrong.example', data: { type: 'maverick.shell.theme-changed', theme: { effective: 'light' } } })));
+  await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { source: window, origin: 'https://wrong.example', data: { type: 'loopino.shell.theme-changed', theme: { effective: 'light' } } })));
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.evaluate(() => window.postMessage({ type: 'maverick.shell.theme-changed', theme: { effective: 'light' } }, location.origin));
+  await page.evaluate(() => window.postMessage({ type: 'loopino.shell.theme-changed', theme: { effective: 'light' } }, location.origin));
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.evaluate(() => window.postMessage({ type: 'maverick.app.navigate', app_id: 'publisher', params: {} }, location.origin));
+  await page.evaluate(() => window.postMessage({ type: 'loopino.app.navigate', app_id: 'publisher', params: {} }, location.origin));
   await expect(page.getByRole('article', { name: 'Dettaglio pubblicazione' })).toHaveCount(0);
   await page.getByRole('button', { name: /Demo sintetica/ }).click();
   await expect(page.getByRole('checkbox')).not.toBeChecked();

@@ -115,7 +115,7 @@ for (const width of [280, 390]) {
         ),
       );
       await page.goto(
-        `/apps/chat/widgets/chat-sidebar/index.html?maverick_theme=${width === 390 ? "light" : "dark"}`,
+        `/apps/chat/widgets/chat-sidebar/index.html?loopino_theme=${width === 390 ? "light" : "dark"}`,
       );
       await expect(
         page.getByRole("button", { name: "Show chats in project Product" }),

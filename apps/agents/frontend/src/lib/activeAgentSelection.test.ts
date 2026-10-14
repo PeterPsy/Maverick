@@ -19,7 +19,7 @@ describe('active agent selection messages', () => {
 
     const posted = notifyActiveAgentSelection(' agent-type-server-coding-engineer ', {
       currentWindow: {},
-      origin: 'https://maverick.test',
+      origin: 'https://loopino.test',
       parentWindow: parent.target
     });
 
@@ -27,11 +27,11 @@ describe('active agent selection messages', () => {
     expect(parent.messages).toEqual([
       {
         message: {
-          type: 'maverick.app.selection-changed',
+          type: 'loopino.app.selection-changed',
           owner_app_id: 'agents',
           selection: { agent_type_id: 'agent-type-server-coding-engineer' }
         },
-        targetOrigin: 'https://maverick.test'
+        targetOrigin: 'https://loopino.test'
       }
     ]);
   });
@@ -48,18 +48,18 @@ describe('active agent selection messages', () => {
   it('extracts only Agents-owned active agent selections', () => {
     expect(
       agentTypeIdFromSelectionMessage({
-        type: 'maverick.app.selection-changed',
+        type: 'loopino.app.selection-changed',
         owner_app_id: 'agents',
         selection: { agent_type_id: ' agent-type-a ' }
       })
     ).toBe('agent-type-a');
     expect(
       agentTypeIdFromSelectionMessage({
-        type: 'maverick.app.selection-changed',
+        type: 'loopino.app.selection-changed',
         owner_app_id: 'chat',
         selection: { agent_type_id: 'agent-type-a' }
       })
     ).toBe('');
-    expect(agentTypeIdFromSelectionMessage({ type: 'maverick.widget.data-changed', owner_app_id: 'agents' })).toBe('');
+    expect(agentTypeIdFromSelectionMessage({ type: 'loopino.widget.data-changed', owner_app_id: 'agents' })).toBe('');
   });
 });

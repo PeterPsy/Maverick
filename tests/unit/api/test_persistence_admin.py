@@ -44,35 +44,35 @@ class PersistenceAdminTestCase(unittest.TestCase):
 
     def test_mongo_target_payload_preserves_auth_secret_ref_settings(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._make_repo_root(Path(temp_dir) / "maverick")
+            repo_root = self._make_repo_root(Path(temp_dir) / "loopino")
 
             settings = target_settings_from_payload(
                 repository_root=repo_root,
                 payload={
                     "kind": "mongo",
-                    "mongodb_uri": "mongodb://127.0.0.1:27017/maverick",
-                    "mongodb_database": "maverick",
-                    "mongodb_username": "maverick",
+                    "mongodb_uri": "mongodb://127.0.0.1:27017/loopino",
+                    "mongodb_database": "loopino",
+                    "mongodb_username": "loopino",
                     "mongodb_password_ref": "platform:secret-alias/mongodb-password",
                 },
             )
 
-            self.assertEqual(settings.mongo_username, "maverick")
+            self.assertEqual(settings.mongo_username, "loopino")
             self.assertEqual(settings.mongo_password_ref, "platform:secret-alias/mongodb-password")
 
     def test_json_to_json_migration_copies_all_control_plane_collections_and_updates_env(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._make_repo_root(Path(temp_dir) / "maverick")
-            env_file = repo_root / ".env.maverick"
+            repo_root = self._make_repo_root(Path(temp_dir) / "loopino")
+            env_file = repo_root / ".env.loopino"
             env_file.write_text(
                 "\n".join(
                     [
-                        "MAVERICK_ADMIN_USERNAME=admin",
-                        "MAVERICK_ADMIN_PASSWORD=maverick",
-                        "MAVERICK_RUNTIME_API_SECRET=test-runtime-secret",
-                        "MAVERICK_SECRET_STORE_KEY=test-secret-key",
-                        "MAVERICK_CONTROL_STORE=json",
-                        "MAVERICK_JSON_CONTROL_STORE_ROOT=source-control",
+                        "LOOPINO_ADMIN_USERNAME=admin",
+                        "LOOPINO_ADMIN_PASSWORD=loopino",
+                        "LOOPINO_RUNTIME_API_SECRET=test-runtime-secret",
+                        "LOOPINO_SECRET_STORE_KEY=test-secret-key",
+                        "LOOPINO_CONTROL_STORE=json",
+                        "LOOPINO_JSON_CONTROL_STORE_ROOT=source-control",
                     ]
                 )
                 + "\n",
@@ -81,14 +81,14 @@ class PersistenceAdminTestCase(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
-                    "MAVERICK_RUNTIME_API_SECRET": "test-runtime-secret",
-                    "MAVERICK_SECRET_STORE_KEY": "test-secret-key",
-                    "MAVERICK_CONTROL_STORE": "json",
-                    "MAVERICK_JSON_CONTROL_STORE_ROOT": "source-control",
-                    "MAVERICK_SERVICE_ENV_FILE": str(env_file),
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
+                    "LOOPINO_RUNTIME_API_SECRET": "test-runtime-secret",
+                    "LOOPINO_SECRET_STORE_KEY": "test-secret-key",
+                    "LOOPINO_CONTROL_STORE": "json",
+                    "LOOPINO_JSON_CONTROL_STORE_ROOT": "source-control",
+                    "LOOPINO_SERVICE_ENV_FILE": str(env_file),
                 },
                 clear=True,
             ):
@@ -142,21 +142,21 @@ class PersistenceAdminTestCase(unittest.TestCase):
             env_content = env_file.read_text(encoding="utf-8")
             self.assertEqual(provider_bindings[0]["binding_id"], "binding:codex:default")
             self.assertEqual(api_tokens[0]["token_id"], "token-1")
-            self.assertIn("MAVERICK_CONTROL_STORE=json", env_content)
-            self.assertIn("MAVERICK_JSON_CONTROL_STORE_ROOT=target-control", env_content)
+            self.assertIn("LOOPINO_CONTROL_STORE=json", env_content)
+            self.assertIn("LOOPINO_JSON_CONTROL_STORE_ROOT=target-control", env_content)
 
     def test_admin_http_surface_requires_admin_and_exposes_status(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._make_repo_root(Path(temp_dir) / "maverick")
+            repo_root = self._make_repo_root(Path(temp_dir) / "loopino")
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
-                    "MAVERICK_RUNTIME_API_SECRET": "test-runtime-secret",
-                    "MAVERICK_SECRET_STORE_KEY": "test-secret-key",
-                    "MAVERICK_CONTROL_STORE": "json",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
+                    "LOOPINO_RUNTIME_API_SECRET": "test-runtime-secret",
+                    "LOOPINO_SECRET_STORE_KEY": "test-secret-key",
+                    "LOOPINO_CONTROL_STORE": "json",
                 },
                 clear=True,
             ):
@@ -176,17 +176,17 @@ class PersistenceAdminTestCase(unittest.TestCase):
 
     def test_source_deletion_requires_backend_restart_cutover(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._make_repo_root(Path(temp_dir) / "maverick")
+            repo_root = self._make_repo_root(Path(temp_dir) / "loopino")
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
-                    "MAVERICK_RUNTIME_API_SECRET": "test-runtime-secret",
-                    "MAVERICK_SECRET_STORE_KEY": "test-secret-key",
-                    "MAVERICK_CONTROL_STORE": "json",
-                    "MAVERICK_JSON_CONTROL_STORE_ROOT": "source-control",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
+                    "LOOPINO_RUNTIME_API_SECRET": "test-runtime-secret",
+                    "LOOPINO_SECRET_STORE_KEY": "test-secret-key",
+                    "LOOPINO_CONTROL_STORE": "json",
+                    "LOOPINO_JSON_CONTROL_STORE_ROOT": "source-control",
                 },
                 clear=True,
             ):
@@ -206,7 +206,7 @@ class PersistenceAdminTestCase(unittest.TestCase):
 
     def test_pending_cleanup_runs_on_startup_when_target_adapter_is_active(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._make_repo_root(Path(temp_dir) / "maverick")
+            repo_root = self._make_repo_root(Path(temp_dir) / "loopino")
             source_root = repo_root / "source-control"
             target_root = repo_root / "target-control"
             source_file = source_root / "workspaces" / "workspaces.json"
@@ -215,7 +215,7 @@ class PersistenceAdminTestCase(unittest.TestCase):
             target_file.parent.mkdir(parents=True, exist_ok=True)
             source_file.write_text('[{"workspace_id":"old"}]\n', encoding="utf-8")
             target_file.write_text('[{"workspace_id":"new"}]\n', encoding="utf-8")
-            plan_root = repo_root / ".maverick" / "persistence-cleanup"
+            plan_root = repo_root / ".loopino" / "persistence-cleanup"
             plan_root.mkdir(parents=True)
             plan_path = plan_root / "pending.json"
             plan_path.write_text(
@@ -226,13 +226,13 @@ class PersistenceAdminTestCase(unittest.TestCase):
                             "kind": "json",
                             "json_root": str(source_root),
                             "mongo_uri": None,
-                            "mongo_database": "maverick",
+                            "mongo_database": "loopino",
                         },
                         "target_adapter": {
                             "kind": "json",
                             "json_root": str(target_root),
                             "mongo_uri": None,
-                            "mongo_database": "maverick",
+                            "mongo_database": "loopino",
                         },
                     }
                 )
@@ -252,12 +252,12 @@ class PersistenceAdminTestCase(unittest.TestCase):
 
     def test_json_source_cleanup_deletes_json_root_when_target_is_mongo(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._make_repo_root(Path(temp_dir) / "maverick")
+            repo_root = self._make_repo_root(Path(temp_dir) / "loopino")
             source_root = repo_root / "control-plane-json"
             source_file = source_root / "workspaces" / "workspaces.json"
             source_file.parent.mkdir(parents=True, exist_ok=True)
             source_file.write_text('[{"workspace_id":"old"}]\n', encoding="utf-8")
-            plan_root = repo_root / ".maverick" / "persistence-cleanup"
+            plan_root = repo_root / ".loopino" / "persistence-cleanup"
             plan_root.mkdir(parents=True)
             plan_path = plan_root / "pending.json"
             plan_path.write_text(
@@ -268,13 +268,13 @@ class PersistenceAdminTestCase(unittest.TestCase):
                             "kind": "json",
                             "json_root": str(source_root),
                             "mongo_uri": None,
-                            "mongo_database": "maverick",
+                            "mongo_database": "loopino",
                         },
                         "target_adapter": {
                             "kind": "mongo",
                             "json_root": str(source_root),
-                            "mongo_uri": "mongodb://127.0.0.1:27017/maverick",
-                            "mongo_database": "maverick",
+                            "mongo_uri": "mongodb://127.0.0.1:27017/loopino",
+                            "mongo_database": "loopino",
                         },
                     }
                 )
@@ -287,8 +287,8 @@ class PersistenceAdminTestCase(unittest.TestCase):
                 active_settings=ControlStoreSettings(
                     kind="mongo",
                     json_root=source_root,
-                    mongo_uri="mongodb://127.0.0.1:27017/maverick",
-                    mongo_database="maverick",
+                    mongo_uri="mongodb://127.0.0.1:27017/loopino",
+                    mongo_database="loopino",
                 ),
             )
 
@@ -307,7 +307,7 @@ class PersistenceAdminTestCase(unittest.TestCase):
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": "admin", "password": "maverick"},
+            body={"username": "admin", "password": "loopino"},
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]

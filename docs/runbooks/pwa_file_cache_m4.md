@@ -8,14 +8,14 @@ physical-device rollout gates are complete.
 
 ## Owned browser state
 
-- package: `@maverick/pwa-cache`;
-- manifest database: `maverick-pwa-file-v1`, IndexedDB version 1, record schema
+- package: `@loopino/pwa-cache`;
+- manifest database: `loopino-pwa-file-v1`, IndexedDB version 1, record schema
   version 2;
 - manifest stores: `files` and `metadata`;
-- byte directory: `maverick-pwa-file-cache-v1` in OPFS;
+- byte directory: `loopino-pwa-file-cache-v1` in OPFS;
 - OPFS file names: opaque flat random UUID-derived names ending in `.bin`;
-- cleanup barrier: `maverick-pwa-file-cache-cleanup-barrier-v1`;
-- policy revision: `maverick.local-persistence-policy.v2`;
+- cleanup barrier: `loopino-pwa-file-cache-cleanup-barrier-v1`;
+- policy revision: `loopino.local-persistence-policy.v2`;
 - default maximum entry: 64 MiB;
 - default authenticated Storage-scope budget: 128 MiB;
 - default origin-wide file budget: 256 MiB;
@@ -37,7 +37,7 @@ Storage frame and returns the Blob over that private port.
 Before OPFS access, the broker calls the authenticated internal
 `file.cache_descriptor` action and validates:
 
-1. exact `maverick.storage-file-cache-descriptor.v1` schema;
+1. exact `loopino.storage-file-cache-descriptor.v1` schema;
 2. matching stable file id and source version;
 3. same-origin `/api/apps/storage/media` URL with the same identities and the
    cache-specific version-verification marker;
@@ -45,7 +45,7 @@ Before OPFS access, the broker calls the authenticated internal
 5. exact local-persistence policy revision, canonical data class, attachment
    provenance, and applicable cache/privacy approvals; and
 6. before each open until terminal disable, the tri-state decision from an
-   exact no-store `maverick.pwa-config.v2` response.
+   exact no-store `loopino.pwa-config.v2` response.
 
 An explicit `false`, malformed successful response, non-transient HTTP error,
 or `401`/`403` terminally disables the mounted broker; an authentication
@@ -222,13 +222,13 @@ npm --prefix apps/base-shell test
 npm --prefix apps/base-shell run test:service-worker
 npm --prefix apps/storage test
 python3 -m unittest apps.storage.tests.test_storage_file_cache
-MAVERICK_TEST_LEVEL=integration python3 -m unittest \
+LOOPINO_TEST_LEVEL=integration python3 -m unittest \
   tests.integration.app_hosting.test_app_frame_browser_origin \
   tests.integration.app_hosting.test_widgets
 python3 -m unittest apps.settings.tests.test_settings_app.SettingsFrontendDistTests
-maverick app storage frontend build --json
-maverick app base-shell frontend build --json
-maverick app settings frontend build --json
+loopino app storage frontend build --json
+loopino app base-shell frontend build --json
+loopino app settings frontend build --json
 ```
 
 Also run the focused Core PWA configuration/HTTP file-response tests and the
@@ -241,13 +241,13 @@ and pass/fail.
 The runtime projection must remain:
 
 ```json
-{"schema":"maverick.pwa-config.v2","features":{"storage_file_cache":false}}
+{"schema":"loopino.pwa-config.v2","features":{"storage_file_cache":false}}
 ```
 
 until reviewed exact-version approvals, privacy review, and physical
 Safari/Home Screen/Dock evidence are approved. The isolated app-frame boundary
 is implemented but remains part of the physical validation matrix. Afterwards,
-the operator gate is `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE`. Invalid values
+the operator gate is `LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE`. Invalid values
 fail closed.
 
 Rollback sets that feature to `off` and restarts Core through the normal

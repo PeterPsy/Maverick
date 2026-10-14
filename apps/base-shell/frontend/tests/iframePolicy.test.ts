@@ -4,20 +4,20 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { IsolatedMaverickFrame, requestAppFrameLaunch } from "../src/components/IsolatedMaverickFrame";
+import { IsolatedLoopinoFrame, requestAppFrameLaunch } from "../src/components/IsolatedLoopinoFrame";
 import {
   appFrameBrowserFeaturePolicy,
-  isMaverickFrameMessage,
-  registeredMaverickFrameOwner,
-  postToMaverickFrame,
-  setMaverickFrameOrigin,
+  isLoopinoFrameMessage,
+  registeredLoopinoFrameOwner,
+  postToLoopinoFrame,
+  setLoopinoFrameOrigin,
   widgetFrameBrowserFeaturePolicy,
 } from "../src/iframePolicy";
 import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
 
 const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-one", workspaceId: "default" });
 
-describe("isolated Maverick frame policy", () => {
+describe("isolated Loopino frame policy", () => {
   afterEach(() => {
     document.body.replaceChildren();
     vi.unstubAllGlobals();
@@ -28,18 +28,18 @@ describe("isolated Maverick frame policy", () => {
     const frame = document.createElement("iframe");
     const foreign = document.createElement("iframe");
     document.body.append(frame, foreign);
-    setMaverickFrameOrigin(frame, "https://af-session.sidecars.maverick.test", "storage", FRAME_SCOPE);
+    setLoopinoFrameOrigin(frame, "https://af-session.sidecars.loopino.test", "storage", FRAME_SCOPE);
 
-    expect(isMaverickFrameMessage(message(frame, "https://af-session.sidecars.maverick.test"), frame)).toBe(true);
-    expect(registeredMaverickFrameOwner(message(frame, "https://af-session.sidecars.maverick.test"), FRAME_SCOPE)).toBe("storage");
-    expect(registeredMaverickFrameOwner(message(frame, "https://af-session.sidecars.maverick.test"), {
+    expect(isLoopinoFrameMessage(message(frame, "https://af-session.sidecars.loopino.test"), frame)).toBe(true);
+    expect(registeredLoopinoFrameOwner(message(frame, "https://af-session.sidecars.loopino.test"), FRAME_SCOPE)).toBe("storage");
+    expect(registeredLoopinoFrameOwner(message(frame, "https://af-session.sidecars.loopino.test"), {
       sessionGeneration: "session-two",
       workspaceId: "other",
     })).toBeNull();
-    expect(isMaverickFrameMessage(message(frame, "https://attacker.example"), frame)).toBe(false);
-    expect(isMaverickFrameMessage(message(foreign, "https://af-session.sidecars.maverick.test"), frame)).toBe(false);
-    expect(() => setMaverickFrameOrigin(frame, window.location.origin, "storage", FRAME_SCOPE)).toThrow(/distinct exact origin/i);
-    setMaverickFrameOrigin(frame, null, "storage", FRAME_SCOPE);
+    expect(isLoopinoFrameMessage(message(frame, "https://attacker.example"), frame)).toBe(false);
+    expect(isLoopinoFrameMessage(message(foreign, "https://af-session.sidecars.loopino.test"), frame)).toBe(false);
+    expect(() => setLoopinoFrameOrigin(frame, window.location.origin, "storage", FRAME_SCOPE)).toThrow(/distinct exact origin/i);
+    setLoopinoFrameOrigin(frame, null, "storage", FRAME_SCOPE);
   });
 
   it("posts only to the registered exact origin and never broadens the target", () => {
@@ -47,17 +47,17 @@ describe("isolated Maverick frame policy", () => {
     document.body.append(frame);
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
 
-    postToMaverickFrame(frame, { type: "ignored-before-registration" });
+    postToLoopinoFrame(frame, { type: "ignored-before-registration" });
     expect(postMessage).not.toHaveBeenCalled();
 
-    setMaverickFrameOrigin(frame, "https://af-session.sidecars.maverick.test", "storage", FRAME_SCOPE);
-    postToMaverickFrame(frame, { type: "accepted" });
+    setLoopinoFrameOrigin(frame, "https://af-session.sidecars.loopino.test", "storage", FRAME_SCOPE);
+    postToLoopinoFrame(frame, { type: "accepted" });
     expect(postMessage).toHaveBeenCalledWith(
       { type: "accepted" },
-      "https://af-session.sidecars.maverick.test",
+      "https://af-session.sidecars.loopino.test",
     );
     expect(postMessage).not.toHaveBeenCalledWith(expect.anything(), "*");
-    setMaverickFrameOrigin(frame, null, "storage", FRAME_SCOPE);
+    setLoopinoFrameOrigin(frame, null, "storage", FRAME_SCOPE);
   });
 
   it("delegates clipboard writes only to Chat app and widget frames", () => {
@@ -68,14 +68,14 @@ describe("isolated Maverick frame policy", () => {
   });
 
   it("keeps the iframe on a themed local document until it self-submits the isolated bootstrap", async () => {
-    const isolatedOrigin = "https://af-session.sidecars.maverick.test";
+    const isolatedOrigin = "https://af-session.sidecars.loopino.test";
     let resolveLaunch!: (response: Response) => void;
     const launchResponse = new Promise<Response>((resolve) => {
       resolveLaunch = resolve;
     });
     vi.stubGlobal("fetch", vi.fn(() => launchResponse));
     const launchPayload = {
-      bootstrap_url: `${isolatedOrigin}/.well-known/maverick-app-frame-bootstrap`,
+      bootstrap_url: `${isolatedOrigin}/.well-known/loopino-app-frame-bootstrap`,
       method: "POST",
       origin: isolatedOrigin,
       ticket: "one-shot-ticket",
@@ -86,7 +86,7 @@ describe("isolated Maverick frame policy", () => {
     const root = createRoot(container);
 
     await act(async () => {
-      root.render(createElement(IsolatedMaverickFrame, {
+      root.render(createElement(IsolatedLoopinoFrame, {
         appId: "storage",
         frameScope: FRAME_SCOPE,
         launchPath: "/apps/storage/",
@@ -95,16 +95,16 @@ describe("isolated Maverick frame policy", () => {
 
     const frame = container.querySelector("iframe");
     resolveLaunch(new Response(JSON.stringify(launchPayload), { status: 200 }));
-    await vi.waitFor(() => expect(frame?.dataset.maverickFrameOrigin).toBe(isolatedOrigin));
+    await vi.waitFor(() => expect(frame?.dataset.loopinoFrameOrigin).toBe(isolatedOrigin));
     act(() => frame?.dispatchEvent(new Event("load")));
     acknowledgeBootstrap(frame!);
 
     expect(frame?.getAttribute("src")).toBeNull();
     expect(frame?.srcdoc).toContain("#070708");
-    expect(frame?.srcdoc).toContain("maverick.app-frame.bootstrap");
+    expect(frame?.srcdoc).toContain("loopino.app-frame.bootstrap");
     expect(frame?.srcdoc).toContain('form.target="_self"');
-    expect(frame?.dataset.maverickFrameOrigin).toBe(isolatedOrigin);
-    expect(frame?.dataset.maverickFrameBootstrapArmed).toBe("true");
+    expect(frame?.dataset.loopinoFrameOrigin).toBe(isolatedOrigin);
+    expect(frame?.dataset.loopinoFrameBootstrapArmed).toBe("true");
     expect(fetch).toHaveBeenCalledWith(
       "/api/app-frames/browser-launch",
       expect.objectContaining({
@@ -118,7 +118,7 @@ describe("isolated Maverick frame policy", () => {
 
   it("rejects launch payloads that reuse the platform origin", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-      bootstrap_url: `${window.location.origin}/.well-known/maverick-app-frame-bootstrap`,
+      bootstrap_url: `${window.location.origin}/.well-known/loopino-app-frame-bootstrap`,
       method: "POST",
       origin: window.location.origin,
       ticket: "ticket",
@@ -166,13 +166,13 @@ function message(frame: HTMLIFrameElement, origin: string): MessageEvent {
 }
 
 function acknowledgeBootstrap(frame: HTMLIFrameElement) {
-  const bootstrapId = frame.srcdoc.match(/data-maverick-loader="([^"]+)"/)?.[1];
+  const bootstrapId = frame.srcdoc.match(/data-loopino-loader="([^"]+)"/)?.[1];
   if (!bootstrapId) throw new Error("Expected a local app-frame bootstrap relay.");
   act(() => {
     window.dispatchEvent(new MessageEvent("message", {
       data: {
         bootstrap_id: bootstrapId,
-        type: "maverick.app-frame.bootstrap-submitted",
+        type: "loopino.app-frame.bootstrap-submitted",
       },
       origin: window.location.origin,
       source: frame.contentWindow,

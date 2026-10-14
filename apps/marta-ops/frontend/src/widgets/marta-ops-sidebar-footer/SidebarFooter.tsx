@@ -3,7 +3,7 @@ import {
   mountedAppIdFromPath,
   openWidgetApp,
   postToShell,
-  isMaverickParentMessage,
+  isLoopinoParentMessage,
   viewFromAppPage,
 } from "../../lib/shellNavigation";
 import { useShellTheme } from "../../lib/shellTheme";
@@ -29,7 +29,7 @@ export function MartaOpsSidebarFooter() {
   useEffect(() => {
     function postActionState() {
       postToShell({
-        type: "maverick.widget.primary-action.state",
+        type: "loopino.widget.primary-action.state",
         owner_app_id: appId,
         widget_id: WIDGET_ID,
         available,
@@ -37,14 +37,14 @@ export function MartaOpsSidebarFooter() {
       });
     }
     function handleShellMessage(event: MessageEvent) {
-      if (!isMaverickParentMessage(event)) return;
+      if (!isLoopinoParentMessage(event)) return;
       const message = event.data;
       if (message.owner_app_id !== appId || message.widget_id !== WIDGET_ID)
         return;
-      if (message.type === "maverick.widget.primary-action.query")
+      if (message.type === "loopino.widget.primary-action.query")
         postActionState();
       if (
-        message.type === "maverick.widget.primary-action.invoke" &&
+        message.type === "loopino.widget.primary-action.invoke" &&
         available
       ) {
         openCreate();

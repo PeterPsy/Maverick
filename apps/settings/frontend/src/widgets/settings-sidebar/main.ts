@@ -1,5 +1,5 @@
 import { applySettingsTheme } from '../../settingsTheme';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import {
   DEFAULT_SETTINGS_PAGE_ID,
   SETTINGS_PAGES,
@@ -45,7 +45,7 @@ function openPageInShell(pageId: SettingsPageId, setting = '') {
   render();
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'settings',
       params: {
         app_page: settingsAppPageFor(pageId),
@@ -56,12 +56,12 @@ function openPageInShell(pageId: SettingsPageId, setting = '') {
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
 function handleShellMessage(event: MessageEvent) {
-  if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+  if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
     return;
   }
   const payload = event.data as {
@@ -71,8 +71,8 @@ function handleShellMessage(event: MessageEvent) {
     selection?: Record<string, unknown>;
     type?: string;
   };
-  if (payload.type === 'maverick.shell.theme-changed') { applySettingsTheme(payload.theme); return; }
-  if (payload.type === 'maverick.widget.context-changed') {
+  if (payload.type === 'loopino.shell.theme-changed') { applySettingsTheme(payload.theme); return; }
+  if (payload.type === 'loopino.widget.context-changed') {
     applySettingsTheme(payload.context?.content?.shell_theme);
     if (payload.context?.workspace_id && payload.context.workspace_id !== workspaceId) {
       workspaceId = payload.context.workspace_id; query = '';
@@ -86,7 +86,7 @@ function handleShellMessage(event: MessageEvent) {
     }
     return;
   }
-  if (payload.type === 'maverick.app.selection-changed' && payload.owner_app_id === 'settings') {
+  if (payload.type === 'loopino.app.selection-changed' && payload.owner_app_id === 'settings') {
     const pageId = settingsPageIdFromParams(payload.selection || {});
     if (pageId) {
       selectedPageId = pageId;
@@ -205,7 +205,7 @@ function installShellSidebarCloseSwipe() {
     if (deltaX <= -72 && deltaY <= 48) {
       event.preventDefault();
       event.stopPropagation();
-      window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+      window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
       start = null;
     }
   }, { passive: false });

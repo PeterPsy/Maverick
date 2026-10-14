@@ -251,7 +251,7 @@ export function ChatComposer({
                 aria-multiline="true"
                 className={`chat-ui-input chat-ui-input--textarea chatapp-composer__field chatapp-composer__editor ${value ? "" : "is-empty"}`}
                 contentEditable={!disabled}
-                data-placeholder="Message Maverick..."
+                data-placeholder="Message Loopino..."
                 onClick={(event) => syncCaret(event.currentTarget)}
                 onDragOver={onDragOver}
                 onDrop={onDrop}

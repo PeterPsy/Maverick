@@ -103,7 +103,7 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         self.assertEqual(result, [process])
         self.assertEqual(len(spawned_by), 1)
         self.assertIsNot(spawned_by[0], caller[0])
-        self.assertTrue(spawned_by[0].name.startswith("maverick-sidecar-process-owner-"))
+        self.assertTrue(spawned_by[0].name.startswith("loopino-sidecar-process-owner-"))
         self.assertTrue(spawned_by[0].is_alive())
 
     def test_slow_startup_does_not_convoy_another_sidecar(self) -> None:

@@ -8,17 +8,17 @@ redacted.
 
 ## Automated development capture
 
-Start a production-build Maverick host, then run:
+Start a production-build Loopino host, then run:
 
 ```bash
 node scripts/pwa_cache_baseline.mjs \
   --base-url http://127.0.0.1:8014 \
-  --username "$MAVERICK_STARTUP_USERNAME" \
-  --password "$MAVERICK_STARTUP_PASSWORD" \
+  --username "$LOOPINO_STARTUP_USERNAME" \
+  --password "$LOOPINO_STARTUP_PASSWORD" \
   --engine webkit \
   --runs 5 \
   --warm-reloads 2 \
-  --output /tmp/maverick-pwa-baseline.json
+  --output /tmp/loopino-pwa-baseline.json
 ```
 
 To measure conditional file reads, add an authenticated same-origin stable
@@ -29,7 +29,7 @@ When Playwright WebKit is unavailable, the probe emits a structured `skipped`
 result. Chromium is useful during development with `--engine chromium`, but it
 does not satisfy the physical WebKit release gate.
 
-Schema `maverick.pwa-cache-baseline.v2` records:
+Schema `loopino.pwa-cache-baseline.v2` records:
 
 - shell-visible and total navigation time;
 - request/response counts and estimated response transfer bytes;
@@ -50,8 +50,8 @@ Run the cache/lifecycle probe independently of the performance capture:
 node scripts/pwa_shell_cache_smoke.mjs \
   --base-url http://127.0.0.1:8014 \
   --engine chromium \
-  --username "$MAVERICK_STARTUP_USERNAME" \
-  --password "$MAVERICK_STARTUP_PASSWORD"
+  --username "$LOOPINO_STARTUP_USERNAME" \
+  --password "$LOOPINO_STARTUP_PASSWORD"
 ```
 
 Credentials are optional as a pair. Supplying fake development credentials also
@@ -120,7 +120,7 @@ Preserve only redaction-safe diagnostics:
 - safe categories such as `install_failed`, `cache_corrupt`,
   `quota_exceeded`, `transport_unavailable`, or `retry_cancelled`.
 
-If rollback is required, disable `MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2`,
-verify schema `maverick.pwa-config.v2` at `/api/pwa/config`, reload with working
+If rollback is required, disable `LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2`,
+verify schema `loopino.pwa-config.v2` at `/api/pwa/config`, reload with working
 transport, and confirm that the client unregisters the worker and removes only
-known Maverick static caches.
+known Loopino static caches.

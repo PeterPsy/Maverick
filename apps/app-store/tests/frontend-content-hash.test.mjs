@@ -5,13 +5,13 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { build } from "vite";
 
-import { maverickFrontendAssets } from "../../../scripts/vite-frontend-assets.mjs";
+import { loopinoFrontendAssets } from "../../../scripts/vite-frontend-assets.mjs";
 import { sanitizeCatalog } from "../frontend/src/assets/catalogReadModel.js";
 
 test("App Store catalog cache accepts only sanitized app-shaped records", () => {
   const revision = "a".repeat(64);
   const sanitized = sanitizeCatalog({
-    schema: "maverick.app-store-catalog.v1",
+    schema: "loopino.app-store-catalog.v1",
     revision,
     items: [{
       app_id: "notes",
@@ -27,7 +27,7 @@ test("App Store catalog cache accepts only sanitized app-shaped records", () => 
   assert.equal(sanitized.revision, revision);
   assert.equal(sanitized.items[0].access_token, undefined);
   assert.equal(sanitized.items[0].versions[0].artifact_download_url, undefined);
-  assert.equal(sanitizeCatalog({ schema: "maverick.app-store-catalog.v1", revision, items: [{}] }), null);
+  assert.equal(sanitizeCatalog({ schema: "loopino.app-store-catalog.v1", revision, items: [{}] }), null);
 });
 
 test("a cached catalog cannot authorize App Store actions", () => {
@@ -41,7 +41,7 @@ test("a cached catalog cannot authorize App Store actions", () => {
 });
 
 test("App Store changes asset filename and digest when one source byte changes", async (context) => {
-  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "maverick-app-store-hash-"));
+  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "loopino-app-store-hash-"));
   context.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
   const sourceRoot = resolve(temporaryRoot, "src");
   const outDir = resolve(temporaryRoot, "dist");
@@ -55,10 +55,10 @@ test("App Store changes asset filename and digest when one source byte changes",
       root: sourceRoot,
       resolve: {
         alias: {
-          "@maverick/pwa-cache": resolve(import.meta.dirname, "../../../packages/pwa-cache/src/index.ts"),
+          "@loopino/pwa-cache": resolve(import.meta.dirname, "../../../packages/pwa-cache/src/index.ts"),
         },
       },
-      plugins: [maverickFrontendAssets()],
+      plugins: [loopinoFrontendAssets()],
       build: {
         outDir,
         emptyOutDir: true,
@@ -70,7 +70,7 @@ test("App Store changes asset filename and digest when one source byte changes",
         },
       },
     });
-    return JSON.parse(readFileSync(resolve(outDir, "maverick-frontend-assets.json"), "utf8"));
+    return JSON.parse(readFileSync(resolve(outDir, "loopino-frontend-assets.json"), "utf8"));
   }
 
   const before = await runBuild();
@@ -89,7 +89,7 @@ test("App Store changes asset filename and digest when one source byte changes",
 });
 
 test("static Rollup output names that resemble hashes remain revalidated", async (context) => {
-  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "maverick-semantic-asset-"));
+  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "loopino-semantic-asset-"));
   context.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
   const sourceRoot = resolve(temporaryRoot, "src");
   const outDir = resolve(temporaryRoot, "dist");
@@ -108,7 +108,7 @@ test("static Rollup output names that resemble hashes remain revalidated", async
           this.emitFile({ type: "asset", fileName: "assets/copied-cafebabe.svg", source: "<svg/>" });
         },
       },
-      maverickFrontendAssets(),
+      loopinoFrontendAssets(),
     ],
     build: {
       outDir,
@@ -117,7 +117,7 @@ test("static Rollup output names that resemble hashes remain revalidated", async
     },
   });
 
-  const manifest = JSON.parse(readFileSync(resolve(outDir, "maverick-frontend-assets.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(resolve(outDir, "loopino-frontend-assets.json"), "utf8"));
   assert.ok(manifest.revalidated.some(({ path }) => path === "assets/app-deadbeef.js"));
   assert.ok(manifest.revalidated.some(({ path }) => path === "assets/copied-cafebabe.svg"));
   assert.ok(!manifest.immutable.some(({ path }) => path === "assets/app-deadbeef.js"));
@@ -125,7 +125,7 @@ test("static Rollup output names that resemble hashes remain revalidated", async
 });
 
 test("frontend build rejects a missing local asset referenced by HTML", async (context) => {
-  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "maverick-missing-html-asset-"));
+  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "loopino-missing-html-asset-"));
   context.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
   const sourceRoot = resolve(temporaryRoot, "src");
   const outDir = resolve(temporaryRoot, "dist");
@@ -140,9 +140,9 @@ test("frontend build rejects a missing local asset referenced by HTML", async (c
       configFile: false,
       logLevel: "silent",
       root: sourceRoot,
-      plugins: [maverickFrontendAssets()],
+      plugins: [loopinoFrontendAssets()],
       build: { outDir, emptyOutDir: true },
     }),
-    /Maverick HTML asset reference is missing from build output: index\.html -> \/missing\.png \(missing\.png\)/,
+    /Loopino HTML asset reference is missing from build output: index\.html -> \/missing\.png \(missing\.png\)/,
   );
 });

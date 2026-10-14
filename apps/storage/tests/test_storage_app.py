@@ -62,7 +62,7 @@ class StorageAppTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -124,8 +124,8 @@ class StorageAppTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -175,7 +175,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "storage")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
-        self.assertIn("maverick_storage", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("loopino_storage", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_list_files", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_read_file", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_read_text", parsed.contract.capabilities.mcp_tools)
@@ -242,7 +242,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("#[0-9A-Fa-f]{6}", cli_background["pattern"])
 
         mcp_descriptor = json.loads((STORAGE_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
-        generic_background = mcp_descriptor["tools"]["maverick_storage"]["input_schema"]["properties"]["background_color"]
+        generic_background = mcp_descriptor["tools"]["loopino_storage"]["input_schema"]["properties"]["background_color"]
         compose_background = mcp_descriptor["tools"]["storage_image_compose_pair"]["input_schema"]["properties"]["background_color"]
         self.assertEqual(generic_background["pattern"], cli_background["pattern"])
         self.assertEqual(compose_background["pattern"], cli_background["pattern"])
@@ -745,7 +745,7 @@ class StorageAppTestCase(unittest.TestCase):
             generated_root.mkdir(parents=True)
             (data_root / "files.json").write_text(json.dumps({"schema_version": "1", "files": [], "updated_at": ""}), encoding="utf-8")
             (generated_root / "report.md").write_text("# Report", encoding="utf-8")
-            (generated_root / ".maverick-storage-write-report.md.partial.tmp").write_text("partial", encoding="utf-8")
+            (generated_root / ".loopino-storage-write-report.md.partial.tmp").write_text("partial", encoding="utf-8")
             (generated_root / ".cache.tmp").write_text("user temp", encoding="utf-8")
 
             catalog = self.run_backend(
@@ -766,7 +766,7 @@ class StorageAppTestCase(unittest.TestCase):
             workspace_paths = {item["workspace_relative_path"] for item in catalog["json"]["files"]}
             self.assertIn("storage/generated/report.md", workspace_paths)
             self.assertIn("storage/generated/.cache.tmp", workspace_paths)
-            self.assertNotIn("storage/generated/.maverick-storage-write-report.md.partial.tmp", workspace_paths)
+            self.assertNotIn("storage/generated/.loopino-storage-write-report.md.partial.tmp", workspace_paths)
 
     def test_backend_health_check_does_not_refresh_file_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1094,7 +1094,7 @@ class StorageAppTestCase(unittest.TestCase):
                     "expected_sha256": original_sha256,
                     "replacements": [
                         {"old_text": "Status: draft", "new_text": "Status: final"},
-                        {"old_text": "Owner: Marco", "new_text": "Owner: Maverick"},
+                        {"old_text": "Owner: Marco", "new_text": "Owner: Loopino"},
                     ],
                 },
             )
@@ -1104,7 +1104,7 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(updated["json"]["replacements_applied"], 2)
             self.assertEqual(updated["json"]["matched_occurrences"], 2)
             self.assertNotEqual(updated["json"]["sha256"], original_sha256)
-            self.assertEqual(target.read_text(encoding="utf-8"), "# Report\n\nStatus: final\n\nOwner: Maverick\n")
+            self.assertEqual(target.read_text(encoding="utf-8"), "# Report\n\nStatus: final\n\nOwner: Loopino\n")
 
             stale = self.run_backend(
                 data_root=root / "data" / "storage",
@@ -1121,7 +1121,7 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(stale["status_code"], 409, stale)
             self.assertEqual(stale["json"]["error"], "conflict")
             self.assertEqual(stale["json"]["conflict"], "expected_sha256_mismatch")
-            self.assertEqual(target.read_text(encoding="utf-8"), "# Report\n\nStatus: final\n\nOwner: Maverick\n")
+            self.assertEqual(target.read_text(encoding="utf-8"), "# Report\n\nStatus: final\n\nOwner: Loopino\n")
 
     def test_backend_rejects_ambiguous_markdown_replacement_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1304,7 +1304,7 @@ class StorageAppTestCase(unittest.TestCase):
             generated_root = root / "storage" / "generated"
             generated_root.mkdir(parents=True)
 
-            with patch.dict(os.environ, {"MAVERICK_STORAGE_MAX_BYTES": "4"}):
+            with patch.dict(os.environ, {"LOOPINO_STORAGE_MAX_BYTES": "4"}):
                 rejected = self.run_backend(
                     data_root=root / "data" / "storage",
                     uploaded_root=root / "storage" / "uploaded",
@@ -1820,7 +1820,7 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(first_chunk["app_events"], [])
             self.assertEqual(completed["status_code"], 200)
             self.assertEqual(completed["json"]["status"], "uploaded")
-            self.assertEqual(completed["app_events"], [{"type": "maverick.app.data-changed", "resource": "files",
+            self.assertEqual(completed["app_events"], [{"type": "loopino.app.data-changed", "resource": "files",
                 "scope_keys": ["e228942194760b52874ad8f644716abd22e4818411398f9e99956f9a685e1604",
                     "b9fa0aa5020dd433a6cb95e054bc9aa6b3b778f2b25fd7f3a816ca7321d48557"]}])
             self.assertEqual(completed["json"]["file"]["workspace_relative_path"], "storage/generated/large.txt")
@@ -1870,7 +1870,7 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(result["bytes_uploaded"], len(payload))
             self.assertEqual(result["file"]["workspace_relative_path"], "storage/generated/pdf-edits/output.pdf")
             self.assertEqual((generated_root / "pdf-edits" / "output.pdf").read_bytes(), payload)
-            self.assertEqual(result["app_events"], [{"type": "maverick.app.data-changed", "resource": "files",
+            self.assertEqual(result["app_events"], [{"type": "loopino.app.data-changed", "resource": "files",
                 "scope_keys": ["e228942194760b52874ad8f644716abd22e4818411398f9e99956f9a685e1604",
                     "b9fa0aa5020dd433a6cb95e054bc9aa6b3b778f2b25fd7f3a816ca7321d48557",
                     "078abd12ee9570383b3a7fa94437975840f75b8e1a9855ef3e08c335f2f8ed55"]}])
@@ -1947,7 +1947,7 @@ class StorageAppTestCase(unittest.TestCase):
             generated_root.mkdir(parents=True)
             uploaded_root.mkdir(parents=True)
             data_root = root / "data" / "storage"
-            with patch.dict(os.environ, {"MAVERICK_STORAGE_MAX_BYTES": "10"}, clear=False):
+            with patch.dict(os.environ, {"LOOPINO_STORAGE_MAX_BYTES": "10"}, clear=False):
                 first = self.run_backend(
                     data_root=data_root,
                     uploaded_root=uploaded_root,
@@ -2647,7 +2647,7 @@ class StorageAppTestCase(unittest.TestCase):
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
 
-        self.assertIn("app.storage.maverick_storage", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.loopino_storage", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_list_files", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_read_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_read_text", [tool.tool_name for tool in tools])
@@ -2680,7 +2680,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertFalse(markdown_tool.input_schema["additionalProperties"])
         read_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_read_file")
         self.assertNotIn("include_local_path", read_tool.input_schema["properties"])
-        generic_tool = next(tool for tool in tools if tool.tool_name == "app.storage.maverick_storage")
+        generic_tool = next(tool for tool in tools if tool.tool_name == "app.storage.loopino_storage")
         self.assertNotIn("include_local_path", generic_tool.input_schema["properties"])
         self.assertIn("oneOf", write_tool.input_schema)
         localize_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_file_localize")
@@ -2723,7 +2723,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("storage/generated/report.txt", {item["workspace_relative_path"] for item in backend_payload["files"]})
         self.assertEqual(frontend_status, 200)
         self.assertIn("text/html", frontend_headers["Content-Type"])
-        self.assertIn(b"Maverick Storage", frontend_payload)
+        self.assertIn(b"Loopino Storage", frontend_payload)
         self.assertEqual(media_status, 206)
         self.assertEqual(media_payload, b"2345")
         self.assertEqual(media_headers["Accept-Ranges"], "bytes")
@@ -2738,7 +2738,7 @@ class StorageAppTestCase(unittest.TestCase):
         generated.write_text("hello", encoding="utf-8")
 
         mcp_payload = call_mcp_tool(
-            tool_name="app.storage.maverick_storage",
+            tool_name="app.storage.loopino_storage",
             context=McpInvocationContext(
                 caller_kind="sandbox_agent",
                 workspace_id="default",
@@ -2787,7 +2787,7 @@ class StorageAppTestCase(unittest.TestCase):
         uploaded.write_text("source", encoding="utf-8")
 
         mcp_payload = call_mcp_tool(
-            tool_name="app.storage.maverick_storage",
+            tool_name="app.storage.loopino_storage",
             context=McpInvocationContext(
                 caller_kind="sandbox_agent",
                 workspace_id="default",

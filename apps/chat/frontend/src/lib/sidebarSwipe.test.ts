@@ -23,6 +23,6 @@ describe("mobile sidebar swipe", () => {
     const closeSwipeSource = readFileSync(resolve(currentDir, "../hooks/useShellSidebarCloseSwipe.ts"), "utf8");
 
     expect(appSource).not.toContain("useShellSidebarSwipe");
-    expect(closeSwipeSource).not.toContain("maverick.shell.sidebar.open");
+    expect(closeSwipeSource).not.toContain("loopino.shell.sidebar.open");
   });
 });

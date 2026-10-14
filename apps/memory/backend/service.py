@@ -147,13 +147,13 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         return []
     if action == "apply_storage_staleness":
         return [
-            {"type": "maverick.app.data-changed", "resource": "graph"},
-            {"type": "maverick.app.data-changed", "resource": "wiki"},
+            {"type": "loopino.app.data-changed", "resource": "graph"},
+            {"type": "loopino.app.data-changed", "resource": "wiki"},
         ]
     if action in GRAPH_AND_WIKI_ACTIONS:
         return [
-            {"type": "maverick.app.data-changed", "resource": "graph"},
-            {"type": "maverick.app.data-changed", "resource": "wiki"},
+            {"type": "loopino.app.data-changed", "resource": "graph"},
+            {"type": "loopino.app.data-changed", "resource": "wiki"},
         ]
     if action in VIEW_STATE_ACTIONS:
         resource = "view-state"
@@ -161,7 +161,7 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         resource = "wiki"
     else:
         resource = "graph"
-    return [{"type": "maverick.app.data-changed", "resource": resource}]
+    return [{"type": "loopino.app.data-changed", "resource": resource}]
 
 
 def action_from_tool(tool_name: str, fallback: str) -> str:

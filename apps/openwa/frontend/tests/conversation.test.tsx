@@ -7,9 +7,9 @@ import { sendAttemptKey } from "../src/sendAttempts";
 import { BackendError, callBackend, operation } from "../src/api";
 
 vi.mock("../src/api", async (original) => ({ ...await original(), operation: vi.fn() }));
-vi.mock("@maverick/pwa-cache", () => ({
-  maverickAppIsVisible: () => true,
-  observeMaverickVisibility: (listener: (visible: boolean) => void) => { listener(true); return () => {}; },
+vi.mock("@loopino/pwa-cache", () => ({
+  loopinoAppIsVisible: () => true,
+  observeLoopinoVisibility: (listener: (visible: boolean) => void) => { listener(true); return () => {}; },
 }));
 
 const props = { session: { id: "session-1", name: "Phone", status: "ready" },

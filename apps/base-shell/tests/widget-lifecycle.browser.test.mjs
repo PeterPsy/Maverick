@@ -46,7 +46,7 @@ test("warm sidebar, overlay and dock documents survive desktop app and placement
   let page;
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" });
-    await context.addInitScript(() => localStorage.setItem("maverick:base-shell:session", JSON.stringify({ sidebarMode: "fixed" })));
+    await context.addInitScript(() => localStorage.setItem("loopino:base-shell:session", JSON.stringify({ sidebarMode: "fixed" })));
     page = await context.newPage();
     page.setDefaultTimeout(10_000);
     await page.goto(`${origin}/app/chat`);
@@ -137,7 +137,7 @@ test("mobile footer and contextual Chat preserve documents through closing and a
       "keyboard users must retain the launcher's visible focus indicator");
     await page.getByRole("button", { name: "Apri chat contestuale", exact: true }).click();
     await assertPreserved(chat, chatInstance, "mobile draft");
-    await page.screenshot({ path: "/tmp/maverick-contextual-shell-mobile.png" });
+    await page.screenshot({ path: "/tmp/loopino-contextual-shell-mobile.png" });
     assert.equal(fixture.documents.filter((path) => path.includes("/chat-floating/")).length, 1);
     assert.equal(fixture.documents.filter((path) => path.includes("/chat-sidebar-footer/")).length, 1);
     await openApp(page, "calendar", true);

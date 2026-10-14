@@ -6,7 +6,7 @@ Accepted with launch limitation
 
 ## Context
 
-Maverick needs local bootstrap secrets for development, but the current local JSON secret path is not sufficient for production.
+Loopino needs local bootstrap secrets for development, but the current local JSON secret path is not sufficient for production.
 
 ## Decision
 

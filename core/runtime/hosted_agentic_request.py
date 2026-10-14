@@ -36,7 +36,7 @@ from core.runtime.hosted_agentic_models import (
 from core.runtime.authority import narrow_hosted_authority_to_policy
 from core.runtime.hosted_agentic_policy import validate_hosted_request_policy
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+    LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
     require_agentic_feature,
 )
 from core.runtime.authority import validate_runtime_context_capabilities
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from core.workspaces.data_governance import WorkspaceDataAttestation
 
 
-HOSTED_TOOL_USE_INSTRUCTION = "Maverick runtime tools are available for this turn."
+HOSTED_TOOL_USE_INSTRUCTION = "Loopino runtime tools are available for this turn."
 
 
 @dataclass(frozen=True)
@@ -244,7 +244,7 @@ class HostedAgenticRequestBuilder:
         request_id = str(
             uuid5(
                 NAMESPACE_URL,
-                f"maverick:hosted-request:{context.session.session_id}:{context.correlation_id}:{step}",
+                f"loopino:hosted-request:{context.session.session_id}:{context.correlation_id}:{step}",
             )
         )
         envelope = self.semantic_compiler.compile(
@@ -800,7 +800,7 @@ class HostedAgenticRequestBuilder:
         semantic_block: SemanticEnvelopeBlock | None = None,
     ) -> tuple[bytes, AgenticSourceMetadata]:
         require_agentic_feature(
-            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+            LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
             "agentic_egress_enforcement_disabled",
         )
         classification = classification or self.classifier(context, provenance, content)

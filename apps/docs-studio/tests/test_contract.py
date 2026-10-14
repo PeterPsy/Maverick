@@ -45,8 +45,8 @@ class GeneratedAppContractTest(unittest.TestCase):
         for obsolete_text in obsolete_texts:
             self.assertNotIn(obsolete_text, frontend_source)
 
-        self.assertIn("maverick.widget.open-app", frontend_source)
-        self.assertIn("maverick.app.selection-changed", frontend_source)
+        self.assertIn("loopino.widget.open-app", frontend_source)
+        self.assertIn("loopino.app.selection-changed", frontend_source)
 
 
 if __name__ == "__main__":

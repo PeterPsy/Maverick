@@ -1,6 +1,6 @@
 .settings-shell {
   min-height: 100dvh;
-  background: var(--maverick-bg);
+  background: var(--loopino-bg);
 }
 
 .settings-main {
@@ -51,13 +51,13 @@
 
 .detail-header p {
   max-width: 760px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   line-height: 1.45;
 }
 
 .settings-kicker {
   margin: 0 0 0.46rem;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.7rem;
   font-weight: 400;
   letter-spacing: 0;
@@ -66,7 +66,7 @@
 
 .settings-copy,
 .settings-card-copy {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.84rem;
   line-height: 1.48;
 }
@@ -95,20 +95,20 @@
   justify-content: center;
   width: 2.2rem;
   height: 2.2rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 0.86rem;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
     rgba(255, 255, 255, 0.055);
-  box-shadow: var(--maverick-inner-edge);
-  color: var(--maverick-text-muted);
+  box-shadow: var(--loopino-inner-edge);
+  color: var(--loopino-text-muted);
 }
 
 .settings-adapter-card.is-active .settings-adapter-card-icon,
 .settings-migration-result > .material-symbols-rounded {
   border-color: rgba(255, 255, 255, 0.26);
   background: rgba(255, 255, 255, 0.1);
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 .settings-membership span:not(.settings-membership-icon),
@@ -126,7 +126,7 @@
 .settings-membership strong,
 .settings-app-workspace-heading strong {
   overflow: hidden;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -137,7 +137,7 @@
 .settings-migration-result small,
 .settings-migration-progress-heading small,
 .settings-adapter-card small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.75rem;
   line-height: 1.35;
 }
@@ -152,10 +152,10 @@
 .settings-migration-progress {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   isolation: isolate;
@@ -172,7 +172,7 @@
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  background: var(--maverick-glass-highlight);
+  background: var(--loopino-glass-highlight);
   opacity: 0.72;
   pointer-events: none;
   content: "";
@@ -205,8 +205,8 @@
   align-items: center;
   gap: 0.64rem;
   min-height: 2.6rem;
-  border-color: var(--maverick-border-strong);
-  color: var(--maverick-text);
+  border-color: var(--loopino-border-strong);
+  color: var(--loopino-text);
   padding: 0.6rem 0.7rem;
   font-size: 0.82rem;
   font-weight: 400;
@@ -220,12 +220,12 @@
 
 .settings-notice-success {
   border-color: rgba(255, 255, 255, 0.24);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .settings-notice-error {
   border-color: rgba(255, 255, 255, 0.24);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .settings-icon-button {
@@ -236,13 +236,13 @@
 }
 
 button.settings-icon-button {
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.075);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 button.settings-icon-button:hover:not(:disabled) {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .settings-collapsible {
@@ -288,17 +288,17 @@ select {
   width: 100%;
   min-width: 0;
   min-height: 2.45rem;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.07);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
   padding: 0 0.78rem;
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
 input::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 select {
@@ -307,14 +307,14 @@ select {
 
 option,
 optgroup {
-  background: var(--maverick-bg-strong);
-  color: var(--maverick-text);
+  background: var(--loopino-bg-strong);
+  color: var(--loopino-text);
 }
 
 input:focus,
 select:focus {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
   background: rgba(255, 255, 255, 0.09);
 }
 
@@ -325,8 +325,8 @@ button {
   gap: 0.42rem;
   min-height: 2.12rem;
   border-radius: 999px;
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
+  background: var(--loopino-accent);
+  color: var(--loopino-text-on-accent);
   padding: 0 0.84rem;
   font-size: 0.76rem;
   font-weight: 400;
@@ -363,7 +363,7 @@ button:hover:not(:disabled) {
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
   padding: 0 0.68rem;
   font-size: 0.7rem;
   font-weight: 400;
@@ -372,9 +372,9 @@ button:hover:not(:disabled) {
 }
 
 .settings-pill-muted {
-  border-color: var(--maverick-border);
+  border-color: var(--loopino-border);
   background: rgba(255, 255, 255, 0.06);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .settings-grid {
@@ -385,7 +385,7 @@ button:hover:not(:disabled) {
 .settings-password-grid label {
   display: grid;
   gap: 0.44rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
   font-weight: 400;
 }

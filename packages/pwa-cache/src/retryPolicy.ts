@@ -75,7 +75,7 @@ export function classifyRetryError(error: unknown): RetryClassification {
       : { disposition: "terminal" };
   }
   const name = typeof record.name === "string" ? record.name : "";
-  return name === "MaverickTransportError" || name === "TimeoutError"
+  return name === "LoopinoTransportError" || name === "TimeoutError"
     ? { disposition: "retryable" }
     : { disposition: "terminal" };
 }

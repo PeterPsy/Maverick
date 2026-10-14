@@ -14,14 +14,14 @@ from core.egress.networks import METADATA_HOSTS, RESTRICTED_HOSTS, RESTRICTED_NE
 
 class BrowserEgressPolicyTests(unittest.TestCase):
     def test_named_dev_platform_and_exact_app_frames_require_admin_enablement(self):
-        frame = "af-" + "a" * 24 + ".sidecars.maverick.localhost"
-        for host in ("maverick.localhost", frame):
+        frame = "af-" + "a" * 24 + ".sidecars.loopino.localhost"
+        for host in ("loopino.localhost", frame):
             url = f"http://{host}:8000/apps/calendar/"
             self.assertFalse(evaluate_browser_egress_url(url).allowed)
             allowed = evaluate_browser_egress_url(url, allow_admin_dev_targets=True)
             self.assertTrue(allowed.allowed)
             self.assertEqual(allowed.reason, "allowed_admin_dev_target")
-        for host in ("other.localhost", frame + ".evil", frame.replace("af-", "sc-"), "anything.sidecars.maverick.localhost"):
+        for host in ("other.localhost", frame + ".evil", frame.replace("af-", "sc-"), "anything.sidecars.loopino.localhost"):
             self.assertFalse(evaluate_browser_egress_url(f"http://{host}:8000/", allow_admin_dev_targets=True).allowed)
         self.assertFalse(evaluate_browser_egress_url(f"http://{frame}:9000/", allow_admin_dev_targets=True).allowed)
 

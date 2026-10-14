@@ -2,7 +2,7 @@
 
 Backend commit: `89826df0` (`design`, pushed).
 Native commit: `f3d953b4bbacd0cc075eadd4bddc0b116b313b6d`
-(`giuntiocram/maverick-glasses-ios`, `maverick-integration`, pushed).
+(`giuntiocram/loopino-glasses-ios`, `loopino-integration`, pushed).
 
 The paired v49 change fixes cancellation before filesystem commit, process UTF-8
 pagination, complete directory pagination and stale reconnection test contracts.
@@ -23,9 +23,9 @@ without failures. No second dispatch was needed.
 
 Backend restart completed at 09:22:31 UTC. The ordinary restart CLI could not
 reach systemd from its mount namespace; the user-authorized host-namespace
-systemctl operation restarted `maverick-core.service`. Subsequent inspection
+systemctl operation restarted `loopino-core.service`. Subsequent inspection
 confirmed PID 1016581 (previously 945651), active/running state and `/health`
-returning `{"status":"ok","service":"maverick-core"}`.
+returning `{"status":"ok","service":"loopino-core"}`.
 
 After installation/restart, this chat's direct native calls returned
 `Device Use executor is unavailable`. No native input was replayed. Installation

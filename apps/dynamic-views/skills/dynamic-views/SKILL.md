@@ -5,9 +5,9 @@ description: "Use when the user wants a custom persisted visual or interactive v
 
 # Dynamic Views
 
-Use Dynamic Views for custom visualizations, dashboards, cards, inspectors, and interactive embeds that should persist in the active Maverick workspace, render in chat, and reopen from the Dynamic Views library.
+Use Dynamic Views for custom visualizations, dashboards, cards, inspectors, and interactive embeds that should persist in the active Loopino workspace, render in chat, and reopen from the Dynamic Views library.
 
-Prefer the `app.dynamic-views.dynamic-views` CLI command for agent work. Use the `app.dynamic-views.maverick_dynamic_views` MCP tool only when the caller specifically needs MCP transport or the CLI surface is unavailable. The same app behavior is also available through `/api/apps/dynamic-views/backend` for app/frontend flows.
+Prefer the `app.dynamic-views.dynamic-views` CLI command for agent work. Use the `app.dynamic-views.loopino_dynamic_views` MCP tool only when the caller specifically needs MCP transport or the CLI surface is unavailable. The same app behavior is also available through `/api/apps/dynamic-views/backend` for app/frontend flows.
 
 Do not paste raw HTML, CSS, or JavaScript into chat after the CLI or tool succeeds. Successful `create`, `read`, and `recall` actions return `chat_render.kind: "dynamic.view.instance"` and a `chat_render.payload` that Chat can render through the registry-mounted Dynamic Views widget.
 
@@ -28,7 +28,7 @@ Dynamic Views currently supports only `sandbox_html_v1`.
 The renderer receives this browser global inside the sandboxed iframe:
 
 ```js
-window.MaverickDynamicView = {
+window.LoopinoDynamicView = {
   data: {},
   dataBindings: [],
   metadata: {
@@ -41,7 +41,7 @@ window.MaverickDynamicView = {
 };
 ```
 
-Use `window.MaverickDynamicView.data` for input data. Use `window.MaverickDynamicView.dataBindings` only for source provenance or source snapshots.
+Use `window.LoopinoDynamicView.data` for input data. Use `window.LoopinoDynamicView.dataBindings` only for source provenance or source snapshots.
 
 ## Create Payload
 
@@ -55,7 +55,7 @@ Use `window.MaverickDynamicView.data` for input data. Use `window.MaverickDynami
       "renderer": "sandbox_html_v1",
       "html": "<main><h1>Revenue Probe</h1><div id=\"root\"></div></main>",
       "css": "body { font-family: system-ui; }",
-      "javascript": "document.getElementById('root').textContent = JSON.stringify(window.MaverickDynamicView.data, null, 2);",
+      "javascript": "document.getElementById('root').textContent = JSON.stringify(window.LoopinoDynamicView.data, null, 2);",
       "tags": ["finance"],
       "dataSchema": {}
     },

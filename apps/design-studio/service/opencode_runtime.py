@@ -260,7 +260,7 @@ def _open_pinned_url(url: str) -> BinaryIO:
     if parsed.scheme != "https" or parsed.hostname != "registry.npmjs.org":
         raise OpenCodeRuntimeError("OpenCode package origin is invalid")
     opener = build_opener(_PinnedRedirectHandler())
-    return opener.open(Request(url, headers={"User-Agent": "Maverick-Model-Bridge/1"}), timeout=60)
+    return opener.open(Request(url, headers={"User-Agent": "Loopino-Model-Bridge/1"}), timeout=60)
 
 
 __all__ = [

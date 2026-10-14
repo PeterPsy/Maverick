@@ -129,13 +129,13 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                 patch.dict(
                     os.environ,
                     {
-                        "MAVERICK_WP1_HOST_SENTINEL": "must-not-cross",
+                        "LOOPINO_WP1_HOST_SENTINEL": "must-not-cross",
                         "HOME": str(operator_home),
                         "OPENAI_API_KEY": "provider-secret",
                         "CODEX_HOME": "/operator-runtime-home",
-                        "MAVERICK_BOOTSTRAP_SECRET": "bootstrap-secret",
-                        "MAVERICK_RUNTIME_API_TOKEN": "runtime-secret",
-                        "MAVERICK_SESSION_COOKIE": "platform-cookie",
+                        "LOOPINO_BOOTSTRAP_SECRET": "bootstrap-secret",
+                        "LOOPINO_RUNTIME_API_TOKEN": "runtime-secret",
+                        "LOOPINO_SESSION_COOKIE": "platform-cookie",
                     },
                 ),
                 patch(
@@ -391,7 +391,7 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                 )
 
     def _repo_root(self, temp_root: Path) -> Path:
-        repo_root = temp_root / "maverick"
+        repo_root = temp_root / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -471,12 +471,12 @@ def _probe_server_source(*, operator_secret: Path, other_workspace_secret: Path,
                 probe.close()
 
         results = {{
-            "sentinel_absent": "MAVERICK_WP1_HOST_SENTINEL" not in os.environ,
+            "sentinel_absent": "LOOPINO_WP1_HOST_SENTINEL" not in os.environ,
             "home_absent": "HOME" not in os.environ,
             "provider_secret_absent": "OPENAI_API_KEY" not in os.environ,
-            "runtime_secret_absent": "MAVERICK_RUNTIME_API_TOKEN" not in os.environ,
-            "bootstrap_secret_absent": "MAVERICK_BOOTSTRAP_SECRET" not in os.environ,
-            "cookie_absent": "MAVERICK_SESSION_COOKIE" not in os.environ,
+            "runtime_secret_absent": "LOOPINO_RUNTIME_API_TOKEN" not in os.environ,
+            "bootstrap_secret_absent": "LOOPINO_BOOTSTRAP_SECRET" not in os.environ,
+            "cookie_absent": "LOOPINO_SESSION_COOKIE" not in os.environ,
             "provider_home_absent": "CODEX_HOME" not in os.environ,
             "relay_capability_absent_from_env": not any("RELAY" in key for key in os.environ),
             "sandbox_home_is_ephemeral": Path.home() == Path("/tmp/home"),
@@ -486,8 +486,8 @@ def _probe_server_source(*, operator_secret: Path, other_workspace_secret: Path,
             "operator_home_absent": not Path({str(operator_secret)!r}).exists(),
             "other_workspace_absent": not Path({str(other_workspace_secret)!r}).exists(),
             "control_metadata_absent": not Path("/data/official-update.json").exists(),
-            "diagnostic_capability_present": os.environ.get("MAVERICK_SIDECAR_STATUS_FILE") == "/run/maverick/sidecar-status.json",
-            "diagnostic_parent_is_hidden": not Path("/run/maverick/official-update.json").exists(),
+            "diagnostic_capability_present": os.environ.get("LOOPINO_SIDECAR_STATUS_FILE") == "/run/loopino/sidecar-status.json",
+            "diagnostic_parent_is_hidden": not Path("/run/loopino/official-update.json").exists(),
             "technical_token_present": bool(os.environ.get("PROBE_TOKEN")),
             "memory_limit": resource.getrlimit(resource.RLIMIT_AS)[0],
             "open_files_limit": resource.getrlimit(resource.RLIMIT_NOFILE)[0],
@@ -504,7 +504,7 @@ def _probe_server_source(*, operator_secret: Path, other_workspace_secret: Path,
             results["outside_write_denied"] = True
         Path("/data/allowed.txt").write_text("allowed", encoding="utf-8")
         results["data_write_allowed"] = True
-        status_file = os.environ.get("MAVERICK_SIDECAR_STATUS_FILE", "")
+        status_file = os.environ.get("LOOPINO_SIDECAR_STATUS_FILE", "")
         if status_file:
             Path(status_file).write_text(
                 json.dumps({{"state": "ready", "source": "confined-sidecar"}}),

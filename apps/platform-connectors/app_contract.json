@@ -4,7 +4,7 @@
   "name": "Connectors",
   "version": "1.0.0",
   "description": "Read Instagram, social platforms, YouTube, GitHub and public web sources through governed connectors.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [],
   "requires": [

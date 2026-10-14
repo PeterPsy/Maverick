@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWidgetContext, listWidgets, type WidgetRegistryItem } from "../src/api";
 import { WidgetSlot } from "../src/components/WidgetSlot";
-import { setMaverickFrameOrigin } from "../src/iframePolicy";
+import { setLoopinoFrameOrigin } from "../src/iframePolicy";
 
 vi.mock("../src/api", () => ({
   createWidgetContext: vi.fn(),
@@ -89,7 +89,7 @@ describe("WidgetSlot overlay widget messages", () => {
     const slot = container.querySelector<HTMLElement>(".bs-widget-slot--overlay")!;
     await act(async () => window.dispatchEvent(new MessageEvent("message", {
       origin: window.location.origin, source: frameWindow,
-      data: { type: "maverick.widget.dock.open", owner_app_id: ownerAppId, widget_id: widgetId, placement: "right" },
+      data: { type: "loopino.widget.dock.open", owner_app_id: ownerAppId, widget_id: widgetId, placement: "right" },
     })));
     expect(slot.style.width).toBe("420px");
     expect(slot.style.height).toBe("320px");
@@ -108,7 +108,7 @@ describe("WidgetSlot overlay widget messages", () => {
           data: {
             navigation_scope: "thread:alpha",
             owner_app_id: ownerAppId,
-            type: "maverick.shell.capture-area.start",
+            type: "loopino.shell.capture-area.start",
             widget_id: widgetId,
           },
           origin: window.location.origin,
@@ -119,7 +119,7 @@ describe("WidgetSlot overlay widget messages", () => {
     });
 
     expect(framePostMessage).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "maverick.widget.capture-area.error" }),
+      expect.objectContaining({ type: "loopino.widget.capture-area.error" }),
       window.location.origin,
     );
   });
@@ -144,8 +144,8 @@ describe("WidgetSlot overlay widget messages", () => {
     widgetPostMessage.mockClear();
     const foreignFrame = document.createElement("iframe");
     document.body.append(foreignFrame);
-    const foreignOrigin = "https://af-storage-widget.sidecars.maverick.test";
-    setMaverickFrameOrigin(foreignFrame, foreignOrigin, "storage", FRAME_SCOPE);
+    const foreignOrigin = "https://af-storage-widget.sidecars.loopino.test";
+    setLoopinoFrameOrigin(foreignFrame, foreignOrigin, "storage", FRAME_SCOPE);
 
     await dispatchDataChanged(foreignFrame.contentWindow!, foreignOrigin);
     expect(widgetDataChangedMessages(widgetPostMessage)).toEqual([]);
@@ -155,11 +155,11 @@ describe("WidgetSlot overlay widget messages", () => {
       expect.objectContaining({
         owner_app_id: ownerAppId,
         resource: "threads",
-        type: "maverick.widget.data-changed",
+        type: "loopino.widget.data-changed",
       }),
     ]);
 
-    setMaverickFrameOrigin(foreignFrame, null, "storage", FRAME_SCOPE);
+    setLoopinoFrameOrigin(foreignFrame, null, "storage", FRAME_SCOPE);
     foreignFrame.remove();
   });
 });
@@ -219,10 +219,10 @@ async function waitForIframe(parent: HTMLElement): Promise<HTMLIFrameElement> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const iframe = parent.querySelector("iframe");
     if (iframe instanceof HTMLIFrameElement) {
-      if (!iframe.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test", ownerAppId, FRAME_SCOPE);
+      if (!iframe.dataset.loopinoFrameOrigin) {
+        setLoopinoFrameOrigin(iframe, "https://af-widget.sidecars.loopino.test", ownerAppId, FRAME_SCOPE);
       }
-      iframe.dataset.maverickFrameBootstrapArmed = "true";
+      iframe.dataset.loopinoFrameBootstrapArmed = "true";
       return iframe;
     }
     await act(async () => {
@@ -254,7 +254,7 @@ async function dispatchResize(source: MessageEventSource, width: string, height:
         data: {
           height,
           owner_app_id: ownerAppId,
-          type: "maverick.widget.resize",
+          type: "loopino.widget.resize",
           widget_id: widgetId,
           width,
         },
@@ -274,7 +274,7 @@ async function dispatchActiveThreadChanged(source: MessageEventSource, activeThr
           active_thread_id: activeThreadId,
           navigation_scope: navigationScope,
           owner_app_id: ownerAppId,
-          type: "maverick.chat.active-thread-changed",
+          type: "loopino.chat.active-thread-changed",
         },
         origin: messageOrigin(source),
         source,
@@ -290,7 +290,7 @@ async function dispatchDataChanged(source: MessageEventSource, origin: string) {
       data: {
         owner_app_id: ownerAppId,
         resource: "threads",
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
       },
       origin,
       source,
@@ -306,7 +306,7 @@ function widgetDataChangedMessages(postMessageSpy: { mock: { calls: unknown[][] 
       Boolean(message)
       && typeof message === "object"
       && !Array.isArray(message)
-      && (message as { type?: unknown }).type === "maverick.widget.data-changed"
+      && (message as { type?: unknown }).type === "loopino.widget.data-changed"
     ));
 }
 
@@ -314,14 +314,14 @@ function messageOrigin(source: MessageEventSource): string {
   if (source === window) return window.location.origin;
   const frame = [...document.querySelectorAll("iframe")]
     .find((candidate) => candidate.contentWindow === source);
-  return frame?.dataset.maverickFrameOrigin || "https://foreign-frame.invalid";
+  return frame?.dataset.loopinoFrameOrigin || "https://foreign-frame.invalid";
 }
 
 function isolatedLaunchResponse(): Response {
   return new Response(JSON.stringify({
-    bootstrap_url: "https://af-widget.sidecars.maverick.test/.well-known/maverick-app-frame-bootstrap",
+    bootstrap_url: "https://af-widget.sidecars.loopino.test/.well-known/loopino-app-frame-bootstrap",
     method: "POST",
-    origin: "https://af-widget.sidecars.maverick.test",
+    origin: "https://af-widget.sidecars.loopino.test",
     ticket: "test-ticket",
     ticket_field: "ticket",
   }), { headers: { "Content-Type": "application/json" }, status: 200 });

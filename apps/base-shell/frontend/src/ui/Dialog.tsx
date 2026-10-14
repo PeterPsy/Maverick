@@ -52,7 +52,7 @@ export function Dialog({ children, description, dismissible = true, hideHeader =
         {!hideHeader ? (
           <div className="bs-ui-dialog__header">
             <div>
-              <p className="bs-ui-dialog__eyebrow">Maverick</p>
+              <p className="bs-ui-dialog__eyebrow">Loopino</p>
               <h3 className="bs-ui-dialog__title">{title}</h3>
               {description ? <p className="bs-ui-dialog__description">{description}</p> : null}
             </div>

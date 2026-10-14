@@ -1,4 +1,4 @@
-"""Shared helpers for the Maverick SDK CLI wrapper."""
+"""Shared helpers for the Loopino SDK CLI wrapper."""
 
 from __future__ import annotations
 

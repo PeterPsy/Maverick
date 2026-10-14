@@ -10,11 +10,11 @@ Memory keeps the human product surface graph-first. Under the hood it compiles w
 ## Contract Notes
 
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
-- Memory ships app-owned CLI and MCP descriptor sidecars at `cli/command_schemas.json` and `mcp/tool_schemas.json`. These populate `maverick app memory cli inspect memory --json` and `maverick app memory mcp inspect <tool> --json` with operation-specific descriptions and JSON schemas for current agent-facing operations.
+- Memory ships app-owned CLI and MCP descriptor sidecars at `cli/command_schemas.json` and `mcp/tool_schemas.json`. These populate `loopino app memory cli inspect memory --json` and `loopino app memory mcp inspect <tool> --json` with operation-specific descriptions and JSON schemas for current agent-facing operations.
 - The frontend is a React/Vite graph workspace with a dark token-aligned canvas, live refresh, canvas graph navigation, readable node inspection, compiled wiki evidence, references, relationship browsing, and a create-node modal.
 - The base-shell sidebar widgets provide Memory search, node navigation, a footer context-preview action that opens the app modal, and an icon-only create action that opens the app create modal.
 - The contract declares the bundled `memory-ops` skill, persisted view-state actions, `memory_compile`, `memory_lint`, `memory_wiki_query`, `memory_ingest_source`, `memory_source_query`, `memory_fetch_chunks`, `memory_inspect_source`, `memory_jobs`, `memory_ingest_storage_source`, `memory_apply_storage_staleness`, and the `node` reference entity.
-- The contract declares required Storage interfaces for local file identity and bounded file content reads, plus an optional Google Drive provider dependency for Drive indexing workflows. Memory calls Storage through official platform-hosted surfaces; direct local Storage entrypoint fallback is limited to explicit test/development mode with `MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK=1`.
+- The contract declares required Storage interfaces for local file identity and bounded file content reads, plus an optional Google Drive provider dependency for Drive indexing workflows. Memory calls Storage through official platform-hosted surfaces; direct local Storage entrypoint fallback is limited to explicit test/development mode with `LOOPINO_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK=1`.
 - App-owned storage lives under `data/memory/` for the SQLite graph, internal wiki tables, attached artifacts, and the verified source/chunk content store.
 - Memory storage schema v8 retains v4's explicit current source-version pointer, supporting/conflicting evidence relations, active-node content identities, revision snapshots, and compiled claim FTS. Upgrading from v4, v5, v6 or v7 revokes supporting verification and invalidates existing active compiled pages until the candidate propositions have been checked with the numeric-format/sign/operator/question-aware criterion. Recompilation prevents citing a numeric prefix when an operator continues the expression after a paragraph break. Deduplicated recompilation also reconsiders previously unverified evidence beside UUIDs and locators. Existing node text, original evidence and confidence are preserved.
 - Memory is one of the repository reference apps for complete stateful contract coverage.
@@ -91,7 +91,7 @@ Operationally, agents should keep the loop selective:
 
 Remote Storage ingest is idempotent by stable Storage file id when no target node is provided, and idempotent by `(node_id, stable_storage_file_id)` when a target node is provided. This lets one Drive file support multiple Memory nodes while avoiding duplicate refs on the same node. It requires a Storage `source_version` so source versions and citations remain stable. A successful ingest clears prior Storage stale metadata for that file reference and materializes the matching source document, source version, content-store body, and source chunks before compile when preview text is available; an empty preview response records a `reference_snapshot` version without chunks. When `compile_after_ingest=true`, Memory also compiles immediately into claims, citations, and a compiled wiki page. If Storage preview/export cannot be called and no bounded `preview_text` was supplied, ingest fails without creating a fresh source version or fresh wiki page.
 
-The first v3 implementation keeps existing Drive-to-Memory behavior intact while adding the migration, content-store foundation, deterministic multi-chunk source extraction, chunk-level citation support, app-owned source chunk FTS, read-only source/chunk retrieval primitives, source chunk matches in node retrieval, an app-owned job lifecycle with `run_next` plus bounded `run_until_idle`, and `memory_ingest_source` for `inline_markdown`, local workspace `storage_file` sources, remote Storage file payloads fetched through Storage-owned file surfaces, and app-entity reference snapshots. Memory currently reaches Storage and app reference surfaces through the platform-hosted `maverick app ... mcp` wrapper with bounded timeout and retry settings; a future direct app-to-app SDK can replace that transport without changing Memory's stored source model. Embeddings and model-assisted entailment remain optional future work; this implementation adds no inference dependency or cost.
+The first v3 implementation keeps existing Drive-to-Memory behavior intact while adding the migration, content-store foundation, deterministic multi-chunk source extraction, chunk-level citation support, app-owned source chunk FTS, read-only source/chunk retrieval primitives, source chunk matches in node retrieval, an app-owned job lifecycle with `run_next` plus bounded `run_until_idle`, and `memory_ingest_source` for `inline_markdown`, local workspace `storage_file` sources, remote Storage file payloads fetched through Storage-owned file surfaces, and app-entity reference snapshots. Memory currently reaches Storage and app reference surfaces through the platform-hosted `loopino app ... mcp` wrapper with bounded timeout and retry settings; a future direct app-to-app SDK can replace that transport without changing Memory's stored source model. Embeddings and model-assisted entailment remain optional future work; this implementation adds no inference dependency or cost.
 
 `apply_storage_staleness` accepts the Storage sync payload shape, for example `owning_app_id=storage`, `entity_type=file`, `entity_id=file_...`, and `reason=google_drive_change`, plus optional Drive locator and version fields. It updates every matching `external_refs` row for that Storage file identity and leaves re-indexing explicit: the agent should call Storage `drive_index`, then Memory `memory_ingest_source` with `adapter_id=remote_storage_file` and `compile_after_ingest=true`. The queued `requires_storage_reindex` job is an inspectable action-required marker; `run_next` returns the re-index suggestion and completes that marker without attempting an impossible Memory-only ingest.
 
@@ -100,16 +100,16 @@ The first v3 implementation keeps existing Drive-to-Memory behavior intact while
 Validate the installation-level Memory source directly:
 
 ```bash
-./scripts/maverick core cli run core.app-sdk.validate --app-id memory --app-root apps/memory --workspace default --json
+./scripts/loopino core cli run core.app-sdk.validate --app-id memory --app-root apps/memory --workspace default --json
 ```
 
 Workspace-local registration and installation commands target a workspace-owned copy under `workspaces/default/apps/memory`:
 
 ```bash
-./scripts/maverick core cli run core.app-sdk.register-local --app-id memory --workspace default --json
-./scripts/maverick core cli run core.app-sdk.install-local --app-id memory --workspace default --json
-./scripts/maverick core cli run core.app-sdk.status --app-id memory --workspace default --json
-./scripts/maverick core cli run core.app-sdk.package --app-id memory --workspace default --json
+./scripts/loopino core cli run core.app-sdk.register-local --app-id memory --workspace default --json
+./scripts/loopino core cli run core.app-sdk.install-local --app-id memory --workspace default --json
+./scripts/loopino core cli run core.app-sdk.status --app-id memory --workspace default --json
+./scripts/loopino core cli run core.app-sdk.package --app-id memory --workspace default --json
 ```
 
 ## Context UI and renderer

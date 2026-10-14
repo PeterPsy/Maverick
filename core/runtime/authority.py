@@ -18,13 +18,13 @@ from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 from core.runtime.failure_messages import public_runtime_failure_reason_code
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-    MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
-    MAVERICK_FEATURE_AGENTIC_PROFILES,
-    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+    LOOPINO_FEATURE_AGENTIC_PROFILES,
+    LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
     feature_enabled,
     provider_preview_feature,
 )
@@ -161,7 +161,7 @@ def resolve_runtime_authority(
     else:
         tool_handles = _narrow_handles_to_capabilities(tool_handles, capabilities)
     # Native runtimes own and report their structured CLI tool surface. Hosted
-    # runtimes instead require explicit live Maverick tool handles.
+    # runtimes instead require explicit live Loopino tool handles.
     if tool_handles or not _runtime_owns_native_tool_surface(adapter):
         capabilities = _narrow_capabilities_to_live_handles(
             capabilities,
@@ -586,11 +586,11 @@ def _feature_capability_ceiling(
     declared: RuntimeCapabilitySet,
 ) -> tuple[RuntimeCapabilitySet, str]:
     resolved = _runtime_feature_flags(binding)
-    hosted_remote = binding.runtime_engine_id == "maverick-tool-loop"
+    hosted_remote = binding.runtime_engine_id == "loopino-tool-loop"
     ceiling = declared
     if not (
-        resolved[MAVERICK_FEATURE_AGENTIC_PROFILES]
-        and resolved[MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT]
+        resolved[LOOPINO_FEATURE_AGENTIC_PROFILES]
+        and resolved[LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT]
     ):
         ceiling = _disabled_capabilities(declared)
     elif hosted_remote and not all(resolved.values()):
@@ -600,15 +600,15 @@ def _feature_capability_ceiling(
             declared,
             confirmation_resume=(
                 declared.confirmation_resume
-                and resolved[MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION]
+                and resolved[LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION]
             ),
             confirmations=(
                 declared.confirmations
-                and resolved[MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION]
+                and resolved[LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION]
             ),
             provider_private_state=(
                 declared.provider_private_state
-                and resolved[MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE]
+                and resolved[LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE]
             ),
         )
     return ceiling, runtime_feature_flag_revision(binding)
@@ -625,17 +625,17 @@ def _runtime_feature_flags(
     binding: RuntimeExecutionBinding,
 ) -> dict[str, bool]:
     flag_names = (
-        MAVERICK_FEATURE_AGENTIC_PROFILES,
-        MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-        MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
-        MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+        LOOPINO_FEATURE_AGENTIC_PROFILES,
+        LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+        LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+        LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
     )
     resolved = {name: feature_enabled(name) for name in flag_names}
-    hosted_remote = binding.runtime_engine_id == "maverick-tool-loop"
+    hosted_remote = binding.runtime_engine_id == "loopino-tool-loop"
     if hosted_remote:
         hosted_names = (
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+            LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
         )
         resolved.update({name: feature_enabled(name) for name in hosted_names})
         provider_flag = provider_preview_feature(binding.model_provider_id)
@@ -643,9 +643,9 @@ def _runtime_feature_flags(
             resolved[provider_flag[0]] = feature_enabled(provider_flag[0])
     elif binding.runtime_engine_id == "antigravity-cli":
         remote_names = (
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
-            MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+            LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+            LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
         )
         resolved.update({name: feature_enabled(name) for name in remote_names})
     return resolved

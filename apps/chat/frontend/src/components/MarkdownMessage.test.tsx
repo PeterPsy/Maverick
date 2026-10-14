@@ -68,7 +68,7 @@ describe("MarkdownMessage", () => {
         root?.render(
           <MarkdownMessage
             content={
-              "[agents-cli-mcp-speed-report.md](/home/ubuntu/projects/maverick-v3/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)"
+              "[agents-cli-mcp-speed-report.md](/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)"
             }
           />,
         );
@@ -83,7 +83,7 @@ describe("MarkdownMessage", () => {
       link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
       expect(messages[0]?.message).toEqual({
-        type: "maverick.app.open-app",
+        type: "loopino.app.open-app",
         app_id: "storage",
         params: { workspace_relative_path: "storage/generated/agents-cli-mcp-speed-report.md" },
       });
@@ -119,7 +119,7 @@ describe("MarkdownMessage", () => {
       link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
       expect(messages[0]?.message).toEqual({
-        type: "maverick.app.open-app",
+        type: "loopino.app.open-app",
         app_id: "storage",
         params: { app_page: "files/file_123" },
       });
@@ -156,7 +156,7 @@ describe("MarkdownMessage", () => {
 
       expect(click.defaultPrevented).toBe(true);
       expect(messages[0]?.message).toEqual({
-        type: "maverick.app.open-app",
+        type: "loopino.app.open-app",
         app_id: "mail",
         params: { thread: "email_thread_123" },
       });

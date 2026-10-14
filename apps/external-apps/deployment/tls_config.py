@@ -6,9 +6,9 @@ import re
 import stat
 import time
 
-TLS_ROOT = Path("/var/lib/maverick/external-apps-tls")
-ACME_ROOT = Path("/var/lib/maverick/external-apps-acme")
-PROXY = "/etc/nginx/snippets/maverick-external-apps-proxy.conf"
+TLS_ROOT = Path("/projects/loopino/data/external-apps-tls")
+ACME_ROOT = Path("/projects/loopino/data/external-apps-acme")
+PROXY = "/etc/nginx/snippets/loopino-external-apps-proxy.conf"
 
 
 def read_json(path, limit=2 * 1024 * 1024):

@@ -66,14 +66,14 @@ class FullWorkspaceMetadataContractTest(FullWorkspaceContractFixture, unittest.T
         first.write_text("first-old", encoding="utf-8")
         second.write_text("second-old", encoding="utf-8")
         try:
-            os.setxattr(second, "user.maverick.race-probe", b"probe")
-            os.removexattr(second, "user.maverick.race-probe")
+            os.setxattr(second, "user.loopino.race-probe", b"probe")
+            os.removexattr(second, "user.loopino.race-probe")
         except OSError as error:
             self.skipTest(f"filesystem xattrs unavailable: {error}")
 
         def race(stage, path):
             if stage == "write_committed" and path == "a.txt":
-                os.setxattr(second, "user.maverick.concurrent", b"retained")
+                os.setxattr(second, "user.loopino.concurrent", b"retained")
 
         capabilities = self._capabilities(race_hook=race)
         scope_digest = self._scope_digest(
@@ -106,7 +106,7 @@ class FullWorkspaceMetadataContractTest(FullWorkspaceContractFixture, unittest.T
         self.assertEqual(first.read_text(encoding="utf-8"), "first-old")
         self.assertEqual(second.read_text(encoding="utf-8"), "second-old")
         self.assertEqual(
-            os.getxattr(second, "user.maverick.concurrent"),
+            os.getxattr(second, "user.loopino.concurrent"),
             b"retained",
         )
 
@@ -120,7 +120,7 @@ class FullWorkspaceMetadataContractTest(FullWorkspaceContractFixture, unittest.T
             target.write_text("old\n", encoding="utf-8")
             target.chmod(0o755)
             try:
-                os.setxattr(target, "user.maverick.fixture", b"retained")
+                os.setxattr(target, "user.loopino.fixture", b"retained")
             except OSError as error:
                 self.skipTest(f"filesystem xattrs unavailable: {error}")
             old_atime_ns = time.time_ns() - 86_400_000_000_000
@@ -186,7 +186,7 @@ class FullWorkspaceMetadataContractTest(FullWorkspaceContractFixture, unittest.T
                 self.assertEqual((current.st_uid, current.st_gid), expected_owner)
                 self.assertEqual(current.st_atime_ns, expected_atimes[target])
                 self.assertEqual(
-                    os.getxattr(target, "user.maverick.fixture"),
+                    os.getxattr(target, "user.loopino.fixture"),
                     b"retained",
                 )
 
@@ -199,7 +199,7 @@ class FullWorkspaceMetadataContractTest(FullWorkspaceContractFixture, unittest.T
         target.write_text("#!/bin/sh\necho old\n", encoding="utf-8")
         target.chmod(0o755)
         try:
-            os.setxattr(target, "user.maverick.fixture", b"retained")
+            os.setxattr(target, "user.loopino.fixture", b"retained")
         except OSError as error:
             self.skipTest(f"filesystem xattrs unavailable: {error}")
         capabilities = self._capabilities()
@@ -247,7 +247,7 @@ class FullWorkspaceMetadataContractTest(FullWorkspaceContractFixture, unittest.T
         self.assertEqual(patched.payload["path"], "editable-script.sh")
         self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o755)
         self.assertEqual(
-            os.getxattr(target, "user.maverick.fixture"),
+            os.getxattr(target, "user.loopino.fixture"),
             b"retained",
         )
 

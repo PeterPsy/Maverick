@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { callBackend } from '../api';
 import { Selection } from './vnext';
 
@@ -27,7 +27,7 @@ export function useProviderRefresh(selected: Selection, refs: LinkedRef[]) {
     const providers: string[] = JSON.parse(providerKey);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const changed = (event: MessageEvent) => {
-      if (!isExactMaverickParentMessage(event) || event.data?.type !== 'maverick.app.data-changed' || !providers.includes(event.data?.owner_app_id) || timer) return;
+      if (!isExactLoopinoParentMessage(event) || event.data?.type !== 'loopino.app.data-changed' || !providers.includes(event.data?.owner_app_id) || timer) return;
       timer = setTimeout(() => {
         timer = undefined;
         void callBackend({ action: 'crm.integration_refresh', entity_type: selected.entity, entity_id: selected.record.id }).catch(() => { /* Last-good snapshot remains visible; explicit refresh exposes errors. */ });

@@ -21,7 +21,8 @@ sys.path.insert(0, str(ROOT))
 from core.shared.browser_origin_tls_backoff import (
     clear_issuance_backoff, issuance_retry_at, record_issuance_failure,
 )
-from core.shared.env_file import read_env_file
+from core.shared.env_file import read_env_file, service_env_path
+from core.shared.installation_material import certbot_root, certbot_directory_arguments
 from scripts.deploy.refresh_cloudflare_dns_credentials import DEFAULT_CREDENTIALS, refresh_credentials
 
 CA = "https://acme-v02.api.letsencrypt.org/directory"
@@ -72,18 +73,18 @@ def maintain(hostname: str, email: str, nginx_config: Path, state_root: Path, *,
         renewal = runner(["/usr/bin/certbot", "renew", "--non-interactive", "--dry-run",
                           "--no-random-sleep-on-renew",
                           "--no-directory-hooks", "--run-deploy-hooks",
-                          "--cert-name", hostname + "-sidecars-wildcard"],
+                          "--cert-name", hostname + "-sidecars-wildcard"] + certbot_directory_arguments(ROOT),
                          capture_output=True, text=True, timeout=300)
         if renewal.returncode:
             return {"status": "renewal_verification_failed"}
         verified.touch(mode=0o600)
-    if os.environ.get("MAVERICK_BROWSER_ORIGIN_TLS_MODE") != "external_wildcard":
+    if os.environ.get("LOOPINO_BROWSER_ORIGIN_TLS_MODE") != "external_wildcard":
         # Persist intent before the transition, including interruption recovery.
         (state_root / "restart-required").touch(mode=0o600)
     activation = runner([str(ROOT / ".venv/bin/python"),
                          str(ROOT / "scripts/deploy/activate_browser_origin_wildcard.py"),
                          "--hostname", hostname, "--certificate-dir",
-                         "/etc/letsencrypt/live/" + hostname + "-sidecars-wildcard",
+                         str(certbot_root(ROOT) / "config/live" / (hostname + "-sidecars-wildcard")),
                          "--nginx-config", str(nginx_config), "--apply"],
                         capture_output=True, text=True, timeout=30)
     if activation.returncode:
@@ -105,7 +106,7 @@ def main():
     parser.add_argument("--hostname", required=True)
     parser.add_argument("--email", required=True)
     parser.add_argument("--nginx-config", required=True, type=Path)
-    parser.add_argument("--state-root", type=Path, default=Path("/var/lib/maverick/wildcard-maintenance"))
+    parser.add_argument("--state-root", type=Path, default=ROOT / "data/wildcard-maintenance")
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error("Root privileges are required")
@@ -120,7 +121,7 @@ def main():
             parser.error("Use absolute installation paths without symlink ancestors")
     args.state_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     args.state_root.chmod(0o700)
-    os.environ.update(read_env_file(ROOT / ".env"))
+    os.environ.update(read_env_file(service_env_path(ROOT)))
     os.chdir(ROOT)
     with (args.state_root / "maintenance.lock").open("a") as lock:
         try:

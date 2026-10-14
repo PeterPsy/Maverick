@@ -25,8 +25,8 @@ if (localPlaywright.version !== pinnedPlaywrightVersion) {
   );
 }
 
-const host = process.env.MAVERICK_BROWSER_PLAYWRIGHT_HOST || "127.0.0.1";
-const port = process.env.MAVERICK_BROWSER_PLAYWRIGHT_PORT || "3100";
+const host = process.env.LOOPINO_BROWSER_PLAYWRIGHT_HOST || "127.0.0.1";
+const port = process.env.LOOPINO_BROWSER_PLAYWRIGHT_PORT || "3100";
 const cliPath = join(dirname(playwrightPackagePath), "cli.js");
 const args = [cliPath, "run-server", "--host", host, "--port", port];
 

@@ -19,7 +19,7 @@ from official_oci_validation import (
 )
 
 
-USER_AGENT = "Maverick-OpenDesign-OCI-Importer/1"
+USER_AGENT = "Loopino-OpenDesign-OCI-Importer/1"
 CHUNK_SIZE = 1024 * 1024
 
 

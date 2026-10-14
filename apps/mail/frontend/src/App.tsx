@@ -1,9 +1,9 @@
 import {
-  isExactMaverickParentMessage,
+  isExactLoopinoParentMessage,
   isStandaloneWebApp,
   requestParentExternalUrl,
   type ExternalUrlDisposition,
-} from '@maverick/pwa-cache';
+} from '@loopino/pwa-cache';
 import { readMailDisplay } from './pwaCache';
 import { useMailList } from './useMailList';
 import { MailToolbar } from './MailToolbar';
@@ -52,8 +52,8 @@ const IMAP_SMTP_SECRET = 'mailbox-password';
 const THREADS_PAGE_SIZE = 50;
 const INLINE_IMAGE_MAX_BYTES = 2_000_000;
 
-function maverickPlatformOrigin(): string {
-  const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+function loopinoPlatformOrigin(): string {
+  const value = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__;
   return typeof value === 'string' && /^https?:\/\//u.test(value) ? value : window.location.origin;
 }
 const READER_TEXT_BODY_CHARS = 12_000;
@@ -156,7 +156,7 @@ function isUsableConnection(connection?: MailConnection | null) {
 function openVaultIssues() {
   window.parent?.postMessage(
     {
-      type: 'maverick.app.open-app',
+      type: 'loopino.app.open-app',
       app_id: 'vault',
       params: { tab: 'issues', query: 'mail' }
     },
@@ -167,7 +167,7 @@ function openVaultIssues() {
 function notifySelection(selection: Record<string, string | boolean | null | undefined>) {
   window.parent?.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'mail',
       selection
     },
@@ -935,11 +935,11 @@ export function App() {
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
-      if (!isExactMaverickParentMessage(event)) {
+      if (!isExactLoopinoParentMessage(event)) {
         return;
       }
       const data = event.data as { type?: string; owner_app_id?: string; resource?: string; scope_keys?: unknown; params?: MailNavigateParams };
-      if (data?.type === 'maverick.app.navigate') {
+      if (data?.type === 'loopino.app.navigate') {
         const params = data.params || {};
         if (data.params?.add_account) {
           setAccountModalOpen(true);
@@ -998,7 +998,7 @@ export function App() {
         return;
       }
       const mailDataChanged =
-        (data?.type === 'maverick.app.data-changed' || data?.type === 'maverick.widget.data-changed') &&
+        (data?.type === 'loopino.app.data-changed' || data?.type === 'loopino.widget.data-changed') &&
         data.owner_app_id === 'mail' &&
         typeof data.resource === 'string' &&
         MAIL_DATA_RESOURCES.has(data.resource);
@@ -1075,7 +1075,7 @@ export function App() {
       const payload = await callBackend<{ status: string; authorization_url?: string; detail?: string }>({
         action: MAIL_BACKEND_ACTIONS.connectionsStartOAuth,
         provider: 'gmail',
-        redirect_uri: `${maverickPlatformOrigin()}/apps/mail/oauth/callback`,
+        redirect_uri: `${loopinoPlatformOrigin()}/apps/mail/oauth/callback`,
         _app_secret_request: {
           logical_names: GMAIL_OAUTH_START_SECRETS,
           required: true

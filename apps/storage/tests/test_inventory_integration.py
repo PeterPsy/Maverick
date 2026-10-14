@@ -57,7 +57,7 @@ class IndexedStorageIntegrationTests(unittest.TestCase):
     def test_indexed_quota_does_not_scan_the_storage_tree(self):
         from store_files_paths import enforce_storage_budget
         from errors import StorageValidationError
-        with patch.dict(os.environ, {'MAVERICK_STORAGE_MAX_BYTES': '10'}), \
+        with patch.dict(os.environ, {'LOOPINO_STORAGE_MAX_BYTES': '10'}), \
              patch.object(Path, 'rglob', side_effect=AssertionError('quota tree scan')):
             enforce_storage_budget(data_root=self.data, **self.arguments, target=self.root / 'second.md', payload_size=5)
             with self.assertRaisesRegex(StorageValidationError, 'quota_exceeded'):

@@ -24,7 +24,7 @@ export function providerSupportsResearch(provider: ProviderItem | null | undefin
     return true;
   }
   if (
-    provider.execution_family !== "maverick_agent"
+    provider.execution_family !== "loopino_agent"
     || provider.agentic_effective_capabilities.capabilities.tool_orchestration !== true
     || provider.agentic_effective_capabilities.capabilities.mcp !== true
   ) {

@@ -10,7 +10,7 @@ from core.runtime.output_compaction.redaction import redact_payload, redact_text
 
 
 _HOST_PATH_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9:])/(?:home|root|etc|var|tmp|opt|srv|usr|run)/(?:[^\s\"'<>`]+)"
+    r"(?<![A-Za-z0-9:])/(?:home|root|etc|var|tmp|opt|srv|usr|run|projects)/(?:[^\s\"'<>`]+)"
 )
 
 

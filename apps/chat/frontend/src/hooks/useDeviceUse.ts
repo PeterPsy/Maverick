@@ -154,7 +154,7 @@ export function useDeviceUse({
     const coreStopped = core.status === "fulfilled" && core.value?.status === "stopped";
     const nativeStopped = native.status === "fulfilled" && !native.value.active;
     if (!coreStopped && !nativeStopped) {
-      throw new Error("Impossibile disattivare PC use. Riprova o usa Interrompi PC use nel menu Maverick.");
+      throw new Error("Impossibile disattivare PC use. Riprova o usa Interrompi PC use nel menu Loopino.");
     }
     if (native.status === "fulfilled") setSnapshot(native.value);
     setLease(null);
@@ -206,7 +206,7 @@ export function useDeviceUse({
           websocketPath: activation.websocket_path,
           mode: nextMode,
         });
-        if (!native.available) throw new Error("Device Use è disponibile solo nell'app Maverick per macOS.");
+        if (!native.available) throw new Error("Device Use è disponibile solo nell'app Loopino per macOS.");
         let ready = await waitUntilReady(createdId);
         if (threadRef.current?.thread_id !== activeThread?.thread_id) {
           throw new Error("Chat cambiata durante la connessione. Riattiva Device Use nella chat desiderata.");

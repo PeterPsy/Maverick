@@ -19,7 +19,7 @@ class StartupPerformanceTests(TestCase):
         with patch.dict(os.environ, {}, clear=True):
             self.assertFalse(startup_performance_enabled())
 
-        with patch.dict(os.environ, {"MAVERICK_STARTUP_PERF_LOGS": "1"}, clear=True):
+        with patch.dict(os.environ, {"LOOPINO_STARTUP_PERF_LOGS": "1"}, clear=True):
             self.assertTrue(startup_performance_enabled())
 
     def test_record_returns_rounded_timing_when_disabled(self) -> None:
@@ -31,10 +31,10 @@ class StartupPerformanceTests(TestCase):
         self.assertEqual(timing.payload["thread_count"], 3)
 
     def test_timer_logs_json_when_enabled(self) -> None:
-        logger = logging.getLogger("maverick.startup")
+        logger = logging.getLogger("loopino.startup")
         logger.setLevel(logging.INFO)
-        with patch.dict(os.environ, {"MAVERICK_STARTUP_PERF_LOGS": "true"}, clear=True):
-            with self.assertLogs("maverick.startup", level="INFO") as records:
+        with patch.dict(os.environ, {"LOOPINO_STARTUP_PERF_LOGS": "true"}, clear=True):
+            with self.assertLogs("loopino.startup", level="INFO") as records:
                 with startup_timer("frontend.asset", app_id="chat") as details:
                     details["bytes"] = 10
 

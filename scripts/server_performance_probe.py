@@ -154,7 +154,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.count < 1 or args.requests < 1 or args.warmup < 0:
         parser.error('count and requests must be positive; warmup cannot be negative')
-    with tempfile.TemporaryDirectory(prefix='maverick-performance-') as scratch:
+    with tempfile.TemporaryDirectory(prefix='loopino-performance-') as scratch:
         root = Path(scratch)
         result = storage_probe(root, args.count, args.shape, args.requests, args.warmup, adapter=args.storage_adapter) if args.domain == 'storage' else usage_probe(root, args.count, args.requests, args.warmup, adapter=args.usage_adapter)
     revision = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()

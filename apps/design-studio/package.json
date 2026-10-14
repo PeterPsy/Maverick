@@ -1,5 +1,5 @@
 {
-  "name": "@maverick/design-studio",
+  "name": "@loopino/design-studio",
   "version": "0.3.5",
   "license": "MIT",
   "private": true,
@@ -19,7 +19,7 @@
     "test:e2e:hosted": "python3 tests/opendesign_e2e_gate.py --profile hosted"
   },
   "dependencies": {
-    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
+    "@loopino/pwa-cache": "file:../../packages/pwa-cache",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },

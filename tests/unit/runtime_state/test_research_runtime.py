@@ -112,7 +112,7 @@ class ResearchRuntimeTest(unittest.TestCase):
         self.assertIn("image", authority.allowed_capabilities.attachment_modalities)
         binding = replace(
             harness.binding,
-            runtime_engine_id="maverick-tool-loop",
+            runtime_engine_id="loopino-tool-loop",
         )
         validate_research_authority(
             binding,
@@ -124,7 +124,7 @@ class ResearchRuntimeTest(unittest.TestCase):
             ),
         )
 
-    def test_native_research_authority_has_no_maverick_tools_or_context(self) -> None:
+    def test_native_research_authority_has_no_loopino_tools_or_context(self) -> None:
         harness = HostedAgenticHarness(self)
         binding = replace(
             harness.binding,
@@ -217,7 +217,7 @@ class ResearchRuntimeTest(unittest.TestCase):
             "workspace",
         )
 
-    def test_semantic_envelope_contains_no_maverick_or_workspace_context(self) -> None:
+    def test_semantic_envelope_contains_no_loopino_or_workspace_context(self) -> None:
         harness = HostedAgenticHarness(self)
         session = replace(
             harness.session,
@@ -247,7 +247,7 @@ class ResearchRuntimeTest(unittest.TestCase):
 
         envelope = HostedSemanticEnvelopeCompiler(
             classifier=harness.classify,
-            platform_instruction="hidden Maverick platform instruction",
+            platform_instruction="hidden Loopino platform instruction",
         ).compile(
             context=context,
             input_text=context.input_text,

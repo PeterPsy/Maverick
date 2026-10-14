@@ -7,7 +7,7 @@ description: Read Instagram and supported platforms, inspect bounded media and m
 
 Connectors is a backend-only app used through agents; it has no app page or shell
 sidebar. Use official `platform-connectors` surfaces. Discover with
-`maverick app platform-connectors mcp list --json` and inspect selected tools.
+`loopino app platform-connectors mcp list --json` and inspect selected tools.
 Do not access provider-private data or invoke upstream CLIs directly.
 
 ## Instagram and shared platforms

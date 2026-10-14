@@ -53,7 +53,7 @@ def main():
             sessions[name] = key
             processes[name] = subprocess.Popen(['bash', '-c',
                 f"exec -a 'codex app-server --listen stdio://' sleep {args.ttl + 30}"],
-                env={**os.environ, 'MAVERICK_RUNTIME_SESSION_ID': key, 'MAVERICK_RUNTIME_ENGINE_ID': 'codex'})
+                env={**os.environ, 'LOOPINO_RUNTIME_SESSION_ID': key, 'LOOPINO_RUNTIME_ENGINE_ID': 'codex'})
         retain('active')
         turn = queue_runtime_turn(store, turn_id=f'turn-{uuid4().hex}', session_id=sessions['active'], input_text='fixture')
         transition_runtime_turn(store, turn_id=turn.turn_id, target_status='active')

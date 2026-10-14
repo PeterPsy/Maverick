@@ -4,7 +4,7 @@ Date: 2026-04-21
 
 ## Purpose
 
-Define the official Maverick App SDK as a developer surface for creating Maverick apps without weakening the platform boundary.
+Define the official Loopino App SDK as a developer surface for creating Loopino apps without weakening the platform boundary.
 
 The SDK helps humans and agents create, validate, register, install, and inspect app source trees. It does not replace the app contract, app-hosting lifecycle, workspace boundary, or app-owned data rules.
 
@@ -94,42 +94,42 @@ Generated source is only the starting point. Before an app is considered complet
 The official SDK mutation surface for agents is the canonical core CLI, invoked with the runtime workspace context:
 
 ```text
-maverick core cli run core.app-sdk.create --app-id <app_id> --template-id <template_id> --json
-maverick core cli run core.app-sdk.validate --app-id <app_id> --json
-maverick core cli run core.app-sdk.register-local --app-id <app_id> --json
-maverick core cli run core.app-sdk.install-local --app-id <app_id> --json
-maverick core cli run core.app-sdk.status --app-id <app_id> --json
-maverick core cli run core.app-sdk.package --app-id <app_id> --json
+loopino core cli run core.app-sdk.create --app-id <app_id> --template-id <template_id> --json
+loopino core cli run core.app-sdk.validate --app-id <app_id> --json
+loopino core cli run core.app-sdk.register-local --app-id <app_id> --json
+loopino core cli run core.app-sdk.install-local --app-id <app_id> --json
+loopino core cli run core.app-sdk.status --app-id <app_id> --json
+loopino core cli run core.app-sdk.package --app-id <app_id> --json
 ```
 
 The runtime CLI API accepts a workspace runtime bearer token issued by the core when launching an agent runtime. Runtime tokens are scoped to one active runtime session and one `workspace_id`; SDK CLI actions never infer or fall back to `default` when a non-default workspace token is used.
 
-The workspace-local `maverick` command installed into `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/bin/` is a thin HTTP client for `/api/runtime/cli`. It does not import `core`, read installation-level source, or require repo-global paths inside the sandbox. Runtime CLI requests may include `output_profile` in the JSON body. The default API profile is `full`; the runtime-local shim requests `provider_compact` by default so large textual response fields are redacted and compacted before they enter provider context, while preserving explicit document-body fields for developer-context and Storage read surfaces from truncation. Agents can set `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` for exact full JSON output.
+The workspace-local `loopino` command installed into `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/bin/` is a thin HTTP client for `/api/runtime/cli`. It does not import `core`, read installation-level source, or require repo-global paths inside the sandbox. Runtime CLI requests may include `output_profile` in the JSON body. The default API profile is `full`; the runtime-local shim requests `provider_compact` by default so large textual response fields are redacted and compacted before they enter provider context, while preserving explicit document-body fields for developer-context and Storage read surfaces from truncation. Agents can set `LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE=full` for exact full JSON output.
 
 The supported command shape is:
 
 ```text
-maverick core cli run core.app-sdk.create
-maverick core cli run core.app-sdk.validate
-maverick core cli run core.app-sdk.register-local
-maverick core cli run core.app-sdk.install-local
-maverick core cli run core.app-sdk.status
-maverick core cli run core.app-sdk.package
-maverick sdk templates
-maverick sdk docs
+loopino core cli run core.app-sdk.create
+loopino core cli run core.app-sdk.validate
+loopino core cli run core.app-sdk.register-local
+loopino core cli run core.app-sdk.install-local
+loopino core cli run core.app-sdk.status
+loopino core cli run core.app-sdk.package
+loopino sdk templates
+loopino sdk docs
 ```
 
 The older app-domain SDK shortcut form is not a supported surface. Registration and installation remain governed by workspace policy and actor authority, but the canonical SDK CLI commands are agent-invokable through the trusted runtime CLI context available to the workspace today. Secret values or other privileged inputs may be accepted as command arguments only when the result stays redaction-safe.
 
-`maverick sdk docs` returns the SDK documentation content through the hosted SDK API. Workspace runtimes must use this command instead of reading SDK documentation files from disk.
+`loopino sdk docs` returns the SDK documentation content through the hosted SDK API. Workspace runtimes must use this command instead of reading SDK documentation files from disk.
 
 The repository also provides an operator/development wrapper:
 
 ```text
-scripts/maverick
+scripts/loopino
 ```
 
-Packaging metadata may expose this as the `maverick` console script.
+Packaging metadata may expose this as the `loopino` console script.
 
 ## Templates
 
@@ -195,7 +195,7 @@ Developer Kit must not write app-hosting control-plane records directly and must
 
 ## Packaging Artifacts
 
-`maverick core cli run core.app-sdk.package --app-id <app_id> --json` creates a tarball and a sidecar manifest under `workspaces/<workspace_id>/storage/generated/`:
+`loopino core cli run core.app-sdk.package --app-id <app_id> --json` creates a tarball and a sidecar manifest under `workspaces/<workspace_id>/storage/generated/`:
 
 ```text
 <app_id>.tar.gz
@@ -230,7 +230,7 @@ core/app_sdk/
 core/api/app_sdk_api.py
 core/runtime/workspace_api_token.py
 core/cli/app_sdk_commands.py
-scripts/maverick
+scripts/loopino
 apps/developer-kit/
 tests/test_app_sdk.py
 docs/app-sdk/getting_started.md

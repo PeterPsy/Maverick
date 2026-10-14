@@ -1,5 +1,5 @@
 {
-  "name": "maverick",
+  "name": "loopino",
   "version": "0.1.0",
   "description": "Workspace-isolated AI operating environment for agent-powered apps.",
   "main": "index.js",
@@ -18,7 +18,7 @@
     "apps",
     "ai"
   ],
-  "author": "Maverick contributors",
+  "author": "Loopino contributors",
   "license": "MIT",
   "type": "commonjs",
   "engines": {

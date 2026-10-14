@@ -8,10 +8,10 @@ export const stopReasons = {
   connection_expired: "The Browser connection expired; reconnect from Companion",
   connection_revoked: "The Browser connection was stopped",
   connection_replaced: "Replaced by a new connection for this agent tab",
-  connection_unavailable: "The connection is unavailable for this Maverick account or workspace",
+  connection_unavailable: "The connection is unavailable for this Loopino account or workspace",
   connector_unauthorized: "The Browser bridge lease is invalid; reconnect from Companion",
-  authentication_failed: "Maverick authentication expired; sign in in the Browser bridge and reconnect",
-  connector_principal_changed: "The connected Maverick account or workspace changed; reconnect from Companion",
+  authentication_failed: "Loopino authentication expired; sign in in the Browser bridge and reconnect",
+  connector_principal_changed: "The connected Loopino account or workspace changed; reconnect from Companion",
   heartbeat_failed: "The Browser bridge could not maintain its connection; reconnect from Companion",
 };
 

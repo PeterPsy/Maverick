@@ -37,7 +37,7 @@ class HostedFilesystemMutationLineageIntegrationTest(unittest.TestCase):
         )
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(
@@ -179,7 +179,7 @@ class HostedFilesystemMutationLineageIntegrationTest(unittest.TestCase):
         (workspace_root / "lineage.txt").write_text("before\n", encoding="utf-8")
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(

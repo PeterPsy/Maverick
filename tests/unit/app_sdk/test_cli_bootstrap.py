@@ -1,4 +1,4 @@
-"""Tests for Maverick CLI wrapper bootstrap selection."""
+"""Tests for Loopino CLI wrapper bootstrap selection."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ from core.app_sdk.cli_surface_runners import _reject_app_cli_command_in_core_sco
 
 
 NO_RUNTIME_ENV = {
-    "MAVERICK_RUNTIME_API_TOKEN": "",
-    "MAVERICK_RUNTIME_ROOT": "",
-    "MAVERICK_RUNTIME_SESSION_ID": "",
+    "LOOPINO_RUNTIME_API_TOKEN": "",
+    "LOOPINO_RUNTIME_ROOT": "",
+    "LOOPINO_RUNTIME_SESSION_ID": "",
 }
 
 
@@ -150,7 +150,7 @@ class CliBootstrapTests(unittest.TestCase):
             os.environ,
             {
                 **NO_RUNTIME_ENV,
-                "MAVERICK_RUNTIME_SESSION_ID": "stale-session",
+                "LOOPINO_RUNTIME_SESSION_ID": "stale-session",
             },
             clear=False,
         ):
@@ -171,7 +171,7 @@ class CliBootstrapTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             runtime_root = Path(temp)
-            shim = runtime_root / "bin" / "maverick"
+            shim = runtime_root / "bin" / "loopino"
             shim.parent.mkdir(parents=True)
             shim.write_text("#!/bin/sh\n", encoding="utf-8")
             shim.chmod(0o755)
@@ -179,9 +179,9 @@ class CliBootstrapTests(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_RUNTIME_API_TOKEN": "token",
-                    "MAVERICK_RUNTIME_ROOT": str(runtime_root),
-                    "MAVERICK_RUNTIME_SESSION_ID": "sess-1",
+                    "LOOPINO_RUNTIME_API_TOKEN": "token",
+                    "LOOPINO_RUNTIME_ROOT": str(runtime_root),
+                    "LOOPINO_RUNTIME_SESSION_ID": "sess-1",
                 },
                 clear=False,
             ):
@@ -209,7 +209,7 @@ class CliBootstrapTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as captured:
             _reject_app_cli_command_in_core_scope("app.document-generator.document-generator")
 
-        self.assertIn("maverick app document-generator cli run document-generator --json", str(captured.exception))
+        self.assertIn("loopino app document-generator cli run document-generator --json", str(captured.exception))
 
     def test_core_cli_allows_app_lifecycle_commands(self) -> None:
         _reject_app_cli_command_in_core_scope(

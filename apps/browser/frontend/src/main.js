@@ -8,7 +8,7 @@ import {showResult} from "./result-view.js";
 import {createPlatformState} from "./platform-state.js";
 import {connectionDetail} from "./sharing-state.js";
 import {createAutoConnect} from "./auto-connect.js";
-import companionArchiveUrl from "../package/maverick-browser-companion.zip?url";
+import companionArchiveUrl from "../package/loopino-browser-companion.zip?url";
 
 const launchParams = new URLSearchParams(location.search);
 const connectorMode = launchParams.get("connector") === "1";
@@ -16,7 +16,7 @@ mountShell(connectorMode);
 const $ = selector => document.querySelector(selector);
 let platformOrigin = location.origin;
 try {
-  const supplied = window.__MAVERICK_PLATFORM_ORIGIN__, origin = new URL(supplied);
+  const supplied = window.__LOOPINO_PLATFORM_ORIGIN__, origin = new URL(supplied);
   if (["http:", "https:"].includes(origin.protocol) && origin.origin === supplied) platformOrigin = origin.origin;
 } catch { /* Standalone connector window. */ }
 // Chrome signs in through the shell and receives its own fresh isolated frame.
@@ -49,7 +49,7 @@ function render() {
   const ready = active.some(connection => connection.status === "connected");
   $("#agent-heading").textContent = ready ? "Your agent is ready" : active.length ? "Connecting your agent tab…" : current.length ? "Reconnect your agent tab" : "Give your agent a browser tab";
   const interactive=active.some(connection=>connection.status === "connected" && connection.access_mode === "interactive");
-  $("#agent-description").textContent = interactive ? "Ask Maverick to browse, fill a form or interact with a page." : ready ? "Reading is connected. Update Companion to enable browser interactions." : "Open Companion in Chrome and connect your agent tab. Keep the agent tab open.";
+  $("#agent-description").textContent = interactive ? "Ask Loopino to browse, fill a form or interact with a page." : ready ? "Reading is connected. Update Companion to enable browser interactions." : "Open Companion in Chrome and connect your agent tab. Keep the agent tab open.";
   $("#agent-state").textContent = ready ? "Connected" : active.length ? "Connecting" : current.length ? "Offline" : "Not connected";
   $("#agent-state").className = `badge ${ready ? "state-connected" : ""}`;
   $("#pending-note").hidden = !pending;
@@ -153,15 +153,15 @@ function openConnectorSetup(retry = false) {
   void checkSelectedTab(retry);
 }
 window.addEventListener("message", event => {
-  if (event.source === window && event.origin === location.origin && event.data?.type === "maverick.browser.ready") {
+  if (event.source === window && event.origin === location.origin && event.data?.type === "loopino.browser.ready") {
     openConnectorSetup(true); return;
   }
   if (event.source !== window.parent || event.origin !== platformOrigin) return;
   const message = event.data;
-  if (message?.type === "maverick.app.navigate" && message.app_id === "browser" && ["1", true].includes(message.params?.connector)) {
+  if (message?.type === "loopino.app.navigate" && message.app_id === "browser" && ["1", true].includes(message.params?.connector)) {
     openConnectorSetup();
   }
-  if (message?.type === "maverick.app.data-changed" && message.owner_app_id === "browser" && ["companion", "state"].includes(message.resource)) void loop.refresh();
+  if (message?.type === "loopino.app.data-changed" && message.owner_app_id === "browser" && ["companion", "state"].includes(message.resource)) void loop.refresh();
 });
 if (connectorMode) void checkSelectedTab();
 window.addEventListener("pagehide", event => { if (event.persisted) loop.pause(); else loop.stop(); });

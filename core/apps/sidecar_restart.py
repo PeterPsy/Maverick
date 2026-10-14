@@ -15,7 +15,7 @@ from core.apps.surfaces import resolve_workspace_app_surface
 from core.observability.service import record_platform_audit, record_platform_event
 
 
-RUNTIME_CHANGED_EVENT = "maverick.app.runtime-changed"
+RUNTIME_CHANGED_EVENT = "loopino.app.runtime-changed"
 
 
 class SidecarRestartError(AppLifecycleError):

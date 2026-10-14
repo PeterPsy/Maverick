@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build source-buildable Maverick app frontends."""
+"""Build source-buildable Loopino app frontends."""
 
 from __future__ import annotations
 

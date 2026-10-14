@@ -11,14 +11,14 @@ from model_access_client import ModelAccessClient
 from model_access_constants import MODEL_ACCESS_API_KEY, MODEL_ACCESS_BASE_URL
 
 
-PROFILE_PATH = Path("sandbox/agent-home/.maverick/model-access-agents.json")
+PROFILE_PATH = Path("sandbox/agent-home/.loopino/model-access-agents.json")
 SANDBOX_PROFILE_PATH = Path("/data") / PROFILE_PATH
-API_CONFIG_PATH = Path("sandbox/agent-home/.maverick/model-access-opencode.json")
+API_CONFIG_PATH = Path("sandbox/agent-home/.loopino/model-access-opencode.json")
 SANDBOX_API_CONFIG_PATH = Path("/data") / API_CONFIG_PATH
-CODEX_WRAPPER = "maverick-codex"
-OPENCODE_WRAPPER = "maverick-opencode"
-API_PROFILE_ID = "installed-maverick-api"
-API_PROVIDER_ID = "maverick"
+CODEX_WRAPPER = "loopino-codex"
+OPENCODE_WRAPPER = "loopino-opencode"
+API_PROFILE_ID = "installed-loopino-api"
+API_PROVIDER_ID = "loopino"
 
 
 def write_model_access_profiles(
@@ -94,7 +94,7 @@ def write_model_access_profiles(
         api_config = {
             "provider": {
                 API_PROVIDER_ID: {
-                    "name": "Maverick Model Access",
+                    "name": "Loopino Model Access",
                     "npm": "@ai-sdk/openai-compatible",
                     "options": {
                         "baseURL": MODEL_ACCESS_BASE_URL,
@@ -113,7 +113,7 @@ def write_model_access_profiles(
         agents.append(
             {
                 "id": API_PROFILE_ID,
-                "name": "Maverick API models",
+                "name": "Loopino API models",
                 "baseAgent": "opencode",
                 "bin": OPENCODE_WRAPPER,
                 "env": {

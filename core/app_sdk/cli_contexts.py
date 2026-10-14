@@ -1,4 +1,4 @@
-"""Invocation context and registry helpers for the Maverick SDK CLI."""
+"""Invocation context and registry helpers for the Loopino SDK CLI."""
 
 from __future__ import annotations
 

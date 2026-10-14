@@ -98,7 +98,7 @@ test("preserves the real composer, attachments and other drafts through every pl
   });
   for (const mode of ["fixed-right", "mobile-fullscreen", "overlay"]) {
     await page.evaluate(({ mode, windowId }) => window.postMessage({
-      type: "maverick.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
+      type: "loopino.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
       context: { content: { workspace_id: "default", payload: { mode, navigation_scope: windowId, thread_id: "stale-thread" } } },
     }, window.location.origin), { mode, windowId });
     await expect(page.locator(".chat-floating-widget-stack")).toHaveClass(new RegExp(`is-${mode}`));
@@ -110,7 +110,7 @@ test("preserves the real composer, attachments and other drafts through every pl
   await expect(page.locator(".chat-floating-window-slot")).toHaveCount(2);
   await activeSlot.getByRole("button", { name: "Dock chat to right" }).click();
   await page.evaluate(({ windowId, threadId }) => window.postMessage({
-    type: "maverick.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
+    type: "loopino.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
     context: { content: { workspace_id: "default", payload: { mode: "fixed-right", navigation_scope: windowId, thread_id: threadId } } },
   }, window.location.origin), { windowId, threadId: SESSION_ID });
   await expect(page.locator(".chat-floating-widget-stack")).toHaveClass(/is-fixed-right/);
@@ -118,7 +118,7 @@ test("preserves the real composer, attachments and other drafts through every pl
   await expect(page.locator(".chat-floating-window-slot:not([hidden])").getByRole("textbox")).toHaveText("Unsent work survives docking");
   await expect(page.locator(".chat-floating-window-slot")).toHaveCount(2);
   expect(submissions).toHaveLength(0);
-  await page.screenshot({ path: "/tmp/maverick-contextual-chat-desktop.png" });
+  await page.screenshot({ path: "/tmp/loopino-contextual-chat-desktop.png" });
 });
 
 
@@ -164,7 +164,7 @@ test("uses the sidebar row/editor and preserves project changes", async ({ page 
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(() => mutations.at(-1)).toMatchObject({ action: "rename", title: "Renamed work", project_id: "project-demo" });
   await expect(dialog.locator(".bs-chat-thread-editor")).toHaveCount(0);
-  await page.screenshot({ path: "/tmp/maverick-chat-shared-picker-desktop.png" });
+  await page.screenshot({ path: "/tmp/loopino-chat-shared-picker-desktop.png" });
 });
 
 test("resets the real controller after deleting a promoted draft", async ({ page }) => {
@@ -176,7 +176,7 @@ test("resets the real controller after deleting a promoted draft", async ({ page
   const windowId = await slot.getAttribute("data-window-id");
   await expect(slot.getByRole("textbox")).toBeEditable();
   await page.evaluate(({ windowId, threadId }) => window.postMessage({
-    type: "maverick.chat.active-thread-changed", owner_app_id: "chat", navigation_scope: windowId, active_thread_id: threadId,
+    type: "loopino.chat.active-thread-changed", owner_app_id: "chat", navigation_scope: windowId, active_thread_id: threadId,
   }, window.location.origin), { windowId, threadId: SESSION_ID });
   await expect(slot.getByRole("button", { name: "Choose chat", exact: true })).toContainText("Active work");
   await slot.getByRole("button", { name: "Choose chat", exact: true }).click();
@@ -215,7 +215,7 @@ test.describe("mobile shared chat picker", () => {
     await dialog.getByRole("button", { name: "Edit Active work", exact: true }).tap();
     await expect(dialog.locator(".bs-chat-thread-editor")).toBeVisible();
     await expect(dialog.getByRole("combobox", { name: "Project", exact: true })).toBeVisible();
-    await page.screenshot({ path: "/tmp/maverick-chat-shared-picker-mobile.png" });
+    await page.screenshot({ path: "/tmp/loopino-chat-shared-picker-mobile.png" });
     await dialog.getByRole("button", { name: "Cancel", exact: true }).tap();
     await expect(dialog).toBeVisible();
     await expect(dialog.locator(".bs-chat-thread-editor")).toHaveCount(0);

@@ -9,15 +9,15 @@ import core.apps.runtime_requests as runtime_requests
 from core.providers.errors import ProviderError
 from core.providers.errors import AgenticRuntimeError
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
 )
 
 
 class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
     def setUp(self) -> None:
         self.definition = SimpleNamespace(
-            runtime_engine_id="maverick-tool-loop",
+            runtime_engine_id="loopino-tool-loop",
             model_provider_id="google-ai-studio",
             provider_protocol="google-interactions",
         )
@@ -30,8 +30,8 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
             observability_store=None,
         )
         self.environment = {
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
         }
 
     def test_remote_app_request_and_fake_declaration_fail_before_store_use(self) -> None:

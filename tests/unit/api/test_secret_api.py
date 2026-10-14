@@ -337,14 +337,14 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "api-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
             },
         )
 
         self.assertEqual(rejected_status, 400)
         self.assertEqual(rejected_payload["error"], "secret_error")
         self.assertEqual(accepted_status, 201)
-        self.assertEqual(accepted_payload["grant"]["target_patterns"], ["maverick://app.backend/*"])
+        self.assertEqual(accepted_payload["grant"]["target_patterns"], ["loopino://app.backend/*"])
 
     def test_app_backend_grant_requires_declared_logical_name(self) -> None:
         app = self.make_app()
@@ -368,7 +368,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "missing-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
             },
         )
         accepted_status, accepted_payload, _ = self.invoke(
@@ -381,7 +381,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "declared-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
             },
         )
 
@@ -419,7 +419,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "api-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/backend"],
+                "target_patterns": ["loopino://app.backend/backend"],
             },
         )
         cli_status, cli_payload, _ = self.invoke(
@@ -432,7 +432,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "api-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/cli/sync"],
+                "target_patterns": ["loopino://app.backend/cli/sync"],
             },
         )
         duplicate_status, duplicate_payload, _ = self.invoke(
@@ -445,7 +445,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "api-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/backend"],
+                "target_patterns": ["loopino://app.backend/backend"],
             },
         )
         wildcard_status, wildcard_payload, _ = self.invoke(
@@ -458,13 +458,13 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "api-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
             },
         )
 
         self.assertEqual(backend_status, 201)
         self.assertEqual(cli_status, 201)
-        self.assertEqual(cli_payload["grant"]["target_patterns"], ["maverick://app.backend/cli/sync"])
+        self.assertEqual(cli_payload["grant"]["target_patterns"], ["loopino://app.backend/cli/sync"])
         self.assertEqual(duplicate_status, 400)
         self.assertIn("overlapping targets", duplicate_payload["detail"])
         self.assertEqual(wildcard_status, 400)
@@ -498,7 +498,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "api-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/cli/noop"],
+                "target_patterns": ["loopino://app.backend/cli/noop"],
             },
         )
 
@@ -518,7 +518,7 @@ class SecretApiTestCase(SecretApiTestSupport):
             logical_name="api-token",
             secret_ref=build_secret_ref(secret_id=secret.secret_id),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             expires_at=datetime.now(tz=UTC) - timedelta(minutes=1),
         )
 
@@ -533,7 +533,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "api-token",
                 "secret_id": secret.secret_id,
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
             },
         )
 
@@ -762,7 +762,7 @@ class SecretApiTestCase(SecretApiTestSupport):
             logical_name="api-token",
             secret_ref=build_secret_ref(alias=secret.alias),
             actions=["app.secret.read"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
         )
 
         status, payload, _ = self.invoke(app, path="/api/secret-grant-needs", cookie=cookie)
@@ -978,7 +978,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                     "logical_name": "gmail-refresh-token",
                     "secret_id": secret_payload["secret"]["secret_id"],
                     "actions": ["app.backend"],
-                    "target_patterns": ["maverick://app.backend/*"],
+                    "target_patterns": ["loopino://app.backend/*"],
                 },
                 "requires resource_type and resource_id",
             ),
@@ -988,7 +988,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                     "logical_name": "gmail-refresh-token",
                     "secret_id": secret_payload["secret"]["secret_id"],
                     "actions": ["app.backend"],
-                    "target_patterns": ["maverick://app.backend/*"],
+                    "target_patterns": ["loopino://app.backend/*"],
                     "resource_type": "email_thread",
                     "resource_id": "thread_1",
                 },
@@ -1000,7 +1000,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                     "logical_name": "gmail-oauth-client-id",
                     "secret_id": secret_payload["secret"]["secret_id"],
                     "actions": ["app.backend"],
-                    "target_patterns": ["maverick://app.backend/*"],
+                    "target_patterns": ["loopino://app.backend/*"],
                     "resource_type": "mail_connection",
                     "resource_id": "conn_1",
                 },
@@ -1053,7 +1053,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "gmail-refresh-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
                 "resource_type": "mail_connection",
                 "resource_id": "conn_2",
             },
@@ -1126,7 +1126,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "gmail-refresh-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
                 "resource_type": "mail_connection",
                 "resource_id": "conn_1",
             },
@@ -1141,7 +1141,7 @@ class SecretApiTestCase(SecretApiTestSupport):
                 "logical_name": "gmail-refresh-token",
                 "secret_id": secret_payload["secret"]["secret_id"],
                 "actions": ["app.backend"],
-                "target_patterns": ["maverick://app.backend/*"],
+                "target_patterns": ["loopino://app.backend/*"],
                 "resource_type": "MAIL_CONNECTION",
                 "resource_id": "Conn_1",
             },

@@ -121,7 +121,7 @@ Corrective automated checks:
 | website-studio | `336a49a8749d58a82268a5428bded523733390dcd3e43c678fd9bb17cd7f8e35` |
 | app-store | `7c398b6953347ed76401d27400e9e65e98a3d65d55748d5d5f2cf9158c6f2dc7` |
 
-The plan at `storage/generated/development/maverick-pwa-cache-development-plan.md`
+The plan at `storage/generated/development/loopino-pwa-cache-development-plan.md`
 was updated and reread through Storage's guarded Markdown surface. At that
 historical checkpoint its SHA-256 was `a58a397488a371da8913f28f0f54518d746ac609981c522c6ee44b68cf73f9e0`.
 Section 7.8 distinguishes implemented code from validation and actual rollout;

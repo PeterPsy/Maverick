@@ -29,7 +29,7 @@ from managed_sidecar_evidence import (
 from official_opendesign_release import OfficialReleaseError, verify_official_installation
 
 
-CORE_SERVICE = "maverick-core.service"
+CORE_SERVICE = "loopino-core.service"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -204,9 +204,9 @@ def _require_core_inactive() -> None:
     except OSError as error:
         raise NativeDataCutoverError("Core writer state could not be verified") from error
     if result.returncode == 0:
-        raise NativeDataCutoverError("Maverick Core must be stopped before native cutover")
+        raise NativeDataCutoverError("Loopino Core must be stopped before native cutover")
     if result.returncode not in {3, 4}:
-        raise NativeDataCutoverError("Maverick Core writer state is indeterminate")
+        raise NativeDataCutoverError("Loopino Core writer state is indeterminate")
 
 
 def _request_sidecar_control(operation: str, *, workspace_id: str) -> dict[str, Any]:

@@ -256,7 +256,7 @@ export function SkillsDetail({ catalog, selectedSkill, savingSkill, onDeleteSkil
                 <a href={selectedSkill.source_url} onClick={(event) => openExternalLink(event, selectedSkill.source_url!)} rel="noreferrer" target="_blank">
                   prompts.chat <ExternalLink size={13} aria-hidden="true" />
                 </a>
-              ) : <strong>{selectedSkill.origin === 'maverick' ? 'Maverick built-in' : 'Workspace catalog'}</strong>}
+              ) : <strong>{selectedSkill.origin === 'loopino' ? 'Loopino built-in' : 'Workspace catalog'}</strong>}
             </div>
             {selectedSkill.remote_id ? (
               <div>

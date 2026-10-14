@@ -2,12 +2,12 @@ type BrandMarkVariant = "icon" | "mark" | "logotype";
 
 const brandAssets: Record<BrandMarkVariant, string> = {
   icon: "/apps/base-shell/app-icon-lightcolor.png",
-  logotype: "/apps/base-shell/maverick-logotype.svg",
-  mark: "/apps/base-shell/maverick-mark.svg",
+  logotype: "/apps/base-shell/loopino-logotype.svg",
+  mark: "/apps/base-shell/loopino-mark.svg",
 };
 
 export function BrandMark({
-  alt = "Maverick",
+  alt = "Loopino",
   className = "",
   variant = "icon",
 }: {

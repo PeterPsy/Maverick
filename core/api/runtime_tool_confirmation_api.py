@@ -20,7 +20,7 @@ from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.tool_errors import RuntimeToolError, RuntimeToolRevisionError
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION,
     feature_enabled,
 )
 
@@ -36,7 +36,7 @@ def handle_runtime_tool_confirmation(
     start_response: StartResponse,
 ) -> list[bytes]:
     """Read or decide one exact invocation without exposing grant authority."""
-    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION):
+    if not feature_enabled(LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION):
         return json_response(
             start_response,
             {"error": "agentic_tool_confirmation_disabled"},
@@ -103,7 +103,7 @@ def handle_runtime_tool_confirmation(
             event_id=str(
                 uuid5(
                     NAMESPACE_URL,
-                    f"maverick:tool-confirmation:{grant.grant_id}:{decision}",
+                    f"loopino:tool-confirmation:{grant.grant_id}:{decision}",
                 )
             ),
             session_id=turn.session_id,

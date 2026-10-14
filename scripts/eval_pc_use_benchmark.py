@@ -46,7 +46,7 @@ def run_trial(variant, scenario, chromium, *, timeout=180, repetition=0):
     started = time.monotonic()
     final, exception = None, None
     try:
-        with tempfile.TemporaryDirectory(prefix='maverick-ui-benchmark-') as root:
+        with tempfile.TemporaryDirectory(prefix='loopino-ui-benchmark-') as root:
             session = SimpleNamespace(session_id='benchmark-' + variant, workspace_id='default', runtime_root=root)
             binding = SimpleNamespace(mode='full', approved_apps=(BUNDLE,), initial_app=BUNDLE)
             now = datetime.now(UTC)

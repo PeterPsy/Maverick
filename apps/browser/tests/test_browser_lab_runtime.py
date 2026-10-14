@@ -20,7 +20,7 @@ class BrowserLabRuntimeTests(unittest.TestCase):
              patch.object(runtime, "control", side_effect=[{"status": "stopped"}, {"status": "ready"}]), \
              patch.object(runtime.shutil, "which", return_value="/supported/node"), \
              patch.object(runtime.subprocess, "run"), patch.object(runtime.subprocess, "Popen") as spawn, \
-             patch.dict(runtime.os.environ, {"PATH": "/bin", "HOME": folder, "MAVERICK_RUNTIME_API_TOKEN": "private", "VENDOR_API_KEY": "private"}, clear=True):
+             patch.dict(runtime.os.environ, {"PATH": "/bin", "HOME": folder, "LOOPINO_RUNTIME_API_TOKEN": "private", "VENDOR_API_KEY": "private"}, clear=True):
             self.assertEqual(runtime.ensure_running(enable=True)["status"], "ready")
             environment = spawn.call_args.kwargs["env"]
             self.assertEqual(environment, {"PATH": "/bin", "HOME": folder})

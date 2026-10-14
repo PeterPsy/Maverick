@@ -28,14 +28,14 @@ MINIMAL_SIDECAR_ENV = {
     "TMPDIR": "/tmp",
     "TZ": "UTC",
 }
-RELAY_PROTOCOL_PREFIX = b"MAVERICK-SIDECAR-RELAY/1 "
+RELAY_PROTOCOL_PREFIX = b"LOOPINO-SIDECAR-RELAY/1 "
 _SANDBOX_APP_ROOT = Path("/app")
-_SANDBOX_ROOTFS_APP_SOURCE_ROOT = Path("/maverick/app")
+_SANDBOX_ROOTFS_APP_SOURCE_ROOT = Path("/loopino/app")
 _SANDBOX_DATA_ROOT = Path("/data")
 _SANDBOX_RELAY_SOCKET = Path("/relay/r.sock")
 _SANDBOX_MODEL_ACCESS_ROOT = Path("/model-access")
-_SANDBOX_STATUS_FILE = Path("/run/maverick/sidecar-status.json")
-_SIDECAR_STATUS_ENV = "MAVERICK_SIDECAR_STATUS_FILE"
+_SANDBOX_STATUS_FILE = Path("/run/loopino/sidecar-status.json")
+_SIDECAR_STATUS_ENV = "LOOPINO_SIDECAR_STATUS_FILE"
 _RUNTIME_READ_ONLY_DIRS = (Path("/etc/ssl"),)
 
 
@@ -233,7 +233,7 @@ def prepare_confined_sidecar_launch(
     passwd_fd = -1
     try:
         secret_fd = _pipe_with_payload(capability.encode("ascii") + b"\n")
-        passwd_fd = _pipe_with_payload(b"maverick-sidecar:x:0:0::/tmp/home:/usr/sbin/nologin\n")
+        passwd_fd = _pipe_with_payload(b"loopino-sidecar:x:0:0::/tmp/home:/usr/sbin/nologin\n")
         relay_source = Path(__file__).with_name("sidecar_relay.py").resolve()
         command = [
             bwrap,
@@ -256,11 +256,11 @@ def prepare_confined_sidecar_launch(
                 "/artifacts",
                 "/data",
                 "/relay",
-                "/maverick",
-                "/maverick/app",
-                "/maverick/python",
-                "/maverick/python/lib",
-                "/maverick/python/glibc",
+                "/loopino",
+                "/loopino/app",
+                "/loopino/python",
+                "/loopino/python/lib",
+                "/loopino/python/glibc",
                 "/model-access",
                 "/proc",
                 "/dev",
@@ -281,7 +281,7 @@ def prepare_confined_sidecar_launch(
                 "/artifacts",
                 "/data",
                 "/relay",
-                "/maverick",
+                "/loopino",
                 "/model-access",
                 "/proc",
                 "/dev",
@@ -328,7 +328,7 @@ def prepare_confined_sidecar_launch(
                 "/relay",
                 "--ro-bind",
                 str(relay_source),
-                "/maverick/sidecar_relay.py",
+                "/loopino/sidecar_relay.py",
                 "--proc",
                 "/proc",
                 "--dev",
@@ -338,7 +338,7 @@ def prepare_confined_sidecar_launch(
                 "--tmpfs",
                 "/run",
                 "--dir",
-                "/run/maverick",
+                "/run/loopino",
                 *(
                     [
                         "--bind",
@@ -355,7 +355,7 @@ def prepare_confined_sidecar_launch(
                 "--chdir",
                 workdir,
                 *relay_python,
-                "/maverick/sidecar_relay.py",
+                "/loopino/sidecar_relay.py",
                 "--relay-socket",
                 str(_SANDBOX_RELAY_SOCKET),
                 "--secret-fd",
@@ -391,7 +391,7 @@ def prepare_confined_sidecar_launch(
         command=command,
         env={
             **env,
-            **({"PYTHONHOME": "/maverick/python"} if execution_root is not None else {}),
+            **({"PYTHONHOME": "/loopino/python"} if execution_root is not None else {}),
             **(
                 {_SIDECAR_STATUS_ENV: _SANDBOX_STATUS_FILE.as_posix()}
                 if diagnostics_file is not None
@@ -719,22 +719,22 @@ def _runtime_mount_arguments(
         arguments = [
             "--ro-bind",
             str(loader),
-            "/maverick/python/ld.so",
+            "/loopino/python/ld.so",
             "--ro-bind",
             str(python_binary),
-            "/maverick/python/python3",
+            "/loopino/python/python3",
             "--ro-bind",
             str(python_stdlib),
-            f"/maverick/python/lib/{python_stdlib.name}",
+            f"/loopino/python/lib/{python_stdlib.name}",
             "--ro-bind",
             str(shared_libraries),
-            "/maverick/python/glibc",
+            "/loopino/python/glibc",
         ]
         relay_python = [
-            "/maverick/python/ld.so",
+            "/loopino/python/ld.so",
             "--library-path",
-            "/maverick/python/glibc",
-            "/maverick/python/python3",
+            "/loopino/python/glibc",
+            "/loopino/python/python3",
         ]
         if sidecar.runtime != "python" or sidecar.command[0] not in {"python", "python3"}:
             raise AppHostingError(
@@ -845,7 +845,12 @@ def _trusted_node_runtime() -> tuple[Path, Path]:
         root_metadata = node_root.stat()
     except OSError as error:
         raise AppHostingError("The minimal Node sidecar runtime closure is unavailable.") from error
-    inside_trusted_root = any(node_root == root or root in node_root.parents for root in trusted_roots)
+    from core.shared.node_toolchain import is_protected_installation_node
+
+    inside_trusted_root = (
+        any(node_root == root or root in node_root.parents for root in trusted_roots)
+        or is_protected_installation_node(node_binary)
+    )
     if (
         not inside_trusted_root
         or node_binary.name != "node"

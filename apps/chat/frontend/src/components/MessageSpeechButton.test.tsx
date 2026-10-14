@@ -9,7 +9,7 @@ import { recordSpeechPlaybackMetrics, synthesizeSpeech, synthesizeSpeechStream }
 import { speechChunks, speechLanguageHint, speechLanguageTextFromMarkdown, speechTextFromMarkdown } from "../lib/messageSpeech";
 import * as speechPcmPlayback from "../lib/speechPcmPlayback";
 import { MessageSpeechButton } from "./MessageSpeechButton";
-import * as appLifecycle from '@maverick/pwa-cache';
+import * as appLifecycle from '@loopino/pwa-cache';
 
 vi.mock("../api/client", () => ({
   recordSpeechPlaybackMetrics: vi.fn(async () => ({})),
@@ -55,7 +55,7 @@ describe("MessageSpeechButton", () => {
 
   it("requests backend synthesis and controls audio playback", async () => {
     const releases: Array<ReturnType<typeof vi.fn>> = [];
-    const pin = vi.spyOn(appLifecycle, 'preventMaverickAppHibernation').mockImplementation(() => {
+    const pin = vi.spyOn(appLifecycle, 'preventLoopinoAppHibernation').mockImplementation(() => {
       const release = vi.fn();
       releases.push(release);
       return release;

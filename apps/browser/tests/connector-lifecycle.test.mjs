@@ -13,7 +13,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
     postMessage(message) {
       if (message.action === "execute") {executing = message; return;}
       if (message.action === "cancel") cancelled = true;
-      queueMicrotask(() => dispatch({type: "maverick.browser.response", id: message.id,
+      queueMicrotask(() => dispatch({type: "loopino.browser.response", id: message.id,
         result: message.action === "status" ? (statusFailure ? {error:"connector_scope_required"} : {url: "https://www.instagram.com/fixture/", agent_tab_id:"5394d8de-023e-4e63-acf3-cdc9d56e2aee", active_operation: executing?.command.operation_id}) : {}}));
     },
   };
@@ -52,7 +52,7 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   statusFailure = false;
   const first = connector.start(); assert.equal(connector.start(), first); await first;
   await until(() => calls.filter(call => call.url.startsWith("/.well-known")).length === 1);
-  await nextTurn(); dispatch({type: "maverick.browser.wake"});
+  await nextTurn(); dispatch({type: "loopino.browser.wake"});
   await until(() => calls.filter(call => call.action === "companion.poll").length === 2);
   renewals.shift()();
   assert.equal(calls.filter(call => call.url.startsWith("/.well-known")).length, 1);
@@ -68,17 +68,17 @@ test("connector starts once, throttles renewal, fences stop and preserves sharin
   nextCommand = {operation_id: "cancel-race", lease_id: "fixture-lease", action: "video.analyze", expires_at: Date.now() / 1000 + 60};
   await connector.start(); await until(() => Boolean(executing)); await nextTurn();
   const disconnects = calls.filter(call => call.action === "companion.disconnect").length;
-  dispatch({type: "maverick.browser.wake"}); await until(() => cancelled);
+  dispatch({type: "loopino.browser.wake"}); await until(() => cancelled);
   await until(() => calls.some(call => call.action === "companion.poll" && call.active_operation_id === "cancel-race"));
   assert.equal(calls.filter(call => call.action === "companion.disconnect").length, disconnects, "An operation cancellation race must not revoke sharing");
   const pendingExecution = executing; executing = null;
-  dispatch({type: "maverick.browser.response", id: pendingExecution.id, result: {error: "operation_cancelled"}});
+  dispatch({type: "loopino.browser.response", id: pendingExecution.id, result: {error: "operation_cancelled"}});
   await nextTurn(); await nextTurn();
-  dispatch({type: "maverick.browser.wake"});
+  dispatch({type: "loopino.browser.wake"});
   await until(() => calls.filter(call => call.action === "companion.poll").length >= 5);
   assert.equal(calls.filter(call => call.action === "companion.disconnect").length, disconnects);
   await nextTurn(); statusFailure = true;
-  dispatch({type: "maverick.browser.wake"});
+  dispatch({type: "loopino.browser.wake"});
   await until(() => calls.filter(call => call.action === "companion.disconnect").length === disconnects + 1);
   assert.equal(states.at(-1), "stopped", "A scoped bridge failure must revoke on the first response even when its message contains friendly guidance");
   assert.match(reports.at(-1), /Sharing stopped:.*Open agent tab/u);

@@ -25,7 +25,7 @@ for (const scenario of cases) {
       context.skip("Chromium or Chrome is required for the microphone browser contract.");
       return;
     }
-    const profile = mkdtempSync(resolve(tmpdir(), "maverick-microphone-browser-"));
+    const profile = mkdtempSync(resolve(tmpdir(), "loopino-microphone-browser-"));
     context.after(() => rmSync(profile, { force: true, recursive: true }));
     const appServer = createServer();
     const shellServer = createServer();
@@ -102,10 +102,10 @@ for (const scenario of cases) {
 function shellDocument(appOrigin, targetOrigin, scenario) {
   const relay = `<script>const form=document.createElement('form');form.method='POST';form.action=${JSON.stringify(`${targetOrigin}/record`)};document.body.append(form);form.submit()</script>`;
   return `<!doctype html><html><body><iframe id="app"></iframe><script type="module">
-    import { MAVERICK_IFRAME_SANDBOX, appFrameBrowserFeaturePolicy, widgetFrameBrowserFeaturePolicy, isolatedFrameBrowserFeaturePolicy } from '/iframePolicy.js';
+    import { LOOPINO_IFRAME_SANDBOX, appFrameBrowserFeaturePolicy, widgetFrameBrowserFeaturePolicy, isolatedFrameBrowserFeaturePolicy } from '/iframePolicy.js';
     const frame = document.querySelector('#app');
     const features = ${scenario.owner === "chat" && !scenario.widget ? "appFrameBrowserFeaturePolicy" : "widgetFrameBrowserFeaturePolicy"}(${JSON.stringify(scenario.owner)});
-    frame.sandbox = MAVERICK_IFRAME_SANDBOX;
+    frame.sandbox = LOOPINO_IFRAME_SANDBOX;
     frame.allow = ${scenario.isolated ? `isolatedFrameBrowserFeaturePolicy(features, ${JSON.stringify(appOrigin)})` : "features"};
     addEventListener('message', event => {
       if (event.source !== frame.contentWindow || event.origin !== ${JSON.stringify(targetOrigin)}) return;

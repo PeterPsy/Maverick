@@ -19,7 +19,7 @@ describe("chat read receipts", () => {
     expect(hookSource).toContain("void markActiveThreadReadIfNeeded(activeThread);");
     expect(hookSource).toMatch(/markThreadRead\s*\(thread\.thread_id\)/);
     expect(source).not.toContain("isAppVisible");
-    expect(source).not.toContain("maverick.app.visibility-changed");
+    expect(source).not.toContain("loopino.app.visibility-changed");
     expect(sidebarSource).toContain("void markThreadReadIfNeeded(thread);");
     expect(sidebarSource).toMatch(/markThreadRead\s*\(thread\.thread_id\)/);
   });

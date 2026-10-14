@@ -17,8 +17,8 @@ from storage_mime import normalize_content_type
 from storage_provider_model import GOOGLE_DRIVE_PROVIDER
 
 
-FILE_CACHE_DESCRIPTOR_SCHEMA = "maverick.storage-file-cache-descriptor.v1"
-LOCAL_PERSISTENCE_POLICY_REVISION = "maverick.local-persistence-policy.v2"
+FILE_CACHE_DESCRIPTOR_SCHEMA = "loopino.storage-file-cache-descriptor.v1"
+LOCAL_PERSISTENCE_POLICY_REVISION = "loopino.local-persistence-policy.v2"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 MAX_BROWSER_FILE_CACHE_ENTRY_BYTES = 64 * 1024 * 1024
 

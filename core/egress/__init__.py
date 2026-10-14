@@ -1,4 +1,4 @@
-"""Network egress policy primitives owned by the Maverick core."""
+"""Network egress policy primitives owned by the Loopino core."""
 
 from core.egress.agentic_models import (
     AgenticEgressContentBlock,

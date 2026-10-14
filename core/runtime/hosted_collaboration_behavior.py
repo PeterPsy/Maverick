@@ -48,7 +48,7 @@ def inspect_hosted_collaboration_behavior() -> tuple[str, ...]:
 
 def _probe_workflow() -> bool:
     with tempfile.TemporaryDirectory() as directory:
-        repository_root = Path(directory) / "maverick"
+        repository_root = Path(directory) / "loopino"
         workspace_root = repository_root / "workspaces" / _WORKSPACE_ID
         runtime_root = workspace_root / "runtime"
         for path in (

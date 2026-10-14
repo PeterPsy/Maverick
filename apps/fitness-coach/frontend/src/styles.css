@@ -1,43 +1,43 @@
 :root {
   color-scheme: dark;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-bg-strong: #171717;
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #9ff0ca;
-  --maverick-danger: #ffb3bf;
-  --maverick-warning: #fde68a;
-  --maverick-card-radius: 8px;
-  --maverick-control-radius: 18px;
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-bg-strong: #171717;
+  --loopino-surface: rgba(255, 255, 255, 0.055);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-border: rgba(255, 255, 255, 0.08);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-glass-surface: rgba(12, 12, 14, 0.58);
+  --loopino-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.66);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-accent-soft: rgba(255, 255, 255, 0.18);
+  --loopino-text-on-accent: #0a0a0b;
+  --loopino-success: #9ff0ca;
+  --loopino-danger: #ffb3bf;
+  --loopino-warning: #fde68a;
+  --loopino-card-radius: 8px;
+  --loopino-control-radius: 18px;
+  --loopino-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
 
-  --fitness-bg: var(--maverick-bg);
-  --fitness-surface: var(--maverick-glass-surface);
-  --fitness-surface-muted: var(--maverick-surface);
-  --fitness-surface-hover: var(--maverick-surface-hover);
-  --fitness-surface-active: var(--maverick-surface-active);
-  --fitness-border: var(--maverick-border);
-  --fitness-border-strong: var(--maverick-border-strong);
-  --fitness-text: var(--maverick-text);
-  --fitness-muted: var(--maverick-text-muted);
-  --fitness-soft: var(--maverick-text-soft);
+  --fitness-bg: var(--loopino-bg);
+  --fitness-surface: var(--loopino-glass-surface);
+  --fitness-surface-muted: var(--loopino-surface);
+  --fitness-surface-hover: var(--loopino-surface-hover);
+  --fitness-surface-active: var(--loopino-surface-active);
+  --fitness-border: var(--loopino-border);
+  --fitness-border-strong: var(--loopino-border-strong);
+  --fitness-text: var(--loopino-text);
+  --fitness-muted: var(--loopino-text-muted);
+  --fitness-soft: var(--loopino-text-soft);
   --fitness-accent: #ffffff;
   --fitness-accent-soft: rgba(255, 255, 255, 0.18);
   --fitness-panel: rgba(13, 15, 12, 0.76);
-  --fitness-shell-top-offset: var(--maverick-shell-mobile-content-top-offset, 0px);
-  --fitness-player-top-offset: var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px));
+  --fitness-shell-top-offset: var(--loopino-shell-mobile-content-top-offset, 0px);
+  --fitness-player-top-offset: var(--loopino-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px));
   --fitness-player-progress-top: calc(0.62rem + var(--fitness-player-top-offset));
   --fitness-player-heading-gap: 0.74rem;
   --fitness-mobile-top-fade-height: calc(var(--fitness-shell-top-offset) + 1.1rem);
@@ -62,7 +62,7 @@ body,
 body {
   background: var(--fitness-bg);
   color: var(--fitness-text);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -270,7 +270,7 @@ select:focus {
 }
 
 .danger {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .block-editor,
@@ -306,7 +306,7 @@ select:focus {
 }
 
 .inline-error {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .editor,
@@ -362,7 +362,7 @@ select:focus {
 .fitness-loading-skeleton__icon,
 .fitness-loading-skeleton__media,
 .fitness-loading-skeleton__pill {
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .fitness-loading-skeleton__line::after,
@@ -397,7 +397,7 @@ select:focus {
 .fitness-loading-skeleton__button {
   width: 5.3rem;
   height: 2.15rem;
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
 }
 
 .fitness-loading-skeleton__counter {
@@ -482,7 +482,7 @@ select:focus {
   border: 1px solid var(--fitness-border);
   border-radius: 18px;
   background: rgba(7, 7, 8, 0.88);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.5rem;
   transform: translateX(-50%);
   backdrop-filter: blur(18px);
@@ -623,7 +623,7 @@ select:focus {
   border: 1px solid var(--fitness-border);
   border-radius: 999px;
   background: var(--fitness-surface-muted);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .header-actions,
@@ -746,7 +746,7 @@ select:focus {
   border: 1px solid var(--fitness-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .rest-block-icon {
@@ -980,7 +980,7 @@ select:focus {
   border: 1px solid var(--fitness-border);
   border-radius: 18px;
   background: rgba(7, 7, 8, 0.88);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.5rem;
   transform: translateX(-50%);
   backdrop-filter: blur(18px);
@@ -998,7 +998,7 @@ select:focus {
 
 .save-button.is-saved {
   border-color: rgba(159, 240, 202, 0.24);
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .save-button:disabled {
@@ -1122,7 +1122,7 @@ select:focus {
 }
 
 .field-label > span,
-.maverick-tags-label {
+.loopino-tags-label {
   color: var(--fitness-muted);
   font-size: 0.76rem;
   font-weight: 520;
@@ -1235,17 +1235,17 @@ select:focus {
   color: #070807;
 }
 
-.maverick-tags-input-wrap,
-.maverick-tags-input {
+.loopino-tags-input-wrap,
+.loopino-tags-input {
   min-width: 0;
 }
 
-.maverick-tags-input {
+.loopino-tags-input {
   display: grid;
   gap: 0.34rem;
 }
 
-.maverick-tags-control {
+.loopino-tags-control {
   display: flex;
   flex-wrap: wrap;
   gap: 0.42rem;
@@ -1257,12 +1257,12 @@ select:focus {
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.maverick-tags-control:focus-within {
+.loopino-tags-control:focus-within {
   border-color: var(--fitness-accent);
   box-shadow: 0 0 0 3px var(--fitness-accent-soft);
 }
 
-.maverick-tags-item {
+.loopino-tags-item {
   display: inline-flex;
   align-items: center;
   min-width: 0;
@@ -1275,15 +1275,15 @@ select:focus {
   padding: 0.28rem 0.34rem 0.28rem 0.58rem;
 }
 
-.maverick-tags-item-preview {
+.loopino-tags-item-preview {
   display: inline-flex;
   align-items: center;
   gap: 0.24rem;
   min-width: 0;
 }
 
-.maverick-tags-item-delete,
-.maverick-tags-clear {
+.loopino-tags-item-delete,
+.loopino-tags-clear {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1292,20 +1292,20 @@ select:focus {
   color: var(--fitness-muted);
 }
 
-.maverick-tags-item-delete {
+.loopino-tags-item-delete {
   width: 1.35rem;
   height: 1.35rem;
   border-radius: 999px;
   padding: 0;
 }
 
-.maverick-tags-item-delete:hover {
+.loopino-tags-item-delete:hover {
   background: rgba(255, 179, 191, 0.16);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
-.maverick-tags-item-input,
-.maverick-tags-text-input {
+.loopino-tags-item-input,
+.loopino-tags-text-input {
   width: auto;
   min-height: auto;
   border: 0;
@@ -1315,20 +1315,20 @@ select:focus {
   padding: 0;
 }
 
-.maverick-tags-item-input:focus,
-.maverick-tags-text-input:focus {
+.loopino-tags-item-input:focus,
+.loopino-tags-text-input:focus {
   border-color: transparent;
   box-shadow: none;
 }
 
-.maverick-tags-text-input {
+.loopino-tags-text-input {
   flex: 1 1 8rem;
   min-width: min(9rem, 100%);
   color: var(--fitness-text);
   font-size: 0.84rem;
 }
 
-.maverick-tags-clear {
+.loopino-tags-clear {
   justify-self: start;
   gap: 0.32rem;
   min-height: 1.9rem;
@@ -1337,7 +1337,7 @@ select:focus {
   font-size: 0.76rem;
 }
 
-.maverick-tags-clear:hover {
+.loopino-tags-clear:hover {
   color: var(--fitness-text);
 }
 
@@ -1870,13 +1870,13 @@ select:focus {
   border: 1px solid rgba(255, 179, 191, 0.36);
   border-radius: 14px;
   padding: 0.62rem 0.72rem;
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .player-error button {
   min-height: 2rem;
   border-color: rgba(255, 179, 191, 0.26);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .summary {

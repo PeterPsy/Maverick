@@ -19,7 +19,7 @@ export function showResult(operation) {
     dialog.append(link);
   }
   if (result.error) dialog.append(node("p", "error", result.detail || label(result.error)));
-  const release = appendMedia(dialog, result, window.__MAVERICK_PLATFORM_ORIGIN__ || location.origin);
+  const release = appendMedia(dialog, result, window.__LOOPINO_PLATFORM_ORIGIN__ || location.origin);
   appendCollection(dialog, result);
   appendCoverage(dialog, result.coverage);
   const text = result.text || result.content || result.transcription?.text;

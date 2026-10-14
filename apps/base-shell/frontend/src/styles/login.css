@@ -1,15 +1,15 @@
 .bs-login {
   --bs-login-foreground: #fff7fa;
-  --maverick-contrast-rgb: 255, 255, 255;
-  --maverick-text: #f0f0f1;
-  --maverick-text-muted: #a4a5aa;
-  --maverick-surface: #202124;
-  --maverick-surface-hover: #2c2d31;
-  --maverick-border: rgba(255, 255, 255, .12);
-  --maverick-border-strong: rgba(255, 255, 255, .2);
-  --maverick-dialog-surface: #17181b;
-  --maverick-dialog-scrim: rgba(0, 0, 0, .65);
-  --maverick-focus: #fff;
+  --loopino-contrast-rgb: 255, 255, 255;
+  --loopino-text: #f0f0f1;
+  --loopino-text-muted: #a4a5aa;
+  --loopino-surface: #202124;
+  --loopino-surface-hover: #2c2d31;
+  --loopino-border: rgba(255, 255, 255, .12);
+  --loopino-border-strong: rgba(255, 255, 255, .2);
+  --loopino-dialog-surface: #17181b;
+  --loopino-dialog-scrim: rgba(0, 0, 0, .65);
+  --loopino-focus: #fff;
   --bs-login-muted: rgba(255, 247, 250, 0.68);
   --bs-login-glass-background: linear-gradient(-75deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .19), rgba(255, 255, 255, .07));
   --bs-login-glass-shadow: inset 0 .125rem .125rem rgba(255, 255, 255, .08), inset 0 -.125rem .125rem rgba(0, 0, 0, .34), 0 .25rem .125rem -.125rem rgba(255, 255, 255, .22), inset 0 0 .1rem .25rem rgba(255, 255, 255, .08);
@@ -31,15 +31,15 @@
   z-index: 0;
   overflow: hidden;
   background:
-    radial-gradient(circle at 48% 44%, rgba(var(--maverick-contrast-rgb), 0.16), transparent 18rem),
+    radial-gradient(circle at 48% 44%, rgba(var(--loopino-contrast-rgb), 0.16), transparent 18rem),
     linear-gradient(135deg, #000, #171717 45%, #050505);
   pointer-events: none;
 }
 
 .bs-login-paper-bg.is-static {
   background:
-    radial-gradient(circle at 50% 40%, rgba(var(--maverick-contrast-rgb), 0.18), transparent 18rem),
-    radial-gradient(circle at 62% 64%, var(--maverick-accent-soft), transparent 20rem),
+    radial-gradient(circle at 50% 40%, rgba(var(--loopino-contrast-rgb), 0.18), transparent 18rem),
+    radial-gradient(circle at 62% 64%, var(--loopino-accent-soft), transparent 20rem),
     linear-gradient(145deg, #050505, #1c1c1c 54%, #000);
 }
 
@@ -130,7 +130,7 @@
   max-width: calc(100vw - 2rem);
   margin: 0;
   color: var(--bs-login-foreground);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
   font-size: 4rem;
   font-weight: 300;
   letter-spacing: 0;
@@ -169,7 +169,7 @@
 .bs-login__spinner {
   width: 1.05rem;
   height: 1.05rem;
-  border: 2px solid rgba(var(--maverick-contrast-rgb), 0.32);
+  border: 2px solid rgba(var(--loopino-contrast-rgb), 0.32);
   border-top-color: var(--bs-login-foreground);
   border-radius: 999px;
   animation: bs-spin 0.8s linear infinite;

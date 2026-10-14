@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
-import { AccountAvatar, googlePictureUrl } from '@maverick/account-avatar';
+import { AccountAvatar, googlePictureUrl } from '@loopino/account-avatar';
 
 it('keeps a fallback while loading, on errors and when changing accounts', () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

@@ -12,7 +12,7 @@ from core.installation.errors import InstallationError
 from core.installation.store import InstallationStore
 from core.installation.validation import hostname, public_ip, secret_ref
 from core.secrets.errors import SecretError
-from core.shared.env_file import read_env_file
+from core.shared.env_file import read_env_file, service_env_path
 
 ACTIVE_STATES = {"queued", "preparing", "waiting_dns", "waiting_ca", "waiting_external_actions", "activating", "verifying", "rolling_back"}
 
@@ -30,19 +30,19 @@ class InstallationService:
                  workspace_store=None, environment=None, dns_factory=CloudflareDns):
         self.store = InstallationStore(repository_root)
         self.secret_store, self.app_store, self.workspace_store = secret_store, app_store, workspace_store
-        self.environment = environment if environment is not None else {**read_env_file(repository_root / ".env"), **os.environ}
+        self.environment = environment if environment is not None else {**read_env_file(service_env_path(repository_root)), **os.environ}
         self.dns_factory = dns_factory
 
     def configuration(self) -> dict:
         configured = self.store.read("configuration")
         if configured:
             return configured
-        host = self.environment.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip()
+        host = self.environment.get("LOOPINO_SIDECAR_INSTALLATION_DOMAIN", "").strip()
         return {"installation_id": "uninitialized", "generation": 0,
                 "hostname": host, "public_url": "https://" + host if host else "",
-                "target_ip": self.environment.get("MAVERICK_INSTALLATION_PUBLIC_IP", ""),
+                "target_ip": self.environment.get("LOOPINO_INSTALLATION_PUBLIC_IP", ""),
                 "dns_provider": "cloudflare", "dns_secret_ref": "platform:secret-alias/cloudflare-dns-api-token",
-                "tls_mode": self.environment.get("MAVERICK_BROWSER_ORIGIN_TLS_MODE", ""),
+                "tls_mode": self.environment.get("LOOPINO_BROWSER_ORIGIN_TLS_MODE", ""),
                 "managed": False}
 
     def inspect(self) -> dict:
@@ -75,12 +75,12 @@ class InstallationService:
                 return item.status == "active"
             except (ValueError, KeyError, SecretError):
                 return False
-        references = [env.get("MAVERICK_GOOGLE_CLIENT_ID_REF", "platform:secret-alias/google-oauth-client-id"),
-                      env.get("MAVERICK_GOOGLE_CLIENT_SECRET_REF", "platform:secret-alias/google-oauth-client-secret")]
+        references = [env.get("LOOPINO_GOOGLE_CLIENT_ID_REF", "platform:secret-alias/google-oauth-client-id"),
+                      env.get("LOOPINO_GOOGLE_CLIENT_SECRET_REF", "platform:secret-alias/google-oauth-client-secret")]
         configured_google = all(ready(reference) for reference in references)
         requirements.append({"id": "core.google", "label": "Google · Calendar, Mail & Drive", "kind": "oauth_redirect",
             "url": "https://" + host + "/api/auth/google/callback" if host else "",
-            "current_url": env.get("MAVERICK_GOOGLE_REDIRECT_URI", ""),
+            "current_url": env.get("LOOPINO_GOOGLE_REDIRECT_URI", ""),
             "provider_url": "https://console.cloud.google.com/auth/clients", "configured": configured_google,
             "state": "configured" if configured_google else "connection_required"})
         if self.app_store and self.workspace_store:

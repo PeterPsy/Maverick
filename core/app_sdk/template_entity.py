@@ -359,7 +359,7 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action not in MUTATING_ACTIONS:
         return []
     resource = "view-state" if action in {{"clear_custom_view", "set_custom_view", "set_view_filter"}} else "records"
-    return [{{"type": "maverick.app.data-changed", "owner_app_id": "{request.app_id}", "resource": resource}}]
+    return [{{"type": "loopino.app.data-changed", "owner_app_id": "{request.app_id}", "resource": resource}}]
 '''
 
 

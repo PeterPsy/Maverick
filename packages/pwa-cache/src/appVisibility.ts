@@ -1,31 +1,31 @@
-import { isExactMaverickParentMessage } from './dataCacheBrokerProtocol';
+import { isExactLoopinoParentMessage } from './dataCacheBrokerProtocol';
 
 let shellVisible = true;
 type VisibilityOptions = { requireOnline?: boolean };
 const listeners = new Set<{ notify: (visible: boolean) => void; options: VisibilityOptions; previous: boolean }>();
 let teardown: (() => void) | null = null;
 
-export function maverickAppIsVisible(options: VisibilityOptions = {}): boolean {
+export function loopinoAppIsVisible(options: VisibilityOptions = {}): boolean {
   return shellVisible && !globalThis.document?.hidden
     && (options.requireOnline === false || globalThis.navigator?.onLine !== false);
 }
 
 /** Shared shell/document/connectivity intersection; no timers or network work. */
-export function observeMaverickVisibility(listener: (visible: boolean) => void, options: VisibilityOptions = {}): () => void {
+export function observeLoopinoVisibility(listener: (visible: boolean) => void, options: VisibilityOptions = {}): () => void {
   if (typeof window === 'undefined') { listener(true); return () => {}; }
-  const subscriber = { notify: listener, options, previous: maverickAppIsVisible(options) };
+  const subscriber = { notify: listener, options, previous: loopinoAppIsVisible(options) };
   listeners.add(subscriber);
   if (!teardown) {
     const update = () => {
       for (const subscriber of listeners) {
-        const next = maverickAppIsVisible(subscriber.options);
+        const next = loopinoAppIsVisible(subscriber.options);
         if (next === subscriber.previous) continue;
         subscriber.previous = next;
         subscriber.notify(next);
       }
     };
     const message = (event: MessageEvent) => {
-      if (!isExactMaverickParentMessage(event) || event.data?.type !== 'maverick.app.visibility-changed'
+      if (!isExactLoopinoParentMessage(event) || event.data?.type !== 'loopino.app.visibility-changed'
           || typeof event.data.visible !== 'boolean') return;
       shellVisible = event.data.visible;
       update();

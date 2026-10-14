@@ -69,7 +69,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -193,7 +193,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         )
 
         with (
-            patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_CHUNKS": "[\"hel\", \"lo\"]"}, clear=False),
+            patch.dict("os.environ", {"LOOPINO_HOSTED_TEXT_FAKE_CHUNKS": "[\"hel\", \"lo\"]"}, clear=False),
             patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
             patch(
                 "core.runtime.turn_submission_service_submit.resolve_runtime_backend_for_session",
@@ -221,10 +221,10 @@ class PlainHostedRuntimeTest(unittest.TestCase):
             state,
             session_id="sess-governed-context",
         )
-        governed_input = "Come sta andando?\n\n[Maverick governed orchestration read]\nRun is active."
+        governed_input = "Come sta andando?\n\n[Loopino governed orchestration read]\nRun is active."
 
         with (
-            patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "status response"}, clear=False),
+            patch.dict("os.environ", {"LOOPINO_HOSTED_TEXT_FAKE_RESPONSE": "status response"}, clear=False),
             patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
             patch(
                 "core.runtime.turn_submission_service_sync_hosted.generalist_orchestration_input_text",
@@ -255,7 +255,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         image_path.write_bytes(b"png-bytes")
 
         with (
-            patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "image response"}, clear=False),
+            patch.dict("os.environ", {"LOOPINO_HOSTED_TEXT_FAKE_RESPONSE": "image response"}, clear=False),
             patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
             patch(
                 "core.runtime.turn_submission_service_submit.resolve_runtime_backend_for_session",
@@ -322,7 +322,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         )
 
         with (
-            patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "async hosted"}, clear=False),
+            patch.dict("os.environ", {"LOOPINO_HOSTED_TEXT_FAKE_RESPONSE": "async hosted"}, clear=False),
             patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
             patch(
                 "core.runtime.turn_submission_service_runtime.resolve_runtime_backend_for_session",

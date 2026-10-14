@@ -13,8 +13,8 @@ import "./styles/main.css";
 
 const LOADING_DELAY_MS = 300;
 
-function maverickPlatformOrigin(): string {
-  const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+function loopinoPlatformOrigin(): string {
+  const value = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__;
   return typeof value === "string" && /^https?:\/\//u.test(value) ? value : window.location.origin;
 }
 
@@ -34,7 +34,7 @@ export function App() {
   const [errorCode, setErrorCode] = useState("");
 
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, "*");
+    window.parent?.postMessage({ type: "loopino.app.ready", app_id: appId }, "*");
   }, [appId]);
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function App() {
       if (event.origin !== window.location.origin || event.source !== window || !isRecord(event.data)) {
         return;
       }
-      if (event.data.type !== "maverick.app.navigate" || (event.data.app_id && event.data.app_id !== appId)) {
+      if (event.data.type !== "loopino.app.navigate" || (event.data.app_id && event.data.app_id !== appId)) {
         return;
       }
       const params = isRecord(event.data.params) ? event.data.params : {};
@@ -71,7 +71,7 @@ export function App() {
     setErrorCode("");
     const loadingTimer = window.setTimeout(() => setLoadingVisible(true), LOADING_DELAY_MS);
 
-    void requestOpenDesignLaunch(appId, nativePath, maverickPlatformOrigin(), abort.signal)
+    void requestOpenDesignLaunch(appId, nativePath, loopinoPlatformOrigin(), abort.signal)
       .then(async (launch) => {
         if (abort.signal.aborted) return;
         const frame = frameRef.current;
@@ -208,7 +208,7 @@ function diagnosticLabel(code: string): string {
     artifact_integrity_mismatch: "Il pacchetto ufficiale non supera la verifica di integrità.",
     browser_ticket_failed: "Non è stato possibile autorizzare l’origine isolata.",
     daemon_ready_timeout: "OpenDesign non ha raggiunto lo stato pronto.",
-    host_prepare_failed: "Maverick non ha potuto preparare l’avvio di OpenDesign.",
+    host_prepare_failed: "Loopino non ha potuto preparare l’avvio di OpenDesign.",
     sidecar_bootstrap_confirmation_expired: "Core non ha confermato l’avvio dell’origine isolata.",
     sidecar_bootstrap_confirmation_failed: "La verifica dell’avvio isolato non è riuscita.",
     sidecar_bootstrap_confirmation_invalid: "Core ha restituito una conferma di avvio non valida.",

@@ -166,7 +166,7 @@
         ],
         "examples": [
           {"action": "operations.manifest"},
-          {"action": "calendar_connections.start_oauth", "redirect_uri": "https://maverick.example/app/calendar/connections/google/callback"},
+          {"action": "calendar_connections.start_oauth", "redirect_uri": "https://loopino.example/app/calendar/connections/google/callback"},
           {"action": "calendar_calendars.select", "connection_id": "cal_conn_<id>", "calendar_id": "primary", "sync_enabled": false},
           {
             "action": "calendar_sync",

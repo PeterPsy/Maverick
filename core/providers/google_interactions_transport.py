@@ -62,7 +62,7 @@ class GoogleInteractionsHttpTransport:
                 "x-goog-api-key": credential.reveal(),
                 "Content-Type": "application/json",
                 "Accept": "text/event-stream",
-                "User-Agent": "Maverick-Agentic-Runtime/1",
+                "User-Agent": "Loopino-Agentic-Runtime/1",
             },
         )
         response = None

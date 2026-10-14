@@ -48,10 +48,10 @@ export function interactionDom(action,p) {
         }
       };
       collect(document);
-      globalThis.maverickInteractiveRefs={refs,url:location.href};
+      globalThis.loopinoInteractiveRefs={refs,url:location.href};
       return {elements,coverage:"Rendered controls in this page, open shadow roots and same-origin embedded frames."};
     }
-    const state=globalThis.maverickInteractiveRefs,stored=state?.refs.get(p.ref),e=stored?.element;
+    const state=globalThis.loopinoInteractiveRefs,stored=state?.refs.get(p.ref),e=stored?.element;
     if(!e || state.url !== location.href || !visible(e) || stored.signature !== signature(e))throw new Error("snapshot_ref_stale");
     if(e.disabled || e.getAttribute("aria-disabled") === "true")throw new Error("element_disabled");
     if(action === "prepare") {

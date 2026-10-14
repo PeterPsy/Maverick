@@ -254,11 +254,11 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
     def test_workspace_path_is_rewritten_and_other_host_path_is_denied(self) -> None:
         rewritten = self.evaluator.evaluate(
             block=self.block(),
-            content="read /srv/maverick/workspaces/default/generated/report.txt",
+            content="read /srv/loopino/workspaces/default/generated/report.txt",
             destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
-            workspace_root=Path("/srv/maverick/workspaces/default"),
+            workspace_root=Path("/srv/loopino/workspaces/default"),
             now=NOW,
         )
         denied = self.evaluator.evaluate(
@@ -286,15 +286,15 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
                 content_type="application/json",
             ),
             content={
-                "workspace_file": "/srv/maverick/workspaces/default/AGENTS.md",
+                "workspace_file": "/srv/loopino/workspaces/default/AGENTS.md",
                 "host_reference": (
-                    "The installation root is `/home/ubuntu/projects/maverick-v3`."
+                    "The installation root is `/projects/loopino`."
                 ),
             },
             destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
-            workspace_root=Path("/srv/maverick/workspaces/default"),
+            workspace_root=Path("/srv/loopino/workspaces/default"),
             now=NOW,
         )
         denied = self.evaluator.evaluate(
@@ -331,8 +331,8 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
                 data_class="workspace_internal",
             ),
             content=(
-                "Use /srv/maverick/workspaces/default for workspace files and "
-                "/home/ubuntu/projects/maverick-v3 for the installation root."
+                "Use /srv/loopino/workspaces/default for workspace files and "
+                "/projects/loopino for the installation root."
             ),
             destination_provider_id="fixture-provider",
             destination_upstream_id=None,
@@ -344,7 +344,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
                 allowed_upstream_ids=(),
                 transform_sensitive_text=True,
             ),
-            workspace_root=Path("/srv/maverick/workspaces/default"),
+            workspace_root=Path("/srv/loopino/workspaces/default"),
             now=NOW,
         )
         denied = self.evaluator.evaluate(

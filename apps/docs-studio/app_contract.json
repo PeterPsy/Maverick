@@ -8,7 +8,7 @@
   "minimum_core_version": "0.1.0",
   "provides": [
     {
-      "interface": "maverick.documentation",
+      "interface": "loopino.documentation",
       "version": "1",
       "description": "Targeted workspace documentation manifest, search, and Markdown page reads for agents.",
       "surfaces": [

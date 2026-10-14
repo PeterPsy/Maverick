@@ -29,14 +29,14 @@ from tests.support.collections import FakeCollection
 
 class RuntimeExecutionCommandTest(unittest.TestCase):
     def test_sandbox_session_uses_codex_app_server_without_legacy_landlock_flag(self) -> None:
-        with patch.dict(os.environ, {"MAVERICK_CODEX_COMMAND": "/usr/bin/codex"}, clear=False):
+        with patch.dict(os.environ, {"LOOPINO_CODEX_COMMAND": "/usr/bin/codex"}, clear=False):
             command = _codex_app_server_command(execution_mode=_session("sandbox").effective_mode)
 
         self.assertEqual(command, ["/usr/bin/codex", "app-server", "--listen", "stdio://"])
         self.assertNotIn("exec", command)
 
     def test_full_access_session_uses_codex_app_server_without_landlock_flag(self) -> None:
-        with patch.dict(os.environ, {"MAVERICK_CODEX_COMMAND": "/usr/bin/codex"}, clear=False):
+        with patch.dict(os.environ, {"LOOPINO_CODEX_COMMAND": "/usr/bin/codex"}, clear=False):
             command = _codex_app_server_command(execution_mode=_session("full-access").effective_mode)
 
         self.assertEqual(command, ["/usr/bin/codex", "app-server", "--listen", "stdio://"])

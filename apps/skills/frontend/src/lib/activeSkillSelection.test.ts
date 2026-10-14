@@ -19,7 +19,7 @@ describe('active skill selection messages', () => {
 
     const posted = notifyActiveSkillSelection(' skill-a ', {
       currentWindow: {},
-      origin: 'https://maverick.test',
+      origin: 'https://loopino.test',
       parentWindow: parent.target
     });
 
@@ -27,11 +27,11 @@ describe('active skill selection messages', () => {
     expect(parent.messages).toEqual([
       {
         message: {
-          type: 'maverick.app.selection-changed',
+          type: 'loopino.app.selection-changed',
           owner_app_id: 'skills',
           selection: { skill_id: 'skill-a' }
         },
-        targetOrigin: 'https://maverick.test'
+        targetOrigin: 'https://loopino.test'
       }
     ]);
   });
@@ -48,25 +48,25 @@ describe('active skill selection messages', () => {
   it('extracts only Skills-owned active selections', () => {
     expect(
       skillIdFromSelectionMessage({
-        type: 'maverick.app.selection-changed',
+        type: 'loopino.app.selection-changed',
         owner_app_id: 'skills',
         selection: { skill_id: ' skill-a ' }
       })
     ).toBe('skill-a');
     expect(
       skillIdFromSelectionMessage({
-        type: 'maverick.app.selection-changed',
+        type: 'loopino.app.selection-changed',
         owner_app_id: 'agents',
         selection: { skill_id: 'skill-a' }
       })
     ).toBe('');
-    expect(skillIdFromSelectionMessage({ type: 'maverick.widget.data-changed', owner_app_id: 'skills' })).toBe('');
+    expect(skillIdFromSelectionMessage({ type: 'loopino.widget.data-changed', owner_app_id: 'skills' })).toBe('');
   });
 
   it('reads the active skill from shell sidebar widget context', () => {
     expect(
       skillIdFromWidgetContext({
-        type: 'maverick.widget.context-changed',
+        type: 'loopino.widget.context-changed',
         context: {
           content: {
             payload: {

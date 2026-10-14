@@ -10,7 +10,7 @@ never perform a cutover. Storage selects its adapter through
 `inventory-store.json`; the JSON adapter is retained only for pre-cutover
 workspaces and verified reverse exports. Usage defaults to its transitional document adapter until the independent
 SQLite owner is explicitly prepared, validated and selected with
-`MAVERICK_USAGE_STORE=sqlite`.
+`LOOPINO_USAGE_STORE=sqlite`.
 
 ## Reproducible baseline
 
@@ -19,7 +19,7 @@ SQLite owner is explicitly prepared, validated and selected with
 On the migrated Azure host, the 2026-10-10 incident exhausted a 4 GiB machine
 without swap. Linux memory pressure reported full stalls above 50%, and native
 sidecar readiness probes timed out alongside unrelated requests. A 2 GiB,
-root-owned mode-600 swap file at `/mnt/maverick-swapfile`, registered in
+root-owned mode-600 swap file at `/mnt/loopino-swapfile`, registered in
 `/etc/fstab`, reduced full memory stalls below 1% without terminating active
 work. Check `free -m`, `swapon --show`, and `/proc/pressure/memory` before
 starting additional builds or browser tests. Swap cushions temporary peaks;
@@ -28,7 +28,7 @@ sustained pressure requires fewer concurrent workloads or more host RAM.
 Design Studio also retained an empty generated profile directory owned by the
 old migrated uid. Its writer deliberately requires mode 700 and could not
 chmod another user's directory. Only the empty
-`workspaces/default/data/design-studio/opendesign-native/sandbox/agent-home/.maverick`
+`workspaces/default/data/design-studio/opendesign-native/sandbox/agent-home/.loopino`
 directory was reassigned to the current Core service uid (1000), preserving the
 migrated data gid (1003), and set to mode 700. Do not recursively change project
 or conversation ownership. Restart the declared Design Studio sidecar through
@@ -86,8 +86,8 @@ The Python module's loaded library must include the upstream WAL-reset fix.
 build the pinned release without replacing the system library:
 
 ```sh
-python3 scripts/prepare_sqlite_runtime.py --prefix .maverick/sqlite/3.51.3
-LD_LIBRARY_PATH="$PWD/.maverick/sqlite/3.51.3/lib" python3 -c 'import sqlite3; print(sqlite3.sqlite_version)'
+python3 scripts/prepare_sqlite_runtime.py --prefix .loopino/sqlite/3.51.3
+LD_LIBRARY_PATH="$PWD/.loopino/sqlite/3.51.3/lib" python3 -c 'import sqlite3; print(sqlite3.sqlite_version)'
 ```
 
 The build checks SQLite's published SHA3-256 of the amalgamation before
@@ -265,7 +265,7 @@ retaining just that projected message until speech ends. Scrolling
 therefore preserves its Audio/AudioContext without mounting intervening history.
 
 The opt-in `transcript.performance.test.ts` probe reports 500 live updates after
-five warmups for 100/1k/5k messages. Set `MAVERICK_PERFORMANCE_PROBE` to an output
+five warmups for 100/1k/5k messages. Set `LOOPINO_PERFORMANCE_PROBE` to an output
 path and run that file alone with one Vitest worker. This measures isolated
 merge/projection CPU, not browser rendering, startup or server-side batching.
 
@@ -288,14 +288,14 @@ authentication and workload remain identical. The driver intercepts just the
 fixture session's WebSocket to supply identical history and streaming events,
 and clears its missing-provider admission warning without submitting a turn.
 Record both Chat build IDs and raw trials. Run comparisons sequentially without
-other tests/builds; `MAVERICK_PERFORMANCE_STREAM_TRIALS=1` is a diagnostic run,
+other tests/builds; `LOOPINO_PERFORMANCE_STREAM_TRIALS=1` is a diagnostic run,
 not the five-trial comparison.
 
-Set `MAVERICK_PERFORMANCE_COMPACT=1` when persisting evidence. The streaming
+Set `LOOPINO_PERFORMANCE_COMPACT=1` when persisting evidence. The streaming
 and startup drivers keep scalar per-trial measurements and percentile summaries
 while omitting high-volume event-delay and request-waterfall arrays.
 
-For a separate one-trial diagnostic, `MAVERICK_PERFORMANCE_STREAM_TRACE=<path>`
+For a separate one-trial diagnostic, `LOOPINO_PERFORMANCE_STREAM_TRACE=<path>`
 writes a Chromium trace, V8 CPU profile and screenshot. Traced runs are marked and are not used
 as comparison trials. Inline agent, structured and tool cards retain their
 surfaces, gradients, borders and shadows without backdrop blur: those cards sit
@@ -375,7 +375,7 @@ command `core.persistence.usage-migration` accepts `phase=prepare`, `validate`,
 `cutover`, `backup`, `repair`, or `rollback`; validate/cutover require the returned
 `migration_id`. Equivalent MCP tools are `core.persistence.usage.status` and
 `core.persistence.usage.migration`. Complete prepare/validate/cutover with Usage
-producers drained, then restart with the returned `MAVERICK_USAGE_STORE` setting.
+producers drained, then restart with the returned `LOOPINO_USAGE_STORE` setting.
 The command does not modify service credentials or restart the operator's session.
 The fence drains in-flight operations and rejects stale adapter instances.
 For cutover initiated by an agent hosted by that same backend, the explicit
@@ -602,11 +602,11 @@ Additional disposable browser scenarios use the same host wrapper:
   `noDefaults: true`, avoiding Playwright's forced focus emulation. It asserts a
   real hidden/visible transition when switching tabs, then records the resumed
   foreground phase. Normal Chrome background throttling remains enabled.
-  `MAVERICK_PERFORMANCE_HEADFUL=1 xvfb-run -a ...` allows an actual Linux browser
+  `LOOPINO_PERFORMANCE_HEADFUL=1 xvfb-run -a ...` allows an actual Linux browser
   window without claiming Safari or installed-PWA coverage.
   `--frontend-build-ref <commit>` replaces the five changed frontend builds only
   inside the disposable fixture for a coherent pre-change comparison. Set
-  `MAVERICK_PERFORMANCE_IDLE_PHASE_MS` to use the same longer phase duration for
+  `LOOPINO_PERFORMANCE_IDLE_PHASE_MS` to use the same longer phase duration for
   baseline and candidate.
 - `--scenario startup` separates five authenticated cold Shell contexts from 25
   warm in-shell returns to an already mounted Storage frame. Useful content means

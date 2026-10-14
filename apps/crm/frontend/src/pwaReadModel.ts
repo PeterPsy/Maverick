@@ -1,4 +1,4 @@
-import { displayRecord, projectDisplayModel, type DisplayModelSchema } from '@maverick/pwa-cache';
+import { displayRecord, projectDisplayModel, type DisplayModelSchema } from '@loopino/pwa-cache';
 import schemas from '../../pwa_read_models.v1.json';
 
 export type CrmReadModel = { kind: string; data: Record<string, unknown> };

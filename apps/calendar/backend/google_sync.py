@@ -1,4 +1,4 @@
-"""Google Calendar to Maverick Calendar synchronization."""
+"""Google Calendar to Loopino Calendar synchronization."""
 
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 Date: 2026-04-21
 
-`developer-kit` is a sealed workspace-visible Maverick app for SDK workflows. It is intentionally not admin-only: every workspace user should be able to learn the SDK, generate app source, validate contracts, and package source artifacts.
+`developer-kit` is a sealed workspace-visible Loopino app for SDK workflows. It is intentionally not admin-only: every workspace user should be able to learn the SDK, generate app source, validate contracts, and package source artifacts.
 
 It exposes:
 

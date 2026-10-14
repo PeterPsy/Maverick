@@ -22,9 +22,9 @@ function ContextIcon({ context }: { context: ActiveAppContext | null }) {
   const logo = context?.logo;
   if (logo?.kind === "image") {
     // Other apps' public icons live on the platform, outside Chat's isolated origin.
-    const platformOrigin = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }).__MAVERICK_PLATFORM_ORIGIN__;
+    const platformOrigin = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string }).__LOOPINO_PLATFORM_ORIGIN__;
     const url = new URL(logo.value, platformOrigin || window.location.origin).href;
-    if (/\/apps\/[^/]+\/maverick-icon-compact\.png(?:[?#].*)?$/.test(url)) {
+    if (/\/apps\/[^/]+\/loopino-icon-compact\.png(?:[?#].*)?$/.test(url)) {
       const mask = `url(${JSON.stringify(url)}) center / contain no-repeat`;
       return <span aria-hidden="true" className="chat-floating-context-icon is-compact" style={{ mask, WebkitMask: mask }} />;
     }

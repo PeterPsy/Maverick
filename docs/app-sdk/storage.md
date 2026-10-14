@@ -1,4 +1,4 @@
-# Maverick App SDK Storage Guide
+# Loopino App SDK Storage Guide
 
 Date: 2026-04-21
 

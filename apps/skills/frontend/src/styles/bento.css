@@ -13,10 +13,10 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
   backdrop-filter: blur(26px);
   isolation: isolate;
   padding: 18px;
@@ -28,14 +28,14 @@
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  background: var(--maverick-glass-highlight);
+  background: var(--loopino-glass-highlight);
   opacity: 0.7;
   pointer-events: none;
   content: "";
 }
 
 .bento-card:hover {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.045);
 }
 
@@ -83,7 +83,7 @@
   align-items: center;
   gap: 0.46rem;
   min-width: 0;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.76rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -91,7 +91,7 @@
 
 .bento-card-topline strong {
   overflow: hidden;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -167,7 +167,7 @@
 }
 
 .bento-kpi span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.74rem;
   font-weight: 400;
 }
@@ -200,10 +200,10 @@
   justify-content: center;
   width: 62px;
   height: 62px;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.1);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-weight: 900;
 }
 
@@ -237,7 +237,7 @@
 }
 
 .status-meter span.is-active {
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
   box-shadow: 0 0 24px rgba(255, 255, 255, 0.18);
 }
 
@@ -254,8 +254,8 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
   padding: 0.68rem 0.78rem;
 }
@@ -263,7 +263,7 @@
 .skill-toggle-choice input {
   width: 1rem;
   height: 1rem;
-  accent-color: var(--maverick-accent);
+  accent-color: var(--loopino-accent);
 }
 
 .skill-identity-list {
@@ -275,14 +275,14 @@
   display: grid;
   gap: 0.38rem;
   min-width: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
   padding: 12px;
 }
 
 .skill-identity-list span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.74rem;
   font-weight: 400;
 }
@@ -299,7 +299,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 .bento-card-preview pre {

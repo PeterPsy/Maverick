@@ -15,14 +15,14 @@ from core.providers.agentic_data_policies import (
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
 )
-from core.providers.maverick_agent_onboarding import (
-    MaverickAgentProfilePublication,
-    publish_maverick_agent_profile,
-    validate_maverick_runtime_adapter,
+from core.providers.loopino_agent_onboarding import (
+    LoopinoAgentProfilePublication,
+    publish_loopino_agent_profile,
+    validate_loopino_runtime_adapter,
 )
 from core.providers.store import ProviderStore
 from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
@@ -99,13 +99,13 @@ def google_interactions_routing_constraint() -> RoutingConstraint:
 def google_agentic_preview_publication(
     *,
     now: datetime | None = None,
-) -> MaverickAgentProfilePublication:
+) -> LoopinoAgentProfilePublication:
     """Build the immutable Google publication record used by onboarding."""
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=GOOGLE_AGENTIC_PROFILE_ID,
         display_name="Google Gemini 3.6 Flash",
-        runtime_engine_id="maverick-tool-loop",
+        runtime_engine_id="loopino-tool-loop",
         model_provider_id="google-ai-studio",
         model_id="gemini-3.6-flash",
         model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
@@ -126,7 +126,7 @@ def google_agentic_preview_publication(
         egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
         context_policy=GOOGLE_HOSTED_MODEL_CONFIG.context_policy,
     )
-    return MaverickAgentProfilePublication(
+    return LoopinoAgentProfilePublication(
         adapter=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
         provider_config=GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
         model_config=GOOGLE_HOSTED_MODEL_CONFIG,
@@ -142,8 +142,8 @@ def ensure_google_agentic_preview_profile(
 ) -> AgenticProfileDefinition:
     """Publish the current Google agentic model config without enabling it."""
     timestamp = now or datetime.now(tz=UTC)
-    validate_maverick_runtime_adapter(GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER, adapter)
-    return publish_maverick_agent_profile(
+    validate_loopino_runtime_adapter(GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER, adapter)
+    return publish_loopino_agent_profile(
         store,
         publication=google_agentic_preview_publication(now=timestamp),
         now=timestamp,

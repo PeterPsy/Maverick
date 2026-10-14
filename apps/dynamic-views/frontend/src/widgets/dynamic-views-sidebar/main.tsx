@@ -64,7 +64,7 @@ function useShellMobileLayout() {
 function openDynamicViewInShell(viewId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'dynamic-views',
       params: {
         app_page: `views/${encodeURIComponent(viewId)}`,
@@ -75,7 +75,7 @@ function openDynamicViewInShell(viewId: string) {
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -216,7 +216,7 @@ function DynamicViewsSidebarWidget() {
         setSelectedViewId(activeViewId);
         return;
       }
-      if (payload.type !== 'maverick.widget.data-changed' || payload.owner_app_id !== 'dynamic-views') {
+      if (payload.type !== 'loopino.widget.data-changed' || payload.owner_app_id !== 'dynamic-views') {
         return;
       }
       if (payload.resource === 'views') {

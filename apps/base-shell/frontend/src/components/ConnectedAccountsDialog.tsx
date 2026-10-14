@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AccountAvatar } from '@maverick/account-avatar';
+import { AccountAvatar } from '@loopino/account-avatar';
 import { connectedAccounts, disconnectConnectedAccount, selectConnectedAccount, setConnectedAppAccess, setConnectedWorkspaceAccess, startGoogle,
   type ConnectedAccountsPayload, type GoogleService, type SessionUser } from "../api";
 import { GoogleMark, GoogleServices, googleCallbackMessage } from "./GoogleServices";
@@ -29,7 +29,7 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
   const [error, setError] = useState<string | null>(googleCallbackMessage(callbackError));
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
-  const preferenceKey = `maverick.account-panel.v1.${user?.user_id ?? "anonymous"}`;
+  const preferenceKey = `loopino.account-panel.v1.${user?.user_id ?? "anonymous"}`;
   const [section, setSection] = useState<Section>(() => {
     if (callbackError) return "google";
     if (initialSection) return initialSection;
@@ -85,7 +85,7 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
   async function connect(selectedServices = services) {
     if (busy) return;
     const controller = new AbortController(); googleController.current = controller;
-    setBusy(true); setError(null); setNotice("Continue in your browser. Maverick will update automatically.");
+    setBusy(true); setError(null); setNotice("Continue in your browser. Loopino will update automatically.");
     try {
       if (await startGoogle("connect", selectedServices, controller.signal) === "completed"
           && alive.current && googleController.current === controller && !controller.signal.aborted) {
@@ -127,18 +127,18 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
     <div className="bs-connected-accounts__body">
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
-      {section === "profile" && <section className="bs-account-section"><h3>Your profile</h3><div className="bs-account-profile"><UserAvatar user={user} size={64} /><div><strong>{user?.display_name || user?.username || "Maverick user"}</strong><small>{user?.email || user?.username}</small></div></div>
+      {section === "profile" && <section className="bs-account-section"><h3>Your profile</h3><div className="bs-account-profile"><UserAvatar user={user} size={64} /><div><strong>{user?.display_name || user?.username || "Loopino user"}</strong><small>{user?.email || user?.username}</small></div></div>
         <dl className="bs-account-details"><div><dt>Server</dt><dd>{window.location.origin}</dd></div><div><dt>Workspace</dt><dd>{workspaceName || data?.workspace_id || "—"}</dd></div><div><dt>Role</dt><dd>{user?.platform_role || "member"}</dd></div></dl>
-        <p className="bs-account-note">This is your signed-in Maverick identity. Connecting another Google account for an app keeps this profile.</p>
+        <p className="bs-account-note">This is your signed-in Loopino identity. Connecting another Google account for an app keeps this profile.</p>
       </section>}
       {section === "servers" && <ServerProfilesPanel beforeSwitch={() => { cancelGoogle(); setNotice(null); }} />}
-      {section === "logout" && <section className="bs-account-section"><h3>Log out of this server</h3><p>End your Maverick session on {window.location.host}. Google connections stay linked and your sessions on other servers stay available.</p>
+      {section === "logout" && <section className="bs-account-section"><h3>Log out of this server</h3><p>End your Loopino session on {window.location.host}. Google connections stay linked and your sessions on other servers stay available.</p>
         <div className="bs-connected-accounts__actions"><button type="button" disabled={busy && !googleController.current} onClick={() => {
           cancelGoogle(); setBusy(true); setError(null);
           void onLogout?.().catch(() => { if (alive.current) { setBusy(false); setError("Unable to confirm logout. Please try again."); } });
         }}>Log out of this server</button><button type="button" onClick={() => navigate("profile")}>Cancel</button></div></section>}
       {(section === "google" || section === "access") && <><div><h3>{section === "google" ? "Connected accounts" : "App access"}</h3><p>{section === "google"
-        ? "Link personal Google accounts and choose the services they provide. Connections belong to your Maverick identity on this server."
+        ? "Link personal Google accounts and choose the services they provide. Connections belong to your Loopino identity on this server."
         : `Choose accounts and permissions for ${workspaceName || data?.workspace_id || "this workspace"}. Each workspace has its own selection.`}</p></div>
       {!data && !error && <p role="status">Loading accounts…</p>}
       {data && <>
@@ -163,10 +163,10 @@ export function ConnectedAccountsDialog({ onClose, onChanged, callbackError = nu
               : <button type="button" disabled={busy || !data.google.configured} onClick={() => { setServices(account.services); void connect(account.services); }}>Reconnect</button>)}
           </div>
           {confirmDisconnect === account.account_id && <div className="bs-connected-accounts__confirmation">
-            <p>Disconnect {account.email} from Maverick in all workspaces? Maverick will also ask Google to revoke permissions for this connection.</p>
+            <p>Disconnect {account.email} from Loopino in all workspaces? Loopino will also ask Google to revoke permissions for this connection.</p>
             <button type="button" disabled={busy} onClick={() => void mutate(async () => {
               const result = await disconnectConnectedAccount(account.account_id);
-              if (alive.current) { setConfirmDisconnect(null); setNotice(result.revoked_at_google ? "Google disconnected." : "Disconnected from Maverick. Revocation at Google could not be confirmed."); }
+              if (alive.current) { setConfirmDisconnect(null); setNotice(result.revoked_at_google ? "Google disconnected." : "Disconnected from Loopino. Revocation at Google could not be confirmed."); }
             })}>Disconnect Google</button>
             <button type="button" disabled={busy} onClick={() => setConfirmDisconnect(null)}>Cancel</button>
           </div>}

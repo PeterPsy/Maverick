@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 NATIVE_AGENT_EXECUTION_FAMILY = "native_agent"
-MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
+LOOPINO_AGENT_EXECUTION_FAMILY = "loopino_agent"
 HOSTED_TEXT_EXECUTION_FAMILY = "hosted_text"
 
 
@@ -27,9 +27,9 @@ EXECUTION_FAMILIES = (
         workspace_actions=True,
     ),
     ExecutionFamilyDefinition(
-        family_id=MAVERICK_AGENT_EXECUTION_FAMILY,
+        family_id=LOOPINO_AGENT_EXECUTION_FAMILY,
         label="API models",
-        description="Models running through Maverick's agentic API loop.",
+        description="Models running through Loopino's agentic API loop.",
         workspace_actions=True,
     ),
 )
@@ -73,8 +73,8 @@ def effective_agentic_execution_family(
         provider_protocol=provider_protocol,
     ):
         return NATIVE_AGENT_EXECUTION_FAMILY
-    if runtime_engine_id == "maverick-tool-loop":
-        return MAVERICK_AGENT_EXECUTION_FAMILY
+    if runtime_engine_id == "loopino-tool-loop":
+        return LOOPINO_AGENT_EXECUTION_FAMILY
     if runtime_engine_id in {"codex", "claude-code", "antigravity-cli"}:
         return NATIVE_AGENT_EXECUTION_FAMILY
     return ""

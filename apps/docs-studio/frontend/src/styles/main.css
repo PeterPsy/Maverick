@@ -60,7 +60,7 @@ button {
   margin: 0 auto;
   overflow: auto;
   background: var(--docs-bg);
-  padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 42px) 56px 72px;
+  padding: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 42px) 56px 72px;
 }
 
 .doc-page {
@@ -372,7 +372,7 @@ h1 {
   .docs-app {
     height: auto;
     min-height: 100vh;
-    padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 28px) 18px 44px;
+    padding: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 28px) 18px 44px;
   }
 
   h1 {

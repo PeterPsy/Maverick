@@ -1,6 +1,6 @@
 {
   "tools": {
-    "maverick_skills_app": {
+    "loopino_skills_app": {
       "effect_class": "destructive",
       "effect_class_by_argument": {
         "argument_name": "action",

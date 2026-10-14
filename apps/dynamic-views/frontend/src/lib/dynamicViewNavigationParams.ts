@@ -27,7 +27,7 @@ export function dynamicViewIdFromParams(params: DynamicViewNavigationParams): st
 }
 
 export function dynamicViewIdFromWidgetContext(message: WidgetContextMessage): string {
-  if (message.type !== 'maverick.widget.context-changed') {
+  if (message.type !== 'loopino.widget.context-changed') {
     return '';
   }
   const payload = message.context?.content?.payload;

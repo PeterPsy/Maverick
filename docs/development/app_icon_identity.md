@@ -1,6 +1,6 @@
 # App-owned compact icons
 
-The workspace registry discovers `frontend/dist/maverick-icon-compact.png` and supplies its public `/apps/<mount_app_id>/maverick-icon-compact.png` URL as the app's image identity. Rail, app cards and App Store consume that registry identity; app IDs need no additional icon map entries.
+The workspace registry discovers `frontend/dist/loopino-icon-compact.png` and supplies its public `/apps/<mount_app_id>/loopino-icon-compact.png` URL as the app's image identity. Rail, app cards and App Store consume that registry identity; app IDs need no additional icon map entries.
 
 Native compact assets are transparent silhouettes with padding included in the image. Keep the vector source in the app and commit the generated PNG with the mounted frontend build. Design the silhouette to occupy roughly half the square canvas, matching the visible ink of the native Material glyphs. The public PNG route works independently of the isolated app frame.
 

@@ -64,7 +64,7 @@
 .dv-loading-skeleton__icon-button,
 .dv-widget-skeleton__icon,
 .dv-widget-skeleton__button {
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .dv-loading-skeleton__line::after,
@@ -160,8 +160,8 @@
   gap: clamp(0.85rem, 2vw, 1.15rem);
   width: 100%;
   min-height: clamp(22rem, 50vh, 38rem);
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-control-radius);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 245, 247, 0.98)),
     #ffffff;

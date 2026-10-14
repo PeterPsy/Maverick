@@ -1,1 +1,1 @@
-"""Identity models and services for the Maverick core."""
+"""Identity models and services for the Loopino core."""

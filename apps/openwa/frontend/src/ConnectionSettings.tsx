@@ -57,7 +57,7 @@ export function ConnectionSettings({
           : "Connect your conversations"}
       </h1>
       <p className="muted">
-        Bring your WhatsApp sessions, conversations and messages into Maverick
+        Bring your WhatsApp sessions, conversations and messages into Loopino
         with OpenWA.
       </p>
       {status.can_configure ? (
@@ -75,8 +75,8 @@ export function ConnectionSettings({
           </label>
           <p className="small muted">
             {status.connection.credential_available
-              ? "The API key is available in Maverick Vault and used only by the server."
-              : "Add an OpenWA API key and grant this app access in Maverick Vault before connecting."}
+              ? "The API key is available in Loopino Vault and used only by the server."
+              : "Add an OpenWA API key and grant this app access in Loopino Vault before connecting."}
             {" "}When changing gateways, update its key and app access in Vault first.
           </p>
           {error && (

@@ -25,16 +25,16 @@ describe("shell theme state", () => {
 
   it("serializes both preference and effective theme for iframe bootstrap", () => {
     expect(shellThemeSearchParams(createShellThemeState("system", "light"))).toEqual({
-      maverick_color_scheme: "light",
-      maverick_theme: "light",
-      maverick_theme_mode: "system",
+      loopino_color_scheme: "light",
+      loopino_theme: "light",
+      loopino_theme_mode: "system",
     });
   });
 
-  it("applies Maverick and generic theme attributes to the root element", () => {
+  it("applies Loopino and generic theme attributes to the root element", () => {
     applyShellThemeToDocument(createShellThemeState("light", "dark"));
 
-    expect(document.documentElement.dataset.maverickTheme).toBe("light");
+    expect(document.documentElement.dataset.loopinoTheme).toBe("light");
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(document.documentElement.style.colorScheme).toBe("light");
   });

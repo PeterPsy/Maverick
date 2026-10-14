@@ -2,10 +2,10 @@ import { requestJson } from "../api/http";
 import type { WidgetRegistryItem } from "../api/types";
 
 export const NESTED_WIDGET_BROWSER_LAUNCH_PATH = "/api/apps/widgets/browser-launch";
-export const NESTED_WIDGET_LOADED_MESSAGE = "maverick.app-frame.loaded";
+export const NESTED_WIDGET_LOADED_MESSAGE = "loopino.app-frame.loaded";
 export const NESTED_WIDGET_LOAD_TIMEOUT_MS = 10_000;
 
-const NESTED_WIDGET_BOOTSTRAP_PATH = "/.well-known/maverick-app-frame-bootstrap";
+const NESTED_WIDGET_BOOTSTRAP_PATH = "/.well-known/loopino-app-frame-bootstrap";
 
 export type NestedWidgetLaunch = {
   bootstrapUrl: string;
@@ -224,8 +224,8 @@ function boundedOpaqueString(value: unknown, maximum: number): string {
 }
 
 function configuredPlatformOrigin(): string {
-  const candidate = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown })
-    .__MAVERICK_PLATFORM_ORIGIN__;
+  const candidate = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown })
+    .__LOOPINO_PLATFORM_ORIGIN__;
   if (typeof candidate !== "string") {
     return "";
   }

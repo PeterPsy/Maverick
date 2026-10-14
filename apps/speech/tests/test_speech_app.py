@@ -172,7 +172,7 @@ class SpeechAppTests(unittest.TestCase):
                 name="Speech",
                 version="1.0.0",
                 description="Speech provider.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(entrypoints=build_app_entrypoints(backend="backend/app_backend.py")),
             )
             binding = SimpleNamespace(data_root=str(data_root), source_kind="platform")
@@ -358,8 +358,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(transcription["dictation_streaming_supported"])
 
     def test_capabilities_do_not_advertise_flux_streaming_without_persistent_worker(self) -> None:
-        old_mode = os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER")
-        os.environ["MAVERICK_SPEECH_BACKEND_WORKER"] = "entrypoint"
+        old_mode = os.environ.get("LOOPINO_SPEECH_BACKEND_WORKER")
+        os.environ["LOOPINO_SPEECH_BACKEND_WORKER"] = "entrypoint"
         try:
             with TemporaryDirectory() as temp_dir:
                 root = Path(temp_dir)
@@ -373,7 +373,7 @@ class SpeechAppTests(unittest.TestCase):
                     },
                 )
         finally:
-            _restore_env("MAVERICK_SPEECH_BACKEND_WORKER", old_mode)
+            _restore_env("LOOPINO_SPEECH_BACKEND_WORKER", old_mode)
 
         transcription = payload["interfaces"]["speech.transcription"]
         self.assertEqual(status_code, 200)
@@ -2145,36 +2145,36 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["interfaces"]["speech.transcription"]["fallback_engines"], ["faster-whisper"])
 
     def test_faster_whisper_model_can_be_overridden_per_profile(self) -> None:
-        old_global = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL")
-        old_global_all = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES")
-        old_device = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE")
-        old_compute = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE")
-        old_fast = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL")
-        old_balanced = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL")
-        os.environ["MAVERICK_SPEECH_FASTER_WHISPER_MODEL"] = "/models/global"
-        os.environ.pop("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", None)
-        os.environ.pop("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE", None)
-        os.environ.pop("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", None)
-        os.environ["MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL"] = "/models/fast"
-        os.environ["MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL"] = "/models/balanced"
+        old_global = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_MODEL")
+        old_global_all = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES")
+        old_device = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_DEVICE")
+        old_compute = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_COMPUTE_TYPE")
+        old_fast = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_FAST_MODEL")
+        old_balanced = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_BALANCED_MODEL")
+        os.environ["LOOPINO_SPEECH_FASTER_WHISPER_MODEL"] = "/models/global"
+        os.environ.pop("LOOPINO_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", None)
+        os.environ.pop("LOOPINO_SPEECH_FASTER_WHISPER_DEVICE", None)
+        os.environ.pop("LOOPINO_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", None)
+        os.environ["LOOPINO_SPEECH_FASTER_WHISPER_FAST_MODEL"] = "/models/fast"
+        os.environ["LOOPINO_SPEECH_FASTER_WHISPER_BALANCED_MODEL"] = "/models/balanced"
         try:
             self.assertEqual(faster_whisper_model_ref({"transcription_profile": "fast"}), "/models/fast")
             self.assertEqual(faster_whisper_model_source({"transcription_profile": "fast"}), "profile_env")
             self.assertEqual(faster_whisper_model_ref({"transcription_profile": "balanced"}), "/models/balanced")
             self.assertEqual(faster_whisper_model_ref({"transcription_profile": "accurate"}), "medium")
             self.assertEqual(faster_whisper_model_source({"transcription_profile": "accurate"}), "profile_default")
-            os.environ["MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES"] = "1"
+            os.environ["LOOPINO_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES"] = "1"
             self.assertEqual(faster_whisper_model_ref({"transcription_profile": "accurate"}), "/models/global")
             self.assertEqual(faster_whisper_model_source({"transcription_profile": "accurate"}), "global_env")
             self.assertEqual(engines.faster_whisper_device({"transcription_profile": "fast"}), "cpu")
             self.assertEqual(engines.faster_whisper_compute_type({"transcription_profile": "fast"}), "int8")
         finally:
-            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_MODEL", old_global)
-            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", old_global_all)
-            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE", old_device)
-            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", old_compute)
-            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL", old_fast)
-            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL", old_balanced)
+            _restore_env("LOOPINO_SPEECH_FASTER_WHISPER_MODEL", old_global)
+            _restore_env("LOOPINO_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", old_global_all)
+            _restore_env("LOOPINO_SPEECH_FASTER_WHISPER_DEVICE", old_device)
+            _restore_env("LOOPINO_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", old_compute)
+            _restore_env("LOOPINO_SPEECH_FASTER_WHISPER_FAST_MODEL", old_fast)
+            _restore_env("LOOPINO_SPEECH_FASTER_WHISPER_BALANCED_MODEL", old_balanced)
 
     def test_faster_whisper_worker_status_handles_model_directory(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -2186,8 +2186,8 @@ class SpeechAppTests(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_SPEECH_FASTER_WHISPER_MODEL": str(model_dir),
-                    "MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL": "",
+                    "LOOPINO_SPEECH_FASTER_WHISPER_MODEL": str(model_dir),
+                    "LOOPINO_SPEECH_FASTER_WHISPER_BALANCED_MODEL": "",
                 },
             ):
                 fingerprint = engines._file_fingerprint(str(model_dir))
@@ -2205,7 +2205,7 @@ class SpeechAppTests(unittest.TestCase):
     def test_worker_status_is_observational_by_default(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data"
-            with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
+            with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
                 with patch("engines.resolve_transcription_engine", return_value="faster-whisper"):
                     with patch("engines._ensure_external_faster_whisper_worker") as ensure_worker:
                         status = engines.faster_whisper_worker_status(data_root, {"transcription_profile": "fast"})
@@ -2217,7 +2217,7 @@ class SpeechAppTests(unittest.TestCase):
     def test_worker_prewarm_explicitly_warms_current_faster_whisper_worker(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data"
-            with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
+            with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
                 with patch("engines.resolve_transcription_engine", return_value="faster-whisper"):
                     with patch("engines._ensure_external_faster_whisper_worker") as ensure_worker:
                         status = engines.faster_whisper_worker_status(data_root, {"transcription_profile": "fast"}, ensure_warm=True)
@@ -2230,7 +2230,7 @@ class SpeechAppTests(unittest.TestCase):
     def test_worker_prewarm_reports_deepgram_skip_reason(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data"
-            with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
+            with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
                 with patch("engines.resolve_transcription_engine", return_value="deepgram"):
                     with patch("engines._ensure_external_faster_whisper_worker") as ensure_worker:
                         status = engines.faster_whisper_worker_status(data_root, {"transcription_engine": "deepgram"}, ensure_warm=True)
@@ -2245,9 +2245,9 @@ class SpeechAppTests(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL": "/models/fast",
-                    "MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL": "/models/balanced",
-                    "MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto",
+                    "LOOPINO_SPEECH_FASTER_WHISPER_FAST_MODEL": "/models/fast",
+                    "LOOPINO_SPEECH_FASTER_WHISPER_BALANCED_MODEL": "/models/balanced",
+                    "LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "auto",
                 },
             ):
                 with patch("engines.resolve_transcription_engine", return_value="faster-whisper"):
@@ -2265,9 +2265,9 @@ class SpeechAppTests(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL": "/models/fast",
-                    "MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL": "/models/balanced",
-                    "MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto",
+                    "LOOPINO_SPEECH_FASTER_WHISPER_FAST_MODEL": "/models/fast",
+                    "LOOPINO_SPEECH_FASTER_WHISPER_BALANCED_MODEL": "/models/balanced",
+                    "LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "auto",
                 },
             ):
                 with patch("engines.resolve_transcription_engine", return_value="faster-whisper"):
@@ -2328,10 +2328,10 @@ class SpeechAppTests(unittest.TestCase):
                 "uploaded_storage_root": "",
                 "body": {"action": "get_settings"},
             }
-            old_mode = os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER")
-            old_idle = os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER_IDLE_SECONDS")
-            os.environ["MAVERICK_SPEECH_BACKEND_WORKER"] = "persistent"
-            os.environ["MAVERICK_SPEECH_BACKEND_WORKER_IDLE_SECONDS"] = "60"
+            old_mode = os.environ.get("LOOPINO_SPEECH_BACKEND_WORKER")
+            old_idle = os.environ.get("LOOPINO_SPEECH_BACKEND_WORKER_IDLE_SECONDS")
+            os.environ["LOOPINO_SPEECH_BACKEND_WORKER"] = "persistent"
+            os.environ["LOOPINO_SPEECH_BACKEND_WORKER_IDLE_SECONDS"] = "60"
             try:
                 first = app_backend.handle_entrypoint_payload(payload)
                 paths = app_backend.backend_worker_paths(data_root)
@@ -2340,8 +2340,8 @@ class SpeechAppTests(unittest.TestCase):
                 second_pid = app_backend.read_worker_pid(paths["pid"])
             finally:
                 app_backend.stop_backend_workers(data_root)
-                _restore_env("MAVERICK_SPEECH_BACKEND_WORKER", old_mode)
-                _restore_env("MAVERICK_SPEECH_BACKEND_WORKER_IDLE_SECONDS", old_idle)
+                _restore_env("LOOPINO_SPEECH_BACKEND_WORKER", old_mode)
+                _restore_env("LOOPINO_SPEECH_BACKEND_WORKER_IDLE_SECONDS", old_idle)
 
         self.assertEqual(first["status_code"], 200)
         self.assertEqual(second["status_code"], 200)
@@ -2403,7 +2403,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(slow_result["json"]["ok"], "slow")
 
     def test_transcription_status_reports_persistent_worker_scope(self) -> None:
-        with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
+        with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
             with patch("engines.faster_whisper_available", return_value=False):
                 with patch("engines.faster_whisper_model_configured", return_value=False):
                     statuses = engines.transcription_engine_statuses({"transcription_profile": "fast"})
@@ -2416,7 +2416,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertIn("model_source", faster)
 
     def test_transcription_status_can_report_entrypoint_worker_scope(self) -> None:
-        with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "entrypoint"}):
+        with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "entrypoint"}):
             with patch("engines.faster_whisper_model_configured", return_value=False):
                 statuses = engines.transcription_engine_statuses({"transcription_profile": "fast"})
 
@@ -2446,7 +2446,7 @@ class SpeechAppTests(unittest.TestCase):
                     "worker": {"scope": "workspace_daemon", "cross_request_reuse": True},
                 },
             }
-            with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "persistent"}):
+            with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "persistent"}):
                 with patch("engines._run_external_faster_whisper_worker_job", return_value=fake_payload) as external_worker:
                     result = engines._transcribe_with_faster_whisper(
                         audio_path,
@@ -2459,7 +2459,7 @@ class SpeechAppTests(unittest.TestCase):
 
     def test_faster_whisper_auto_worker_fallback_is_reported(self) -> None:
         fake_payload = {"ok": True, "result": {"worker": {"scope": "entrypoint_process"}, "text": "fallback"}}
-        with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
+        with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
             with patch("engines._run_external_faster_whisper_worker_job", side_effect=OSError("socket failed")):
                 with patch("engines._run_entrypoint_faster_whisper_worker_job", return_value=fake_payload) as entrypoint_worker:
                     payload = engines._run_faster_whisper_worker_job(
@@ -2474,7 +2474,7 @@ class SpeechAppTests(unittest.TestCase):
         entrypoint_worker.assert_called_once()
 
     def test_faster_whisper_strict_persistent_worker_failure_is_visible(self) -> None:
-        with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "persistent"}):
+        with patch.dict(os.environ, {"LOOPINO_SPEECH_FASTER_WHISPER_WORKER": "persistent"}):
             with patch("engines._run_external_faster_whisper_worker_job", side_effect=OSError("socket failed")):
                 with patch("engines._run_entrypoint_faster_whisper_worker_job") as entrypoint_worker:
                     with self.assertRaises(SpeechTranscriptionError):
@@ -2508,7 +2508,7 @@ class SpeechAppTests(unittest.TestCase):
                 with patch.dict(
                     os.environ,
                     {
-                        "MAVERICK_SPEECH_FASTER_WHISPER_WORKER_IDLE_SECONDS": "60",
+                        "LOOPINO_SPEECH_FASTER_WHISPER_WORKER_IDLE_SECONDS": "60",
                         "PYTHONPATH": f"{root}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
                     },
                 ):
@@ -2555,7 +2555,7 @@ class SpeechAppTests(unittest.TestCase):
                 with patch.dict(
                     os.environ,
                     {
-                        "MAVERICK_SPEECH_FASTER_WHISPER_WORKER_IDLE_SECONDS": "60",
+                        "LOOPINO_SPEECH_FASTER_WHISPER_WORKER_IDLE_SECONDS": "60",
                         "PYTHONPATH": f"{root}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
                     },
                 ):
@@ -2725,11 +2725,11 @@ class SpeechAppTests(unittest.TestCase):
             )
             piper.chmod(piper.stat().st_mode | stat.S_IXUSR)
             old_path = os.environ.get("PATH", "")
-            old_model = os.environ.get("MAVERICK_SPEECH_PIPER_MODEL")
-            old_voices = os.environ.get("MAVERICK_SPEECH_PIPER_VOICES_JSON")
+            old_model = os.environ.get("LOOPINO_SPEECH_PIPER_MODEL")
+            old_voices = os.environ.get("LOOPINO_SPEECH_PIPER_VOICES_JSON")
             os.environ["PATH"] = f"{root}{os.pathsep}{old_path}"
-            os.environ["MAVERICK_SPEECH_PIPER_MODEL"] = str(model_one)
-            os.environ["MAVERICK_SPEECH_PIPER_VOICES_JSON"] = json.dumps(
+            os.environ["LOOPINO_SPEECH_PIPER_MODEL"] = str(model_one)
+            os.environ["LOOPINO_SPEECH_PIPER_VOICES_JSON"] = json.dumps(
                 [
                     {"voice_id": "one", "language": "en", "model": str(model_one)},
                     {"voice_id": "two", "language": "it", "model": str(model_two)},
@@ -2743,13 +2743,13 @@ class SpeechAppTests(unittest.TestCase):
             finally:
                 os.environ["PATH"] = old_path
                 if old_model is None:
-                    os.environ.pop("MAVERICK_SPEECH_PIPER_MODEL", None)
+                    os.environ.pop("LOOPINO_SPEECH_PIPER_MODEL", None)
                 else:
-                    os.environ["MAVERICK_SPEECH_PIPER_MODEL"] = old_model
+                    os.environ["LOOPINO_SPEECH_PIPER_MODEL"] = old_model
                 if old_voices is None:
-                    os.environ.pop("MAVERICK_SPEECH_PIPER_VOICES_JSON", None)
+                    os.environ.pop("LOOPINO_SPEECH_PIPER_VOICES_JSON", None)
                 else:
-                    os.environ["MAVERICK_SPEECH_PIPER_VOICES_JSON"] = old_voices
+                    os.environ["LOOPINO_SPEECH_PIPER_VOICES_JSON"] = old_voices
 
             self.assertEqual(payload["settings"]["synthesis_engine"], "piper")
             self.assertEqual(status_code, 200)
@@ -2780,12 +2780,12 @@ class SpeechAppTests(unittest.TestCase):
             piper.chmod(piper.stat().st_mode | stat.S_IXUSR)
             old_path = os.environ.get("PATH", "")
             old_pythonpath = os.environ.get("PYTHONPATH")
-            old_model = os.environ.get("MAVERICK_SPEECH_PIPER_MODEL")
-            old_worker = os.environ.get("MAVERICK_SPEECH_PIPER_WORKER")
+            old_model = os.environ.get("LOOPINO_SPEECH_PIPER_MODEL")
+            old_worker = os.environ.get("LOOPINO_SPEECH_PIPER_WORKER")
             os.environ["PATH"] = f"{bin_dir}{os.pathsep}{old_path}"
             os.environ["PYTHONPATH"] = f"{root}{os.pathsep}{old_pythonpath or ''}"
-            os.environ["MAVERICK_SPEECH_PIPER_MODEL"] = str(model)
-            os.environ["MAVERICK_SPEECH_PIPER_WORKER"] = "persistent"
+            os.environ["LOOPINO_SPEECH_PIPER_MODEL"] = str(model)
+            os.environ["LOOPINO_SPEECH_PIPER_WORKER"] = "persistent"
             try:
                 with patch("engines.piper_python_available", return_value=True):
                     first_status, first = handle_action(root / "data", root / "generated", {"action": "synthesize", "text": "first chunk"})
@@ -2797,8 +2797,8 @@ class SpeechAppTests(unittest.TestCase):
                     os.environ.pop("PYTHONPATH", None)
                 else:
                     os.environ["PYTHONPATH"] = old_pythonpath
-                _restore_env("MAVERICK_SPEECH_PIPER_MODEL", old_model)
-                _restore_env("MAVERICK_SPEECH_PIPER_WORKER", old_worker)
+                _restore_env("LOOPINO_SPEECH_PIPER_MODEL", old_model)
+                _restore_env("LOOPINO_SPEECH_PIPER_WORKER", old_worker)
 
             self.assertEqual(first_status, 200)
             self.assertEqual(second_status, 200)
@@ -2899,7 +2899,7 @@ class SpeechAppTests(unittest.TestCase):
             self.assertEqual(payload["settings"]["transcription_profile"], "accurate")
             settings_json = (root / "data" / "settings.json").read_text(encoding="utf-8")
             self.assertNotIn("whisper_cpp_model_path", settings_json)
-            self.assertEqual(app_events_for_action("set_engine"), [{"type": "maverick.app.data-changed", "resource": "configuration"}])
+            self.assertEqual(app_events_for_action("set_engine"), [{"type": "loopino.app.data-changed", "resource": "configuration"}])
 
     def test_transcribe_audio_returns_text_and_metadata_only_job(self) -> None:
         audio = b"RIFF" + b"\0" * 512
@@ -3397,10 +3397,10 @@ class SpeechAppTests(unittest.TestCase):
                 encoding="utf-8",
             )
             binary_path.chmod(binary_path.stat().st_mode | stat.S_IXUSR)
-            old_binary = os.environ.get("MAVERICK_SPEECH_WHISPER_CPP_BINARY")
-            old_model = os.environ.get("MAVERICK_SPEECH_WHISPER_CPP_MODEL")
-            os.environ["MAVERICK_SPEECH_WHISPER_CPP_BINARY"] = str(binary_path)
-            os.environ["MAVERICK_SPEECH_WHISPER_CPP_MODEL"] = str(model_path)
+            old_binary = os.environ.get("LOOPINO_SPEECH_WHISPER_CPP_BINARY")
+            old_model = os.environ.get("LOOPINO_SPEECH_WHISPER_CPP_MODEL")
+            os.environ["LOOPINO_SPEECH_WHISPER_CPP_BINARY"] = str(binary_path)
+            os.environ["LOOPINO_SPEECH_WHISPER_CPP_MODEL"] = str(model_path)
             try:
                 handle_action(root / "data", root / "storage" / "generated", {"action": "set_engine", "transcription_engine": "whisper.cpp"})
                 status_code, payload = handle_action(
@@ -3411,13 +3411,13 @@ class SpeechAppTests(unittest.TestCase):
                 )
             finally:
                 if old_binary is None:
-                    os.environ.pop("MAVERICK_SPEECH_WHISPER_CPP_BINARY", None)
+                    os.environ.pop("LOOPINO_SPEECH_WHISPER_CPP_BINARY", None)
                 else:
-                    os.environ["MAVERICK_SPEECH_WHISPER_CPP_BINARY"] = old_binary
+                    os.environ["LOOPINO_SPEECH_WHISPER_CPP_BINARY"] = old_binary
                 if old_model is None:
-                    os.environ.pop("MAVERICK_SPEECH_WHISPER_CPP_MODEL", None)
+                    os.environ.pop("LOOPINO_SPEECH_WHISPER_CPP_MODEL", None)
                 else:
-                    os.environ["MAVERICK_SPEECH_WHISPER_CPP_MODEL"] = old_model
+                    os.environ["LOOPINO_SPEECH_WHISPER_CPP_MODEL"] = old_model
 
             self.assertEqual(status_code, 200)
             self.assertEqual(payload["text"], "redacted transcript")
@@ -3572,7 +3572,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["status_code"], 200)
         self.assertEqual(payload["settings"]["synthesis_engine"], "piper")
         self.assertEqual(payload["settings"]["synthesis_language"], "it-it")
-        self.assertEqual(payload["app_events"], [{"type": "maverick.app.data-changed", "resource": "configuration"}])
+        self.assertEqual(payload["app_events"], [{"type": "loopino.app.data-changed", "resource": "configuration"}])
 
     def test_deepgram_benchmark_script_dry_run_reports_nova_and_flux_plan(self) -> None:
         result = subprocess.run(

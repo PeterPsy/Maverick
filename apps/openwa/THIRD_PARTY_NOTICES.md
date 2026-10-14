@@ -26,4 +26,4 @@ SOFTWARE.
 
 ## WhatsApp icon — Simple Icons
 
-The WhatsApp silhouette is adapted from [Simple Icons](https://github.com/simple-icons/simple-icons/blob/develop/icons/whatsapp.svg), published under [CC0 1.0 Universal](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md). The geometry is preserved; colour and compact padding are adapted for Maverick. The app-owned SVG is the source for the transparent PNG.
+The WhatsApp silhouette is adapted from [Simple Icons](https://github.com/simple-icons/simple-icons/blob/develop/icons/whatsapp.svg), published under [CC0 1.0 Universal](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md). The geometry is preserved; colour and compact padding are adapted for Loopino. The app-owned SVG is the source for the transparent PNG.

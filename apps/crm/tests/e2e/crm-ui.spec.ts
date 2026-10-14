@@ -503,7 +503,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
   });
   await expect(page.getByRole('heading', { name: 'Pipeline by stage' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Forecast by currency' })).toBeVisible();
@@ -518,7 +518,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
   });
   await page.getByRole('button', { name: /owner_1/ }).first().click();
   await expect(page.getByRole('heading', { name: 'Agent deck' })).toBeVisible();
@@ -528,7 +528,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
   await expect.poll(() => lastRequest(requests, 'crm.operations_feed')?.kind).toBe('task');
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
   });
   await page.getByRole('button', { name: /owner_1 3 activities/ }).click();
   await expect(page.getByRole('heading', { name: 'Agent deck' })).toBeVisible();
@@ -536,7 +536,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
   await expect.poll(() => lastRequest(requests, 'crm.operations_feed')?.kind).toBe('activity');
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'accounts/account_acme' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'accounts/account_acme' } }, window.location.origin);
   });
   await expect(page.getByText('Connect a CRM record', { exact: true })).toBeVisible();
   const detailPanel = page.getByRole('region', { name: 'Acme Corp' });
@@ -581,7 +581,7 @@ test('scrolls the lead detail page content vertically', async ({ page }) => {
   await navigate(page, 'Records');
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'leads/lead_northwind' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'leads/lead_northwind' } }, window.location.origin);
   });
 
   const detailPanel = page.getByRole('region', { name: 'Northwind Expansion' });
@@ -606,7 +606,7 @@ test('renders the pipeline board with stage totals and deal context', async ({ p
   await navigate(page, 'Records');
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'pipeline' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'pipeline' } }, window.location.origin);
   });
 
   await expect(page.getByText('1 deal')).toBeVisible();
@@ -636,7 +636,7 @@ test('loads pipeline board deals from backend beyond bootstrap limits', async ({
   await navigate(page, 'Records');
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'pipeline' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'pipeline' } }, window.location.origin);
   });
 
   await expect(page.getByText('105 deals')).toBeVisible();
@@ -697,7 +697,7 @@ test('shows agent-centric pipeline deck and workflow actions', async ({ page }) 
   await navigate(page, 'Records');
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'operations' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'operations' } }, window.location.origin);
   });
 
   await expect(page.getByRole('heading', { name: 'Agent deck' })).toBeVisible();
@@ -749,7 +749,7 @@ test('shows agent-centric pipeline deck and workflow actions', async ({ page }) 
   await expect(page.getByText('No duplicate groups detected.')).toBeVisible();
 
   await page.evaluate(() => {
-    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
+    window.postMessage({ type: 'loopino.app.navigate', params: { app_page: 'reports' } }, window.location.origin);
   });
   await expect(page.getByRole('heading', { name: 'Overdue tasks by owner' })).toBeVisible();
   await page.getByRole('button', { name: /owner_1\s+2 overdue tasks/ }).click();

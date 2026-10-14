@@ -7,8 +7,8 @@ from core.providers.google_agentic_profile import (
     GOOGLE_REASONING_EFFORTS,
     google_agentic_preview_publication,
 )
-from core.providers.maverick_agent_onboarding import publish_maverick_agent_profile
-from tests.support.maverick_agent_onboarding import provider_store
+from core.providers.loopino_agent_onboarding import publish_loopino_agent_profile
+from tests.support.loopino_agent_onboarding import provider_store
 
 
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
@@ -32,8 +32,8 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         store = provider_store()
         publication = google_agentic_preview_publication(now=NOW)
 
-        publish_maverick_agent_profile(store, publication=publication, now=NOW)
-        publish_maverick_agent_profile(store, publication=publication, now=NOW)
+        publish_loopino_agent_profile(store, publication=publication, now=NOW)
+        publish_loopino_agent_profile(store, publication=publication, now=NOW)
 
         self.assertEqual(store.list_agentic_profile_definitions(), [publication.profile])
 

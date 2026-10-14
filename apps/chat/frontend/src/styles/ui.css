@@ -1,6 +1,6 @@
 .chat-ui-surface {
   position: relative;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-glass-surface);
   box-shadow: var(--chatapp-composer-shadow);
@@ -28,7 +28,7 @@
 
 .chat-ui-surface--interactive:hover {
   transform: translateY(-1px);
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: var(--chatapp-soft-surface-hover);
 }
 
@@ -73,7 +73,7 @@
 .chatapp-gallery-card:focus-visible,
 .chatapp-role-card:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px var(--maverick-focus);
+  box-shadow: 0 0 0 4px var(--loopino-focus);
 }
 
 .chat-ui-button--full {
@@ -87,37 +87,37 @@
 }
 
 .chat-ui-button--primary {
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
+  background: var(--loopino-accent);
+  color: var(--loopino-text-on-accent);
   box-shadow: none;
   border-color: transparent;
 }
 
 .chat-ui-button--primary:hover {
-  background: var(--maverick-accent-strong);
+  background: var(--loopino-accent-strong);
   box-shadow: none;
 }
 
 .chat-ui-button--secondary {
-  border-color: var(--maverick-border);
+  border-color: var(--loopino-border);
   background: var(--chatapp-soft-surface);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .chat-ui-button--secondary:hover {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: var(--chatapp-soft-surface-hover);
 }
 
 .chat-ui-button--ghost {
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .chat-ui-button__spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(var(--maverick-contrast-rgb), 0.32);
+  border: 2px solid rgba(var(--loopino-contrast-rgb), 0.32);
   border-top-color: currentColor;
   border-radius: 999px;
   animation: chat-ui-spin 0.8s linear infinite;
@@ -137,21 +137,21 @@
 }
 
 .chat-ui-badge--neutral {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.1);
-  background: rgba(var(--maverick-contrast-rgb), 0.05);
-  color: var(--maverick-text-muted);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.1);
+  background: rgba(var(--loopino-contrast-rgb), 0.05);
+  color: var(--loopino-text-muted);
 }
 
 .chat-ui-badge--primary {
-  border-color: var(--maverick-accent-hover);
-  background: var(--maverick-accent-soft);
-  color: var(--maverick-accent);
+  border-color: var(--loopino-accent-hover);
+  background: var(--loopino-accent-soft);
+  color: var(--loopino-accent);
 }
 
 .chat-ui-badge--secondary {
-  border-color: var(--maverick-accent-hover);
-  background: var(--maverick-accent-soft);
-  color: var(--maverick-accent);
+  border-color: var(--loopino-accent-hover);
+  background: var(--loopino-accent-soft);
+  color: var(--loopino-accent);
 }
 
 .chat-ui-badge--success {
@@ -186,14 +186,14 @@
 }
 
 .chat-ui-field__label {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .chat-ui-field__message {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.78rem;
 }
 
@@ -205,11 +205,11 @@
   width: 100%;
   min-height: 42px;
   padding: 0.75rem 0.95rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-soft-surface);
   box-shadow: var(--chatapp-inner-edge);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   transition:
     border-color 180ms ease,
     background 180ms ease,
@@ -217,11 +217,11 @@
 }
 
 .chat-ui-input:hover {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .chat-ui-input::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .chat-ui-input--textarea {
@@ -272,7 +272,7 @@
   height: 1.6rem;
   min-width: 1.6rem;
   border-radius: 0.85rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.05);
+  background: rgba(var(--loopino-contrast-rgb), 0.05);
   color: rgba(243, 246, 251, 0.92);
 }
 
@@ -301,7 +301,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.66rem;
   line-height: 1.35;
 }
@@ -312,7 +312,7 @@
   right: 1rem;
   width: 1rem;
   height: 1rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -328,7 +328,7 @@
   display: grid;
   gap: 0.28rem;
   padding: 0.4rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.08);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-glass-surface);
   box-shadow: var(--chatapp-composer-shadow);
@@ -359,7 +359,7 @@
   border: 1px solid transparent;
   border-radius: var(--chatapp-control-radius);
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   cursor: pointer;
   text-align: left;
   transition:
@@ -369,12 +369,12 @@
 }
 
 .chat-ui-select-menu__option:hover {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.06);
-  background: rgba(var(--maverick-contrast-rgb), 0.045);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.06);
+  background: rgba(var(--loopino-contrast-rgb), 0.045);
 }
 
 .chat-ui-select-menu__option.is-active {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.13);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.13);
   background: var(--chatapp-soft-surface-active);
   box-shadow: var(--chatapp-inner-edge);
 }
@@ -392,7 +392,7 @@
 }
 
 .chat-ui-select-menu__option-description {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
   line-height: 1.35;
 }
@@ -405,7 +405,7 @@
   height: 1.25rem;
   min-width: 1.25rem;
   border-radius: 999px;
-  background: rgba(var(--maverick-contrast-rgb), 0.08);
+  background: rgba(var(--loopino-contrast-rgb), 0.08);
   color: #ffd9e6;
 }
 
@@ -439,7 +439,7 @@
   max-height: min(86vh, 920px);
   overflow: auto;
   padding: 1.3rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   border-radius: var(--chatapp-glass-radius);
   background: var(--chatapp-glass-surface);
   box-shadow: var(--chatapp-composer-shadow);
@@ -475,7 +475,7 @@
 
 .chat-ui-dialog__eyebrow {
   margin: 0 0 0.35rem;
-  color: var(--maverick-accent-muted);
+  color: var(--loopino-accent-muted);
   font-size: 0.74rem;
   font-weight: 400;
   letter-spacing: 0.18em;
@@ -490,7 +490,7 @@
 
 .chat-ui-dialog__description {
   margin: 0.45rem 0 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   line-height: 1.6;
 }
 
@@ -500,11 +500,11 @@
   justify-content: center;
   width: 42px;
   height: 42px;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-soft-surface);
   box-shadow: var(--chatapp-inner-edge);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   cursor: pointer;
 }
 
@@ -523,11 +523,11 @@
   justify-content: center;
   min-height: 38px;
   padding: 0.7rem 1rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.12);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.12);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-soft-surface);
   box-shadow: var(--chatapp-inner-edge);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   cursor: pointer;
   transition:
     border-color 180ms ease,
@@ -537,8 +537,8 @@
 
 .chat-ui-dropdown__trigger:hover {
   transform: translateY(-1px);
-  border-color: rgba(var(--maverick-contrast-rgb), 0.2);
-  background: rgba(var(--maverick-contrast-rgb), 0.06);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.2);
+  background: rgba(var(--loopino-contrast-rgb), 0.06);
 }
 
 .chat-ui-dropdown__trigger:disabled {
@@ -556,7 +556,7 @@
   min-width: 200px;
   max-width: min(18rem, calc(100vw - 24px));
   padding: 0.45rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.08);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-glass-surface);
   box-shadow: var(--chatapp-composer-shadow);
@@ -579,7 +579,7 @@
   border: 0;
   border-radius: var(--chatapp-control-radius);
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -588,9 +588,9 @@
 }
 
 .chat-ui-dropdown__item:hover {
-  background: rgba(var(--maverick-contrast-rgb), 0.05);
+  background: rgba(var(--loopino-contrast-rgb), 0.05);
 }
 
 .chat-ui-dropdown__item--danger {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }

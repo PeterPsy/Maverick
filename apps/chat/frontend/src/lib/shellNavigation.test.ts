@@ -32,7 +32,7 @@ describe("chat shell navigation", () => {
 
     const posted = openChatThreadRouteInShell("thread-123", {
       currentWindow: {},
-      origin: "https://maverick.test",
+      origin: "https://loopino.test",
       parentWindow: parent.target,
     });
 
@@ -40,11 +40,11 @@ describe("chat shell navigation", () => {
     expect(parent.messages).toEqual([
       {
         message: {
-          type: "maverick.app.open-app",
+          type: "loopino.app.open-app",
           app_id: "chat",
           params: { app_page: "threads/thread-123" },
         },
-        targetOrigin: "https://maverick.test",
+        targetOrigin: "https://loopino.test",
       },
     ]);
   });
@@ -55,7 +55,7 @@ describe("chat shell navigation", () => {
     const posted = openChatThreadRouteInShell("thread-123", {
       currentWindow: {},
       navigationScope: "floating-window-1",
-      origin: "https://maverick.test",
+      origin: "https://loopino.test",
       parentWindow: parent.target,
     });
 
@@ -68,13 +68,13 @@ describe("chat shell navigation", () => {
 
     const posted = openChatRootRouteInShell({
       currentWindow: {},
-      origin: "https://maverick.test",
+      origin: "https://loopino.test",
       parentWindow: parent.target,
     });
 
     expect(posted).toBe(true);
     expect(parent.messages[0]?.message).toEqual({
-      type: "maverick.app.open-app",
+      type: "loopino.app.open-app",
       app_id: "chat",
       params: {},
     });
@@ -85,13 +85,13 @@ describe("chat shell navigation", () => {
 
     const posted = openAppRouteInShell("checklist", "checklists/check_123", {
       currentWindow: {},
-      origin: "https://maverick.test",
+      origin: "https://loopino.test",
       parentWindow: parent.target,
     });
 
     expect(posted).toBe(true);
     expect(parent.messages[0]?.message).toEqual({
-      type: "maverick.app.open-app",
+      type: "loopino.app.open-app",
       app_id: "checklist",
       params: { app_page: "checklists/check_123" },
     });
@@ -102,13 +102,13 @@ describe("chat shell navigation", () => {
 
     const posted = openAppParamsInShell("storage", { workspace_relative_path: "storage/generated/report.md" }, {
       currentWindow: {},
-      origin: "https://maverick.test",
+      origin: "https://loopino.test",
       parentWindow: parent.target,
     });
 
     expect(posted).toBe(true);
     expect(parent.messages[0]?.message).toEqual({
-      type: "maverick.app.open-app",
+      type: "loopino.app.open-app",
       app_id: "storage",
       params: { workspace_relative_path: "storage/generated/report.md" },
     });
@@ -120,13 +120,13 @@ describe("chat shell navigation", () => {
     const posted = openContextAppParamsInShell("design-studio", { od_project_id: "od_project_1" }, {
       currentWindow: {},
       navigationScope: "chat-floating-dock",
-      origin: "https://maverick.test",
+      origin: "https://loopino.test",
       parentWindow: parent.target,
     });
 
     expect(posted).toBe(true);
     expect(parent.messages[0]?.message).toEqual({
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: "design-studio",
       params: { od_project_id: "od_project_1" },
     });
@@ -137,13 +137,13 @@ describe("chat shell navigation", () => {
 
     const posted = openStoragePathInShell("storage/generated/report.md", {
       currentWindow: {},
-      origin: "https://maverick.test",
+      origin: "https://loopino.test",
       parentWindow: parent.target,
     });
 
     expect(posted).toBe(true);
     expect(parent.messages[0]?.message).toEqual({
-      type: "maverick.app.open-app",
+      type: "loopino.app.open-app",
       app_id: "storage",
       params: { workspace_relative_path: "storage/generated/report.md" },
     });

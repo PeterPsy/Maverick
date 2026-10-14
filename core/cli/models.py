@@ -30,7 +30,7 @@ class CliInvocationPolicy:
 
 @dataclass(frozen=True)
 class CliCommandDefinition:
-    """Describe one command surfaced by the Maverick platform."""
+    """Describe one command surfaced by the Loopino platform."""
 
     command_id: str
     path_segments: list[str]

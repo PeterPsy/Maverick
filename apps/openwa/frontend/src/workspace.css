@@ -1,6 +1,6 @@
 .app-shell {
   height: 100dvh;
-  padding: calc(20px + var(--maverick-shell-mobile-content-top-offset, 0px)) 24px 20px;
+  padding: calc(20px + var(--loopino-shell-mobile-content-top-offset, 0px)) 24px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;

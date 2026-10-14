@@ -1,4 +1,4 @@
-import { IncrementalSha256 } from '@maverick/pwa-cache';
+import { IncrementalSha256 } from '@loopino/pwa-cache';
 
 export function storageScopeKey(role: string, parent: string | null): string {
   return new IncrementalSha256().update(new TextEncoder().encode(JSON.stringify([role, parent]))).hexDigest();

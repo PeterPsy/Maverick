@@ -154,7 +154,7 @@ describe("transparent PWA file cache", () => {
       url: "/api/apps/storage/media?stable_storage_file_id=file-one",
     };
 
-    await expect(runtime.cache.open(request)).rejects.toMatchObject({ name: "MaverickTransportError" });
+    await expect(runtime.cache.open(request)).rejects.toMatchObject({ name: "LoopinoTransportError" });
     await until(() => [...runtime.manifest.records.values()].some((record) => record.writtenBytes === 3));
     expect([...runtime.bytes.files.values()].map((value) => value.byteLength)).toEqual([3]);
     const resumed = await runtime.cache.open(request);

@@ -70,7 +70,7 @@ class BrowserReadingTests(unittest.TestCase):
         response = SimpleNamespace(status_code=201, payload={"session_id": "admin-session"})
         with TemporaryDirectory() as folder, patch("service.call_broker_action", return_value=response) as broker:
             root = Path(folder)
-            handle_action(root, {"action": "session.create", "mode": "maverick_dev_inspector"}, platform_role="admin")
+            handle_action(root, {"action": "session.create", "mode": "loopino_dev_inspector"}, platform_role="admin")
             broker.reset_mock()
             status, result = mcp_result_for_tool(root, "browser_read_content", {"session_id": "admin-session"})
         self.assertEqual(status, 403)

@@ -1,12 +1,12 @@
 # Storage downloads and preview repair — 2026-10-13
 
 Storage's download links reached a native host with no WebKit download delegate.
-MaverickMac now turns download actions and attachment responses into authenticated
+LoopinoMac now turns download actions and attachment responses into authenticated
 WebKit transfers, presents Save, and keeps the shell and app document mounted.
 Exports retain their blob URL during asynchronous handoff. Error responses are
 reported rather than saved as the requested file. Completed transfers publish to
 the selected destination; cancellation and teardown release pending transfers.
-The native implementation is on `maverick-integration`, through `b9de56a`.
+The native implementation is on `loopino-integration`, through `b9de56a`.
 
 The preview also allowed a portrait image's intrinsic height to exceed its grid
 row. Media now uses the available box with `object-fit: contain`; the toolbar
@@ -24,7 +24,7 @@ Validation:
   frames: native fullscreen, denied fullscreen, 390px and 320px widths. Checks
   include portrait containment, visible controls, mobile header clearance,
   Escape/Close, focus restoration, filenames and exact downloaded bytes.
-- MaverickMac's managed macOS build
+- LoopinoMac's managed macOS build
   [38385740327](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38385740327)
   passed script tests, the Swift suite (including real iframe blob downloads,
   overwrite, cancel, teardown and native Save sheet coverage), signed native

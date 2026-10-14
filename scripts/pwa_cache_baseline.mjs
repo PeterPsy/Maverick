@@ -29,7 +29,7 @@ try {
   browser = await browserType.launch(launchOptions);
 } catch (error) {
   emit({
-    schema: "maverick.pwa-cache-baseline.v2",
+    schema: "loopino.pwa-cache-baseline.v2",
     skipped: true,
     reason: `browser unavailable: ${safeError(error)}`,
   });
@@ -46,7 +46,7 @@ try {
     results.push(await measureProfile(profileName, device));
   }
   emit({
-    schema: "maverick.pwa-cache-baseline.v2",
+    schema: "loopino.pwa-cache-baseline.v2",
     captured_at: new Date().toISOString(),
     engine: engineName,
     environment: "playwright-emulation",
@@ -172,7 +172,7 @@ async function measureNetworkUnavailableReopen(context, page) {
       elapsed_ms: Math.round(performance.now() - startedAt),
       standard_shell_count: await page.locator(".bs-shell").count(),
       loading_indicator_count: await page.locator('[aria-label="Loading workspace"]').count(),
-      legacy_mode_marker_count: await page.locator('.bs-offline-indicator, .bs-offline-workspace-shell, [data-maverick-connectivity]').count(),
+      legacy_mode_marker_count: await page.locator('.bs-offline-indicator, .bs-offline-workspace-shell, [data-loopino-connectivity]').count(),
       iframe_count: await page.locator("iframe").count(),
     };
   } catch (error) {
@@ -272,7 +272,7 @@ function boundedIntegerArg(parsed, key, fallback, min, max) {
 }
 
 function discoverChromiumExecutablePath() {
-  const configured = process.env.MAVERICK_PLAYWRIGHT_CHROMIUM || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  const configured = process.env.LOOPINO_PLAYWRIGHT_CHROMIUM || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   if (configured && existsSync(configured)) return configured;
   for (const candidate of ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"]) {
     if (existsSync(candidate)) return candidate;

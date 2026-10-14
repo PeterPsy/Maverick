@@ -1,4 +1,4 @@
-"""Node.js runtime version policy for Maverick frontend tooling."""
+"""Node.js runtime version policy for Loopino frontend tooling."""
 
 from __future__ import annotations
 
@@ -56,10 +56,10 @@ def node_runtime_diagnostic(*, node_command: str = "node") -> str | None:
     if version.major > SUPPORTED_NODE_MAJOR:
         return (
             f"node {version.format()} at `{executable}` is outside the supported range; "
-            f"Maverick requires {NODE_RUNTIME_REQUIREMENT}"
+            f"Loopino requires {NODE_RUNTIME_REQUIREMENT}"
         )
     if not node_version_supported(version):
-        return f"node {version.format()} at `{executable}` is too old; Maverick requires {NODE_RUNTIME_REQUIREMENT}"
+        return f"node {version.format()} at `{executable}` is too old; Loopino requires {NODE_RUNTIME_REQUIREMENT}"
     return None
 
 

@@ -788,8 +788,8 @@ def hosted_process_environment(*, session_id: str) -> dict[str, str]:
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
-        "MAVERICK_RUNTIME_SESSION_ID": session_id,
-        "MAVERICK_RUNTIME_ENGINE_ID": "maverick-hosted-tool-process",
+        "LOOPINO_RUNTIME_SESSION_ID": session_id,
+        "LOOPINO_RUNTIME_ENGINE_ID": "loopino-hosted-tool-process",
     }
 
 

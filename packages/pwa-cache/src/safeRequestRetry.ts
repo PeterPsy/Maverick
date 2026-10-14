@@ -2,7 +2,7 @@ import { describeReadModelRequest } from "./readModelRequest";
 import type { ReadModelRequest } from "./readModelRetry";
 import { executeRetryJsonRequest, retryAfterMilliseconds } from "./retryJsonRequest";
 
-const SAFE_REQUEST_RETRY_EXECUTOR_BRAND: unique symbol = Symbol("maverick.safe-request-retry-executor");
+const SAFE_REQUEST_RETRY_EXECUTOR_BRAND: unique symbol = Symbol("loopino.safe-request-retry-executor");
 const SAFE_ENDPOINT_PATTERN = /^\/api\/[^\s#]{1,506}$/u;
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const ISSUED_SAFE_REQUEST_RETRY_EXECUTORS = new WeakSet<object>();
@@ -37,7 +37,7 @@ export class SafeRequestRetryHttpError extends Error {
 export class SafeRequestRetryTransportError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
-    this.name = "MaverickTransportError";
+    this.name = "LoopinoTransportError";
   }
 }
 

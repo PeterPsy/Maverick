@@ -23,4 +23,4 @@ Future cross-app consumers should declare what interface type they require, not 
 apps/chat imports ../../checklist/frontend/widget.tsx
 ```
 
-That couples host and widget owner at build time. The Maverick model uses registry-driven iframe widgets instead.
+That couples host and widget owner at build time. The Loopino model uses registry-driven iframe widgets instead.

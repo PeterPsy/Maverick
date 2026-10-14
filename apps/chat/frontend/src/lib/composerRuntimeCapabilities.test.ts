@@ -109,14 +109,14 @@ describe("composerRuntimeCapabilities", () => {
   it("does not mistake a remote session's Codex display fallback for local authority", () => {
     expect(composerRuntimeCapabilities({
       activeSession: session({
-        provider_id: "maverick-tool-loop",
+        provider_id: "loopino-tool-loop",
         execution_binding: {
           workspace_binding_id: "binding-remote",
-          runtime_engine_id: "maverick-tool-loop",
+          runtime_engine_id: "loopino-tool-loop",
           model_id: "remote-model",
         },
       }),
-      activeThread: thread({ provider_id: "maverick-tool-loop" }),
+      activeThread: thread({ provider_id: "loopino-tool-loop" }),
       selectedProvider: provider(),
     })).toEqual({
       allowedAttachmentInputModalities: [],
@@ -174,9 +174,9 @@ describe("composerRuntimeCapabilities", () => {
   });
 
   it("fails closed for blocked or missing remote capability snapshots", () => {
-    const remote = provider({ provider_id: "maverick-tool-loop" });
+    const remote = provider({ provider_id: "loopino-tool-loop" });
     const blocked = provider({
-      provider_id: "maverick-tool-loop",
+      provider_id: "loopino-tool-loop",
       agentic_effective_capabilities: effectiveCapabilities({
         attachment_modalities: ["file"],
         app_references: true,

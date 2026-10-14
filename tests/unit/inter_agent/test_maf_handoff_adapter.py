@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from core.inter_agent.adapters.base import AdapterEventMappingContext, InterAgentAdapterUnavailableError
 from core.inter_agent.adapters.maf import (
-    MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK,
+    LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK,
     MafAdapter,
     map_maf_events_to_inter_agent_records,
 )
@@ -56,19 +56,19 @@ def _retention() -> EventRetentionPolicyRecord:
 
 class MafHandoffAdapterTest(unittest.TestCase):
     def test_adapter_is_unavailable_when_feature_flag_is_off(self) -> None:
-        with patch.dict(os.environ, {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK: "0"}):
+        with patch.dict(os.environ, {LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK: "0"}):
             adapter = MafAdapter()
 
             self.assertFalse(adapter.is_enabled())
             self.assertFalse(adapter.is_available())
             with self.assertRaisesRegex(
                 InterAgentAdapterUnavailableError,
-                MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK,
+                LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK,
             ):
                 adapter.require_available()
             with self.assertRaisesRegex(
                 InterAgentAdapterUnavailableError,
-                MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK,
+                LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK,
             ):
                 adapter.map_events(AdapterEventMappingContext(run=_run(), created_at=NOW), [])
 
@@ -79,7 +79,7 @@ class MafHandoffAdapterTest(unittest.TestCase):
             imported.append(name)
             return ModuleType(name)
 
-        with patch.dict(os.environ, {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK: "1"}):
+        with patch.dict(os.environ, {LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK: "1"}):
             with patch("core.inter_agent.adapters.shared.importlib.import_module", side_effect=fake_import):
                 MafAdapter().require_available()
 

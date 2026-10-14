@@ -8,7 +8,7 @@ from core.installation.environment import ADDRESS_KEYS, address_environment, tar
 from core.installation.errors import InstallationError
 from core.installation.validation import record_id, hostname
 from core.installation.private_state import write_private
-from core.shared.env_file import read_env_file
+from core.shared.env_file import read_env_file, service_env_path
 from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
 from scripts.deploy.reload_nginx import check_nginx, reload_nginx
 
@@ -52,7 +52,7 @@ server {{
 def managed_nginx_path(service, host: str) -> Path:
     identifier = record_id(service.configuration()["installation_id"])
     suffix = sha256(hostname(host).encode()).hexdigest()[:16]
-    return Path(f"/etc/nginx/conf.d/maverick-installation-{identifier}-{suffix}.conf")
+    return Path(f"/etc/nginx/conf.d/loopino-installation-{identifier}-{suffix}.conf")
 
 
 def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
@@ -67,7 +67,7 @@ def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
         backup.write_bytes(path.read_bytes() if existed else b"")
         backup.chmod(0o600)
         write_private(private / "nginx-backup.json", {"existed": existed, "hostname": plan["hostname"]})
-    content = render_nginx(plan["hostname"], certificates, int(service.environment.get("MAVERICK_PORT", "8014")))
+    content = render_nginx(plan["hostname"], certificates, int(service.environment.get("LOOPINO_PORT", "8014")))
     if not path.exists():
         path.touch(mode=0o644)
     try:
@@ -85,7 +85,7 @@ def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
 
 
 def commit_environment(service, plan: dict, private: Path) -> bool:
-    path = service.store.repository_root / ".env"
+    path = service_env_path(service.store.repository_root)
     before = read_env_file(path)
     snapshot = private / "environment-before.json"
     if not snapshot.exists():
@@ -111,5 +111,5 @@ def restore_host(service, private: Path) -> None:
         reload_nginx()
     snapshot = private / "environment-before.json"
     if snapshot.exists():
-        path = service.store.repository_root / ".env"
+        path = service_env_path(service.store.repository_root)
         atomic_replace(path, address_environment(path.read_text(), json.loads(snapshot.read_text())).encode())

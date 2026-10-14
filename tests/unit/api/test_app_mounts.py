@@ -69,11 +69,11 @@ class AppMountsTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             icon = b"\x89PNG\r\n\x1a\ncompact-icon"
-            (root / "maverick-icon-compact.png").write_bytes(icon)
+            (root / "loopino-icon-compact.png").write_bytes(icon)
 
             status, headers, body = _serve_body(
                 root,
-                "/maverick-icon-compact.png",
+                "/loopino-icon-compact.png",
                 cross_origin=True,
             )
 
@@ -173,7 +173,7 @@ class AppMountsTestCase(unittest.TestCase):
             name="Sample",
             version="1.0.0",
             description="Sample provider.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(hook_timeouts=build_app_hook_timeouts(backend_seconds=300)),
         )
 
@@ -700,7 +700,7 @@ class AppMountsTestCase(unittest.TestCase):
             (manifest_root / f"{token}.json").write_text(
                 json.dumps(
                     {
-                        "schema": "maverick.app.file_gateway.v1",
+                        "schema": "loopino.app.file_gateway.v1",
                         "app_id": "website-studio",
                         "file_response": {
                             "path": str(media_path),
@@ -741,7 +741,7 @@ class AppMountsTestCase(unittest.TestCase):
             (manifest_root / f"{token}.json").write_text(
                 json.dumps(
                     {
-                        "schema": "maverick.app.file_gateway.v1",
+                        "schema": "loopino.app.file_gateway.v1",
                         "app_id": "website-studio",
                         "access": "public_capability",
                         "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=15)).isoformat(),
@@ -844,7 +844,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="api_token",
             secret_ref=build_secret_ref(alias=secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
         )
 
         result = _resolve_app_secret_payload(
@@ -868,7 +868,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="api_token",
             secret_ref=build_secret_ref(alias=secret.alias),
             actions=["app.secret.read"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
         )
 
         with self.assertRaises(SecretPolicyError):
@@ -912,7 +912,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="api_token",
             secret_ref=build_secret_ref(alias=secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             expires_at=datetime.now(tz=UTC) - timedelta(minutes=1),
         )
 
@@ -958,7 +958,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="api_token",
             secret_ref=build_secret_ref(alias=backend_secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             now=datetime.now(tz=UTC) - timedelta(minutes=1),
         )
         grant_app_secret_use(
@@ -997,7 +997,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="api_token",
             secret_ref=build_secret_ref(alias=expired_secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             expires_at=datetime.now(tz=UTC) - timedelta(minutes=1),
         )
         grant_app_secret_use(
@@ -1007,7 +1007,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="api_token",
             secret_ref=build_secret_ref(alias=replacement_secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
         )
 
         result = _resolve_app_secret_payload(
@@ -1031,7 +1031,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="api_token",
             secret_ref=build_secret_ref(alias=secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             expires_at=datetime.now(tz=UTC) - timedelta(minutes=1),
         )
 
@@ -1214,7 +1214,7 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(delivered.secrets, {"gmail-refresh-token": "new-token"})
         self.assertEqual(saved_grant.resource_type, "mail_connection")
         self.assertEqual(saved_grant.resource_id, "conn_1")
-        self.assertEqual(saved_grant.target_patterns, ["maverick://app.backend/*"])
+        self.assertEqual(saved_grant.target_patterns, ["loopino://app.backend/*"])
 
     def test_app_secret_writes_enforce_declared_resource_scope(self) -> None:
         secret_store = _secret_store()
@@ -1279,7 +1279,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="gmail-oauth-client-id",
             secret_ref=build_secret_ref(alias=workspace_secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
         )
         grant_app_secret_use(
             secret_store,
@@ -1288,7 +1288,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="gmail-refresh-token",
             secret_ref=build_secret_ref(alias=first_secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             resource_type="mail_connection",
             resource_id="conn_1",
         )
@@ -1299,7 +1299,7 @@ class AppMountsTestCase(unittest.TestCase):
             logical_name="gmail-refresh-token",
             secret_ref=build_secret_ref(alias=second_secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             resource_type="mail_connection",
             resource_id="conn_2",
         )
@@ -1419,7 +1419,7 @@ def _write_asset_manifest(root: Path, *, immutable_paths: list[str]) -> None:
         return {"path": relative, "sha256": hashlib.sha256(body).hexdigest(), "size_bytes": len(body)}
 
     payload = {
-        "schema": "maverick.frontend-assets.v2",
+        "schema": "loopino.frontend-assets.v2",
         "build_id": "a" * 64,
         "entrypoints": ["index.html"],
         "immutable": [record(path) for path in immutable_paths],

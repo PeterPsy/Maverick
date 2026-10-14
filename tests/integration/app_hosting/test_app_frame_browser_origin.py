@@ -63,7 +63,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             clock = [10_000.0]
             state.sidecar_browser_sessions._clock = lambda: clock[0]
             app = PlatformAsgiHost(state)
-            platform_host = "maverick.localhost:8000"
+            platform_host = "loopino.localhost:8000"
             platform_origin = f"http://{platform_host}"
             platform_cookie = await self._login(app, host=platform_host)
             frame = await self._bootstrap_app_frame(
@@ -224,7 +224,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             repo_root = self._repo_root(Path(temp_dir))
             state = self._state_with_frontend(repo_root, include_other_app=True)
             app = PlatformAsgiHost(state)
-            platform_host = "maverick.localhost:8000"
+            platform_host = "loopino.localhost:8000"
             platform_origin = f"http://{platform_host}"
             platform_cookie = await self._login(app, host=platform_host)
 
@@ -333,11 +333,11 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             )
             self.assertEqual(own_app_status, 200)
             self.assertIn(b"frame-demo", own_app_body)
-            self.assertIn(b"__MAVERICK_APP_FRAME_CONTEXT__", own_app_body)
+            self.assertIn(b"__LOOPINO_APP_FRAME_CONTEXT__", own_app_body)
             self.assertIn(b'{"app_id":"frame-demo","workspace_id":"default"}', own_app_body)
             self.assertEqual(own_widget_status, 200)
             self.assertIn(b"frame-widget", own_widget_body)
-            self.assertIn(b"__MAVERICK_APP_FRAME_CONTEXT__", own_widget_body)
+            self.assertIn(b"__LOOPINO_APP_FRAME_CONTEXT__", own_widget_body)
             self.assertIn(b'{"app_id":"frame-demo","workspace_id":"default"}', own_widget_body)
 
             forwarded_scope: dict = {}
@@ -364,11 +364,11 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             repo_root = self._repo_root(Path(temp_dir))
             state = self._state_with_frontend(repo_root)
             app = PlatformAsgiHost(state)
-            platform_host = "maverick.localhost:8000"
+            platform_host = "loopino.localhost:8000"
             platform_origin = f"http://{platform_host}"
             platform_cookie = await self._login(app, host=platform_host)
 
-            with patch.dict(os.environ, {"MAVERICK_APP_FRAME_ISOLATION_MODE": "same_origin"}):
+            with patch.dict(os.environ, {"LOOPINO_APP_FRAME_ISOLATION_MODE": "same_origin"}):
                 callback_status, callback_body, _callback_headers = await self._invoke(
                     app,
                     host=platform_host,
@@ -424,12 +424,12 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             repo_root = self._repo_root(Path(temp_dir))
             state = self._state_with_frontend(repo_root)
             app = PlatformAsgiHost(state)
-            platform_host = "maverick.localhost:8000"
+            platform_host = "loopino.localhost:8000"
             platform_origin = f"http://{platform_host}"
             platform_cookie = await self._login(app, host=platform_host)
 
-            with patch.dict(os.environ, {"MAVERICK_SIDECAR_ORIGIN_MODE": "disabled"}):
-                os.environ.pop("MAVERICK_APP_FRAME_ISOLATION_MODE", None)
+            with patch.dict(os.environ, {"LOOPINO_SIDECAR_ORIGIN_MODE": "disabled"}):
+                os.environ.pop("LOOPINO_APP_FRAME_ISOLATION_MODE", None)
                 direct_status, direct_body, _direct_headers = await self._invoke(
                     app,
                     host=platform_host,
@@ -467,7 +467,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             repo_root = self._repo_root(Path(temp_dir))
             state = self._state_with_frontend(repo_root)
             app = PlatformAsgiHost(state)
-            platform_host = "maverick.localhost:8000"
+            platform_host = "loopino.localhost:8000"
             platform_origin = f"http://{platform_host}"
             platform_cookie = await self._login(app, host=platform_host)
 
@@ -516,7 +516,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             self.assertEqual(launch_status, 200)
             self.assertEqual(launch_headers["cache-control"], "no-store")
             self.assertTrue(launch["origin"].startswith("http://af-"))
-            self.assertTrue(launch["origin"].endswith(".sidecars.maverick.localhost:8000"))
+            self.assertTrue(launch["origin"].endswith(".sidecars.loopino.localhost:8000"))
             self.assertNotEqual(launch["origin"], platform_origin)
             self.assertEqual(launch["bootstrap_url"], launch["origin"] + APP_FRAME_BOOTSTRAP_PATH)
             self.assertNotIn(launch["ticket"], launch["bootstrap_url"])
@@ -532,7 +532,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             )
             self.assertEqual(bootstrap_status, 303)
             self.assertEqual(bootstrap_headers["location"], "/apps/frame-demo/route?q=1")
-            self.assertIn("maverick_app_frame_session=", bootstrap_headers["set-cookie"])
+            self.assertIn("loopino_app_frame_session=", bootstrap_headers["set-cookie"])
             self.assertIn("HttpOnly", bootstrap_headers["set-cookie"])
             self.assertIn("SameSite=Strict", bootstrap_headers["set-cookie"])
             self.assertNotIn("Domain=", bootstrap_headers["set-cookie"])
@@ -559,17 +559,17 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             )
             self.assertEqual(html_status, 200)
             self.assertIn(b"frame-demo", html_body)
-            self.assertIn(b"__MAVERICK_PLATFORM_ORIGIN__", html_body)
-            self.assertIn(b"__MAVERICK_APP_FRAME_CONTEXT__", html_body)
+            self.assertIn(b"__LOOPINO_PLATFORM_ORIGIN__", html_body)
+            self.assertIn(b"__LOOPINO_APP_FRAME_CONTEXT__", html_body)
             self.assertIn(b'{"app_id":"frame-demo","workspace_id":"default"}', html_body)
             self.assertIn(b"Object.freeze", html_body)
             self.assertIn(b"{value:fc,writable:false,configurable:false}", html_body)
-            self.assertIn(b"maverick.shell.layout-changed", html_body)
+            self.assertIn(b"loopino.shell.layout-changed", html_body)
             self.assertIn(APP_FRAME_SESSION_LEASE_PATH.encode(), html_body)
-            self.assertIn(b"maverick.app-frame.authorization-required", html_body)
-            self.assertIn(b"maverick.app.visibility-changed", html_body)
+            self.assertIn(b"loopino.app-frame.authorization-required", html_body)
+            self.assertIn(b"loopino.app.visibility-changed", html_body)
             self.assertIn(b"document.visibilityState", html_body)
-            self.assertIn(b"--maverick-shell-mobile-content-top-offset", html_body)
+            self.assertIn(b"--loopino-shell-mobile-content-top-offset", html_body)
             self.assertIn(platform_origin.encode(), html_body)
             self.assertIn(
                 f'src="{platform_origin}/apps/frame-demo/assets/app-contenthash.js"'.encode(),
@@ -666,14 +666,14 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
                 host=isolated_host,
                 path="/api/session",
                 headers={
-                    "cookie": f"{isolated_cookie}; maverick_session=attacker-value; app_cookie=kept",
+                    "cookie": f"{isolated_cookie}; loopino_session=attacker-value; app_cookie=kept",
                 },
             )
             self.assertEqual(session_status, 200)
             self.assertEqual(json.loads(session_body)["workspace_id"], "default")
             self.assertEqual(session_headers["cache-control"], "private, no-store")
 
-            foreign_host = "af-000000000000000000000000.sidecars.maverick.localhost:8000"
+            foreign_host = "af-000000000000000000000000.sidecars.loopino.localhost:8000"
             foreign_status, _foreign_body, _foreign_headers = await self._invoke(
                 app,
                 host=foreign_host,
@@ -743,10 +743,10 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
                 "index.html",
             )
         }
-        (frontend_root / "maverick-frontend-assets.json").write_text(
+        (frontend_root / "loopino-frontend-assets.json").write_text(
             json.dumps(
                 {
-                    "schema": "maverick.frontend-assets.v2",
+                    "schema": "loopino.frontend-assets.v2",
                     "build_id": "a" * 64,
                     "entrypoints": ["index.html"],
                     "immutable": [
@@ -766,7 +766,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             name="Frame Demo",
             version="1.0.0",
             description="Isolated app-frame integration fixture.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 entrypoints=build_app_entrypoints(frontend="frontend/dist", backend="backend.py" if include_backend else None),
                 widgets=[
@@ -812,7 +812,7 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             name="Other Demo",
             version="1.0.0",
             description="Second isolated app-frame integration fixture.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 entrypoints=build_app_entrypoints(frontend="frontend/dist"),
                 widgets=[

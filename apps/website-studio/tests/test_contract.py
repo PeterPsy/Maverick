@@ -8,8 +8,8 @@ import sys
 import unittest
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-MAVERICK_ROOT = next(parent for parent in APP_ROOT.parents if (parent / "core").is_dir())
-sys.path.insert(0, str(MAVERICK_ROOT))
+LOOPINO_ROOT = next(parent for parent in APP_ROOT.parents if (parent / "core").is_dir())
+sys.path.insert(0, str(LOOPINO_ROOT))
 
 from core.apps.contracts import parse_app_contract_file
 
@@ -26,7 +26,7 @@ class GeneratedAppContractTest(unittest.TestCase):
 
     def test_contract_publisher_matches_source_available_platform_app(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
-        self.assertEqual(contract.get("publisher"), "maverick")
+        self.assertEqual(contract.get("publisher"), "loopino")
         self.assertEqual(contract.get("distribution", {}).get("mode"), "source_available")
         self.assertEqual(contract.get("distribution", {}).get("source_access"), "forkable")
 

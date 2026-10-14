@@ -1,4 +1,4 @@
-"""Compaction helpers for runtime-token Maverick CLI responses."""
+"""Compaction helpers for runtime-token Loopino CLI responses."""
 
 from __future__ import annotations
 
@@ -284,7 +284,7 @@ def _compaction_input_for_cli_field(
         turn_id=None,
         event_type="runtime.cli.response",
         tool_call_id=None,
-        tool_name="maverick_cli",
+        tool_name="loopino_cli",
         tool_kind="runtime_cli",
         command=shlex.join(tuple(argv)),
         argv=tuple(argv),

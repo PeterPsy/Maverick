@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_MAVERICK_FEATURE_GROUP_CHAT?: string;
+  readonly VITE_LOOPINO_FEATURE_GROUP_CHAT?: string;
 }
 
 interface ImportMeta {

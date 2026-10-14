@@ -5,7 +5,7 @@ import {
   createCacheLifecycleController,
   createPwaCacheMetricsCollector,
   type CacheLifecyclePrincipal,
-} from "@maverick/pwa-cache";
+} from "@loopino/pwa-cache";
 import type { SessionPayload } from "./api";
 
 export const shellPwaMetrics = createPwaCacheMetricsCollector();

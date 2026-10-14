@@ -43,7 +43,7 @@ and browser checks were not rerun.
 
 The second follow-up passed **119 Memory backend tests** and SDK validation.
 The first follow-up passed **115 backend tests**, **18 frontend tests**, TypeScript
-and the official `maverick app memory frontend build --json`.
+and the official `loopino app memory frontend build --json`.
 
 Backend regressions are in `apps/memory/tests/test_audit_regressions.py`,
 `test_review_regressions.py`, `test_decimal_and_reference_regressions.py` and

@@ -20,7 +20,7 @@ The Base Shell production build emitted:
 - three Rollup-verified immutable bundles;
 - fifteen revalidated public artifacts, including the generated worker;
 - seventeen URL/path/SHA-256/size precache records;
-- no unresolved `__MAVERICK_*` generation token.
+- no unresolved `__LOOPINO_*` generation token.
 
 `core.apps.frontend_assets.load_frontend_asset_manifest(...,
 verify_files=True)` re-read every declared artifact and accepted the manifest.

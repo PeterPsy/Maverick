@@ -96,18 +96,18 @@ BROKER_ACTION_FIELDS = {
     "press_key": frozenset({"action", "session_id", "key", "target_url", "mode"}),
     **READING_ACTION_FIELDS,
 }
-ACCEPTANCE_URL_ENV = "MAVERICK_BROWSER_ACCEPTANCE_URL"
+ACCEPTANCE_URL_ENV = "LOOPINO_BROWSER_ACCEPTANCE_URL"
 DEFAULT_ACCEPTANCE_URL = "https://example.com/"
-DEV_SMOKE_PORT_ENV = "MAVERICK_BROWSER_DEV_SMOKE_PORT"
+DEV_SMOKE_PORT_ENV = "LOOPINO_BROWSER_DEV_SMOKE_PORT"
 DEFAULT_DEV_SMOKE_PORT = 8000
 DEFAULT_MOBILE_VIEWPORT = {"viewport_width": 390, "viewport_height": 844, "mobile": True}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action in {"companion.connect", "companion.disconnect", "companion.complete", "operation.cancel", "content.collect", "video.analyze", "media.completed", "hover", "select_option", "set_checked"}:
-        return [{"type": "maverick.app.data-changed", "resource": "companion"}]
+        return [{"type": "loopino.app.data-changed", "resource": "companion"}]
     if action in ACTION_EVENTS:
-        return [{"type": "maverick.app.data-changed", "resource": "state"}]
+        return [{"type": "loopino.app.data-changed", "resource": "state"}]
     return []
 
 
@@ -401,7 +401,7 @@ def status_payload(
         "audit_count": len(audit),
         "p0_scope": {
             "browser_lab_read_only": True,
-            "maverick_dev_inspector": True,
+            "loopino_dev_inspector": True,
             "chrome_companion": True,
             "persistent_profiles": False,
             "file_upload": False,
@@ -413,7 +413,7 @@ def status_payload(
             "bounded_scroll": True,
             "video_frames": True,
             "audio_transcription": "local_only_via_speech",
-            "authenticated_browser": "temporary_maverick_and_user_shared_chrome",
+            "authenticated_browser": "temporary_loopino_and_user_shared_chrome",
         },
     }
 
@@ -426,7 +426,7 @@ def visible_session_records(state: dict[str, Any], *, admin_dev_targets_enabled:
                and (not record.get("user_id") or record["user_id"] == user_id)]
     if admin_dev_targets_enabled:
         return records
-    return [record for record in records if record.get("mode") != "maverick_dev_inspector" or record.get("platform_origin")]
+    return [record for record in records if record.get("mode") != "loopino_dev_inspector" or record.get("platform_origin")]
 
 
 def visible_audit_records(state: dict[str, Any], *, admin_dev_targets_enabled: bool, user_id: str | None = None) -> list[dict[str, Any]]:
@@ -440,13 +440,13 @@ def visible_audit_records(state: dict[str, Any], *, admin_dev_targets_enabled: b
     dev_session_ids = {
         str(record.get("session_id"))
         for record in visible_session_records(state, admin_dev_targets_enabled=True)
-        if record.get("mode") == "maverick_dev_inspector" and record.get("session_id")
+        if record.get("mode") == "loopino_dev_inspector" and record.get("session_id")
     }
     return [
         record
         for record in records
         if (record.get("user_id") and record["user_id"] == user_id) or
-           (record.get("mode") != "maverick_dev_inspector" and str(record.get("session_id") or "") not in dev_session_ids)
+           (record.get("mode") != "loopino_dev_inspector" and str(record.get("session_id") or "") not in dev_session_ids)
     ]
 
 
@@ -458,9 +458,9 @@ def operations_manifest() -> dict[str, Any]:
                 "actions": sorted(READ_ONLY_ACTIONS),
                 "description": "Navigate, read rendered content, scroll, inspect video frames, and collect snapshots and diagnostics under core egress policy. No external-site forms or social actions.",
             },
-            "maverick_dev_inspector": {
+            "loopino_dev_inspector": {
                 "actions": sorted(READ_ONLY_ACTIONS | DEV_INSPECTOR_ACTIONS),
-                "description": "Adds click, type, and key press only for admin-enabled Maverick dev targets.",
+                "description": "Adds click, type, and key press only for admin-enabled Loopino dev targets.",
             },
         },
         "mcp_tools": sorted(MCP_TOOL_ACTIONS),
@@ -479,7 +479,7 @@ def operations_manifest() -> dict[str, Any]:
         "admin_dev_targets": admin_dev_target_urls(),
         "smoke": {
             "acceptance": "acceptance.smoke runs the public/read-only P0 broker path.",
-            "dev": "dev.smoke builds an allowlisted hostmachine URL from app_id/path and runs maverick_dev_inspector.",
+            "dev": "dev.smoke builds an allowlisted hostmachine URL from app_id/path and runs loopino_dev_inspector.",
             "mobile_viewport": DEFAULT_MOBILE_VIEWPORT,
         },
         "disabled": [
@@ -534,10 +534,10 @@ def dev_smoke_payload(
     platform_role: str | None = None,
     workspace_role: str | None = None,
 ) -> tuple[int, dict[str, Any]]:
-    """Run an admin Maverick local-dev smoke from app_id/path/port inputs."""
+    """Run an admin Loopino local-dev smoke from app_id/path/port inputs."""
 
-    if "mode" in body and str(body.get("mode") or "").strip() != "maverick_dev_inspector":
-        raise BrowserValidationError("dev.smoke always uses mode maverick_dev_inspector.", field="mode")
+    if "mode" in body and str(body.get("mode") or "").strip() != "loopino_dev_inspector":
+        raise BrowserValidationError("dev.smoke always uses mode loopino_dev_inspector.", field="mode")
     target = dev_smoke_target(body)
     viewport = smoke_viewport_options(body)
     if not is_admin_authority(platform_role=platform_role, workspace_role=workspace_role):
@@ -547,12 +547,12 @@ def dev_smoke_payload(
             "target_url": redact_url(target["url"]),
             "target": target,
             "error": "policy_denied",
-            "detail": "dev.smoke requires admin authority because it uses maverick_dev_inspector.",
+            "detail": "dev.smoke requires admin authority because it uses loopino_dev_inspector.",
             "policy": {
                 "allowed": False,
                 "reason": "blocked_admin_dev_target_not_enabled",
                 "guidance": {
-                    "message": "Use mode=maverick_dev_inspector from an admin context for allowlisted hostmachine targets.",
+                    "message": "Use mode=loopino_dev_inspector from an admin context for allowlisted hostmachine targets.",
                     "admin_dev_targets": admin_dev_target_urls(),
                 },
             },
@@ -564,11 +564,11 @@ def dev_smoke_payload(
         data_root,
         body,
         target_url=target["url"],
-        mode="maverick_dev_inspector",
+        mode="loopino_dev_inspector",
         smoke_action="dev.smoke",
         failure_error="dev_smoke_failed",
-        failure_detail="Browser Maverick dev smoke failed.",
-        close_failure_detail="Browser Maverick dev smoke could not close the session.",
+        failure_detail="Browser Loopino dev smoke failed.",
+        close_failure_detail="Browser Loopino dev smoke could not close the session.",
         target=target,
         workspace_id=workspace_id,
         app_id=app_id,
@@ -597,8 +597,8 @@ def _smoke_payload(
 ) -> tuple[int, dict[str, Any]]:
     if not target_url:
         raise BrowserValidationError("url is required.", field="url")
-    if mode not in {"read_only", "maverick_dev_inspector"}:
-        raise BrowserValidationError("mode must be read_only or maverick_dev_inspector.", field="mode")
+    if mode not in {"read_only", "loopino_dev_inspector"}:
+        raise BrowserValidationError("mode must be read_only or loopino_dev_inspector.", field="mode")
     viewport = smoke_viewport_options(body)
     admin_dev_targets_enabled = is_admin_authority(platform_role=platform_role, workspace_role=workspace_role)
     active_health = broker_health(connect=True)
@@ -916,12 +916,12 @@ def broker_action_result(
     platform = session or platform_browser_session or {}
     platform_origin = platform.get("platform_origin") or platform.get("origin")
     frame_host_suffix = platform.get("frame_host_suffix")
-    if mode == "maverick_dev_inspector" and not admin_dev_targets_enabled and not platform_origin:
+    if mode == "loopino_dev_inspector" and not admin_dev_targets_enabled and not platform_origin:
         raise BrowserPolicyError(
-            "Maverick dev inspector sessions require admin authority.",
+            "Loopino dev inspector sessions require admin authority.",
             decision={"allowed": False, "reason": "blocked_admin_dev_target_not_enabled"},
         )
-    allow_admin_dev_targets = mode == "maverick_dev_inspector" and admin_dev_targets_enabled
+    allow_admin_dev_targets = mode == "loopino_dev_inspector" and admin_dev_targets_enabled
     if action == "navigate":
         preflight = preflight_payload({**body, "mode": mode}, admin_dev_targets_enabled=admin_dev_targets_enabled,
                                       platform_origin=platform_origin, frame_host_suffix=frame_host_suffix)
@@ -979,8 +979,8 @@ def validate_broker_action(action: str, body: dict[str, Any]) -> None:
         )
     if action == "session.create":
         mode = str(body.get("mode") or "read_only")
-        if mode not in {"read_only", "maverick_dev_inspector"}:
-            raise BrowserValidationError("mode must be read_only or maverick_dev_inspector.", field="mode")
+        if mode not in {"read_only", "loopino_dev_inspector"}:
+            raise BrowserValidationError("mode must be read_only or loopino_dev_inspector.", field="mode")
         viewport_options(body)
     if action == "navigate" and "mode" in body:
         validate_optional_mode(body)
@@ -1031,8 +1031,8 @@ def preflight_payload(body: dict[str, Any], *, admin_dev_targets_enabled: bool =
                       platform_origin: str | None = None, frame_host_suffix: str | None = None) -> dict[str, Any]:
     url = require_string(body, "url")
     mode = str(body.get("mode") or "read_only")
-    if mode not in {"read_only", "maverick_dev_inspector"}:
-        raise BrowserValidationError("mode must be read_only or maverick_dev_inspector.", field="mode")
+    if mode not in {"read_only", "loopino_dev_inspector"}:
+        raise BrowserValidationError("mode must be read_only or loopino_dev_inspector.", field="mode")
     if "resolved_addresses" in body:
         raise BrowserValidationError(
             "resolved_addresses are resolved by trusted Browser policy and cannot be supplied by callers.",
@@ -1043,7 +1043,7 @@ def preflight_payload(body: dict[str, Any], *, admin_dev_targets_enabled: bool =
             "allow_admin_dev_targets is derived from trusted caller authority and cannot be supplied by callers.",
             field="allow_admin_dev_targets",
         )
-    allow_admin_dev_targets = mode == "maverick_dev_inspector" and admin_dev_targets_enabled
+    allow_admin_dev_targets = mode == "loopino_dev_inspector" and admin_dev_targets_enabled
     if is_platform_browser_target(url, platform_origin, frame_host_suffix):
         return {"allowed": True, "reason": "allowed_platform_browser_target", "url": redact_url(url), "redacted_url": redact_url(url)}
     resolved_addresses = resolve_browser_egress_url_addresses(url)
@@ -1068,12 +1068,12 @@ def policy_guidance(decision: Any, original_url: str) -> dict[str, Any] | None:
         allowed_ports = admin_dev_target_ports()
         guidance: dict[str, Any] = {
             "message": (
-                "Browser blocks direct loopback/private IP targets. For Maverick local development, use an exact "
-                "allowlisted hostmachine target with mode=maverick_dev_inspector from an admin context."
+                "Browser blocks direct loopback/private IP targets. For Loopino local development, use an exact "
+                "allowlisted hostmachine target with mode=loopino_dev_inspector from an admin context."
             ),
             "supported_host": "hostmachine",
             "allowed_ports": allowed_ports,
-            "mode": "maverick_dev_inspector",
+            "mode": "loopino_dev_inspector",
             "requires_admin": True,
             "admin_dev_targets": admin_dev_target_urls(),
         }
@@ -1084,11 +1084,11 @@ def policy_guidance(decision: Any, original_url: str) -> dict[str, Any] | None:
         return {
             "message": (
                 "hostmachine is restricted unless the exact scheme, host, and port are listed as an admin dev "
-                "target and the request uses mode=maverick_dev_inspector from an admin context."
+                "target and the request uses mode=loopino_dev_inspector from an admin context."
             ),
             "supported_host": "hostmachine",
             "allowed_ports": admin_dev_target_ports(),
-            "mode": "maverick_dev_inspector",
+            "mode": "loopino_dev_inspector",
             "requires_admin": True,
             "admin_dev_targets": admin_dev_target_urls(),
         }
@@ -1150,9 +1150,9 @@ def require_authorized_session(
     requested_mode = body.get("mode")
     if isinstance(requested_mode, str) and requested_mode.strip() and requested_mode.strip() != session["mode"]:
         raise BrowserValidationError("mode must match the Browser session mode.", field="mode")
-    if session["mode"] == "maverick_dev_inspector" and not admin_dev_targets_enabled and session.get("admin_dev_targets_enabled", not session.get("platform_origin")):
+    if session["mode"] == "loopino_dev_inspector" and not admin_dev_targets_enabled and session.get("admin_dev_targets_enabled", not session.get("platform_origin")):
         raise BrowserPolicyError(
-            "Maverick dev inspector session access requires admin authority.",
+            "Loopino dev inspector session access requires admin authority.",
             decision={"allowed": False, "reason": "blocked_admin_dev_session_not_authorized"},
         )
     return session
@@ -1164,24 +1164,24 @@ def validate_dev_inspector_action(
     session: dict[str, Any] | None,
     admin_dev_targets_enabled: bool,
 ) -> None:
-    if body.get("mode") != "maverick_dev_inspector":
+    if body.get("mode") != "loopino_dev_inspector":
         raise BrowserPolicyError(
-            "Interactive browser actions require mode maverick_dev_inspector.",
+            "Interactive browser actions require mode loopino_dev_inspector.",
             decision={"allowed": False, "reason": "blocked_interactive_action_mode_required"},
         )
-    if not session or session["mode"] != "maverick_dev_inspector":
+    if not session or session["mode"] != "loopino_dev_inspector":
         raise BrowserPolicyError(
-            "Interactive browser actions are allowed only in maverick_dev_inspector mode.",
+            "Interactive browser actions are allowed only in loopino_dev_inspector mode.",
             decision={"allowed": False, "reason": "blocked_interactive_action_outside_dev_inspector"},
         )
     target_url = require_string(body, "target_url")
     decision = preflight_payload(
-        {"url": target_url, "mode": "maverick_dev_inspector"},
+        {"url": target_url, "mode": "loopino_dev_inspector"},
         admin_dev_targets_enabled=admin_dev_targets_enabled,
         platform_origin=session.get("platform_origin"), frame_host_suffix=session.get("frame_host_suffix"),
     )
     if not decision["allowed"] or decision["reason"] not in {"allowed_admin_dev_target", "allowed_platform_browser_target"}:
-        raise BrowserPolicyError("Interactive browser action target is not an admin-enabled Maverick dev URL.", decision=decision)
+        raise BrowserPolicyError("Interactive browser action target is not an admin-enabled Loopino dev URL.", decision=decision)
 
 
 def sync_state_after_broker_action(
@@ -1309,8 +1309,8 @@ def validate_optional_bool(body: dict[str, Any], field: str) -> None:
 
 def validate_optional_mode(body: dict[str, Any]) -> None:
     mode = body.get("mode")
-    if not isinstance(mode, str) or mode not in {"read_only", "maverick_dev_inspector"}:
-        raise BrowserValidationError("mode must be read_only or maverick_dev_inspector.", field="mode")
+    if not isinstance(mode, str) or mode not in {"read_only", "loopino_dev_inspector"}:
+        raise BrowserValidationError("mode must be read_only or loopino_dev_inspector.", field="mode")
 
 
 def require_string(body: dict[str, Any], field: str) -> str:

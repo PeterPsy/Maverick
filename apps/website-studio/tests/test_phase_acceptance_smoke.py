@@ -15,7 +15,7 @@ import unittest
 from zipfile import ZipFile
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-MAVERICK_ROOT = next(parent for parent in APP_ROOT.parents if (parent / "core").is_dir())
+LOOPINO_ROOT = next(parent for parent in APP_ROOT.parents if (parent / "core").is_dir())
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
@@ -173,7 +173,7 @@ class WebsiteStudioPhaseAcceptanceSmokeTest(unittest.TestCase):
                     "approval_id": approval["approval"]["id"],
                 },
             )
-            self.assertEqual(published["deployment"]["mode"], "maverick_managed_static")
+            self.assertEqual(published["deployment"]["mode"], "loopino_managed_static")
             self.assertEqual(published["deployment"]["source_ref"]["platform_binding_status"], "pending_generic_surface")
 
             rollback_approval = _call(
@@ -325,9 +325,9 @@ class WebsiteStudioExternalAcceptanceSmokeTest(unittest.TestCase):
             self.skipTest("set WEBSITE_STUDIO_STORAGE_CLI_SMOKE=1 to write a generated Storage smoke ZIP")
         archive_base64 = _zip_base64({"index.html": "<!doctype html><title>Storage Smoke</title><main>Storage ZIP Smoke</main>"})
         rel_path = f"storage/generated/website-studio-smoke-{os.getpid()}.zip"
-        written = _run_maverick_json(
+        written = _run_loopino_json(
             [
-                "maverick",
+                "loopino",
                 "app",
                 "storage",
                 "mcp",
@@ -342,9 +342,9 @@ class WebsiteStudioExternalAcceptanceSmokeTest(unittest.TestCase):
                 "--json",
             ]
         )
-        read_back = _run_maverick_json(
+        read_back = _run_loopino_json(
             [
-                "maverick",
+                "loopino",
                 "app",
                 "storage",
                 "mcp",
@@ -372,8 +372,8 @@ class WebsiteStudioExternalAcceptanceSmokeTest(unittest.TestCase):
             self.assertEqual(imported["site"]["source_artifact_ref"]["workspace_relative_path"], rel_path)
 
 
-def _run_maverick_json(args: list[str]) -> dict[str, object]:
-    result = subprocess.run(args, cwd=MAVERICK_ROOT / "workspaces" / "default", check=True, capture_output=True, text=True, timeout=60)
+def _run_loopino_json(args: list[str]) -> dict[str, object]:
+    result = subprocess.run(args, cwd=LOOPINO_ROOT / "workspaces" / "default", check=True, capture_output=True, text=True, timeout=60)
     return json.loads(result.stdout)
 
 

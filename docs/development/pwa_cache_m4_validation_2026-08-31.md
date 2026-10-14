@@ -55,8 +55,8 @@ badge, mode, alternate shell, availability promise, or residency list.
 
 | Task | Evidence |
 |---|---|
-| PWA-060 | Feature-detected `maverick-pwa-file-cache-v1` OPFS adapter with random opaque flat names |
-| PWA-061 | Separate scoped `maverick-pwa-file-v1` IndexedDB manifest, database version 1 and record schema 2 |
+| PWA-060 | Feature-detected `loopino-pwa-file-cache-v1` OPFS adapter with random opaque flat names |
+| PWA-061 | Separate scoped `loopino-pwa-file-v1` IndexedDB manifest, database version 1 and record schema 2 |
 | PWA-062 | Best-effort cloned-response stream writer; valid network Blob does not await publication |
 | PWA-063 | RAM-only partial sends `Range` plus exact strong `If-Range`; invalid resume restarts fully |
 | PWA-064 | Exact source version, size, strong ETag, and SHA-256 checked before `ready`; candidate hits are physically re-hashed and authoritatively revalidated |
@@ -79,7 +79,7 @@ the platform media URL, applies local-persistence policy v2, and verifies bytes
 before transferring the Blob.
 
 Until a terminal decision, the broker reads the exact
-`maverick.pwa-config.v2` no-store projection for each open. Explicit false,
+`loopino.pwa-config.v2` no-store projection for each open. Explicit false,
 malformed success, non-transient HTTP failure, or `401`/`403` clears prior
 authority and terminally disables that mounted broker. A transient response or
 transport failure may reuse only a positive decision and exact descriptor
@@ -171,7 +171,7 @@ assertion being changed by concurrent work.
 The required projection remains:
 
 ```json
-{"schema":"maverick.pwa-config.v2","service_worker":{"enabled":true,"generation":"v2"},"features":{"data_cache":false,"storage_file_cache":false}}
+{"schema":"loopino.pwa-config.v2","service_worker":{"enabled":true,"generation":"v2"},"features":{"data_cache":false,"storage_file_cache":false}}
 ```
 
 The running Core health and public no-store projection were checked on port
@@ -189,7 +189,7 @@ Screen evidence plus the applicable privacy/release approvals. The exact
 resource approval path and isolated-origin boundary now exist; they do not
 justify changing the default-off global flag.
 
-Rollback sets `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE=off` and restarts Core
+Rollback sets `LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE=off` and restarts Core
 through the normal operator procedure. A broker that has not already reached a
 terminal decision rechecks the flag on its next open; explicit disable then
 disables that broker for the rest of its mount. Existing derivatives remain

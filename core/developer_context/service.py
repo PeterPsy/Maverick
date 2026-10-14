@@ -25,13 +25,13 @@ DOCUMENTS: tuple[DeveloperContextDocument, ...] = (
     DeveloperContextDocument(
         doc_id="agents_working_agreement",
         title="Agents Working Agreement",
-        summary="Repository workflow, engineering rules, and coding discipline for Maverick.",
+        summary="Repository workflow, engineering rules, and coding discipline for Loopino.",
         source_path="AGENTS.md",
     ),
     DeveloperContextDocument(
         doc_id="core_architecture",
         title="Core Architecture",
-        summary="Canonical architecture for the headless Maverick core and platform boundaries.",
+        summary="Canonical architecture for the headless Loopino core and platform boundaries.",
         source_path="docs/architecture/core_architecture.md",
     ),
     DeveloperContextDocument(

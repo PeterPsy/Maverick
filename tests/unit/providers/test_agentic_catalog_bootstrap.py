@@ -16,7 +16,7 @@ from tests.support.repo import make_temp_repo_root
 class AgenticCatalogBootstrapTest(unittest.TestCase):
     def test_live_refresh_publishes_all_models_without_a_restart(self):
         root = make_temp_repo_root(self)
-        with patch.dict(os.environ, {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"}), patch(
+        with patch.dict(os.environ, {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"}), patch(
             "core.providers.native_agent_reconciliation.discover_codex_native_catalog",
             return_value=codex_snapshot("gpt-5.6-sol"),
         ) as discover:
@@ -39,7 +39,7 @@ class AgenticCatalogBootstrapTest(unittest.TestCase):
 
     def test_persisted_models_and_fallback_are_not_authority(self):
         root = make_temp_repo_root(self)
-        with patch.dict(os.environ, {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"}), patch(
+        with patch.dict(os.environ, {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"}), patch(
             "core.providers.native_agent_reconciliation.discover_codex_native_catalog",
             return_value=codex_snapshot("gpt-5.6-sol"),
         ) as discover:

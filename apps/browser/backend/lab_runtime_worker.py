@@ -1,4 +1,4 @@
-"""Supervise finite Lab sessions under the Maverick backend service lifecycle."""
+"""Supervise finite Lab sessions under the Loopino backend service lifecycle."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def runtime_status(children: dict, health: dict) -> dict:
 
 
 def main(node: str) -> None:
-    os.environ["MAVERICK_BROWSER_BROKER_TIMEOUT_SECONDS"] = "2"
+    os.environ["LOOPINO_BROWSER_BROKER_TIMEOUT_SECONDS"] = "2"
     SERVICE_ROOT.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(SERVICE_ROOT / "lab.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, "a+") as lock:
@@ -54,7 +54,7 @@ def main(node: str) -> None:
         (SERVICE_ROOT / "lab.log").chmod(0o600)
         env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR") if key in os.environ}
         cache = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/home/ubuntu/.cache/ms-playwright"))
-        env.update({"PLAYWRIGHT_BROWSERS_PATH": str(cache), "MAVERICK_BROWSER_BROKER_TOKEN_FILE": str(token)})
+        env.update({"PLAYWRIGHT_BROWSERS_PATH": str(cache), "LOOPINO_BROWSER_BROKER_TOKEN_FILE": str(token)})
         stopped = threading.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopped.set())
         signal.signal(signal.SIGINT, lambda *_: stopped.set())

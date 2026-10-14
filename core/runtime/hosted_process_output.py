@@ -32,7 +32,7 @@ class HostedProcessOutputCapture:
         self._limit_reason: str | None = None
         self._thread = Thread(
             target=self._capture,
-            name=f"maverick-hosted-process-output-{process.pid}",
+            name=f"loopino-hosted-process-output-{process.pid}",
             daemon=True,
         )
 

@@ -1,7 +1,7 @@
 import { nativeCrossClientLocksAvailable, withCrossClientLock } from "./cacheBus";
 
 const generations = new Map<string, string>();
-const PREFIX = "maverick-pwa-data-publication-v1:";
+const PREFIX = "loopino-pwa-data-publication-v1:";
 
 /** A completed cleanup must still fence readers waiting on network or quota. */
 export function publicationGeneration(backendKey: string, shared = true, maintenance = false): string | null {

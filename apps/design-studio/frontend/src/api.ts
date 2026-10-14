@@ -1,7 +1,7 @@
 import type { SidecarLaunch } from "./types";
 
 const IDENTIFIER = /^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/;
-const BOOTSTRAP_PATH = "/.well-known/maverick-sidecar-bootstrap";
+const BOOTSTRAP_PATH = "/.well-known/loopino-sidecar-bootstrap";
 const BOOTSTRAP_STATUS_PATH = "/api/app-sidecars/browser-launch-status";
 
 export type SidecarBootstrapStatus = "pending" | "ready";

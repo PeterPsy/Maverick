@@ -7,13 +7,13 @@ import { referenceKey } from "./mentions";
 import type { MentionItem } from "./mentions";
 import { SCHEDULED_CHAT_DRAG_TYPE, scheduledChatMentionItems } from "./scheduledChatReferences";
 
-const STORAGE_FILE_DRAG_DATA_TYPE = "application/x-maverick-storage-file";
-const STORAGE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-folder";
-const STORAGE_SELECTION_DRAG_DATA_TYPE = "application/x-maverick-storage-selection";
-const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-file";
-const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-folder";
-const CHECKLIST_DRAG_DATA_TYPE = "application/x-maverick-checklist";
-const MAIL_THREAD_DRAG_DATA_TYPE = "application/x-maverick-mail-thread";
+const STORAGE_FILE_DRAG_DATA_TYPE = "application/x-loopino-storage-file";
+const STORAGE_FOLDER_DRAG_DATA_TYPE = "application/x-loopino-storage-folder";
+const STORAGE_SELECTION_DRAG_DATA_TYPE = "application/x-loopino-storage-selection";
+const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = "application/x-loopino-storage-drive-file";
+const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = "application/x-loopino-storage-drive-folder";
+const CHECKLIST_DRAG_DATA_TYPE = "application/x-loopino-checklist";
+const MAIL_THREAD_DRAG_DATA_TYPE = "application/x-loopino-mail-thread";
 
 type StorageRole = "uploaded" | "generated";
 type StoragePreviewKind =

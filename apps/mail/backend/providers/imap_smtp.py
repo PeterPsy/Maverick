@@ -708,7 +708,7 @@ def _parse_message(message: EmailMessage, *, flags: set[str] | None = None) -> d
             )
     rendered = render_email_body(plain_chunks, html_chunks)
     labels = []
-    flag_values = {flag.casefold() for flag in (flags if flags is not None else set(str(message.get("X-Maverick-Flags") or "").split()))}
+    flag_values = {flag.casefold() for flag in (flags if flags is not None else set(str(message.get("X-Loopino-Flags") or "").split()))}
     if "\\seen" not in flag_values:
         labels.append("unread")
     if "\\flagged" in flag_values:
@@ -759,7 +759,7 @@ def _draft_message(
     message["Date"] = formatdate(localtime=False)
     set_conversation_headers(message, draft)
     if not message["Message-ID"]:
-        message["Message-ID"] = f"<{uuid4().hex}@maverick.mail>"
+        message["Message-ID"] = f"<{uuid4().hex}@loopino.mail>"
     message.set_content(str(draft.get("body_text") or ""))
     body_html = str(draft.get("body_html") or "")
     if body_html:

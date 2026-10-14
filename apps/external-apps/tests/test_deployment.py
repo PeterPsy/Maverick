@@ -20,13 +20,13 @@ from tls_config import render_hosts, render_ingress
 
 
 DEPLOYMENT = APP_ROOT / "deployment"
-PUBLIC_HOST = "a" * 25 + "-" + "b" * 32 + ".apps.maverick.example.com"
+PUBLIC_HOST = "a" * 25 + "-" + "b" * 32 + ".apps.loopino.example.com"
 
 
 class DeploymentContractTests(unittest.TestCase):
     def test_unit_does_not_manage_core_or_load_its_secrets(self):
-        unit = (DEPLOYMENT / "maverick-external-apps.service.example").read_text()
-        self.assertNotIn("maverick-core.service", unit)
+        unit = (DEPLOYMENT / "loopino-external-apps.service.example").read_text()
+        self.assertNotIn("loopino-core.service", unit)
         self.assertNotIn("EnvironmentFile=", unit)
         self.assertIn("KillMode=mixed", unit)
         self.assertIn("NoNewPrivileges=yes", unit)
@@ -70,8 +70,8 @@ class NginxIngressTests(unittest.TestCase):
             cert, key = root / "cert.pem", root / "key.pem"
             subprocess.run([
                 "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-                "-subj", "/CN=apps.maverick.example.com", "-addext",
-                "subjectAltName=DNS:apps.maverick.example.com,DNS:*.apps.maverick.example.com,DNS:private.example.net",
+                "-subj", "/CN=apps.loopino.example.com", "-addext",
+                "subjectAltName=DNS:apps.loopino.example.com,DNS:*.apps.loopino.example.com,DNS:private.example.net",
                 "-keyout", str(key), "-out", str(cert),
             ], capture_output=True, check=True, timeout=15)
             challenge = root / 'acme/.well-known/acme-challenge'
@@ -81,15 +81,15 @@ class NginxIngressTests(unittest.TestCase):
             (root / 'privkey.pem').symlink_to(key)
             proxy = root / 'proxy.conf'
             proxy.write_text((DEPLOYMENT / 'nginx-proxy.conf').read_text())
-            exact = render_hosts([({PUBLIC_HOST, 'apps.maverick.example.com'}, root)], str(proxy))
-            template = render_ingress('maverick.example.com').replace(
-                'include /var/lib/maverick/external-apps-tls/hosts.conf;', exact)
+            exact = render_hosts([({PUBLIC_HOST, 'apps.loopino.example.com'}, root)], str(proxy))
+            template = render_ingress('loopino.example.com').replace(
+                'include /projects/loopino/data/external-apps-tls/hosts.conf;', exact)
             template = (template.replace("listen 80;", f"listen 127.0.0.1:{plain};")
                         .replace("listen [::]:80;", "")
                         .replace("listen 443 ssl;", f"listen 127.0.0.1:{tls} ssl;")
                         .replace("listen [::]:443 ssl;", "")
-                        .replace('/var/lib/maverick/external-apps-acme', str(root / 'acme'))
-                        .replace("/run/maverick-external-apps-listener/public.sock", str(root / "public.sock")))
+                        .replace('/projects/loopino/data/external-apps-acme', str(root / 'acme'))
+                        .replace("/run/loopino-external-apps-listener/public.sock", str(root / "public.sock")))
             # Existing private/default hosts must not be taken over by the template.
             private = (f"server {{ listen 127.0.0.1:{plain} default_server; "
                        f"listen 127.0.0.1:{tls} ssl default_server; server_name private.example.net; "
@@ -132,10 +132,10 @@ class NginxIngressTests(unittest.TestCase):
                                     time.sleep(.05)
                             self.assertIsNone(process.poll(), (root / "error.log").read_text())
                             self.assertEqual(request("private.example.net")[2], b"private marker")
-                            self.assertEqual(request('unknown.apps.maverick.example.com', '/.well-known/acme-challenge/proof', secure=False)[2], b'challenge proof')
+                            self.assertEqual(request('unknown.apps.loopino.example.com', '/.well-known/acme-challenge/proof', secure=False)[2], b'challenge proof')
                             with self.assertRaises(ssl.SSLError):
-                                request('unknown.apps.maverick.example.com')
-                            self.assertEqual(request('apps.maverick.example.com')[0], 200)
+                                request('unknown.apps.loopino.example.com')
+                            self.assertEqual(request('apps.loopino.example.com')[0], 200)
                             upstream.received.clear()
                             with self.assertRaises(http.client.RemoteDisconnected):
                                 request(secure=False)

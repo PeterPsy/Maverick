@@ -5,11 +5,11 @@ Date: 2026-09-20
 ## Product decision
 
 The user requests the closest practical match to the reference CRM, retaining
-Maverick's colors. Reference: `PeterPsy/versy-crm` at
+Loopino's colors. Reference: `PeterPsy/versy-crm` at
 `43ee8870185c4a3f399c8db598d960ad809f09e0` (local read-only source review).
 This replaces the earlier loose visual inspiration with an explicit screen and
 interaction comparison. No production Versy data, credentials or services are
-required. Existing Maverick records, IDs, links and integrations remain intact.
+required. Existing Loopino records, IDs, links and integrations remain intact.
 
 ## Native implementation plan
 
@@ -30,7 +30,7 @@ required. Existing Maverick records, IDs, links and integrations remain intact.
 
 ## Deliberate differences from the source
 
-- Maverick theme variables only; no Versy logo, palette switch or owner identity.
+- Loopino theme variables only; no Versy logo, palette switch or owner identity.
 - Generic accounts/custom objects replace real-estate and presentation domains.
 - Existing campaign planning is retained but excluded from this new port and from
   delivery/integration work. No technical ticket board is embedded in CRM.
@@ -50,7 +50,7 @@ Implementation and verification results are recorded below with the release.
 
 | Reference surface | Native implementation | Intentional boundary |
 | --- | --- | --- |
-| Compact sidebar, search/action bar | One shell-hosted sidebar, expandable Workspace tools, full-width CRM canvas, Ctrl/Cmd-K search, refresh/create | Maverick branding/theme; shell owns sidebar width and mobile drawer |
+| Compact sidebar, search/action bar | One shell-hosted sidebar, expandable Workspace tools, full-width CRM canvas, Ctrl/Cmd-K search, refresh/create | Loopino branding/theme; shell owns sidebar width and mobile drawer |
 | Dashboard | Brief selector, joined KPIs, full-width value/margin stage chart, next tasks, recent people/threads and active deals | Separate currencies; existing configured stages; no invented brief or score |
 | Task periods and category accordions | Today (including overdue), 1–7 / 8–30 days, undated/all, open/completed, category/priority groups, complete/reopen | Explicit record metadata, not language-specific keyword inference |
 | Thread queues | Reply/waiting/completed, state changes, record inspector with participants, links and connected work | Canonical Mail/provider identities remain external |
@@ -113,7 +113,7 @@ was never created by the new tests; browser tests use temporary isolated stores.
 ## Single sidebar correction (0.7.1, schema 8 unchanged)
 
 The screenshot-approved compact sidebar now lives exclusively in the existing
-`crm-sidebar` iframe (`shell.sidebar.primary`). Its Maverick header, simple icons,
+`crm-sidebar` iframe (`shell.sidebar.primary`). Its Loopino header, simple icons,
 9px active rows, counters and expandable Workspace tools replace the old pill
 navigation. The canvas no longer renders `WorkspaceSidebar`, reserves a sidebar
 column or exposes its own mobile drawer/menu button. Record inspectors use the
@@ -124,7 +124,7 @@ counts only: contacts, accounts, deals, threads, expenses and intelligence. This
 read-only helper returns no business records, performs no provider calls and
 adds no persistent cache/schema or public CLI/MCP surface. Failed counts are
 hidden with an explicit retry instead of displaying fabricated zeros. Trusted
-`maverick.widget.data-changed` CRM events reload the counts.
+`loopino.widget.data-changed` CRM events reload the counts.
 
 Shell context supplies active navigation and mobile layout; the narrow iframe
 width is not interpreted as the shell viewport. Both widget and canvas use the
@@ -134,7 +134,7 @@ origin. A ready handshake supplies current context, and late token reads cannot
 overwrite newer context messages. Top/bottom scroll insets remain reserved for
 shell-owned controls.
 
-In-canvas navigation mirrors its route through `maverick.app.open-app`, so the
+In-canvas navigation mirrors its route through `loopino.app.open-app`, so the
 sole sidebar also tracks dashboard/search/report actions. An app-owned scalar
 `crm_navigation_id` identifies each reflected navigation once, preserving local
 filters, forms and inspectors on the echo without suppressing later URL revisits.

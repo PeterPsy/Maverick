@@ -25,7 +25,7 @@ import { InterAgentGraphView, graphBoardLayout, graphFlowEdges } from "./InterAg
 vi.mock("../api/client", () => ({
   getInterAgentParticipantTranscript: vi.fn(),
   getInterAgentRun: vi.fn(),
-  interAgentWebSocketUrl: vi.fn(() => "ws://maverick.test/ws/inter-agent/runs/run-1"),
+  interAgentWebSocketUrl: vi.fn(() => "ws://loopino.test/ws/inter-agent/runs/run-1"),
   listInterAgentRunApprovals: vi.fn(),
   listInterAgentRunArtifacts: vi.fn(),
   listInterAgentRunEvents: vi.fn(),
@@ -173,7 +173,7 @@ function transcriptPayload(participantId: string): InterAgentParticipantTranscri
           id: "tool-1",
           name: "web_search",
           status: "completed",
-          detail: { tool_kind: "web_search", query: "Maverick launch", summary: "Web search" },
+          detail: { tool_kind: "web_search", query: "Loopino launch", summary: "Web search" },
         },
       },
       {
@@ -513,7 +513,7 @@ describe("InterAgentGraphView", () => {
     const transcript = element.querySelector('[aria-label="Researcher transcript"]');
     expect(transcript?.textContent).toContain("Research complete.");
     expect(transcript?.textContent).toContain("Actions");
-    expect(transcript?.textContent).toContain("Searched the web for “Maverick launch”");
+    expect(transcript?.textContent).toContain("Searched the web for “Loopino launch”");
     expect(transcript?.querySelectorAll(".chatapp-bubble").length).toBe(2);
     expect(transcript?.querySelector("[data-slot='trace-span-label']")).not.toBeNull();
     expect(transcript?.querySelector(".chatapp-agent-block")).not.toBeNull();

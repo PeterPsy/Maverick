@@ -32,7 +32,7 @@ before a private app resource is rolled out.
 ## Post-review remediation
 
 1. A terminal `401` or `403` is classified before retry-scope cancellation, so
-   lifecycle cleanup cannot replace `MaverickHttpError` with
+   lifecycle cleanup cannot replace `LoopinoHttpError` with
    `RetryCancelledError`. The integration test uses the real request,
    lifecycle, and retry singletons.
 2. The top-level host now binds user, workspace, and app identity; client
@@ -76,7 +76,7 @@ before a private app resource is rolled out.
 | PWA-043 | absolute expiry, least-recent eviction, exact serialized byte accounting, resource/app/global budgets |
 | PWA-044 | `navigator.storage.estimate()` adapter; unknown estimate skips writes; no `persist()` call |
 | PWA-045 | in-process promise coalescing, Web Locks when present, BroadcastChannel invalidation |
-| PWA-046 | Base Shell and client handling for `maverick.app.data-changed` |
+| PWA-046 | Base Shell and client handling for `loopino.app.data-changed` |
 | PWA-047 | durable barrier for auth/scope/schema cleanup; pending blocks reuse |
 | PWA-048 | automatic memory backend after IndexedDB absence or operation failure |
 | PWA-049 | Settings aggregate bytes, entries, origin estimate, backend, cleanup markers, and two-click clear |
@@ -88,7 +88,7 @@ before a private app resource is rolled out.
 ## Security and failure semantics
 
 The exact local policy revision is
-`maverick.local-persistence-policy.v2`. Private entries need an access lease
+`loopino.local-persistence-policy.v2`. Private entries need an access lease
 issued after fresh server authentication and capped at 15 minutes; each later
 authoritative authentication may renew that bounded lease independently of the
 entry's original cache time. Structured budgets default to 64 MiB global and
@@ -109,7 +109,7 @@ serialization, or IndexedDB failure cannot replace a valid network result.
 `401`/`403` are terminal, remain observable as their original HTTP errors, and
 trigger cleanup. Retry is RAM-only, never reads
 `navigator.onLine` as authority, and automatically pauses while the document
-or mounted Maverick frame is hidden.
+or mounted Loopino frame is hidden.
 
 ## Automated evidence
 
@@ -137,7 +137,7 @@ lifecycle, retry, diagnostics, manifest, or worker behavior.
 
 ## Built artifacts and live projection
 
-The Base Shell manifest remains `maverick.frontend-assets.v2`, contains the
+The Base Shell manifest remains `loopino.frontend-assets.v2`, contains the
 normal `index.html` navigation fallback and sixteen verified precache records,
 and generated worker tests preserve M2R routing/ownership. Settings contains
 the new Cache surface in both the primary app bundle and sidebar page catalog.
@@ -145,12 +145,12 @@ the new Cache surface in both the primary app bundle and sidebar page catalog.
 After the user's successful backend restart, live checks returned:
 
 ```json
-{"service":"maverick-core","status":"ok"}
-{"schema":"maverick.pwa-config.v2","service_worker":{"enabled":true,"generation":"v2"},"features":{"data_cache":false,"storage_file_cache":false}}
+{"service":"loopino-core","status":"ok"}
+{"schema":"loopino.pwa-config.v2","service_worker":{"enabled":true,"generation":"v2"},"features":{"data_cache":false,"storage_file_cache":false}}
 ```
 
 No further backend restart is required for these frontend/package/document
-changes. Both official builds published `maverick.app.frontend-changed`.
+changes. Both official builds published `loopino.app.frontend-changed`.
 
 ## Rollout boundary
 

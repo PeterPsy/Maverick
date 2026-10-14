@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The structured PWA data cache is live on `https://maverick.loopino.ai` for the
+The structured PWA data cache is live on `https://loopino.giuntitrail.com` for the
 eight reviewed app adapters. Service Worker v2 remains enabled. Storage file
 and preview bytes remain server-first because their resource classification is
 still `unclassified`; the physical-coverage waiver does not broaden that data
@@ -97,7 +97,7 @@ No live records were created, edited or deleted by these rollout probes.
 ## Rollback drill
 
 The complete bounded PWA rollout block was removed from the service
-environment and `maverick-core.service` was restarted. The public configuration
+environment and `loopino-core.service` was restarted. The public configuration
 then reported `data_cache=false`, `storage_file_cache=false`; authenticated
 registry inspection reported 0 enabled adapters; health remained `ok` and
 Service Worker v2 remained available.
@@ -108,8 +108,8 @@ reviewed adapters enabled, no unexpected adapter, health `ok`, and no systemd
 restart loop (`NRestarts=0`).
 
 Immediate stop path: remove the bounded block headed `PWA controlled rollout`
-from `/home/ubuntu/projects/maverick-v3/.env`, restart
-`maverick-core.service`, and verify `/api/pwa/config` plus the authenticated
+from `/projects/loopino/.env`, restart
+`loopino-core.service`, and verify `/api/pwa/config` plus the authenticated
 `/api/apps` registry. The file-cache flag must not be added until its resource
 classification and approval change explicitly.
 

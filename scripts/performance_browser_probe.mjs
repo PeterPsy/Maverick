@@ -8,8 +8,8 @@ context.setDefaultTimeout(15_000);
 await context.addInitScript(() => {
   window.__lifecycleTrace = [];
   window.addEventListener('message', ({ data }) => {
-    if (!['maverick.app.hibernate', 'maverick.app.hibernated', 'maverick.app.resume', 'maverick.app.resumed',
-      'maverick.app.visibility-changed', 'maverick.app.events-resync'].includes(data?.type)) return;
+    if (!['loopino.app.hibernate', 'loopino.app.hibernated', 'loopino.app.resume', 'loopino.app.resumed',
+      'loopino.app.visibility-changed', 'loopino.app.events-resync'].includes(data?.type)) return;
     window.__lifecycleTrace.push({ type: data.type, app_id: data.app_id, visible: data.visible,
       files: data.snapshot?.state?.files, time: Date.now() });
   });
@@ -55,8 +55,8 @@ async function activeFrame(appId) {
 async function openApp(appId, params = {}) {
   const frame = await activeFrame();
   await frame.evaluate(({ appId, params }) => window.parent.postMessage({
-    type: 'maverick.app.open-app', app_id: appId, params,
-  }, window.__MAVERICK_PLATFORM_ORIGIN__), { appId, params });
+    type: 'loopino.app.open-app', app_id: appId, params,
+  }, window.__LOOPINO_PLATFORM_ORIGIN__), { appId, params });
   await page.waitForURL(url => url.pathname === `/app/${appId}`, { timeout: 30_000 });
   const next = await activeFrame(appId);
   await next.waitForLoadState('domcontentloaded');

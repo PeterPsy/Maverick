@@ -19,15 +19,15 @@
 }
 
 :root {
-  --background: var(--maverick-bg);
-  --foreground: var(--maverick-text);
+  --background: var(--loopino-bg);
+  --foreground: var(--loopino-text);
   --card: rgba(14, 14, 16, 0.88);
-  --card-foreground: var(--maverick-text);
-  --border: var(--maverick-border);
+  --card-foreground: var(--loopino-text);
+  --border: var(--loopino-border);
   --muted: rgba(255, 255, 255, 0.07);
-  --muted-foreground: var(--maverick-text-muted);
+  --muted-foreground: var(--loopino-text-muted);
   --secondary: rgba(255, 255, 255, 0.1);
-  --secondary-foreground: var(--maverick-text);
+  --secondary-foreground: var(--loopino-text);
 }
 
 .h-4\.5 {
@@ -49,9 +49,9 @@ body {
   margin: 0;
   min-width: 320px;
   overflow: hidden;
-  background: var(--maverick-bg);
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  background: var(--loopino-bg);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
   scrollbar-width: none;
 }
 
@@ -78,7 +78,7 @@ select {
 
 select option {
   background: #171717;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .checklist-shell {
@@ -86,7 +86,7 @@ select option {
   height: 100%;
   min-height: 0;
   overflow: auto;
-  background: var(--maverick-bg);
+  background: var(--loopino-bg);
 }
 
 .checklist-app {
@@ -98,8 +98,8 @@ select option {
   min-height: 0;
   margin: 0 auto;
   overflow: auto;
-  padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 1rem) 1rem 1rem;
-  background: var(--maverick-bg);
+  padding: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 1rem) 1rem 1rem;
+  background: var(--loopino-bg);
   scrollbar-width: none;
 }
 
@@ -145,7 +145,7 @@ select option {
 }
 
 .checklist-kicker {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.68rem;
   font-weight: 400;
   letter-spacing: 0.14em;
@@ -194,7 +194,7 @@ select option {
 }
 
 .detail-header h2.is-completed {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   text-decoration: line-through;
   text-decoration-color: currentColor;
   text-decoration-thickness: 0.08em;
@@ -211,7 +211,7 @@ select option {
 .detail-header p {
   max-width: 760px;
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   line-height: 1.45;
 }
 
@@ -237,10 +237,10 @@ select option {
   gap: 0.75rem;
   min-width: 0;
   max-height: clamp(20rem, 52vh, 34rem);
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-highlight), var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
   padding: 0.95rem;
   transition: border-color 150ms ease, filter 150ms ease, opacity 150ms ease;
 }
@@ -254,7 +254,7 @@ select option {
 }
 
 .checklist-plan-card.is-dragging {
-  border-color: var(--maverick-border);
+  border-color: var(--loopino-border);
   filter: saturate(0.28) brightness(0.68);
   opacity: 0.48;
 }
@@ -286,7 +286,7 @@ select option {
 
 .checklist-plan-card__title-group h2.is-completed,
 .checklist-plan-card__task-copy strong.is-completed {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   text-decoration: line-through;
   text-decoration-color: currentColor;
   text-decoration-thickness: 0.08em;
@@ -296,7 +296,7 @@ select option {
   display: -webkit-box;
   overflow: hidden;
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.82rem;
   line-height: 1.35;
   -webkit-box-orient: vertical;
@@ -321,7 +321,7 @@ select option {
   min-height: 1.5rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.07);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 0 0.48rem;
   font-size: 0.7rem;
   font-weight: 400;
@@ -329,7 +329,7 @@ select option {
 
 .checklist-plan-card__meta span.is-completed {
   background: rgba(159, 240, 202, 0.13);
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .checklist-plan-card__body {
@@ -337,14 +337,14 @@ select option {
   max-height: 22rem;
   overflow-x: hidden;
   overflow-y: auto;
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   padding-top: 0.72rem;
-  scrollbar-color: var(--maverick-border-strong) transparent;
+  scrollbar-color: var(--loopino-border-strong) transparent;
 }
 
 .checklist-plan-card__body:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--maverick-accent-soft);
+  box-shadow: inset 0 0 0 2px var(--loopino-accent-soft);
 }
 
 .checklist-plan-card__section {
@@ -358,7 +358,7 @@ select option {
 
 .checklist-plan-card__section h3 {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.74rem;
   font-weight: 400;
   letter-spacing: 0;
@@ -393,7 +393,7 @@ select option {
 }
 
 .checklist-plan-card__subtask {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .checklist-plan-card__status {
@@ -401,7 +401,7 @@ select option {
   place-items: center;
   width: 1.1rem;
   height: 1.1rem;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   margin-top: 0.08rem;
 }
 
@@ -419,19 +419,19 @@ select option {
 }
 
 .checklist-plan-card__task-copy strong {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.82rem;
   font-weight: 400;
 }
 
 .checklist-plan-card__task-copy span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.75rem;
 }
 
 .checklist-plan-card__empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.8rem;
 }
 
@@ -442,10 +442,10 @@ select option {
   align-items: center;
   justify-content: center;
   gap: 0.48rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  box-shadow: var(--maverick-inner-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
+  box-shadow: var(--loopino-inner-edge);
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
@@ -465,8 +465,8 @@ select option {
 .checklist-button:hover,
 .checklist-icon-button:hover,
 .checklist-mini-button:hover {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
 }
 
 .checklist-button:active,
@@ -500,16 +500,16 @@ select option {
 .checklist-error,
 .checklist-empty,
 .checklist-widget-card {
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-highlight), var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
 }
 
 .checklist-error,
 .checklist-empty {
   padding: 0.9rem;
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .checklist-editor {
@@ -528,7 +528,7 @@ select option {
 .checklist-editor__fields label {
   display: grid;
   gap: 0.45rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.82rem;
   font-weight: 400;
 }
@@ -538,23 +538,23 @@ select {
   width: 100%;
   min-width: 0;
   min-height: 2.4rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
   padding: 0 0.72rem;
 }
 
 input::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 .checklist-compose,
@@ -566,8 +566,8 @@ button:focus-visible {
 
 .checklist-section-form {
   padding: 0.75rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
   background: rgba(255, 255, 255, 0.035);
 }
 
@@ -667,13 +667,13 @@ button:focus-visible {
 .agent-plan__description,
 .agent-plan__detail-copy {
   margin: 0.18rem 0 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.86rem;
   line-height: 1.45;
 }
 
 .is-complete {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   text-decoration: line-through;
 }
 
@@ -702,7 +702,7 @@ button:focus-visible {
 .agent-plan__pill,
 .agent-plan__chip {
   background: rgba(255, 255, 255, 0.065);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .agent-plan__pill svg {
@@ -713,43 +713,43 @@ button:focus-visible {
 .agent-plan__priority--high,
 .agent-plan__priority--critical {
   background: rgba(255, 179, 191, 0.12);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .agent-plan__priority--medium {
   background: rgba(156, 200, 255, 0.12);
-  color: var(--maverick-info);
+  color: var(--loopino-info);
 }
 
 .agent-plan__priority--low {
   background: rgba(159, 240, 202, 0.12);
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .agent-plan__badge--completed {
   background: rgba(159, 240, 202, 0.13);
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .agent-plan__badge--in-progress {
   background: rgba(156, 200, 255, 0.13);
-  color: var(--maverick-info);
+  color: var(--loopino-info);
 }
 
 .agent-plan__badge--need-help,
 .agent-plan__badge--blocked {
   background: rgba(255, 202, 122, 0.13);
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
 }
 
 .agent-plan__badge--failed {
   background: rgba(255, 179, 191, 0.13);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .agent-plan__badge--pending {
   background: rgba(255, 255, 255, 0.07);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .agent-plan__status-icon {
@@ -767,30 +767,30 @@ button:focus-visible {
 }
 
 .agent-plan__status-icon--completed {
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .agent-plan__status-icon--in-progress {
-  color: var(--maverick-info);
+  color: var(--loopino-info);
 }
 
 .agent-plan__status-icon--blocked,
 .agent-plan__status-icon--need-help {
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
 }
 
 .agent-plan__status-icon--failed {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .agent-plan__status-icon--pending {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .agent-plan__details {
   margin-left: 1.25rem;
   padding: 0.5rem 0 0.5rem 0.88rem;
-  border-left: 1px solid var(--maverick-border-strong);
+  border-left: 1px solid var(--loopino-border-strong);
 }
 
 .agent-plan__chips {
@@ -802,14 +802,14 @@ button:focus-visible {
 }
 
 .agent-plan__chips-label {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.72rem;
   font-weight: 400;
 }
 
 .agent-plan__blocked {
   margin: 0.5rem 0 0;
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
   font-size: 0.84rem;
 }
 
@@ -819,7 +819,7 @@ button:focus-visible {
 
 .agent-plan__subtask-details {
   margin-left: 1.7rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.8rem;
 }
 
@@ -828,7 +828,7 @@ button:focus-visible {
   align-items: center;
   gap: 0.42rem;
   margin-top: 0.5rem;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.82rem;
 }
 
@@ -886,15 +886,15 @@ button:focus-visible {
 }
 
 .checklist-widget-card__header span {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-weight: 400;
 }
 
 .checklist-widget-error {
   padding: 0.82rem;
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
-  color: var(--maverick-danger);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
+  color: var(--loopino-danger);
 }
 
 .checklist-widget-scroll-shell {
@@ -923,7 +923,7 @@ button:focus-visible {
 
 .checklist-widget-scroll:focus-visible {
   border-radius: 14px;
-  box-shadow: inset 0 0 0 2px var(--maverick-accent-soft);
+  box-shadow: inset 0 0 0 2px var(--loopino-accent-soft);
 }
 
 .checklist-widget-scrollbar {
@@ -979,7 +979,7 @@ button:focus-visible {
     height: auto;
     min-height: 100dvh;
     overflow: visible;
-    padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 0.85rem) 0.85rem 0.85rem;
+    padding: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 0.85rem) 0.85rem 0.85rem;
   }
 
   .detail-header h2 {

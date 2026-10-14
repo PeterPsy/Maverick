@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Check, Copy, ExternalLink, Globe2, LockKeyhole, RefreshCw } from 'lucide-react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { callBackend } from '../api';
 import { postToShell } from '../domain/shellMessaging';
 import '../styles.css';
@@ -39,16 +39,16 @@ function Settings() {
   }, [revision]);
 
   useEffect(() => {
-    const initialTheme = new URLSearchParams(window.location.search).get('maverick_theme');
+    const initialTheme = new URLSearchParams(window.location.search).get('loopino_theme');
     if (initialTheme === 'light' || initialTheme === 'dark') document.documentElement.dataset.theme = initialTheme;
     const message = (event: MessageEvent) => {
-      if (!isExactMaverickParentMessage(event)) return;
-      const theme = event.data?.type === 'maverick.shell.theme-changed'
+      if (!isExactLoopinoParentMessage(event)) return;
+      const theme = event.data?.type === 'loopino.shell.theme-changed'
         ? event.data.theme?.effective : event.data?.context?.content?.shell_theme?.effective;
       if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
     };
     window.addEventListener('message', message);
-    postToShell({ type: 'maverick.widget.ready', owner_app_id: 'crm', widget_id: 'crm-external-settings' });
+    postToShell({ type: 'loopino.widget.ready', owner_app_id: 'crm', widget_id: 'crm-external-settings' });
     return () => window.removeEventListener('message', message);
   }, []);
 
@@ -81,7 +81,7 @@ function Settings() {
   function openPublicUrl(event: MouseEvent<HTMLAnchorElement>) {
     if (!status?.url || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (postToShell({
-      type: 'maverick.app.external-url',
+      type: 'loopino.app.external-url',
       owner_app_id: 'crm',
       widget_id: 'crm-external-settings',
       disposition: 'new-window',
@@ -94,7 +94,7 @@ function Settings() {
     <form onSubmit={event => { event.preventDefault(); void save(); }} aria-label="Pubblicazione CRM" aria-busy={busy || loading}>
       <div className="crm-external-content">
         <header className="crm-external-heading">
-          <div><h1>CRM online</h1><p>Il tuo CRM, accessibile anche fuori da Maverick.</p></div>
+          <div><h1>CRM online</h1><p>Il tuo CRM, accessibile anche fuori da Loopino.</p></div>
           <button type="button" className="crm-external-icon" aria-label="Aggiorna stato" title={dirty ? 'Salva o annulla le modifiche prima di aggiornare' : 'Aggiorna stato'} disabled={busy || loading || dirty} onClick={() => refresh(value => value + 1)}>
             <RefreshCw size={17} aria-hidden="true" />
           </button>
@@ -114,7 +114,7 @@ function Settings() {
             </div>
             {copyFeedback && <small role="status">{copyFeedback}</small>}
           </section>
-          {!status.configured && <p className="crm-external-note">Configura il servizio pubblico e HTTPS per questa installazione. Il dominio sarà crm.apps.&lt;dominio-di-Maverick&gt;.</p>}
+          {!status.configured && <p className="crm-external-note">Configura il servizio pubblico e HTTPS per questa installazione. Il dominio sarà crm.apps.&lt;dominio-di-Loopino&gt;.</p>}
           <label className="crm-external-availability">
             <span><strong>Abilita il CRM pubblico</strong><small>Rendi disponibile la superficie al link indicato.</small></span>
             <input className="crm-external-switch" type="checkbox" role="switch" aria-label="Abilita il CRM pubblico" checked={enabled} disabled={locked} onChange={event => { setEnabled(event.target.checked); edit(); }} />

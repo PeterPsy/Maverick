@@ -126,7 +126,7 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
         implementer_prompt = message_events[0].payload["input_text"]
 
         self.assertNotEqual(implementer_prompt, original_prompt)
-        self.assertIn("You are a delegated worker in a Maverick multi-agent run.", implementer_prompt)
+        self.assertIn("You are a delegated worker in a Loopino multi-agent run.", implementer_prompt)
         self.assertIn("Complete only the delegated task below.", implementer_prompt)
         self.assertIn("User request content:", implementer_prompt)
         self.assertIn("Answer the customer in 10 lines.", implementer_prompt)

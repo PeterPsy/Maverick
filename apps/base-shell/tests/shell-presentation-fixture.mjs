@@ -59,13 +59,13 @@ export function fixtureServer(requests, feed, surfaceHandler) {
       const origin = `http://localhost:${port}`;
       return json({
         origin,
-        bootstrap_url: `${origin}/.well-known/maverick-app-frame-bootstrap?app_id=${encodeURIComponent(body.app_id)}`,
+        bootstrap_url: `${origin}/.well-known/loopino-app-frame-bootstrap?app_id=${encodeURIComponent(body.app_id)}`,
         method: "POST", ticket: "fixture-ticket", ticket_field: "ticket",
       });
     }
-    if (url.pathname === "/.well-known/maverick-app-frame-bootstrap") {
+    if (url.pathname === "/.well-known/loopino-app-frame-bootstrap") {
       const appId = url.searchParams.get("app_id");
-      return send(response, `<!doctype html><body><script>parent.postMessage(${JSON.stringify({ type: "maverick.app.ready", app_id: appId })}, "http://127.0.0.1:${port}")</script>`, "text/html");
+      return send(response, `<!doctype html><body><script>parent.postMessage(${JSON.stringify({ type: "loopino.app.ready", app_id: appId })}, "http://127.0.0.1:${port}")</script>`, "text/html");
     }
     if (url.pathname === "/api/session")
       return json({

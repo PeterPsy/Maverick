@@ -55,7 +55,7 @@ def clear_custom_view_payload(data_root: Path) -> dict:
 def skill_summary(item: dict) -> dict:
     skill_id = validate_skill_id(str(item.get("id") or ""))
     origin = str(item.get("origin") or "workspace").strip()
-    if origin not in {"maverick", "prompts.chat", "workspace"}:
+    if origin not in {"loopino", "prompts.chat", "workspace"}:
         origin = "workspace"
     return {
         "id": skill_id,

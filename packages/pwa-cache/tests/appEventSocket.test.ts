@@ -18,7 +18,7 @@ describe("live event recovery", () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
     vi.stubGlobal("WebSocket", Socket);
-    vi.stubGlobal("window", { location: { protocol: "https:", host: "maverick.test" } });
+    vi.stubGlobal("window", { location: { protocol: "https:", host: "loopino.test" } });
   });
   afterEach(() => { dispose?.(); vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -27,7 +27,7 @@ describe("live event recovery", () => {
     const event = vi.fn();
     dispose = connectAppEventSocket(event, refresh);
     const first = Socket.instances[0];
-    expect(first.url).toBe("wss://maverick.test/api/apps/events/ws");
+    expect(first.url).toBe("wss://loopino.test/api/apps/events/ws");
     first.onopen?.();
     expect(refresh).not.toHaveBeenCalled();
     first.close();
@@ -71,7 +71,7 @@ describe("live event recovery", () => {
     const navigator = { onLine: true };
     vi.stubGlobal('document', documentTarget);
     vi.stubGlobal('navigator', navigator);
-    vi.stubGlobal('window', Object.assign(target, { location: { protocol: 'https:', host: 'maverick.test' } }));
+    vi.stubGlobal('window', Object.assign(target, { location: { protocol: 'https:', host: 'loopino.test' } }));
     const refresh = vi.fn();
     dispose = connectAppEventSocket(vi.fn(), refresh);
     const unsubscribe = connectAppEventSocket(vi.fn(), vi.fn());
@@ -98,8 +98,8 @@ describe("live event recovery", () => {
     const parent = {};
     const target = Object.assign(new EventTarget(), {
       parent, location: { protocol: 'https:', host: 'frame.test', origin: 'https://frame.test' },
-      __MAVERICK_PLATFORM_ORIGIN__: 'https://shell.test',
-      __MAVERICK_APP_FRAME_CONTEXT__: { app_id: 'sample', workspace_id: 'workspace' },
+      __LOOPINO_PLATFORM_ORIGIN__: 'https://shell.test',
+      __LOOPINO_APP_FRAME_CONTEXT__: { app_id: 'sample', workspace_id: 'workspace' },
     });
     vi.stubGlobal('window', target);
     const refresh = vi.fn();
@@ -108,22 +108,22 @@ describe("live event recovery", () => {
     const send = (data: unknown, source = parent, origin = 'https://shell.test') => {
       target.dispatchEvent(Object.assign(new Event('message'), { data, source, origin }));
     };
-    const payload = { type: 'maverick.app.event', event: { workspace_id: 'workspace', fresh: true } };
+    const payload = { type: 'loopino.app.event', event: { workspace_id: 'workspace', fresh: true } };
     send(payload, {}, 'https://shell.test');
     send(payload, parent, 'https://attacker.test');
     send({ ...payload, event: { workspace_id: 'different' } });
     expect(receive).not.toHaveBeenCalled();
     send(payload);
     expect(receive).toHaveBeenCalledExactlyOnceWith(payload.event);
-    send({ type: 'maverick.app.visibility-changed', visible: false });
+    send({ type: 'loopino.app.visibility-changed', visible: false });
     send(payload);
-    send({ type: 'maverick.app.events-resync' });
+    send({ type: 'loopino.app.events-resync' });
     vi.advanceTimersByTime(120_000);
     expect(Socket.instances).toHaveLength(0);
     expect(receive).toHaveBeenCalledOnce();
     expect(refresh).not.toHaveBeenCalled();
-    send({ type: 'maverick.app.visibility-changed', visible: true });
-    send({ type: 'maverick.app.visibility-changed', visible: true });
+    send({ type: 'loopino.app.visibility-changed', visible: true });
+    send({ type: 'loopino.app.visibility-changed', visible: true });
     expect(refresh).toHaveBeenCalledOnce();
   });
 
@@ -132,8 +132,8 @@ describe("live event recovery", () => {
     const documentTarget = Object.assign(new EventTarget(), { hidden: false });
     const target = Object.assign(new EventTarget(), {
       parent, location: { protocol: 'https:', host: 'frame.test', origin: 'https://frame.test' },
-      __MAVERICK_PLATFORM_ORIGIN__: 'https://shell.test',
-      __MAVERICK_APP_FRAME_CONTEXT__: { app_id: 'sample', workspace_id: 'workspace' },
+      __LOOPINO_PLATFORM_ORIGIN__: 'https://shell.test',
+      __LOOPINO_APP_FRAME_CONTEXT__: { app_id: 'sample', workspace_id: 'workspace' },
     });
     vi.stubGlobal('window', target);
     vi.stubGlobal('document', documentTarget);
@@ -142,22 +142,22 @@ describe("live event recovery", () => {
     const send = (data: unknown) => target.dispatchEvent(Object.assign(new Event('message'), {
       data, source: parent, origin: 'https://shell.test',
     }));
-    send({ type: 'maverick.app.visibility-changed', visible: false });
+    send({ type: 'loopino.app.visibility-changed', visible: false });
     documentTarget.hidden = true;
     documentTarget.dispatchEvent(new Event('visibilitychange'));
     documentTarget.hidden = false;
     documentTarget.dispatchEvent(new Event('visibilitychange'));
-    send({ type: 'maverick.app.visibility-changed', visible: true });
+    send({ type: 'loopino.app.visibility-changed', visible: true });
     vi.advanceTimersByTime(2000);
     expect(refresh).not.toHaveBeenCalled();
-    send({ type: 'maverick.app.events-resync' });
+    send({ type: 'loopino.app.events-resync' });
     expect(refresh).toHaveBeenCalledOnce();
     expect(Socket.instances).toHaveLength(0);
 
     documentTarget.hidden = true;
     documentTarget.dispatchEvent(new Event('visibilitychange'));
     // Parent messages may arrive before this document's visibility event.
-    send({ type: 'maverick.app.events-resync' });
+    send({ type: 'loopino.app.events-resync' });
     documentTarget.hidden = false;
     documentTarget.dispatchEvent(new Event('visibilitychange'));
     expect(refresh).toHaveBeenCalledTimes(2);

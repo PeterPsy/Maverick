@@ -1,23 +1,23 @@
-import { registeredMaverickFrameOwner, type MaverickFrameScope } from "./iframePolicy";
+import { registeredLoopinoFrameOwner, type LoopinoFrameScope } from "./iframePolicy";
 
-export const DEVICE_USE_REQUEST = "maverick.device-use.request.v1";
+export const DEVICE_USE_REQUEST = "loopino.device-use.request.v1";
 type NativeHandler = { postMessage(value: unknown): Promise<unknown> };
 
 export function deviceUseNativeHandler(): NativeHandler | undefined {
   return (window as unknown as {
-    webkit?: { messageHandlers?: { maverickDeviceUse?: NativeHandler } };
-  }).webkit?.messageHandlers?.maverickDeviceUse;
+    webkit?: { messageHandlers?: { loopinoDeviceUse?: NativeHandler } };
+  }).webkit?.messageHandlers?.loopinoDeviceUse;
 }
 
 export class DeviceUseBroker {
   private disposed = false;
   private active = new Set<MessagePort>();
 
-  constructor(private scope: MaverickFrameScope, private native = deviceUseNativeHandler()) {}
+  constructor(private scope: LoopinoFrameScope, private native = deviceUseNativeHandler()) {}
 
   handle = (event: MessageEvent) => {
     if (event.data?.type !== DEVICE_USE_REQUEST
-        || registeredMaverickFrameOwner(event, this.scope) !== "chat") return;
+        || registeredLoopinoFrameOwner(event, this.scope) !== "chat") return;
     const port = event.ports.length === 1 ? event.ports[0] : null;
     if (!port) return;
     const action = event.data?.action;

@@ -6,7 +6,7 @@
   height: var(--chat-sidebar-search-height);
   min-height: var(--chat-sidebar-search-height);
   padding: 0 0.72rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.05);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.05);
   border-radius: 10px;
   background: var(--chat-sidebar-glass-surface);
   box-shadow: var(--chat-sidebar-inner-edge);
@@ -17,7 +17,7 @@
 .bs-chat-sidebar-search-frame svg {
   width: 1.08rem;
   height: 1.08rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   flex: none;
   stroke: currentColor;
 }
@@ -27,11 +27,11 @@
   min-width: 0;
   outline: none;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .bs-chat-sidebar-search::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .bs-chat-sidebar-search-frame:focus-within {

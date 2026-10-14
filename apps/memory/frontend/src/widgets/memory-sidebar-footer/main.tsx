@@ -9,7 +9,7 @@ const PRIMARY_ACTION_LABEL = "Create node";
 function createNodeInShell(appId: string) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: appId,
       params: {
         new_node: true,
@@ -23,7 +23,7 @@ function createNodeInShell(appId: string) {
 function postPrimaryActionState(appId: string) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.primary-action.state",
+      type: "loopino.widget.primary-action.state",
       owner_app_id: appId,
       widget_id: "memory-sidebar-footer",
       available: true,
@@ -36,7 +36,7 @@ function postPrimaryActionState(appId: string) {
 function previewContextInShell(appId: string) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: appId,
       params: {
         preview_context: true,
@@ -60,11 +60,11 @@ function MemorySidebarFooterWidget() {
       if (payload.owner_app_id !== appId || payload.widget_id !== "memory-sidebar-footer") {
         return;
       }
-      if (payload.type === "maverick.widget.primary-action.query") {
+      if (payload.type === "loopino.widget.primary-action.query") {
         postPrimaryActionState(appId);
         return;
       }
-      if (payload.type === "maverick.widget.primary-action.invoke") {
+      if (payload.type === "loopino.widget.primary-action.invoke") {
         createNodeInShell(appId);
       }
     }

@@ -11,7 +11,7 @@
   display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; list-style: none; margin: 0; padding: 0;
 }
 .bs-login__services li {
-  display: flex; gap: 5px; align-items: center; border: 1px solid var(--maverick-border);
+  display: flex; gap: 5px; align-items: center; border: 1px solid var(--loopino-border);
   border-radius: 10px; padding: 6px 8px; font-size: 11px;
 }
 .bs-login__services .material-symbols-rounded { font-size: 15px; }
@@ -25,4 +25,4 @@
   grid-column: 2; justify-self: start; border: 0; background: transparent; color: var(--bs-login-foreground);
   padding: 4px 0; font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
-.bs-login__pending button:focus-visible { outline: 2px solid var(--maverick-focus); outline-offset: 3px; }
+.bs-login__pending button:focus-visible { outline: 2px solid var(--loopino-focus); outline-offset: 3px; }

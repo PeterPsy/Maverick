@@ -80,7 +80,7 @@ class DeterministicFakeAgenticClient:
                     codec_id="fake-hosted-codec",
                     codec_version="1",
                     schema_version="1",
-                    content_type="application/vnd.maverick.fake-private",
+                    content_type="application/vnd.loopino.fake-private",
                     content=f"opaque-thought-signature:{step}".encode(),
                 ),
             )

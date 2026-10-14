@@ -5,8 +5,8 @@ import { baseUrl, chromium, executablePath } from './performance_browser_support
 
 const browser = await chromium.launch({ headless: true, executablePath: executablePath() });
 const results = [];
-const trials = Number(process.env.MAVERICK_PERFORMANCE_STARTUP_TRIALS || 5);
-const compactEvidence = process.env.MAVERICK_PERFORMANCE_COMPACT === '1';
+const trials = Number(process.env.LOOPINO_PERFORMANCE_STARTUP_TRIALS || 5);
+const compactEvidence = process.env.LOOPINO_PERFORMANCE_COMPACT === '1';
 assert(Number.isInteger(trials) && trials >= 1 && trials <= 5);
 const percentile = (values, fraction) => {
   const sorted = [...values].sort((left, right) => left - right);
@@ -20,15 +20,15 @@ try {
     context.setDefaultTimeout(30_000);
     try {
       await context.addInitScript(() => {
-        window.__MAVERICK_PERFORMANCE_STORAGE_PAINTS__ = [];
+        window.__LOOPINO_PERFORMANCE_STORAGE_PAINTS__ = [];
         window.addEventListener('message', event => {
           const payload = event.data;
           if (!payload || typeof payload !== 'object') return;
-          if (payload.type === 'maverick.performance.storage-painted') {
-            window.__MAVERICK_PERFORMANCE_STORAGE_PAINTS__.push(payload);
+          if (payload.type === 'loopino.performance.storage-painted') {
+            window.__LOOPINO_PERFORMANCE_STORAGE_PAINTS__.push(payload);
             return;
           }
-          if (payload.type !== 'maverick.app.navigate' || (payload.app_id && payload.app_id !== 'storage')) return;
+          if (payload.type !== 'loopino.app.navigate' || (payload.app_id && payload.app_id !== 'storage')) return;
           const started = Number(payload.params?.performance_probe_started_epoch_ms);
           const token = payload.params?.performance_probe_token;
           if (!Number.isFinite(started) || typeof token !== 'string') return;
@@ -39,7 +39,7 @@ try {
               return;
             }
             requestAnimationFrame(() => requestAnimationFrame(() => window.parent.postMessage({
-              type: 'maverick.performance.storage-painted', token, duration_ms: Date.now() - started,
+              type: 'loopino.performance.storage-painted', token, duration_ms: Date.now() - started,
             }, '*')));
           };
           requestAnimationFrame(waitForContent);
@@ -92,8 +92,8 @@ try {
           const current = page.locator('iframe.bs-workspace-app-frame.is-active');
           await current.waitFor();
           const frame = await (await current.elementHandle()).contentFrame();
-          await frame.evaluate(() => window.parent.postMessage({ type: 'maverick.app.open-app', app_id: 'checklist' },
-            window.__MAVERICK_PLATFORM_ORIGIN__));
+          await frame.evaluate(() => window.parent.postMessage({ type: 'loopino.app.open-app', app_id: 'checklist' },
+            window.__LOOPINO_PLATFORM_ORIGIN__));
           await page.waitForURL(url => url.pathname === '/app/checklist');
           await page.locator('iframe.bs-workspace-app-frame.is-active[title="Checklist viewport"]').waitFor();
           // A warm-navigation sample starts from a settled shell. Initial app
@@ -114,13 +114,13 @@ try {
           const checklistElement = page.locator('iframe.bs-workspace-app-frame.is-active[title="Checklist viewport"]');
           const checklist = await (await checklistElement.elementHandle()).contentFrame();
           const token = `${trial}-${visit}`;
-          await checklist.evaluate(token => window.parent.postMessage({ type: 'maverick.app.open-app', app_id: 'storage',
+          await checklist.evaluate(token => window.parent.postMessage({ type: 'loopino.app.open-app', app_id: 'storage',
             params: { role: 'generated', folder_relative_path: 'reading', performance_probe_token: token,
-              performance_probe_started_epoch_ms: String(Date.now()) } }, window.__MAVERICK_PLATFORM_ORIGIN__), token);
+              performance_probe_started_epoch_ms: String(Date.now()) } }, window.__LOOPINO_PLATFORM_ORIGIN__), token);
           await page.waitForURL(url => url.pathname === '/app/storage');
-          await page.waitForFunction(token => window.__MAVERICK_PERFORMANCE_STORAGE_PAINTS__
+          await page.waitForFunction(token => window.__LOOPINO_PERFORMANCE_STORAGE_PAINTS__
             ?.some(item => item.token === token), token);
-          milestones.browser_paint_ms = await page.evaluate(token => window.__MAVERICK_PERFORMANCE_STORAGE_PAINTS__
+          milestones.browser_paint_ms = await page.evaluate(token => window.__LOOPINO_PERFORMANCE_STORAGE_PAINTS__
             .find(item => item.token === token).duration_ms, token);
         }
         milestones.url_ready_ms = performance.now() - started;

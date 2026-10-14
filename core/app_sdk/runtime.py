@@ -27,7 +27,7 @@ class AppEntrypointPayload:
 
 
 def read_entrypoint_payload() -> AppEntrypointPayload:
-    """Read one JSON stdin payload emitted by the Maverick core host."""
+    """Read one JSON stdin payload emitted by the Loopino core host."""
     raw_payload = json.loads(sys.stdin.read() or "{}")
     if not isinstance(raw_payload, dict):
         raise ValueError("Entrypoint payload must be a JSON object.")

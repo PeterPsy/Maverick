@@ -86,7 +86,7 @@ class NativeProfileBootstrapTests(unittest.TestCase):
 
     def test_preserves_an_explicit_non_cloud_agent(self) -> None:
         client = FakeOfficialClient(
-            {"agentId": "installed-maverick-api", "onboardingCompleted": True}
+            {"agentId": "installed-loopino-api", "onboardingCompleted": True}
         )
 
         changed = bootstrap_native_profile(
@@ -115,7 +115,7 @@ class NativeProfileBootstrapTests(unittest.TestCase):
                 {
                     "profiles": {
                         "profile_id": PROFILE_ID,
-                        "api_profile_id": "installed-maverick-api",
+                        "api_profile_id": "installed-loopino-api",
                     }
                 }
             ),
@@ -123,9 +123,9 @@ class NativeProfileBootstrapTests(unittest.TestCase):
         )
         self.assertEqual(
             preferred_profile_id(
-                {"profiles": {"api_profile_id": "installed-maverick-api"}}
+                {"profiles": {"api_profile_id": "installed-loopino-api"}}
             ),
-            "installed-maverick-api",
+            "installed-loopino-api",
         )
 
 

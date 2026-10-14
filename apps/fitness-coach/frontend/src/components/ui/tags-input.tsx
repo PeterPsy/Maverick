@@ -46,17 +46,17 @@ export const Basic = ({
   }
 
   return (
-    <div className="maverick-tags-input-wrap">
-      <div className="maverick-tags-input">
-        <label className="maverick-tags-label" htmlFor={inputId}>
+    <div className="loopino-tags-input-wrap">
+      <div className="loopino-tags-input">
+        <label className="loopino-tags-label" htmlFor={inputId}>
           {label}
         </label>
-        <div className="maverick-tags-control" onClick={() => inputRef.current?.focus()}>
+        <div className="loopino-tags-control" onClick={() => inputRef.current?.focus()}>
           {tags.map((itemValue) => (
-            <span key={itemValue} className="maverick-tags-item">
-              <span className="maverick-tags-item-preview">
+            <span key={itemValue} className="loopino-tags-item">
+              <span className="loopino-tags-item-preview">
                 <span>{itemValue}</span>
-                <button className="maverick-tags-item-delete" type="button" aria-label={`Remove ${itemValue}`} onClick={() => removeTag(itemValue)}>
+                <button className="loopino-tags-item-delete" type="button" aria-label={`Remove ${itemValue}`} onClick={() => removeTag(itemValue)}>
                   <X size={12} aria-hidden="true" />
                 </button>
               </span>
@@ -67,7 +67,7 @@ export const Basic = ({
             ref={inputRef}
             value={draft}
             placeholder={tags.length >= maxTags ? '' : placeholder}
-            className="maverick-tags-text-input"
+            className="loopino-tags-text-input"
             disabled={tags.length >= maxTags}
             onBlur={() => {
               if (draft.trim()) commit([draft]);
@@ -91,7 +91,7 @@ export const Basic = ({
           />
         </div>
         {tags.length ? (
-          <button className="maverick-tags-clear" type="button" onClick={() => onValueChange([])}>
+          <button className="loopino-tags-clear" type="button" onClick={() => onValueChange([])}>
             <Eraser size={14} aria-hidden="true" />
             <span>Clear all</span>
           </button>

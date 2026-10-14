@@ -25,7 +25,7 @@ vi.mock("./api", async (importOriginal) => ({
 
 const LAUNCH: SidecarLaunch = {
   origin: "https://sc-proof.sidecars.example",
-  bootstrap_url: "https://sc-proof.sidecars.example/.well-known/maverick-sidecar-bootstrap",
+  bootstrap_url: "https://sc-proof.sidecars.example/.well-known/loopino-sidecar-bootstrap",
   bootstrap_transport: "cors",
   method: "POST",
   parent_origin: "http://localhost:3000",
@@ -135,7 +135,7 @@ describe("Design Studio native OpenDesign host", () => {
         origin: window.location.origin,
         source: window,
         data: {
-          type: "maverick.app.navigate",
+          type: "loopino.app.navigate",
           app_id: "design-studio",
           params: { app_page: "projects/project_2/conversations/conversation_2" },
         },

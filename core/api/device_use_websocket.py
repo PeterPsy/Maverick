@@ -1,4 +1,4 @@
-"""Private WebSocket transport between Maverick Core and MaverickMac."""
+"""Private WebSocket transport between Loopino Core and LoopinoMac."""
 
 from __future__ import annotations
 

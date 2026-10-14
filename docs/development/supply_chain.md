@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document explains the current supply-chain posture for the first public Maverick release.
+This document explains the current supply-chain posture for the first public Loopino release.
 
 ## Current Policy
 

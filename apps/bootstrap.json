@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "app_ids": [
+    "agents", "app-store", "base-shell", "browser", "calendar", "chat",
+    "checklist", "crm", "design-studio", "developer-kit", "docs-studio",
+    "document-generator", "dynamic-views", "external-apps", "fitness-coach",
+    "mail", "memory", "openwa", "platform-connectors", "senses", "settings",
+    "skills", "speech", "storage", "vault", "website-studio"
+  ]
+}

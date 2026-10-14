@@ -9,13 +9,13 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: rgba(var(--maverick-contrast-rgb), 0.9);
+  color: rgba(var(--loopino-contrast-rgb), 0.9);
   box-shadow: none;
   transform: none;
 }
 
 .chatapp-attachment-picker__trigger:hover:not(:disabled) {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   background: transparent;
   transform: none;
 }
@@ -57,24 +57,24 @@
   justify-content: center;
   width: 2.35rem;
   height: 2.35rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-soft-surface);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .chatapp-attachment-picker__item-icon--image {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   background: var(--chatapp-soft-surface);
 }
 
 .chatapp-attachment-picker__item-icon--file {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   background: var(--chatapp-soft-surface);
 }
 
 .chatapp-attachment-picker__item-icon--capture {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   background: var(--chatapp-soft-surface);
 }
 
@@ -95,7 +95,7 @@
 }
 
 .chatapp-attachment-picker__item-detail {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.76rem;
   line-height: 1.35;
 }
@@ -121,7 +121,7 @@
   min-width: 220px;
   max-width: 280px;
   padding: 0.5rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-soft-surface);
 }
@@ -143,12 +143,12 @@
 }
 
 .chatapp-attachment-card.is-image {
-  border-color: var(--maverick-border);
+  border-color: var(--loopino-border);
   background: var(--chatapp-soft-surface);
 }
 
 .chatapp-attachment-card.is-invalid {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: var(--chatapp-soft-surface);
 }
 
@@ -168,9 +168,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   background: var(--chatapp-soft-surface);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .chatapp-attachment-card__icon svg {
@@ -198,7 +198,7 @@
 }
 
 .chatapp-attachment-card__detail {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
@@ -206,7 +206,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.7rem;
   line-height: 1.35;
 }
@@ -215,7 +215,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.7rem;
   line-height: 1.35;
 }
@@ -227,10 +227,10 @@
   width: 2rem;
   height: 2rem;
   padding: 0;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: calc(var(--chatapp-control-radius) - 6px);
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   cursor: pointer;
   transition:
     color 180ms ease,
@@ -239,8 +239,8 @@
 }
 
 .chatapp-attachment-card__remove:hover {
-  color: var(--maverick-text);
-  border-color: var(--maverick-border-strong);
+  color: var(--loopino-text);
+  border-color: var(--loopino-border-strong);
   background: var(--chatapp-soft-surface-hover);
 }
 

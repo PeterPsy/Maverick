@@ -394,7 +394,7 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
             payload={"name": "command", "output": "Authorization: Bearer secret"},
         )
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_OUTPUT_COMPACTION": "0"}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_OUTPUT_COMPACTION": "0"}):
             compacted = compact_tool_call_event(event)
 
         self.assertIs(compacted, event)
@@ -428,7 +428,7 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
         output = '{"status_code": 200, "chat_render": {"kind": "checklist.design", "payload": {"id": "check_1"}}}'
         event = RuntimeExecutionEvent(
             event_type="runtime.tool_call.completed",
-            payload={"name": "command", "status": "completed", "command": "maverick app checklist", "output": output},
+            payload={"name": "command", "status": "completed", "command": "loopino app checklist", "output": output},
         )
 
         compacted = compact_tool_call_event(event, policy=ToolOutputCompactionPolicy(min_original_bytes=1000))

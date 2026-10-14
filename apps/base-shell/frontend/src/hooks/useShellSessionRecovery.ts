@@ -26,7 +26,7 @@ export function useShellSessionRecovery(onVerified: (session: SessionPayload) =>
       else { controller?.abort(); controller = null; }
     };
     const timer = window.setInterval(verify, 5 * 60_000);
-    const events = ["online", "focus", "pageshow", "maverick.session-changed"];
+    const events = ["online", "focus", "pageshow", "loopino.session-changed"];
     for (const event of events) window.addEventListener(event, verify);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {

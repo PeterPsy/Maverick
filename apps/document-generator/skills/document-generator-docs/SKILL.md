@@ -86,7 +86,7 @@ app.document-generator.document-generator
 From a repository shell, call the app-owned CLI surface:
 
 ```bash
-./scripts/maverick app document-generator cli run document-generator --arguments-json '<json>' --json
+./scripts/loopino app document-generator cli run document-generator --arguments-json '<json>' --json
 ```
 
 Do not use `core cli run` for this app command.
@@ -95,7 +95,7 @@ Call the command with action `validate_spec` before generation when the document
 
 The generated file is written under `storage/generated/`. Report the returned `workspace_relative_path` to the user.
 
-The CLI arguments are JSON. In a Maverick CLI tool invocation, pass the JSON object as the command arguments.
+The CLI arguments are JSON. In a Loopino CLI tool invocation, pass the JSON object as the command arguments.
 
 ### DOCX
 
@@ -268,7 +268,7 @@ Supported spreadsheet operations:
 
 ## MCP Procedure
 
-Use `app.document-generator.maverick_document_generator` with the same arguments as the CLI.
+Use `app.document-generator.loopino_document_generator` with the same arguments as the CLI.
 
 For supported PDF, DOCX, PPTX, XLSX, or ODT text extraction, prefer:
 

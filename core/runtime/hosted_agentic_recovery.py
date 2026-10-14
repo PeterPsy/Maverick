@@ -430,7 +430,7 @@ class HostedAgenticRecovery:
                         output_id=str(
                             uuid5(
                                 NAMESPACE_URL,
-                                f"maverick:provider-final-output:{record.journal_id}",
+                                f"loopino:provider-final-output:{record.journal_id}",
                             )
                         ),
                         private_ref=private_ref,
@@ -1145,7 +1145,7 @@ class HostedAgenticRecovery:
             event_id=str(
                 uuid5(
                     NAMESPACE_URL,
-                    f"maverick:provider-completed:{record.final_output_id}",
+                    f"loopino:provider-completed:{record.final_output_id}",
                 )
             ),
             session_id=session.session_id,

@@ -93,7 +93,7 @@ describe("Google login and connected accounts", () => {
         { id: "offline", name: "Offline", origin: "https://offline.example", current: false },
       ] };
     });
-    vi.stubGlobal("webkit", { messageHandlers: { maverickServers: { postMessage } } });
+    vi.stubGlobal("webkit", { messageHandlers: { loopinoServers: { postMessage } } });
     api.startGoogle.mockImplementation(() => new Promise(() => {}));
     await act(async () => root.render(<LoginScreen onAuthenticated={vi.fn()} />));
     await act(async () => button("Continue with Google").click());
@@ -156,7 +156,7 @@ describe("Google login and connected accounts", () => {
     await act(async () => root.render(<ConnectedAccountsDialog onClose={vi.fn()} onChanged={changed} />));
     await act(async () => button("Update permissions or add an account").click());
     const signal = api.startGoogle.mock.calls[0][2] as AbortSignal;
-    expect(container.textContent).toContain("Maverick will update automatically");
+    expect(container.textContent).toContain("Loopino will update automatically");
     await act(async () => button("Cancel connection").click());
     expect(signal.aborted).toBe(true);
     expect(button("Update permissions or add an account").disabled).toBe(false);
@@ -180,7 +180,7 @@ describe("Google login and connected accounts", () => {
         { id: "offline", name: "Offline", origin: "https://offline.example", current: false },
       ] };
     });
-    vi.stubGlobal("webkit", { messageHandlers: { maverickServers: { postMessage } } });
+    vi.stubGlobal("webkit", { messageHandlers: { loopinoServers: { postMessage } } });
     api.startGoogle.mockImplementation((_mode, _services, signal: AbortSignal) => new Promise((_resolve, reject) => {
       signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
     }));

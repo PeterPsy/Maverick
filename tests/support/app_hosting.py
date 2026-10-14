@@ -104,7 +104,7 @@ class AppHostingTestBase(unittest.TestCase):
         root = Path(temp_dir)
         (root / "AGENTS.md").write_text("test", encoding="utf-8")
         (root / "pyproject.toml").write_text(
-            '[project]\nname = "maverick"\nversion = "0.1.0"\n',
+            '[project]\nname = "loopino"\nversion = "0.1.0"\n',
             encoding="utf-8",
         )
         for name in ("core", "apps", "workspaces", "docs", "scripts", "tests"):
@@ -118,7 +118,7 @@ class AppHostingTestBase(unittest.TestCase):
         app_id: str,
         name: str | None = None,
         version: str = "1.0.0",
-        publisher: str = "maverick",
+        publisher: str = "loopino",
         contract=None,
     ) -> None:
         parsed = build_parsed_app_contract(

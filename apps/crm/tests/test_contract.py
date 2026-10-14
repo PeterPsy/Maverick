@@ -80,7 +80,7 @@ class GeneratedAppContractTest(unittest.TestCase):
         app_root = Path(__file__).resolve().parents[1]
         skill = (app_root / "skills" / "crm-ops" / "SKILL.md").read_text(encoding="utf-8")
 
-        self.assertIn("maverick core cli run app.crm.dependencies --json", skill)
+        self.assertIn("loopino core cli run app.crm.dependencies --json", skill)
         self.assertIn("selected_provider_app_ids", skill)
         self.assertIn("never a hardcoded default", skill)
 

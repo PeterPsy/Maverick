@@ -574,8 +574,8 @@ def _record_platform_routing_decision(state, *, session: RuntimeSessionRecord, d
 
 
 def _fake_transport_from_environment() -> FakeHostedTextTransport | None:
-    response = os.environ.get("MAVERICK_HOSTED_TEXT_FAKE_RESPONSE")
-    chunks = os.environ.get("MAVERICK_HOSTED_TEXT_FAKE_CHUNKS")
+    response = os.environ.get("LOOPINO_HOSTED_TEXT_FAKE_RESPONSE")
+    chunks = os.environ.get("LOOPINO_HOSTED_TEXT_FAKE_CHUNKS")
     if response is None and chunks is None:
         return None
     parsed_chunks = _json_string_list(chunks)

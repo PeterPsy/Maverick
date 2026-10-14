@@ -1,4 +1,4 @@
-"""Trusted production composition for data-driven Maverick Agent runtimes."""
+"""Trusted production composition for data-driven Loopino Agent runtimes."""
 
 from __future__ import annotations
 
@@ -25,17 +25,17 @@ from core.providers.hosted_endpoint_preflight import (
     preflight_google_interactions_request,
     preflight_openrouter_completion_request,
 )
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-    builtin_maverick_agent_publications,
-    builtin_maverick_protocol_adapters,
-    builtin_maverick_provider_configs,
+    builtin_loopino_agent_publications,
+    builtin_loopino_protocol_adapters,
+    builtin_loopino_provider_configs,
 )
-from core.providers.maverick_agent_onboarding import (
-    MaverickAgentOnboardingCatalog,
-    MaverickProtocolRuntimeRegistration,
-    MaverickProviderConfig,
+from core.providers.loopino_agent_onboarding import (
+    LoopinoAgentOnboardingCatalog,
+    LoopinoProtocolRuntimeRegistration,
+    LoopinoProviderConfig,
 )
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
@@ -59,43 +59,43 @@ from core.runtime.hosted_provider_runtime import (
 from core.runtime.hosted_finalization_policy import provider_finalization_policy
 
 
-def build_builtin_maverick_agent_onboarding_catalog(
+def build_builtin_loopino_agent_onboarding_catalog(
     *,
     now: datetime | None = None,
-) -> MaverickAgentOnboardingCatalog:
+) -> LoopinoAgentOnboardingCatalog:
     """Assemble the production catalog from trusted adapters and data records."""
-    catalog = MaverickAgentOnboardingCatalog()
-    for manifest in builtin_maverick_protocol_adapters():
+    catalog = LoopinoAgentOnboardingCatalog()
+    for manifest in builtin_loopino_protocol_adapters():
         try:
             runtime_factory = _PROTOCOL_RUNTIME_FACTORIES[
                 manifest.protocol_adapter_id
             ]
         except KeyError as error:
-            raise RuntimeError("maverick_protocol_factory_missing") from error
+            raise RuntimeError("loopino_protocol_factory_missing") from error
         catalog.register_protocol_adapter(
-            MaverickProtocolRuntimeRegistration(
+            LoopinoProtocolRuntimeRegistration(
                 manifest=manifest,
                 runtime_factory=runtime_factory,
             )
         )
-    for config in builtin_maverick_provider_configs():
+    for config in builtin_loopino_provider_configs():
         catalog.register_provider_config(config)
-    for publication in builtin_maverick_agent_publications(now=now):
+    for publication in builtin_loopino_agent_publications(now=now):
         catalog.register_profile(publication)
     return catalog
 
 
 def build_hosted_provider_runtime_registry(
     *,
-    onboarding_catalog: MaverickAgentOnboardingCatalog | None = None,
+    onboarding_catalog: LoopinoAgentOnboardingCatalog | None = None,
 ) -> HostedProviderRuntimeRegistry:
     """Build the runtime registry exclusively through production onboarding."""
-    catalog = onboarding_catalog or build_builtin_maverick_agent_onboarding_catalog()
+    catalog = onboarding_catalog or build_builtin_loopino_agent_onboarding_catalog()
     return catalog.build_runtime_registry()
 
 
 def _google_interactions_runtime(
-    config: MaverickProviderConfig,
+    config: LoopinoProviderConfig,
     model_config: HostedProviderModelConfig,
 ) -> HostedProviderRuntime:
     return HostedProviderRuntime(
@@ -134,7 +134,7 @@ def _google_interactions_runtime(
 
 
 def _openrouter_chat_runtime(
-    config: MaverickProviderConfig,
+    config: LoopinoProviderConfig,
     model_config: HostedProviderModelConfig,
 ) -> HostedProviderRuntime:
     return HostedProviderRuntime(
@@ -175,6 +175,6 @@ _PROTOCOL_RUNTIME_FACTORIES = {
 
 
 __all__ = [
-    "build_builtin_maverick_agent_onboarding_catalog",
+    "build_builtin_loopino_agent_onboarding_catalog",
     "build_hosted_provider_runtime_registry",
 ]

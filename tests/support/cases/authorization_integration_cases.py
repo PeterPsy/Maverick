@@ -48,7 +48,7 @@ class AuthorizationIntegrationTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -101,8 +101,8 @@ class AuthorizationIntegrationTestCase(unittest.TestCase):
     def login_admin(self, app) -> str:
         return self.login(
             app,
-            username=os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-            password=os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+            username=os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+            password=os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
         )
 
     def create_workspace_users(self, state, workspace_id: str) -> tuple[object, object]:
@@ -151,7 +151,7 @@ class AuthorizationIntegrationTestCase(unittest.TestCase):
             name="Authorization Probe",
             version="1.0.0",
             description="Authorization regression app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 visibility=visibility,
                 capabilities=build_app_capabilities(
@@ -185,7 +185,7 @@ class AuthorizationIntegrationTestCase(unittest.TestCase):
             name="Dependency Provider",
             version="1.0.0",
             description="Dependency provider regression app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 provides=[
                     build_provided_interface_declaration(
@@ -201,7 +201,7 @@ class AuthorizationIntegrationTestCase(unittest.TestCase):
             name="Dependency Consumer",
             version="1.0.0",
             description="Dependency consumer regression app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 requires=[
                     build_required_interface_declaration(

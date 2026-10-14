@@ -61,7 +61,7 @@ function VaultSidebarWidget() {
         return;
       }
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
-      if (payload.type === 'maverick.widget.context-changed' || (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === appId)) {
+      if (payload.type === 'loopino.widget.context-changed' || (payload.type === 'loopino.widget.data-changed' && payload.owner_app_id === appId)) {
         if (payload.resource === 'view-state') {
           const nextState = readVaultViewState();
           setCredentialPanel(nextState.credentialPanel);

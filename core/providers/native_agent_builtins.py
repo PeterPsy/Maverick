@@ -28,9 +28,9 @@ from core.providers.native_agent_contract import (
     NativeRuntimeStatus,
     NativeUpdateState,
 )
-NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
+NATIVE_AGENT_SANDBOX_POLICY_REVISION = "loopino-native-sandbox-v1"
 ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION = (
-    "maverick-antigravity-native-sandbox-v4"
+    "loopino-antigravity-native-sandbox-v4"
 )
 ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
 _INSPECTION_CACHE_SECONDS = 5.0
@@ -140,11 +140,11 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             protocol_kind="app_server",
             protocol_id="codex-app-server-stdio",
             protocol_version=None,
-            structured_event_schema="maverick.runtime-provider-event.v1",
+            structured_event_schema="loopino.runtime-provider-event.v1",
             lifecycle_operations=tuple(sorted(REQUIRED_NATIVE_OPERATIONS)),
             machine_readable=True,
             human_terminal_scraping=False,
-            trusted_distribution="maverick_builtin",
+            trusted_distribution="loopino_builtin",
         ),
         recipe=NativeAgentHarnessRecipe(
             prompt_contract_revision="codex-native-prompt-v1",
@@ -156,7 +156,7 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             workspace_confined=True,
             process_tree_supervised=True,
             structured_effect_events=True,
-            approval_policy="maverick_common_approval_policy",
+            approval_policy="loopino_common_approval_policy",
             sandbox_policy_revision=NATIVE_AGENT_SANDBOX_POLICY_REVISION,
         ),
         inspector=CommandNativeRuntimeInspector(adapter.codex_command),
@@ -230,7 +230,7 @@ def build_antigravity_cli_candidate_installation(
             lifecycle_operations=tuple(sorted(REQUIRED_NATIVE_OPERATIONS)),
             machine_readable=True,
             human_terminal_scraping=False,
-            trusted_distribution="maverick_reviewed_binary",
+            trusted_distribution="loopino_reviewed_binary",
         ),
         recipe=NativeAgentHarnessRecipe(
             prompt_contract_revision="antigravity-text-v1",

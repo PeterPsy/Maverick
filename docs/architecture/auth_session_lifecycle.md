@@ -1,6 +1,6 @@
 # Platform login session lifecycle
 
-Maverick login uses an opaque server-side session and an expiring `HttpOnly`,
+Loopino login uses an opaque server-side session and an expiring `HttpOnly`,
 `SameSite=Lax` cookie (`Secure` on HTTPS). New sessions have a 30-day idle
 window. A verified top-level `GET /api/session` renews that window at most once
 per day, bounded by 90 days from login. Expired, revoked, deleted sessions,
@@ -32,7 +32,7 @@ Logging out the temporary browser revokes only its own app-frame sessions; it
 preserves human cookies, device sessions and other temporary browsers.
 
 Base Shell checks the session on foreground, connectivity restoration,
-`pageshow`, the native `maverick.session-changed` hint, and every five minutes
+`pageshow`, the native `loopino.session-changed` hint, and every five minutes
 while visible and online. Only a server response grants authorization.
 Same-session renewal updates expiry and cache leases without remounting frames.
 A changed user, workspace or generation enters the existing publication barrier.

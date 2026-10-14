@@ -160,7 +160,7 @@ class AntigravityCliRuntimeHomeTest(unittest.TestCase):
     def test_environment_override_is_explicit_and_validated(self) -> None:
         with patch.dict(
             os.environ,
-            {"MAVERICK_ANTIGRAVITY_HOME": str(self.source)},
+            {"LOOPINO_ANTIGRAVITY_HOME": str(self.source)},
         ):
             self.assertEqual(resolve_antigravity_source_home(), self.source)
             validate_antigravity_oauth_source()

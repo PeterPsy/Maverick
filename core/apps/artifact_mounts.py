@@ -11,10 +11,11 @@ from typing import Iterable
 from uuid import uuid4
 
 from core.apps.errors import AppHostingError
+from core.apps.contract_common import APP_ID_PATTERN
 from core.apps.models import HttpSidecarArtifactMountSpec
 
 
-ARTIFACT_NAMESPACE_MARKER = ".maverick-artifact-namespace.json"
+ARTIFACT_NAMESPACE_MARKER = ".loopino-artifact-namespace.json"
 ARTIFACT_NAMESPACE_SCHEMA_VERSION = "1"
 
 
@@ -29,15 +30,16 @@ class ResolvedArtifactMount:
 
 
 def platform_artifact_store_root(repository_root: Path) -> Path:
-    """Resolve the installation-owned store root, always outside app source."""
+    """Resolve protected installation material outside app and tenant source."""
     repository = Path(repository_root).resolve(strict=True)
-    configured = os.environ.get("MAVERICK_APP_ARTIFACT_STORE_ROOT", "").strip()
-    candidate = Path(configured) if configured else repository.parent / f".{repository.name}-app-artifacts"
+    configured = os.environ.get("LOOPINO_APP_ARTIFACT_STORE_ROOT", "").strip()
+    designated = repository / "data" / "app-artifacts"
+    candidate = Path(configured) if configured else designated
     if not candidate.is_absolute():
-        raise AppHostingError("MAVERICK_APP_ARTIFACT_STORE_ROOT must be an absolute path.")
+        raise AppHostingError("LOOPINO_APP_ARTIFACT_STORE_ROOT must be an absolute path.")
+    if candidate != designated or any(path.is_symlink() for path in (candidate, *candidate.parents)):
+        raise AppHostingError("The platform app-artifact store must use the designated installation data/app-artifacts path without symlinks.")
     resolved = candidate.resolve(strict=False)
-    if resolved == repository or repository in resolved.parents:
-        raise AppHostingError("The platform app-artifact store must stay outside the repository source tree.")
     return resolved
 
 
@@ -48,6 +50,7 @@ def create_artifact_namespace(
     artifact_id: str,
 ) -> Path:
     """Create one platform-governed namespace before app materialization."""
+    _validate_namespace_ids(app_id=app_id, artifact_id=artifact_id)
     store_root = platform_artifact_store_root(repository_root)
     _mkdir_protected(store_root)
     app_root = store_root / app_id
@@ -76,6 +79,7 @@ def resolve_artifact_mounts(
     declarations: Iterable[HttpSidecarArtifactMountSpec],
 ) -> tuple[ResolvedArtifactMount, ...]:
     """Resolve declared namespaces without creating or repairing them."""
+    _validate_namespace_ids(app_id=app_id, artifact_id="namespace")
     store_root = platform_artifact_store_root(repository_root)
     if not store_root.exists():
         if tuple(declarations):
@@ -84,6 +88,7 @@ def resolve_artifact_mounts(
     store = _real_protected_directory(store_root, label="platform app-artifact store")
     mounts: list[ResolvedArtifactMount] = []
     for declaration in declarations:
+        _validate_namespace_ids(app_id=app_id, artifact_id=declaration.artifact_id)
         namespace = store / app_id / declaration.artifact_id
         marker = _validate_namespace(
             namespace,
@@ -99,6 +104,11 @@ def resolve_artifact_mounts(
             )
         )
     return tuple(mounts)
+
+
+def _validate_namespace_ids(*, app_id: str, artifact_id: str) -> None:
+    if any(not isinstance(value, str) or not APP_ID_PATTERN.fullmatch(value) for value in (app_id, artifact_id)):
+        raise AppHostingError("App artifact namespace ids must be canonical lowercase ids.")
 
 
 def _validate_namespace(namespace: Path, *, app_id: str, artifact_id: str) -> dict[str, object]:

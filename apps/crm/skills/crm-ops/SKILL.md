@@ -1,6 +1,6 @@
 ---
 name: crm-ops
-description: Use the `crm` Maverick app through its declared CLI and MCP surfaces.
+description: Use the `crm` Loopino app through its declared CLI and MCP surfaces.
 ---
 
 # CRM Operations
@@ -10,8 +10,8 @@ Use CRM when the user asks to search, create, update, convert leads, configure p
 Use scoped discovery first:
 
 ```bash
-maverick app crm cli list --json
-maverick app crm mcp list --json
+loopino app crm cli list --json
+loopino app crm mcp list --json
 ```
 
 Prefer MCP tools for agent-facing record operations:
@@ -84,10 +84,10 @@ Use CLI command `crm` for diagnostics, import/export smoke checks, and scripted 
 Before linking Mail, Calendar, Storage, or other app-owned items back to CRM, resolve CRM's provider app links through the generic dependency surface:
 
 ```bash
-maverick core cli run app.crm.dependencies --json
+loopino core cli run app.crm.dependencies --json
 ```
 
-If the runtime shim reports `CLI command is not available in this scope` for that command, run the same dependency lookup through the repository-local SDK CLI from the Maverick root:
+If the runtime shim reports `CLI command is not available in this scope` for that command, run the same dependency lookup through the repository-local SDK CLI from the Loopino root:
 
 ```bash
 python3 -m core.app_sdk.cli core cli run app.crm.dependencies --json

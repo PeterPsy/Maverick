@@ -89,7 +89,7 @@ export async function startPreviewFixture() {
       const type = path.endsWith('.js') || path.endsWith('.mjs') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'text/html';
       let content = await readFile(join(dist, path));
       if (path === 'index.html' && url.searchParams.has('test_mobile')) {
-        content = content.toString().replace('</head>', '<style>:root{--maverick-shell-mobile-content-top-offset:60px}</style></head>');
+        content = content.toString().replace('</head>', '<style>:root{--loopino-shell-mobile-content-top-offset:60px}</style></head>');
       }
       response.writeHead(200, { 'Content-Type': type, 'Access-Control-Allow-Origin': '*' }); response.end(content);
     } catch { response.writeHead(404); response.end(); }

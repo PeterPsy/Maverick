@@ -21,12 +21,12 @@ import {
   type ParentDataCacheSerializedError,
   type CacheTelemetry,
   type StorageQuotaAdapter,
-} from "@maverick/pwa-cache";
+} from "@loopino/pwa-cache";
 import {
-  isMaverickOwnerMessage,
-  registeredMaverickFrameIdentity,
-  sameMaverickFrameScope,
-  type MaverickFrameScope,
+  isLoopinoOwnerMessage,
+  registeredLoopinoFrameIdentity,
+  sameLoopinoFrameScope,
+  type LoopinoFrameScope,
 } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
 import { PwaDataCacheRetryMetrics } from "./pwaDataCacheRetryMetrics";
@@ -61,7 +61,7 @@ type ActiveRead = {
 type PwaDataCacheBrokerOptions = {
   accessLease?: AccessLease;
   featureEnabled?: (signal?: AbortSignal) => Promise<boolean | null>;
-  frameScope: MaverickFrameScope;
+  frameScope: LoopinoFrameScope;
   principal: Omit<CachePrincipal, "appId">;
   quotaAdapter?: StorageQuotaAdapter;
   telemetry?: CacheTelemetry;
@@ -71,7 +71,7 @@ export class PwaDataCacheBroker {
   private readonly active = new Map<string, ActiveRead>();
   private readonly clients = new Map<string, ReturnType<ReturnType<typeof createPwaCacheHost>["createClient"]>>();
   private readonly featureEnabled: NonNullable<PwaDataCacheBrokerOptions["featureEnabled"]>;
-  private readonly frameScope: MaverickFrameScope;
+  private readonly frameScope: LoopinoFrameScope;
   private featureWasConfirmedEnabled = false;
   private featureWasExplicitlyDisabled = false;
   private authorizationFailureStarted: Promise<void> | null = null;
@@ -103,20 +103,20 @@ export class PwaDataCacheBroker {
     enabledAppIds: ReadonlySet<string>,
   ): boolean {
     const raw = messageRecord(event.data);
-    if (raw?.type !== "maverick.pwa.data-cache.open.v1") return false;
+    if (raw?.type !== "loopino.pwa.data-cache.open.v1") return false;
     if (!isParentDataCacheOpenMessage(event.data)) {
       event.ports[0]?.close();
       return true;
     }
     const request = event.data;
-    const frameIdentity = registeredMaverickFrameIdentity(event);
+    const frameIdentity = registeredLoopinoFrameIdentity(event);
     if (!frameIdentity) return false;
     const port = event.ports.length === 1 ? event.ports[0] : null;
     const declaration = RESOURCE_DECLARATIONS[request.app_id]?.[request.resource];
     const resource = this.resources.get(resourceKey(request.app_id, request.resource));
     if (!port) return true;
     if (frameIdentity.ownerAppId !== request.app_id
-        || !sameMaverickFrameScope(frameIdentity.scope, this.frameScope)
+        || !sameLoopinoFrameScope(frameIdentity.scope, this.frameScope)
         || !enabledAppIds.has(request.app_id)
         || !declaration
         || !resource
@@ -157,11 +157,11 @@ export class PwaDataCacheBroker {
   handleDataChangedMessage(event: MessageEvent): void {
     const payload = messageRecord(event.data);
     if (!payload
-        || payload.type !== "maverick.app.data-changed"
+        || payload.type !== "loopino.app.data-changed"
         || typeof payload.owner_app_id !== "string"
         || typeof payload.resource !== "string") return;
     const ownerAppId = payload.owner_app_id;
-    if (!isMaverickOwnerMessage(event, ownerAppId, this.frameScope)) return;
+    if (!isLoopinoOwnerMessage(event, ownerAppId, this.frameScope)) return;
     const declarations = RESOURCE_DECLARATIONS[ownerAppId];
     if (!declarations) return;
     for (const [resourceName, resourceDeclaration] of Object.entries(declarations)) {

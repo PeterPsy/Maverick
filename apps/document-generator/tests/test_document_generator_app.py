@@ -34,7 +34,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -78,8 +78,8 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -117,7 +117,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["document-generator"])
-        self.assertIn("maverick_document_generator", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("loopino_document_generator", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_convert_to_markdown", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_extract_text", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_spreadsheet_transform", parsed.contract.capabilities.mcp_tools)
@@ -152,7 +152,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
 
         command = cli_schema["commands"]["document-generator"]
         command_properties = cli_schema["commands"]["document-generator"]["argument_schema"]["properties"]
-        generic_tool = mcp_schema["tools"]["maverick_document_generator"]
+        generic_tool = mcp_schema["tools"]["loopino_document_generator"]
         extract_tool = mcp_schema["tools"]["document_generator_extract_text"]
         tool = mcp_schema["tools"]["document_generator_convert_to_markdown"]
         patch_tool = mcp_schema["tools"]["document_generator_patch_pdf_text"]
@@ -904,7 +904,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         skills = list_available_workspace_skills(workspace_id="default", start_path=repo_root)
         frontend_status, frontend_payload, _headers = self.invoke(app, path="/apps/document-generator/", cookie=cookie)
 
-        self.assertIn("app.document-generator.maverick_document_generator", [tool.tool_name for tool in tools])
+        self.assertIn("app.document-generator.loopino_document_generator", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document_generator_convert_to_markdown", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document_generator_extract_text", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document_generator_spreadsheet_transform", [tool.tool_name for tool in tools])
@@ -934,7 +934,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             start_path=repo_root,
         )
         mcp_payload = call_mcp_tool(
-            tool_name="app.document-generator.maverick_document_generator",
+            tool_name="app.document-generator.loopino_document_generator",
             context=McpInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="tester", effective_mode="sandbox"),
             arguments={"action": "validate_spec", "spec": spec},
             app_store=state.app_store,

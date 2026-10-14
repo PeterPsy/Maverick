@@ -91,7 +91,7 @@ export async function callBackend<T>(
     try {
       return await response.json() as T;
     } catch {
-      throw new BackendError("Maverick returned an invalid response. Try refreshing.", 502, "invalid_response");
+      throw new BackendError("Loopino returned an invalid response. Try refreshing.", 502, "invalid_response");
     }
   } catch (error) {
     if (controller.signal.aborted && !signal?.aborted) {
@@ -101,7 +101,7 @@ export async function callBackend<T>(
         : "The request timed out. Try again.", 504, "request_timeout");
     }
     if (error instanceof TypeError)
-      throw new BackendError("Could not reach Maverick. Check your connection and try again.", 503, "network_error");
+      throw new BackendError("Could not reach Loopino. Check your connection and try again.", 503, "network_error");
     throw error;
   } finally {
     clearTimeout(timeout);

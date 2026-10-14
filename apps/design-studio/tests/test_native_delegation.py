@@ -226,7 +226,7 @@ class NativeDelegationTests(unittest.TestCase):
             self.assertEqual(len(client.put_calls), 1)
             self.assertEqual(len(client.run_calls), 1)
             self.assertTrue(replay["idempotent_replay"])
-            visible = "Brief delegated by Maverick\n\nCreate a calm portfolio landing page."
+            visible = "Brief delegated by Loopino\n\nCreate a calm portfolio landing page."
             self.assertEqual(client.put_calls[0]["body"]["content"], visible)
             self.assertEqual(client.run_calls[0]["message"], visible)
             self.assertEqual(client.run_calls[0]["currentPrompt"], visible)

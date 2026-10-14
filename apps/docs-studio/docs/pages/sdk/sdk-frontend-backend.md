@@ -16,10 +16,10 @@ The contract points to `frontend/dist`. The source lives in `frontend/src`.
 
 ```bash
 npm run build
-maverick app <app_id> frontend build --json
+loopino app <app_id> frontend build --json
 ```
 
-The Maverick build command verifies the artifact root and emits `maverick.app.frontend-changed`.
+The Loopino build command verifies the artifact root and emits `loopino.app.frontend-changed`.
 
 ## Backend shape
 

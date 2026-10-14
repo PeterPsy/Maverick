@@ -14,9 +14,9 @@
   gap: 18px;
   width: min(680px, 100%);
   max-height: min(780px, calc(100dvh - 48px));
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-bg);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-bg);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
   overflow: visible;
   padding: 20px;
@@ -25,7 +25,7 @@
 .delete-agent-dialog {
   grid-template-rows: auto auto auto;
   width: min(520px, 100%);
-  border-color: var(--maverick-border);
+  border-color: var(--loopino-border);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035)),
     #111113;
@@ -42,7 +42,7 @@
 
 .modal-header p {
   margin-top: 5px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .modal-body {
@@ -61,7 +61,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   padding: 12px;
 }
 
@@ -70,15 +70,15 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 12px;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 14px;
 }
 
 .delete-agent-warning svg {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .delete-agent-warning p {

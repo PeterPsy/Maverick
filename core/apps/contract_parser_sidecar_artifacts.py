@@ -73,14 +73,14 @@ def parse_sidecar_host_prepare(
         )
     keys: list[str] = []
     platform_keys = {
-        "MAVERICK_APP_ID",
-        "MAVERICK_APP_DATA_ROOT",
-        "MAVERICK_APP_SOURCE_ROOT",
+        "LOOPINO_APP_ID",
+        "LOOPINO_APP_DATA_ROOT",
+        "LOOPINO_APP_SOURCE_ROOT",
     }
     for key in raw_keys:
         if (
             not isinstance(key, str)
-            or not key.startswith("MAVERICK_APP_")
+            or not key.startswith("LOOPINO_APP_")
             or key in platform_keys
             or len(key) > 96
             or any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for character in key)

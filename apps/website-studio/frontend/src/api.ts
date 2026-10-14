@@ -4,7 +4,7 @@ import {
   readThroughParentDataCache,
   readCacheModelJson,
   type ParentDataCacheReadResult
-} from '@maverick/pwa-cache';
+} from '@loopino/pwa-cache';
 
 export type BackendStatus = {
   app_id?: string;
@@ -209,7 +209,7 @@ export async function callBackend<T = BackendStatus>(body: Record<string, unknow
   } catch (error) {
     if (signal?.aborted) throw error;
     const transport = new Error('Website Studio backend transport failed.', { cause: error });
-    transport.name = 'MaverickTransportError';
+    transport.name = 'LoopinoTransportError';
     throw transport;
   }
   if (!response.ok) {
@@ -230,7 +230,7 @@ export async function callBackend<T = BackendStatus>(body: Record<string, unknow
 export class WebsiteHttpError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfterMs: number | null) {
     super(message);
-    this.name = 'MaverickHttpError';
+    this.name = 'LoopinoHttpError';
   }
 }
 

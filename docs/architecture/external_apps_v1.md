@@ -87,7 +87,7 @@ service is installed or detached by an agent without explicit operational setup.
 
 TLS/DNS are installation-owned. Publishing never obtains host privileges or
 ACME keys. Ingress strips credentials and Set-Cookie, has no independent response
-cache and never routes public requests into Maverick's private ASGI application.
+cache and never routes public requests into Loopino's private ASGI application.
 Only GET/HEAD, inventory files, strict canonical host/path validation and a
 restricted static CSP are supported. ETags save bytes, but every reuse must
 revalidate and every 304 checks current serving authority. No public worker.
@@ -133,7 +133,7 @@ The single portable naming rule is `<app>.apps.<installation-domain>`. The app
 label retains its readable slug and opaque id, avoiding collisions across
 workspaces. `deployment.configure` accepts `installation_domain`, not an arbitrary
 public suffix; it derives `apps.` without changing the platform hostname. The
-operator supplies the same canonical hostname as Maverick's installation (not a
+operator supplies the same canonical hostname as Loopino's installation (not a
 request Host or isolated app-frame origin). The supervisor derives the suffix
 independently and admits only matching app configuration. Domain changes are
 explicit and rejected for nonempty catalogs: existing approved URLs are not
@@ -171,7 +171,7 @@ limits still apply. No DNS keys or certificate keys enter the app or public chil
 Validated certificate/key pairs generate exact public nginx hosts. Only owned
 configuration is replaced; nginx validation precedes graceful reload, with rollback
 on failure and a persisted reload retry marker. Unknown names reject TLS in a
-namespace-specific catch-all and never fall through to private Maverick. HTTP only
+namespace-specific catch-all and never fall through to private Loopino. HTTP only
 serves ACME challenges. Content still requires the existing binding/projection
 checks; a valid certificate is not publication authority.
 
@@ -181,7 +181,7 @@ superseded, not retained as a fallback. No general certificate framework, anonym
 Core route or changes to the private sidecar/app-frame authority are introduced.
 
 On 2026-09-19 this deployment migrated its empty catalog to
-`apps.maverick.loopino.ai`. HTTP-01 staging (base and a synthetic two-name SAN
+`apps.loopino.giuntitrail.com`. HTTP-01 staging (base and a synthetic two-name SAN
 batch), production base issuance and production renewal dry-run passed. The old
 sslip.io lineage and its VM-scoped DNS-01 firewall/tag were removed; an ingress
 tombstone prevents private fallback from retired names. Unknown new names reject

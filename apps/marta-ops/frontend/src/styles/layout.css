@@ -16,7 +16,7 @@ body {
   overflow: hidden;
   background: var(--marta-bg);
   color: var(--marta-text);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -39,7 +39,7 @@ button {
   height: 100dvh;
   min-height: 0;
   margin: 0 auto;
-  padding-top: var(--maverick-shell-mobile-content-top-offset, 0px);
+  padding-top: var(--loopino-shell-mobile-content-top-offset, 0px);
   background: var(--marta-bg);
 }
 

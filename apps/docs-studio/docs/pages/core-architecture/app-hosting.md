@@ -12,11 +12,11 @@
 ## Workspace-local flow
 
 ```bash
-maverick core cli run core.app-sdk.create --app-id docs-studio --template-id data-app --json
-maverick core cli run core.app-sdk.validate --app-id docs-studio --workspace default --json
-maverick core cli run core.app-sdk.register-local --app-id docs-studio --workspace default --json
-maverick core cli run core.app-sdk.install-local --app-id docs-studio --workspace default --json
-maverick core cli run core.app-sdk.status --app-id docs-studio --workspace default --json
+loopino core cli run core.app-sdk.create --app-id docs-studio --template-id data-app --json
+loopino core cli run core.app-sdk.validate --app-id docs-studio --workspace default --json
+loopino core cli run core.app-sdk.register-local --app-id docs-studio --workspace default --json
+loopino core cli run core.app-sdk.install-local --app-id docs-studio --workspace default --json
+loopino core cli run core.app-sdk.status --app-id docs-studio --workspace default --json
 ```
 
 ## Rules
@@ -44,5 +44,5 @@ Uninstalling an app removes the active workspace binding. It should not silently
 Apps with source-buildable frontends should support:
 
 ```bash
-maverick app <app_id> frontend build --json
+loopino app <app_id> frontend build --json
 ```

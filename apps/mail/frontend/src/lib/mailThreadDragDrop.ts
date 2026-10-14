@@ -1,6 +1,6 @@
 import type { MailAddress, MailThread } from '../api';
 
-export const MAIL_THREAD_DRAG_DATA_TYPE = 'application/x-maverick-mail-thread';
+export const MAIL_THREAD_DRAG_DATA_TYPE = 'application/x-loopino-mail-thread';
 
 export type MailThreadDragPayload = {
   connection_id: string;

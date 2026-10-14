@@ -69,7 +69,7 @@ class ProviderStepJournal:
         journal_id = str(
             uuid5(
                 NAMESPACE_URL,
-                f"maverick:provider-step:{session.workspace_id}:{session.session_id}:"
+                f"loopino:provider-step:{session.workspace_id}:{session.session_id}:"
                 f"{turn_id}:{request_id}",
             )
         )

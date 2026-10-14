@@ -24,7 +24,7 @@ test('hidden CRM cancels display reads, ignores late values and resumes once wit
     await page.getByRole('button', { name: 'Refresh view', exact: true }).click();
     await expect.poll(() => held).toBe(1);
     const visibility = (visible: boolean) => page.evaluate(visible => window.postMessage({
-      type: 'maverick.app.visibility-changed', visible,
+      type: 'loopino.app.visibility-changed', visible,
     }, window.location.origin), visible);
     await visibility(false);
     await page.waitForTimeout(100);

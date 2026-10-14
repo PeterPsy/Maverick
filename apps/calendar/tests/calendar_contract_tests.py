@@ -134,9 +134,9 @@ class CalendarContractTest(unittest.TestCase):
 
         self.assertTrue(skill_path.is_file())
         self.assertIn("name: calendar-ops", content)
-        self.assertIn("maverick apps list --json", content)
-        self.assertIn("maverick app <calendar_app_id> mcp list --json", content)
-        self.assertIn("maverick app <calendar_app_id> cli list --json", content)
+        self.assertIn("loopino apps list --json", content)
+        self.assertIn("loopino app <calendar_app_id> mcp list --json", content)
+        self.assertIn("loopino app <calendar_app_id> cli list --json", content)
         self.assertIn("Do not read or write `data/calendar/state.json` directly.", content)
         self.assertIn("calendar_find_free_time", content)
         self.assertIn("conflict_policy", content)

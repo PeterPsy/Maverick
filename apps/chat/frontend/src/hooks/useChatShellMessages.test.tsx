@@ -47,7 +47,7 @@ describe("Chat shell context messages", () => {
     await act(async () => {
       window.dispatchEvent(new MessageEvent("message", {
         data: {
-          type: "maverick.widget.context-changed",
+          type: "loopino.widget.context-changed",
           owner_app_id: "chat",
           widget_id: "chat-floating-dock",
           context: {
@@ -81,7 +81,7 @@ describe("Chat shell context messages", () => {
     await act(async () => {
       window.dispatchEvent(new MessageEvent("message", {
         data: {
-          type: "maverick.widget.context-changed",
+          type: "loopino.widget.context-changed",
           context: {
             content: {
               payload: {

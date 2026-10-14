@@ -138,7 +138,7 @@ describe("WidgetHostFrame", () => {
     expect(source).toContain('scrolling="no"');
     expect(source).toContain('allow="fullscreen"');
     expect(source).toContain("allowFullScreen");
-    expect(source).toContain('"maverick.widget.open-app"');
+    expect(source).toContain('"loopino.widget.open-app"');
   });
 
   async function renderWidget() {
@@ -160,7 +160,7 @@ describe("WidgetHostFrame", () => {
 
 function validLaunch() {
   return {
-    bootstrap_url: "https://storage-widget.example/.well-known/maverick-app-frame-bootstrap",
+    bootstrap_url: "https://storage-widget.example/.well-known/loopino-app-frame-bootstrap",
     bootstrap_transport: "cors",
     expires_in_seconds: 60,
     frontend_url: "https://storage-widget.example/api/apps/widgets/storage/file-preview/frontend/#context=signed-context",
@@ -179,7 +179,7 @@ async function dispatchReady(frame: HTMLIFrameElement, origin: string) {
   await act(async () => {
     window.dispatchEvent(new MessageEvent("message", {
       data: {
-        type: "maverick.app-frame.loaded",
+        type: "loopino.app-frame.loaded",
         owner_app_id: "storage",
         widget_id: "file-preview",
       },

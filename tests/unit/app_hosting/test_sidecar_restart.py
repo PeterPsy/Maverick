@@ -74,7 +74,7 @@ class SidecarRestartTests(unittest.TestCase):
         self.assertEqual(tuple(restart_kwargs["sidecars"]), (self.sidecar,))
         self.assertEqual(result["readiness"], readiness)
         event = self.event_bus.publish.call_args.args[0]
-        self.assertEqual(event["type"], "maverick.app.runtime-changed")
+        self.assertEqual(event["type"], "loopino.app.runtime-changed")
         self.assertEqual(event["owner_app_id"], "design-studio")
         self.assertEqual(event["workspace_id"], "workspace-a")
 

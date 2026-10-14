@@ -7,13 +7,13 @@ const socket = vi.hoisted(() => ({
   onMessage: (_message: unknown) => {},
 }));
 
-vi.mock("@maverick/pwa-cache", () => ({
+vi.mock("@loopino/pwa-cache", () => ({
   connectAppEventSocket: (onMessage: (message: unknown) => void) => {
     socket.onMessage = onMessage;
     return () => {};
   },
-  readMaverickAppFrameContext: () => null,
-  isExactMaverickParentMessage: () => false,
+  readLoopinoAppFrameContext: () => null,
+  isExactLoopinoParentMessage: () => false,
 }));
 
 it("ignores an older bootstrap response after a successful mutation", async () => {
@@ -70,7 +70,7 @@ it("refreshes a data event received while a local save is pending", async () => 
   act(() => {
     saving = result.current.mutate({ action: "update_contact" });
     socket.onMessage({
-      type: "maverick.app.data-changed",
+      type: "loopino.app.data-changed",
       owner_app_id: "marta-ops",
       resource: "state",
     });

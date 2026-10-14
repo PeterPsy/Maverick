@@ -1,4 +1,4 @@
-"""Shared launch policy for isolated Maverick app and widget frames."""
+"""Shared launch policy for isolated Loopino app and widget frames."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ _DOMAIN_PATTERN = re.compile(
     r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
 )
 
-APP_FRAME_BOOTSTRAP_PATH = "/.well-known/maverick-app-frame-bootstrap"
-APP_FRAME_SIDECAR_ID = "__maverick_app_frame__"
+APP_FRAME_BOOTSTRAP_PATH = "/.well-known/loopino-app-frame-bootstrap"
+APP_FRAME_SIDECAR_ID = "__loopino_app_frame__"
 APP_FRAME_SURFACE_KIND = "app-frame"
 
 
@@ -100,7 +100,7 @@ def ensure_app_frame_tls(
     """Ensure the requested exact frame host is covered by managed TLS."""
     if not managed_browser_origin_tls_enabled():
         return
-    if os.environ.get("MAVERICK_SIDECAR_ORIGIN_MODE", "local").strip().lower() != "hosted":
+    if os.environ.get("LOOPINO_SIDECAR_ORIGIN_MODE", "local").strip().lower() != "hosted":
         raise BrowserOriginTlsError("Managed browser-origin TLS requires hosted origins.")
     hosts = {requested_host}
     for item in enabled_app_items(
@@ -190,7 +190,7 @@ def isolated_origin(
     platform_origin: str,
 ) -> tuple[str, str, bool]:
     """Resolve the isolated origin for local or hosted deployment mode."""
-    mode = os.environ.get("MAVERICK_SIDECAR_ORIGIN_MODE", "local").strip().lower() or "local"
+    mode = os.environ.get("LOOPINO_SIDECAR_ORIGIN_MODE", "local").strip().lower() or "local"
     platform = urlsplit(platform_origin)
     if mode == "local":
         hostname = str(platform.hostname or "").lower()
@@ -200,8 +200,8 @@ def isolated_origin(
         host = f"{label}.sidecars.{hostname}{suffix}"
         return f"{platform.scheme}://{host}", host, platform.scheme == "https"
     if mode == "hosted":
-        domain = os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
-        configured = os.environ.get("MAVERICK_SIDECAR_PLATFORM_ORIGIN", "").strip()
+        domain = os.environ.get("LOOPINO_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
+        configured = os.environ.get("LOOPINO_SIDECAR_PLATFORM_ORIGIN", "").strip()
         if not domain or not _DOMAIN_PATTERN.fullmatch(domain) or not configured:
             raise AppHostingError("Hosted app-frame origins require the sidecar installation domain and platform origin.")
         configured_origin = normalize_origin(configured)
@@ -209,7 +209,7 @@ def isolated_origin(
             raise AppHostingError("Hosted app-frame origins require the exact configured HTTPS platform origin.")
         host = f"{label}.sidecars.{domain}"
         return f"https://{host}", host, True
-    raise AppHostingError("MAVERICK_SIDECAR_ORIGIN_MODE must be `local` or `hosted`.")
+    raise AppHostingError("LOOPINO_SIDECAR_ORIGIN_MODE must be `local` or `hosted`.")
 
 
 def normalize_origin(value: str) -> str:

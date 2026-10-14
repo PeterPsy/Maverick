@@ -34,7 +34,7 @@ def _wait_for_health(
     while time.monotonic() < deadline:
         return_code = server.poll()
         if return_code is not None:
-            raise RuntimeError(f"Maverick host exited before becoming healthy ({return_code}).")
+            raise RuntimeError(f"Loopino host exited before becoming healthy ({return_code}).")
         try:
             with urlopen(f"http://127.0.0.1:{port}/health", timeout=1) as response:  # noqa: S310
                 if response.status == 200:
@@ -42,7 +42,7 @@ def _wait_for_health(
         except (OSError, URLError) as error:
             last_error = error
         time.sleep(0.2)
-    raise RuntimeError(f"Maverick host did not become healthy: {last_error}")
+    raise RuntimeError(f"Loopino host did not become healthy: {last_error}")
 
 
 def _stop_server(server: subprocess.Popen[bytes]) -> None:
@@ -58,17 +58,17 @@ def _stop_server(server: subprocess.Popen[bytes]) -> None:
 
 def _local_environment(root: Path, username: str, password: str) -> dict[str, str]:
     env = os.environ.copy()
-    env.pop("MAVERICK_SECRET_KEY_FILE", None)
+    env.pop("LOOPINO_SECRET_KEY_FILE", None)
     env.update({
-        "MAVERICK_ADMIN_PASSWORD": password,
-        "MAVERICK_ADMIN_USERNAME": username,
-        "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-        "MAVERICK_CONTROL_STORE": "json",
-        "MAVERICK_USAGE_STORE": "document",
-        "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": str(root / "bootstrap-secrets"),
-        "MAVERICK_JSON_CONTROL_STORE_ROOT": str(root / "control-plane"),
-        "MAVERICK_SECRET_STORE_KEY": "maverick-local-secret-store",
-        "MAVERICK_SIDECAR_ORIGIN_MODE": "local",
+        "LOOPINO_ADMIN_PASSWORD": password,
+        "LOOPINO_ADMIN_USERNAME": username,
+        "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+        "LOOPINO_CONTROL_STORE": "json",
+        "LOOPINO_USAGE_STORE": "document",
+        "LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT": str(root / "bootstrap-secrets"),
+        "LOOPINO_JSON_CONTROL_STORE_ROOT": str(root / "control-plane"),
+        "LOOPINO_SECRET_STORE_KEY": "loopino-local-secret-store",
+        "LOOPINO_SIDECAR_ORIGIN_MODE": "local",
     })
     no_proxy = env.get("NO_PROXY", env.get("no_proxy", ""))
     local_hosts = "127.0.0.1,localhost,.localhost"
@@ -99,7 +99,7 @@ def _run_browser(base_url: str, username: str, password: str, env: dict[str, str
         "--username",
         username,
     ]
-    if env.get("MAVERICK_PWA_SMOKE_APP_READ_MODELS") == "1":
+    if env.get("LOOPINO_PWA_SMOKE_APP_READ_MODELS") == "1":
         command.append("--app-read-models")
     return subprocess.run(command, cwd=ROOT, env=env, check=False).returncode
 
@@ -107,7 +107,7 @@ def _run_browser(base_url: str, username: str, password: str, env: dict[str, str
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", help="use an already-running host instead of starting one")
-    parser.add_argument("--password", default="maverick", help="test login password")
+    parser.add_argument("--password", default="loopino", help="test login password")
     parser.add_argument("--port", type=int, help="local server port")
     parser.add_argument("--username", default="admin", help="test login username")
     parser.add_argument("--app-read-models", action="store_true", help="test approved display adapters on a disposable host only")
@@ -117,15 +117,15 @@ def main() -> int:
     if args.base_url:
         return _run_browser(args.base_url.rstrip("/"), args.username, args.password, os.environ.copy())
 
-    with tempfile.TemporaryDirectory(prefix="maverick-pwa-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="loopino-pwa-smoke-") as temporary:
         temporary_root = Path(temporary)
         repository_root = _create_disposable_repository(temporary_root)
         env = _local_environment(temporary_root, args.username, args.password)
         if args.app_read_models:
-            env["MAVERICK_PWA_SMOKE_APP_READ_MODELS"] = "1"
-            env["MAVERICK_FEATURE_PWA_DATA_CACHE"] = "1"
+            env["LOOPINO_PWA_SMOKE_APP_READ_MODELS"] = "1"
+            env["LOOPINO_FEATURE_PWA_DATA_CACHE"] = "1"
             for app in ("CALENDAR", "CHAT", "CRM", "MAIL", "FITNESS_COACH"):
-                env[f"MAVERICK_FEATURE_PWA_APP_CACHE_{app}"] = "1"
+                env[f"LOOPINO_FEATURE_PWA_APP_CACHE_{app}"] = "1"
         port = args.port or _free_port()
         log_path = temporary_root / "host.stderr.log"
         with log_path.open("wb") as host_log:
@@ -154,7 +154,7 @@ def main() -> int:
                     sys.stderr.write(log_path.read_text(encoding="utf-8", errors="replace"))
                     raise
                 return _run_browser(
-                    f"http://maverick.localhost:{port}",
+                    f"http://loopino.localhost:{port}",
                     args.username,
                     args.password,
                     env,

@@ -23,7 +23,7 @@ from core.api.control_store import (
 
 def run_pending_cleanup_plans(*, repository_root: Path, active_settings: ControlStoreSettings) -> list[dict[str, Any]]:
     """Run pending cleanup plans whose target adapter is now active."""
-    plan_root = repository_root / ".maverick" / "persistence-cleanup"
+    plan_root = repository_root / ".loopino" / "persistence-cleanup"
     if not plan_root.is_dir():
         return []
     results: list[dict[str, Any]] = []
@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _wait_for_cutover(plan: dict[str, Any]) -> None:
     previous_pid = int(plan.get("previous_pid") or 0)
-    service_name = str(plan.get("service_name") or "maverick-core.service")
+    service_name = str(plan.get("service_name") or "loopino-core.service")
     health_url = str(plan.get("health_url") or "http://127.0.0.1:8014/health")
     deadline = time.monotonic() + float(plan.get("timeout_seconds") or 120.0)
     while time.monotonic() < deadline:
@@ -120,7 +120,7 @@ def _settings_from_plan(payload: dict[str, Any]) -> ControlStoreSettings:
         kind=str(payload["kind"]),
         json_root=Path(str(payload["json_root"])),
         mongo_uri=payload.get("mongo_uri"),
-        mongo_database=str(payload.get("mongo_database") or "maverick"),
+        mongo_database=str(payload.get("mongo_database") or "loopino"),
         mongo_username=payload.get("mongo_username"),
         mongo_password_ref=payload.get("mongo_password_ref"),
     )

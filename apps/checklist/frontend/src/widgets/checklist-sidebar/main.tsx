@@ -53,7 +53,7 @@ function useShellMobileLayout() {
 function openChecklistInShell(checklistId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'checklist',
       params: {
         app_page: `checklists/${checklistId}`,
@@ -63,7 +63,7 @@ function openChecklistInShell(checklistId: string) {
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -167,7 +167,7 @@ function ChecklistSidebarWidget() {
         return;
       }
       if (
-        (payload.type !== 'maverick.widget.data-changed' && payload.type !== 'maverick.app.data-changed') ||
+        (payload.type !== 'loopino.widget.data-changed' && payload.type !== 'loopino.app.data-changed') ||
         payload.owner_app_id !== 'checklist'
       ) {
         return;

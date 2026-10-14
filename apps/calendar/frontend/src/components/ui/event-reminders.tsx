@@ -97,7 +97,7 @@ export function EventReminders({
       {!google && (
         <p>
           {t(
-            "Local reminders are saved in Maverick notifications, even when Calendar is closed.",
+            "Local reminders are saved in Loopino notifications, even when Calendar is closed.",
           )}
         </p>
       )}

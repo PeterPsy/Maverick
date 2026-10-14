@@ -52,7 +52,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
             name="Agents",
             backend=True,
             cli_commands=["agents"],
-            mcp_tools=["maverick_agents_app"],
+            mcp_tools=["loopino_agents_app"],
             views=["agents"],
         )
 
@@ -94,8 +94,8 @@ class ShellCoreApiTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -321,8 +321,8 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual({item["app_id"] for item in platform_status["apps"]}, {"agents", "base-shell", "chat"})
         self.assertEqual(status_new_chat, 200)
         self.assertEqual(new_chat["threads"], [])
-        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / ".maverick-app.json").is_file())
-        self.assertTrue((repo_root / "workspaces" / "client-lab" / "data" / "chat" / ".maverick-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / ".loopino-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "client-lab" / "data" / "chat" / ".loopino-app.json").is_file())
 
     def test_member_without_saved_workspace_selection_falls_back_to_own_workspace_only(self) -> None:
         repo_root = self.make_repo_root()
@@ -729,7 +729,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
                 {"event_type": "runtime.output.delta", "payload": {"text": "Working"}},
             ]
         )
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "hello from codex", "MAVERICK_RUNTIME_FAKE_EVENTS": fake_events}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "hello from codex", "LOOPINO_RUNTIME_FAKE_EVENTS": fake_events}):
             status_session, session, _session_headers = self.invoke(
                 app,
                 path="/api/runtime/sessions",
@@ -777,7 +777,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
         app = PlatformHost(state, start_path=state.repository_root)
         cookie = self.login(app)
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "hello from codex"}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "hello from codex"}):
             _status_session, session, _session_headers = self.invoke(
                 app,
                 path="/api/runtime/sessions",
@@ -809,7 +809,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
         app = PlatformHost(state, start_path=state.repository_root)
         cookie = self.login(app)
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "async hello"}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "async hello"}):
             _status_session, session, _session_headers = self.invoke(
                 app,
                 path="/api/runtime/sessions",
@@ -851,7 +851,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
         app = PlatformHost(state, start_path=state.repository_root)
         cookie = self.login(app)
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "async hello"}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "async hello"}):
             status, payload, _headers = self.invoke(
                 app,
                 path="/api/runtime/sessions",
@@ -915,7 +915,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
         app = PlatformHost(state, start_path=state.repository_root)
         cookie = self.login(app)
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "saw attachment"}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "saw attachment"}):
             _status_session, session, _session_headers = self.invoke(
                 app,
                 path="/api/runtime/sessions",

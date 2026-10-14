@@ -1,4 +1,4 @@
-import { connectAppEventSocket, isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { connectAppEventSocket, isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { listChecklists, readChecklist } from './api';
 import { ChecklistAppSkeleton } from './components/ChecklistLoadingSkeletons';
@@ -94,12 +94,12 @@ export function App() {
   }, [viewMode]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'checklist' }, "*");
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'checklist' }, "*");
   }, []);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -109,7 +109,7 @@ export function App() {
         resource?: string;
         type?: string;
       };
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'checklist')) {
+      if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'checklist')) {
         void handleNavigationParams(payload.params || {});
         return;
       }
@@ -120,7 +120,7 @@ export function App() {
   }, [items]);
 
   useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((payload) => {
-    if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'checklist') {
+    if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'checklist') {
       void load(selectedIdRef.current || undefined);
     }
   }, () => { void load(selectedIdRef.current || undefined); }), []);
@@ -158,7 +158,7 @@ export function App() {
     setViewMode('detail');
     window.parent?.postMessage(
       {
-        type: 'maverick.app.open-app',
+        type: 'loopino.app.open-app',
         app_id: 'checklist',
         params: {
           app_page: `checklists/${item.id}`,

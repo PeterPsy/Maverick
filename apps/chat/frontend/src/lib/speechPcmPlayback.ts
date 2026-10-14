@@ -1,8 +1,8 @@
-const PCM_WORKLET_NAME = "maverick-pcm-stream-player";
+const PCM_WORKLET_NAME = "loopino-pcm-stream-player";
 const DEFAULT_INITIAL_BUFFER_MS = 60;
 
 const PCM_WORKLET_SOURCE = `
-class MaverickPcmStreamPlayer extends AudioWorkletProcessor {
+class LoopinoPcmStreamPlayer extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this.queue = [];
@@ -68,7 +68,7 @@ class MaverickPcmStreamPlayer extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor("${PCM_WORKLET_NAME}", MaverickPcmStreamPlayer);
+registerProcessor("${PCM_WORKLET_NAME}", LoopinoPcmStreamPlayer);
 `;
 
 type AudioContextConstructor = new (options?: AudioContextOptions) => AudioContext;
@@ -368,7 +368,7 @@ export function parseSpeechServerTiming(value: string): Partial<SpeechPcmPlaybac
 }
 
 export function publishSpeechPlaybackMetrics(metrics: SpeechPcmPlaybackMetrics): void {
-  window.dispatchEvent(new CustomEvent("maverick:speech-playback-metrics", { detail: metrics }));
+  window.dispatchEvent(new CustomEvent("loopino:speech-playback-metrics", { detail: metrics }));
 }
 
 function audioContextConstructor(): AudioContextConstructor | null {

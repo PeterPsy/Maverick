@@ -13,8 +13,8 @@ describe('agents modal scroll layout', () => {
   it('uses the base background token and keeps the normal viewport scroll on skills only', () => {
     const styles = readModalStyles();
 
-    expect(styles).toMatch(/\.agent-modal\s*\{[^}]*background: var\(--maverick-bg\);/);
-    expect(styles).not.toMatch(/\.agent-modal\s*\{[^}]*background: var\(--maverick-bg-strong\);/);
+    expect(styles).toMatch(/\.agent-modal\s*\{[^}]*background: var\(--loopino-bg\);/);
+    expect(styles).not.toMatch(/\.agent-modal\s*\{[^}]*background: var\(--loopino-bg-strong\);/);
     expect(styles).toMatch(/\.modal-body\s*\{[^}]*overflow: visible;/);
     expect(styles).toMatch(/\.modal-skill-picker\s*\{[^}]*overflow-y: auto;/);
     expect(styles).toContain('@media (max-height: 700px)');

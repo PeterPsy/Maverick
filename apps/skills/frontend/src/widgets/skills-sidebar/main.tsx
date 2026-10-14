@@ -48,7 +48,7 @@ function useShellMobileLayout() {
 function openSkillInShell(skillId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'skills',
       params: {
         app_page: `skills/${skillId}`,
@@ -58,7 +58,7 @@ function openSkillInShell(skillId: string) {
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -155,7 +155,7 @@ function SkillsSidebarWidget() {
         setSelectedSkillId(activeSkillId);
         return;
       }
-      if (payload.type !== 'maverick.widget.data-changed' || payload.owner_app_id !== 'skills') {
+      if (payload.type !== 'loopino.widget.data-changed' || payload.owner_app_id !== 'skills') {
         return;
       }
       if (payload.resource === 'skills') {

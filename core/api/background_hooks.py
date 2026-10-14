@@ -40,7 +40,7 @@ def start_background_hook_scheduler(state, *, interval_seconds: float | None = N
     thread = Thread(
         target=_run_background_hook_scheduler,
         args=(state, interval, stop),
-        name="maverick-app-background-hooks",
+        name="loopino-app-background-hooks",
         daemon=True,
     )
     thread.start()
@@ -86,7 +86,7 @@ def _run_background_hook_scheduler(state, interval_seconds: float, stop: Event) 
 def _background_hook_interval_seconds(interval_seconds: float | None) -> float:
     if interval_seconds is not None:
         return max(1.0, float(interval_seconds))
-    raw = os.environ.get("MAVERICK_BACKGROUND_HOOK_INTERVAL_SECONDS", "").strip()
+    raw = os.environ.get("LOOPINO_BACKGROUND_HOOK_INTERVAL_SECONDS", "").strip()
     if not raw:
         return DEFAULT_BACKGROUND_HOOK_INTERVAL_SECONDS
     try:

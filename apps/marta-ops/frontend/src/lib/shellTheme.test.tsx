@@ -7,19 +7,19 @@ function ThemeFrame() {
   return null;
 }
 afterEach(() => {
-  delete (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string })
-    .__MAVERICK_PLATFORM_ORIGIN__;
-  delete document.documentElement.dataset.maverickTheme;
+  delete (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string })
+    .__LOOPINO_PLATFORM_ORIGIN__;
+  delete document.documentElement.dataset.loopinoTheme;
   window.history.replaceState({}, "", "/");
 });
 
 it("applies initial light theme and accepts updates only from the exact shell and supported messages", () => {
-  window.history.replaceState({}, "", "/?maverick_theme=light");
+  window.history.replaceState({}, "", "/?loopino_theme=light");
   (
-    window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }
-  ).__MAVERICK_PLATFORM_ORIGIN__ = "https://shell.test";
+    window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string }
+  ).__LOOPINO_PLATFORM_ORIGIN__ = "https://shell.test";
   render(<ThemeFrame />);
-  expect(document.documentElement.dataset.maverickTheme).toBe("light");
+  expect(document.documentElement.dataset.loopinoTheme).toBe("light");
   function send(
     type: string,
     origin: string,
@@ -34,13 +34,13 @@ it("applies initial light theme and accepts updates only from the exact shell an
       }),
     );
   }
-  send("maverick.shell.theme-changed", "https://foreign.test");
-  send("maverick.app.selection-changed", "https://shell.test");
-  expect(document.documentElement.dataset.maverickTheme).toBe("light");
-  send("maverick.shell.theme-changed", "https://shell.test");
+  send("loopino.shell.theme-changed", "https://foreign.test");
+  send("loopino.app.selection-changed", "https://shell.test");
+  expect(document.documentElement.dataset.loopinoTheme).toBe("light");
+  send("loopino.shell.theme-changed", "https://shell.test");
   expect(document.documentElement.style.colorScheme).toBe("dark");
-  send("maverick.widget.context-changed", "https://shell.test", {
+  send("loopino.widget.context-changed", "https://shell.test", {
     context: { content: { shell_theme: { effective: "light" } } },
   });
-  expect(document.documentElement.dataset.maverickTheme).toBe("light");
+  expect(document.documentElement.dataset.loopinoTheme).toBe("light");
 });

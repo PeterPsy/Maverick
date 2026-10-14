@@ -60,7 +60,7 @@ function useShellMobileLayout() {
 function openAgentInShell(agentTypeId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'agents',
       params: {
         app_page: `agent-types/${agentTypeId}`,
@@ -70,7 +70,7 @@ function openAgentInShell(agentTypeId: string) {
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -165,7 +165,7 @@ function AgentsSidebarWidget() {
         setSelectedAgentTypeId(activeAgentTypeId);
         return;
       }
-      if (payload.type !== 'maverick.widget.data-changed' || payload.owner_app_id !== 'agents') {
+      if (payload.type !== 'loopino.widget.data-changed' || payload.owner_app_id !== 'agents') {
         return;
       }
       if (payload.resource === 'configuration') {

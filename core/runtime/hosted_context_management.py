@@ -135,7 +135,7 @@ def manage_hosted_provider_context(
         # deliberately excluded from the provider-visible summary.
         "_active_tool_result_ids": active_tool_result_ids,
         "notice": (
-            "Older provider history was compacted by Maverick. Current platform, "
+            "Older provider history was compacted by Loopino. Current platform, "
             "workspace, agent, skill, authority, and user blocks are reinjected "
             "separately and remain authoritative."
         ),

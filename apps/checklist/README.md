@@ -1,6 +1,6 @@
 # Checklist
 
-Workspace-local Maverick Checklist app.
+Workspace-local Loopino Checklist app.
 
 Checklist is now an agent-owned planning surface rather than a user-editable checkbox list. It still supports simple checklist records for compatibility, but the primary persisted schema represents `agent_plan` and `execution` checklists with task status, priority, dependencies, suggested tools, blocked reasons, agent references, agent dialog references, and subtasks.
 
@@ -8,7 +8,7 @@ The frontend renders agent plans as a read-only process board for users. The sid
 
 ## Contract Notes
 
-The app exposes the Maverick product contract:
+The app exposes the Loopino product contract:
 
 - structured content kind: `checklist.design`
 - widget content kind: `checklist.design`
@@ -30,7 +30,7 @@ Agents can now discover three CLI surfaces:
 - `checklist-view`
 
 and the matching MCP/reference/view tools through scoped app discovery.
-Checklist ships app-owned discovery sidecars at `cli/command_schemas.json` and `mcp/tool_schemas.json`, so `maverick app checklist cli inspect checklist --json` and `maverick app checklist mcp inspect <tool> --json` expose machine-readable descriptions, JSON schemas, examples, output shapes, and policy metadata instead of the generic `{"type":"object"}` fallback.
+Checklist ships app-owned discovery sidecars at `cli/command_schemas.json` and `mcp/tool_schemas.json`, so `loopino app checklist cli inspect checklist --json` and `loopino app checklist mcp inspect <tool> --json` expose machine-readable descriptions, JSON schemas, examples, output shapes, and policy metadata instead of the generic `{"type":"object"}` fallback.
 
 Calling the main CLI command or generic MCP tool without arguments returns the compact `operations.manifest` payload. The `list` operation is compact by default and omits `sections` and `metadata`; use `read` for one full checklist by id, or set `include_content: true` only when a full list is explicitly needed by a UI workflow.
 
@@ -39,11 +39,11 @@ Checklist data is owned by this app under the workspace data root.
 ## SDK Flow
 
 ```bash
-./scripts/maverick core cli run core.app-sdk.validate --app-id checklist --workspace default --json
-./scripts/maverick core cli run core.app-sdk.register-local --app-id checklist --workspace default --json
-./scripts/maverick core cli run core.app-sdk.install-local --app-id checklist --workspace default --json
-./scripts/maverick core cli run core.app-sdk.status --app-id checklist --workspace default --json
-./scripts/maverick core cli run core.app-sdk.package --app-id checklist --workspace default --json
+./scripts/loopino core cli run core.app-sdk.validate --app-id checklist --workspace default --json
+./scripts/loopino core cli run core.app-sdk.register-local --app-id checklist --workspace default --json
+./scripts/loopino core cli run core.app-sdk.install-local --app-id checklist --workspace default --json
+./scripts/loopino core cli run core.app-sdk.status --app-id checklist --workspace default --json
+./scripts/loopino core cli run core.app-sdk.package --app-id checklist --workspace default --json
 ```
 
 ## MCP Shape
@@ -51,17 +51,17 @@ Checklist data is owned by this app under the workspace data root.
 Discover the app without reading source:
 
 ```bash
-maverick app checklist cli list --json
-maverick app checklist cli inspect checklist --json
-maverick app checklist mcp list --json
-maverick app checklist mcp inspect checklist_create --json
+loopino app checklist cli list --json
+loopino app checklist cli inspect checklist --json
+loopino app checklist mcp list --json
+loopino app checklist mcp inspect checklist_create --json
 ```
 
 Use the compact operation manifest first:
 
 ```bash
-maverick app checklist cli run checklist --json
-maverick app checklist mcp call checklist_tasklist --json
+loopino app checklist cli run checklist --json
+loopino app checklist mcp call checklist_tasklist --json
 ```
 
 Use compact list, then full read by id:

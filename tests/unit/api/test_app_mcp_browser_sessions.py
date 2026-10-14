@@ -18,7 +18,7 @@ class AppMcpBrowserSessionTests(unittest.TestCase):
         binding = SimpleNamespace(app_id="browser", public_app_id="browser", data_root="/tmp/browser-fixture")
         actor = McpInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="custom-agent",
                                      effective_mode="sandbox", user_id="user:owner", runtime_session_id="runtime:owner")
-        grant = {"origin": "http://maverick.localhost:8014", "cookie_value": "private-cookie"}
+        grant = {"origin": "http://loopino.localhost:8014", "cookie_value": "private-cookie"}
         with (patch("core.mcp.app_tools.resolve_workspace_app_surface", return_value=(app, parsed)),
               patch("core.mcp.app_tools.resolve_app_secret_payload_requests", return_value=SimpleNamespace(secrets={}, errors=[])),
               patch("core.mcp.app_tools._app_dependencies_payload", return_value={}),
@@ -30,7 +30,7 @@ class AppMcpBrowserSessionTests(unittest.TestCase):
                 only_tool_name="app.browser.browser_session_create", identity_store="identity", runtime_store="runtime", start_path=root)
             definition, handler = definitions[0]
             self.assertTrue(definition.invocation_policy.sandbox_agent_allowed)
-            self.assertEqual(handler({"mode": "maverick_dev_inspector"}, actor), {"session_id": "lab:test", "status_code": 200})
+            self.assertEqual(handler({"mode": "loopino_dev_inspector"}, actor), {"session_id": "lab:test", "status_code": 200})
             issue.assert_called_once_with("identity", None, "runtime", user_id="user:owner", workspace_id="default", runtime_session_id="runtime:owner")
             self.assertEqual(invoke.call_args.kwargs["payload"]["platform_browser_session"], grant)
             self.assertNotIn("private-cookie", str(invoke.return_value))

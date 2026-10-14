@@ -32,7 +32,7 @@ def require_stopped_backend(service_name: str) -> dict[str, str]:
     return status
 
 
-def run_startup_cutover(repository_root: Path, receipt: Path, *, service_name: str = 'maverick-core.service') -> dict:
+def run_startup_cutover(repository_root: Path, receipt: Path, *, service_name: str = 'loopino-core.service') -> dict:
     """Prepare/validate/promote/back up with all backend producers stopped."""
     repository_root = repository_root.resolve(strict=True)
     receipt = receipt.resolve()
@@ -51,7 +51,7 @@ def run_startup_cutover(repository_root: Path, receipt: Path, *, service_name: s
     if progress.get('status') == 'completed':
         return progress
     if selected_adapter() != 'sqlite':
-        raise RuntimeError('Configure MAVERICK_USAGE_STORE=sqlite for the next backend before cutover.')
+        raise RuntimeError('Configure LOOPINO_USAGE_STORE=sqlite for the next backend before cutover.')
     with usage_fence(root, exclusive=True):
         receipt.parent.mkdir(mode=0o2770, parents=True, exist_ok=True)
         progress['service_state'] = status
@@ -80,7 +80,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repository-root', type=Path, required=True)
     parser.add_argument('--receipt', type=Path, required=True, help='Unique receipt under data/control-plane/usage/maintenance/')
-    parser.add_argument('--service-name', default='maverick-core.service')
+    parser.add_argument('--service-name', default='loopino-core.service')
     args = parser.parse_args()
     print(json.dumps(run_startup_cutover(args.repository_root, args.receipt, service_name=args.service_name), indent=2))
 

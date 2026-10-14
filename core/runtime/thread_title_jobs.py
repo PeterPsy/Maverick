@@ -104,7 +104,7 @@ def schedule_runtime_thread_title_generation(
             "title_generator": title_generator,
         },
         daemon=True,
-        name=f"maverick-thread-title-{thread.thread_id}",
+        name=f"loopino-thread-title-{thread.thread_id}",
     )
     worker.start()
 
@@ -224,7 +224,7 @@ def generate_hosted_thread_title(
     prompt = _title_prompt(input_text=input_text, attachments=attachments, app_references=app_references)
     request = TextGenerationRequest(
         model_id=decision.selected_model_id_or_voice_id or "",
-        system_prompt="You generate only concise Maverick chat thread titles as JSON.",
+        system_prompt="You generate only concise Loopino chat thread titles as JSON.",
         messages=[TextGenerationMessage(role="user", content=prompt)],
         max_output_tokens=_HOSTED_TITLE_MAX_OUTPUT_TOKENS,
         timeout_seconds=_title_timeout_seconds(),
@@ -274,7 +274,7 @@ def generate_codex_thread_title(
         model_id=model_id,
         reasoning_effort=reasoning_effort,
     )
-    with tempfile.TemporaryDirectory(prefix="maverick-title-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="loopino-title-") as temp_dir:
         temp_root = Path(temp_dir)
         schema_path = temp_root / "schema.json"
         output_path = temp_root / "title.json"
@@ -394,7 +394,7 @@ def fallback_thread_title(
         if _word_key(word) not in {_word_key(item) for item in words}:
             words.append(word)
     if len(words) < MIN_AI_THREAD_TITLE_WORDS:
-        words = ["Primo", "Messaggio", "Chat", "Maverick"]
+        words = ["Primo", "Messaggio", "Chat", "Loopino"]
     return _bounded_title(" ".join(words[:MAX_AI_THREAD_TITLE_WORDS]))
 
 
@@ -435,7 +435,7 @@ def _openrouter_provider_routing_for_title(
 
 def _codex_title_command(*, repository_root: Path, model_id: str, reasoning_effort: str | None) -> list[str]:
     command = [
-        os.environ.get("MAVERICK_CODEX_COMMAND", "").strip() or "codex",
+        os.environ.get("LOOPINO_CODEX_COMMAND", "").strip() or "codex",
         "exec",
         "--ephemeral",
         "--ignore-rules",
@@ -466,7 +466,7 @@ def _title_prompt(
         "app_references": _stable_items(app_references),
     }
     return (
-        "You generate only concise Maverick chat thread titles.\n"
+        "You generate only concise Loopino chat thread titles.\n"
         "Return a JSON object matching the schema exactly.\n"
         "Title rules: use the same language as the user message; prefer 4 to 8 words, "
         "but use 2 or 3 words when the first message is too short for a specific longer title; "
@@ -494,7 +494,7 @@ def _title_output_schema() -> dict[str, Any]:
 
 
 def _title_timeout_seconds() -> int:
-    raw_value = os.environ.get("MAVERICK_THREAD_TITLE_AI_TIMEOUT_SECONDS", "").strip()
+    raw_value = os.environ.get("LOOPINO_THREAD_TITLE_AI_TIMEOUT_SECONDS", "").strip()
     if not raw_value:
         return _DEFAULT_TITLE_TIMEOUT_SECONDS
     try:

@@ -1,30 +1,30 @@
 :root {
   color-scheme: dark;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-bg-strong: #171717;
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-glass-highlight:
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-bg-strong: #171717;
+  --loopino-surface: rgba(255, 255, 255, 0.055);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-border: rgba(255, 255, 255, 0.08);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-glass-surface: rgba(12, 12, 14, 0.58);
+  --loopino-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
     linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #9ff0ca;
-  --maverick-danger: #ffb3bf;
-  --maverick-warning: #fde68a;
-  --maverick-card-radius: 22px;
-  --maverick-control-radius: 18px;
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --loopino-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.66);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-accent-soft: rgba(255, 255, 255, 0.18);
+  --loopino-text-on-accent: #0a0a0b;
+  --loopino-success: #9ff0ca;
+  --loopino-danger: #ffb3bf;
+  --loopino-warning: #fde68a;
+  --loopino-card-radius: 22px;
+  --loopino-control-radius: 18px;
+  --loopino-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -43,8 +43,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -218,12 +218,12 @@ button {
 }
 
 .mail-folder-tree .hover\:bg-accent\/50:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .mail-folder-tree .bg-accent\/80 {
-  background: var(--maverick-surface-active);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-surface-active);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .mail-folder-tree .border-border\/40 {
@@ -245,7 +245,7 @@ button {
 }
 
 .mail-folder-tree .text-muted-foreground {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .mail-folder-tree .truncate {
@@ -264,7 +264,7 @@ button {
 }
 
 .mail-folder-tree-muted {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .mail-sidebar-skeleton {
@@ -279,7 +279,7 @@ button {
   gap: 0.5rem;
   min-height: 3.05rem;
   border-radius: 22px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.58rem 0.7rem;
 }
 
@@ -343,11 +343,11 @@ button {
 }
 
 .mail-folder-tree-filter-icon {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .mail-folder-tree-filter-icon.is-active {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .mail-folder-tree-provider-icon {
@@ -368,15 +368,15 @@ button {
   height: 1.62rem;
   border-radius: 999px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   place-items: center;
   transition: background 140ms ease, color 140ms ease, opacity 140ms ease, transform 140ms ease;
 }
 
 .mail-folder-tree-sync:hover,
 .mail-folder-tree-sync:focus-visible {
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
   outline: none;
 }
 
@@ -395,7 +395,7 @@ button {
 }
 
 .mail-folder-tree-disconnect {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .mail-folder-tree-sync .is-spinning {
@@ -410,7 +410,7 @@ button {
   min-height: 1.35rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.72rem;
   font-weight: 400;
   padding: 2px 6px;
@@ -418,7 +418,7 @@ button {
 
 .mail-folder-tree-meta {
   max-width: 4.8rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -427,7 +427,7 @@ button {
 
 .mail-sidebar-widget__empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
   line-height: 1.35;
   padding: 0.36rem 0.28rem 0.44rem;
@@ -438,7 +438,7 @@ button {
   border: 1px solid rgba(251, 191, 36, 0.16);
   border-radius: 14px;
   background: rgba(251, 191, 36, 0.1);
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
   font-size: 0.78rem;
   line-height: 1.35;
   padding: 10px 12px;
@@ -465,6 +465,6 @@ button {
 }
 
 .mail-account-label > small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
 }

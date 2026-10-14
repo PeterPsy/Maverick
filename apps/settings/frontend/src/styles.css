@@ -20,23 +20,23 @@
   --color-context-card-border: var(--context-card-border);
   --color-gray-1000: var(--ds-gray-1000);
   --color-gray-alpha-400: var(--ds-gray-alpha-400);
-  --font-sans: var(--maverick-font);
+  --font-sans: var(--loopino-font);
 }
 
 :root {
-  --context-card-border: var(--maverick-border);
-  --ds-gray-1000: var(--maverick-text);
-  --ds-gray-alpha-400: var(--maverick-border-strong);
+  --context-card-border: var(--loopino-border);
+  --ds-gray-1000: var(--loopino-text);
+  --ds-gray-alpha-400: var(--loopino-border-strong);
   --settings-menu-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
-  background: var(--maverick-bg);
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  background: var(--loopino-bg);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 .dark {
-  --context-card-border: var(--maverick-border);
-  --ds-gray-1000: var(--maverick-text);
-  --ds-gray-alpha-400: var(--maverick-border-strong);
+  --context-card-border: var(--loopino-border);
+  --ds-gray-1000: var(--loopino-text);
+  --ds-gray-alpha-400: var(--loopino-border-strong);
 }
 
 * {
@@ -63,8 +63,8 @@ body {
   overflow-x: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 32rem),
-    var(--maverick-bg);
-  color: var(--maverick-text);
+    var(--loopino-bg);
+  color: var(--loopino-text);
 }
 
 button,

@@ -1,6 +1,6 @@
 # PWA Cache M6 Operations, Rollout, And Recovery
 
-This runbook operates M6 hardening for Maverick's transparent browser caches.
+This runbook operates M6 hardening for Loopino's transparent browser caches.
 It does not define a network-absence mode, guarantee local availability, or
 turn cached data into authority. The normative limits and reviewed mutation
 retry registry are in
@@ -143,9 +143,9 @@ Boolean flags remain the primary kill switches. Private data and file cache
 flags remain off unless explicitly enabled:
 
 ```text
-MAVERICK_FEATURE_PWA_DATA_CACHE
-MAVERICK_FEATURE_PWA_APP_CACHE_<APP_ID>
-MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE
+LOOPINO_FEATURE_PWA_DATA_CACHE
+LOOPINO_FEATURE_PWA_APP_CACHE_<APP_ID>
+LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE
 ```
 
 Every PWA flag also accepts independent integer cohort controls:
@@ -171,10 +171,10 @@ behavior with both boolean gates off before entering a cohort.
 Example for a 5% workspace / 25% user Website Studio cohort:
 
 ```text
-MAVERICK_FEATURE_PWA_DATA_CACHE=1
-MAVERICK_FEATURE_PWA_DATA_CACHE_ROLLOUT_WORKSPACE_PERCENT=5
-MAVERICK_FEATURE_PWA_DATA_CACHE_ROLLOUT_USER_PERCENT=25
-MAVERICK_FEATURE_PWA_APP_CACHE_WEBSITE_STUDIO=1
+LOOPINO_FEATURE_PWA_DATA_CACHE=1
+LOOPINO_FEATURE_PWA_DATA_CACHE_ROLLOUT_WORKSPACE_PERCENT=5
+LOOPINO_FEATURE_PWA_DATA_CACHE_ROLLOUT_USER_PERCENT=25
+LOOPINO_FEATURE_PWA_APP_CACHE_WEBSITE_STUDIO=1
 ```
 
 After changing environment-backed flags, restart Core through the deployment's
@@ -187,8 +187,8 @@ the new decision.
 1. Set the affected per-app boolean flag to `off`; for an emergency cohort
    stop, set either percentage to `0`.
 2. If multiple structured adapters are affected, disable
-   `MAVERICK_FEATURE_PWA_DATA_CACHE`.
-3. Disable `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE` independently for file
+   `LOOPINO_FEATURE_PWA_DATA_CACHE`.
+3. Disable `LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE` independently for file
    cache faults.
 4. Restart Core if the deployment reads environment only at process startup,
    verify `/health`, and reload an affected shell.
@@ -207,18 +207,18 @@ For one corrupt or missing static entry, ask the active worker to repair its
 declared precache:
 
 ```js
-navigator.serviceWorker.controller?.postMessage({type: "MAVERICK_RECOVER"})
+navigator.serviceWorker.controller?.postMessage({type: "LOOPINO_RECOVER"})
 ```
 
-Require `MAVERICK_SW_RECOVERED`; `MAVERICK_SW_RECOVERY_FAILED` preserves every
+Require `LOOPINO_SW_RECOVERED`; `LOOPINO_SW_RECOVERY_FAILED` preserves every
 entry that still verifies and increments only a fixed error counter. Recovery
 messages and metrics never include an asset URL.
 
 If worker behavior itself is unsafe, set
-`MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2=off`, restart Core, and load the shell
+`LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2=off`, restart Core, and load the shell
 with working transport. The client unregisters `/sw.js` and deletes only
-`maverick-static-v2:*`, `maverick-app-static-v2`, and
-`maverick-base-shell-v3`. It must not touch IndexedDB, OPFS, or an unrelated
+`loopino-static-v2:*`, `loopino-app-static-v2`, and
+`loopino-base-shell-v3`. It must not touch IndexedDB, OPFS, or an unrelated
 Cache API namespace. Re-enable only after the candidate build passes atomic
 install, interrupted update, corruption, recovery, and rollback drills in
 `docs/runbooks/pwa_shell_v2.md`.
@@ -258,7 +258,7 @@ record; an emulated run must never be relabeled physical.
 
 An exceptional release-owner waiver can admit an incomplete but current
 physical record without changing any scenario outcome. The waiver must use
-`maverick.pwa-cache-device-regression-waiver.v1`, name the same exact candidate,
+`loopino.pwa-cache-device-regression-waiver.v1`, name the same exact candidate,
 be accepted after the evidence was captured, expire within seven days, record
 the exact pass/fail/pending/total counts, and contain zero failed outcomes. It
 may cover only literal `pending` results. It does not waive malformed, stale,

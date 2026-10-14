@@ -18,8 +18,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -105,7 +105,7 @@ button {
   border: 1px solid transparent;
   border-radius: 18px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 0.16rem 0.22rem 0.26rem;
   text-align: center;
   touch-action: pan-x;
@@ -129,12 +129,12 @@ button {
 
 .storage-kind-button:hover,
 .storage-kind-button:focus-visible {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .storage-kind-button.selected {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .storage-kind-button:hover::after,
@@ -376,24 +376,24 @@ button {
 }
 
 .storage-folder-tree .hover\:bg-accent\/50:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .storage-folder-tree .bg-accent\/80 {
-  background: var(--maverick-surface-active);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-surface-active);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .storage-folder-tree .storage-folder-tree-drop-ready {
   background: rgba(159, 240, 202, 0.12);
   box-shadow: inset 0 0 0 1px rgba(159, 240, 202, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .storage-folder-tree .storage-folder-tree-drop-blocked {
   background: rgba(255, 179, 191, 0.12);
   box-shadow: inset 0 0 0 1px rgba(255, 179, 191, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .storage-folder-tree .border-border\/40 {
@@ -415,7 +415,7 @@ button {
 }
 
 .storage-folder-tree .text-muted-foreground {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .storage-folder-tree .truncate {
@@ -446,15 +446,15 @@ button {
   height: 1.62rem;
   border-radius: 999px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   place-items: center;
   transition: background 140ms ease, color 140ms ease, opacity 140ms ease, transform 140ms ease;
 }
 
 .storage-folder-tree-sync:hover,
 .storage-folder-tree-sync:focus-visible {
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
   outline: none;
 }
 
@@ -473,7 +473,7 @@ button {
 }
 
 .storage-folder-tree-disconnect {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .storage-folder-tree-sync .is-spinning {
@@ -498,7 +498,7 @@ button {
   }
 
   50% {
-    color: var(--maverick-danger);
+    color: var(--loopino-danger);
     opacity: 1;
   }
 }
@@ -513,7 +513,7 @@ button {
   border: 1px solid transparent;
   border-radius: 22px;
   background: transparent;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0 0.7rem;
   text-align: left;
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
@@ -521,15 +521,15 @@ button {
 
 .storage-sidebar-row:hover,
 .storage-sidebar-row.is-active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .storage-sidebar-row:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .storage-sidebar-row.is-active {
-  background: var(--maverick-surface-active);
+  background: var(--loopino-surface-active);
 }
 
 .storage-sidebar-row:active {
@@ -542,11 +542,11 @@ button {
   width: 2rem;
   height: 2rem;
   border-radius: 15px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .storage-sidebar-row.is-active .storage-sidebar-row__icon {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .storage-sidebar-row__copy {
@@ -567,13 +567,13 @@ button {
 }
 
 .storage-sidebar-row__copy span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .storage-sidebar-empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -590,7 +590,7 @@ button {
   gap: 0.5rem;
   min-height: 3.05rem;
   border-radius: 22px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.58rem 0.7rem;
 }
 
@@ -697,7 +697,7 @@ button {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .storage-sidebar-footer-button,
@@ -723,7 +723,7 @@ button {
 .storage-sidebar-footer-button:focus-visible:not(:disabled),
 .storage-sidebar-footer-actions.is-naming button:hover:not(:disabled),
 .storage-sidebar-footer-actions.is-naming button:focus-visible:not(:disabled) {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
@@ -821,7 +821,7 @@ button {
   height: 2rem;
   place-items: center;
   border-radius: 999px;
-  background: conic-gradient(var(--maverick-accent) var(--storage-upload-progress), rgba(255, 255, 255, 0.12) 0);
+  background: conic-gradient(var(--loopino-accent) var(--storage-upload-progress), rgba(255, 255, 255, 0.12) 0);
   transform: translateY(-50%);
 }
 
@@ -836,7 +836,7 @@ button {
 .storage-sidebar-upload-progress span {
   position: relative;
   z-index: 1;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.54rem;
   font-weight: 700;
   line-height: 1;
@@ -859,8 +859,8 @@ button {
 }
 
 .storage-sidebar-footer-actions input:focus {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 .storage-sidebar-footer-upload-input {
@@ -921,6 +921,6 @@ button {
 }
 
 .storage-account-label > small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
 }

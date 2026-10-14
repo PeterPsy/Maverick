@@ -29,7 +29,7 @@ export function notifyActiveChecklistSelection(checklistId: string, options: Not
   const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'checklist',
       selection: { checklist_id: normalizedChecklistId }
     },
@@ -39,7 +39,7 @@ export function notifyActiveChecklistSelection(checklistId: string, options: Not
 }
 
 export function checklistIdFromSelectionMessage(payload: ActiveChecklistSelectionMessage) {
-  if (payload.type !== 'maverick.app.selection-changed' || payload.owner_app_id !== 'checklist') {
+  if (payload.type !== 'loopino.app.selection-changed' || payload.owner_app_id !== 'checklist') {
     return '';
   }
   const value = payload.selection && typeof payload.selection.checklist_id === 'string' ? payload.selection.checklist_id.trim() : '';

@@ -26,7 +26,7 @@ def apply_dns(service, job: dict, plan: dict, private: Path) -> dict:
     if zone["status"] != "active":
         return {"waiting": True, "nameservers": zone["name_servers"]}
     snapshot = private / "dns-before.json"
-    marker = "Maverick job " + job["job_id"]
+    marker = "Loopino job " + job["job_id"]
     if not snapshot.exists():
         records = provider.records(zone["id"])
         changes = dns_changes(plan["hostname"], plan["target_ip"], records)
@@ -63,7 +63,7 @@ def restore_dns(service, original_job: dict, plan: dict, private: Path) -> None:
         return
     provider = service.dns_factory(service.secret_store, plan["dns_secret_ref"], actor_user_id=original_job["actor_user_id"])
     backup = json.loads(snapshot.read_text())
-    marker = "Maverick job " + original_job["job_id"]
+    marker = "Loopino job " + original_job["job_id"]
     operations = []
     for item in backup["changes"]:
         if item["action"] == "keep":

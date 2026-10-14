@@ -60,7 +60,7 @@ def _authenticate_device_use_caller(
     context = require_session(state, environ, start_response)
     if isinstance(context, list):
         return context
-    session_id = str(environ.get("HTTP_X_MAVERICK_SESSION_ID") or requested_session_id or "").strip() or None
+    session_id = str(environ.get("HTTP_X_LOOPINO_SESSION_ID") or requested_session_id or "").strip() or None
     binding = None
     if session_id:
         try:

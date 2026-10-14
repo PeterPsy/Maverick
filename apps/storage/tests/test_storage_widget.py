@@ -26,8 +26,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 class StorageWidgetTestCase(unittest.TestCase):
     def bootstrap_state(self, repo_root: Path):
         env = {
-            "MAVERICK_ADMIN_USERNAME": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-            "MAVERICK_ADMIN_PASSWORD": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+            "LOOPINO_ADMIN_USERNAME": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+            "LOOPINO_ADMIN_PASSWORD": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
         }
         with patch.dict(os.environ, env, clear=False):
             return bootstrap_platform_state(start_path=repo_root)
@@ -35,7 +35,7 @@ class StorageWidgetTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -97,8 +97,8 @@ class StorageWidgetTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)

@@ -24,7 +24,7 @@ VIEW_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 
 
 class SurfaceService:
-    """Keep Maverick orchestration outside the native OpenDesign product."""
+    """Keep Loopino orchestration outside the native OpenDesign product."""
 
     def __init__(self, payload: Any, *, client: Any | None = None) -> None:
         self.payload = payload
@@ -189,7 +189,7 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     resource = "delegation" if action in DELEGATION_ACTIONS else "view-state" if action in VIEW_ACTIONS else ""
     return (
         [{
-            "type": "maverick.app.data-changed",
+            "type": "loopino.app.data-changed",
             "owner_app_id": "design-studio",
             "resource": resource,
         }]

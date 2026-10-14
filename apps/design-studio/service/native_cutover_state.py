@@ -19,7 +19,7 @@ GENERATION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MARKER_FILE = "native-cutover.json"
 BACKUP_DIRECTORY = "opendesign-cutover-backups"
 BACKUP_BASE_FILES = (
-    ".maverick-app.json",
+    ".loopino-app.json",
     "adapter-state.json",
     "state.json",
     "delegations/state.json",
@@ -63,7 +63,7 @@ MARKER_FIELDS = {
     "native_ready",
     "rollback_to_legacy_allowed",
     "writer",
-    "semantic_content_copied_to_maverick_state",
+    "semantic_content_copied_to_loopino_state",
 }
 
 
@@ -200,7 +200,7 @@ def utc_now() -> str:
 
 
 def _runtime_files(generation: str) -> tuple[str, str]:
-    runtime = f"opendesign/instances/{generation}/data/maverick-runtime"
+    runtime = f"opendesign/instances/{generation}/data/loopino-runtime"
     return (f"{runtime}/correlations.json", f"{runtime}/conversation-bindings.json")
 
 
@@ -216,7 +216,7 @@ def _validate_marker(marker: object) -> None:
         or marker.get("schema_version") != "1"
         or marker.get("kind") != "design-studio-official-native-cutover"
         or marker.get("writer") != "official-native-opendesign"
-        or marker.get("semantic_content_copied_to_maverick_state") is not False
+        or marker.get("semantic_content_copied_to_loopino_state") is not False
         or marker.get("legacy_source_read_only") is not True
         or marker.get("legacy_writer_enabled") is not False
     ):

@@ -3,7 +3,7 @@ import {
   clearParentPwaCache,
   requestParentPwaCacheDashboard,
   type PwaCacheDashboard,
-} from '@maverick/pwa-cache';
+} from '@loopino/pwa-cache';
 import type { SettingsNotice } from './notice';
 
 export type CacheDiagnosticsViewState = {
@@ -32,7 +32,7 @@ export function createCacheDiagnosticsController(context: {
     context.render();
     try {
       dashboard = await requestParentPwaCacheDashboard();
-      if (!dashboard) throw new Error('Cache diagnostics are unavailable outside the Maverick shell.');
+      if (!dashboard) throw new Error('Cache diagnostics are unavailable outside the Loopino shell.');
     } catch (loadError) {
       error = errorMessage(loadError, 'Unable to inspect this browser cache.');
     } finally {
@@ -47,7 +47,7 @@ export function createCacheDiagnosticsController(context: {
     let confirmed = false;
     try {
       confirmed = await confirmSettingsAction({ title: 'Clear this browser cache?',
-        detail: 'Remove cached Maverick data and local file copies from this browser. Server files, conversations and settings are preserved.',
+        detail: 'Remove cached Loopino data and local file copies from this browser. Server files, conversations and settings are preserved.',
         confirmLabel: 'Clear cache' });
     } finally { confirmationPending = false; }
     if (!confirmed) return;
@@ -56,7 +56,7 @@ export function createCacheDiagnosticsController(context: {
     context.render();
     try {
       const result = await clearParentPwaCache();
-      if (!result) throw new Error('Cache cleanup is unavailable outside the Maverick shell.');
+      if (!result) throw new Error('Cache cleanup is unavailable outside the Loopino shell.');
       const { cleanup } = result;
       if (cleanup.status !== 'complete' || cleanup.pendingCleanupCount > 0) {
         throw new Error('Cache cleanup is still pending. Persistent cache reads remain blocked; retry Clear cache.');

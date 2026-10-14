@@ -7,14 +7,14 @@ import { sanitizeCalendarReadModel } from '../../../calendar/frontend/src/pwaRea
 import {
   LOCAL_PERSISTENCE_POLICY_REVISION,
   deriveLocalPersistencePolicy,
-  type MaverickDataClass,
-  type MaverickProvenance,
+  type LoopinoDataClass,
+  type LoopinoProvenance,
   type ResourceCachePolicy,
-} from "@maverick/pwa-cache";
+} from "@loopino/pwa-cache";
 import runtimeResources from "./pwaDataCacheResourceDeclarations.v1.json";
 
-const RUNTIME_RESOURCE_SCHEMA = "maverick.pwa-data-cache-runtime-resources.v1";
-const DATA_CLASSES = new Set<MaverickDataClass>([
+const RUNTIME_RESOURCE_SCHEMA = "loopino.pwa-data-cache-runtime-resources.v1";
+const DATA_CLASSES = new Set<LoopinoDataClass>([
   "public",
   "workspace_internal_fake",
   "workspace_internal",
@@ -24,7 +24,7 @@ const DATA_CLASSES = new Set<MaverickDataClass>([
   "host_operational_metadata",
   "unclassified",
 ]);
-const PROVENANCE_VALUES = new Set<MaverickProvenance>([
+const PROVENANCE_VALUES = new Set<LoopinoProvenance>([
   "platform_instruction",
   "runtime_context",
   "runtime_capabilities",

@@ -105,7 +105,7 @@ def operations_manifest_payload() -> dict[str, Any]:
         "tools": [
             {
                 "surface": "mcp",
-                "name": "maverick_storage",
+                "name": "loopino_storage",
                 "description": "Generic Storage operation runner for less common actions.",
             },
             {"surface": "mcp", "name": "storage_list_files", "operation": "catalog"},

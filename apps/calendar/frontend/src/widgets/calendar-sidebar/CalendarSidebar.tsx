@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { selectCalendar, syncCalendar } from '../../api';
 import { CALENDAR_UI_STATE_RESOURCE, readCalendarUiState } from '../../calendar-ui-state';
 import type { CalendarConnection, CalendarRemoteCalendar } from '../../components/ui/calendar-types';
@@ -26,14 +26,14 @@ export function CalendarSidebar() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
-      if (payload.owner_app_id !== appId && payload.type !== 'maverick.widget.context-changed') return;
-      if (payload.type === 'maverick.widget.context-changed' || payload.resource === CALENDAR_UI_STATE_RESOURCE) {
+      if (payload.owner_app_id !== appId && payload.type !== 'loopino.widget.context-changed') return;
+      if (payload.type === 'loopino.widget.context-changed' || payload.resource === CALENDAR_UI_STATE_RESOURCE) {
         setUiState(readCalendarUiState(appId));
       }
-      if (payload.type === 'maverick.widget.context-changed'
-          || payload.type === 'maverick.widget.data-changed' && payload.resource !== CALENDAR_UI_STATE_RESOURCE) {
+      if (payload.type === 'loopino.widget.context-changed'
+          || payload.type === 'loopino.widget.data-changed' && payload.resource !== CALENDAR_UI_STATE_RESOURCE) {
         scheduleRefresh();
       }
     }
@@ -42,7 +42,7 @@ export function CalendarSidebar() {
   }, [appId, scheduleRefresh]);
 
   function notify(resource: string) {
-    window.parent?.postMessage({ type: 'maverick.app.data-changed', owner_app_id: appId, resource }, '*');
+    window.parent?.postMessage({ type: 'loopino.app.data-changed', owner_app_id: appId, resource }, '*');
   }
 
   async function updateCalendar(calendar: CalendarRemoteCalendar, options: CalendarOptions) {

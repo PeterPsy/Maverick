@@ -16,7 +16,7 @@ Add the following declaration to the app contract's `provides` array:
 ```
 
 Declare `notifications` in `events.data.resources` with `enabled: true`. Publish
-`{"type":"maverick.app.data-changed","resource":"notifications"}` in `app_events`
+`{"type":"loopino.app.data-changed","resource":"notifications"}` in `app_events`
 when notifications arrive, change, retract, become read, or are dismissed.
 Core stamps the event's owner/workspace and trusted entrypoint `user_id`.
 Persist notifications, deduplication keys, and per-user read/dismiss/action

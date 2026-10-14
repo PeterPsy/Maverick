@@ -18,7 +18,7 @@
     },
     "senses_view_filter": {
       "effect_class": "read",
-      "description": "Read the current Senses workspace-shared frontend view state. Requires an authenticated Maverick actor.",
+      "description": "Read the current Senses workspace-shared frontend view state. Requires an authenticated Loopino actor.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false

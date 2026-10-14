@@ -1,4 +1,4 @@
-# Maverick App SDK Templates
+# Loopino App SDK Templates
 
 Date: 2026-04-21
 
@@ -55,7 +55,7 @@ Generated files are starting source. Replace placeholder behavior with real prod
 - `package.json` build script present.
 - React/Vite source under `frontend/src`.
 - Official frontend build support.
-- If you add mutating actions that emit `maverick.app.data-changed`, also add frontend live-update wiring instead of relying on startup-only loads.
+- If you add mutating actions that emit `loopino.app.data-changed`, also add frontend live-update wiring instead of relying on startup-only loads.
 
 `widget`
 
@@ -64,14 +64,14 @@ Generated files are starting source. Replace placeholder behavior with real prod
 - `package.json` build script present.
 - Widget React source under `frontend/src/widgets/main`.
 - Official frontend build support.
-- If widget state depends on app writes, consume `maverick.widget.data-changed` in the widget frontend.
+- If widget state depends on app writes, consume `loopino.widget.data-changed` in the widget frontend.
 
 `react-vite`
 
 - Mounted React/Vite frontend plus backend.
 - `package.json` build script present.
 - Official frontend build support.
-- Use `maverick app <app_id> frontend build --json` after frontend edits.
+- Use `loopino app <app_id> frontend build --json` after frontend edits.
 - When app writes emit live change events, wire the frontend to `/api/apps/events/ws` or shell-forwarded `postMessage` updates.
 
 `entity-sqlite`
@@ -80,4 +80,4 @@ Generated files are starting source. Replace placeholder behavior with real prod
 - `package.json` build script present.
 - Official frontend build support.
 - Best starting point when developers need to learn how to expose a complete app surface area cleanly.
-- Treat emitted `maverick.app.data-changed` events as part of the template completion bar for mounted views.
+- Treat emitted `loopino.app.data-changed` events as part of the template completion bar for mounted views.

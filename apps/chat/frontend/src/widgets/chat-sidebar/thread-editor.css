@@ -8,7 +8,7 @@
   display: grid;
   gap: 5px;
   min-width: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 10px;
   font-weight: 500;
   line-height: 1.2;
@@ -22,7 +22,7 @@
   border: 1px solid var(--chat-sidebar-soft-border);
   border-radius: 7px;
   background: var(--chat-sidebar-edit-surface);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   transition: background 140ms ease;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .bs-chat-thread-editor__project > svg {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   pointer-events: none;
 }
 
@@ -52,12 +52,12 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font: inherit;
   font-size: 12px;
   font-weight: 400;
   cursor: pointer;
-  color-scheme: var(--maverick-color-scheme);
+  color-scheme: var(--loopino-color-scheme);
 }
 
 .bs-chat-thread-editor__project option {
@@ -91,7 +91,7 @@
   padding: 0 9px;
   border-radius: 7px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 12px;
   line-height: 1;
   transition:
@@ -103,19 +103,19 @@
 .bs-chat-thread-editor__footer button:hover:not(:disabled),
 .bs-chat-thread-editor__footer button:focus-visible {
   background: var(--chat-sidebar-soft-surface-hover);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .bs-chat-thread-editor__footer button.is-primary {
   background: var(--chat-sidebar-soft-surface-active);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-weight: 600;
 }
 
 .bs-chat-thread-editor__footer button.is-primary:hover:not(:disabled),
 .bs-chat-thread-editor__footer button.is-primary:focus-visible {
-  background: rgba(var(--maverick-contrast-rgb), 0.22);
+  background: rgba(var(--loopino-contrast-rgb), 0.22);
 }
 
 .bs-chat-thread-editor__footer button.bs-chat-thread-editor__delete {

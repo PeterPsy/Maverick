@@ -34,17 +34,17 @@ def execute(root, body, *, access):
         raise PublicDenied('Private request context is not accepted.')
     action = body['action'].removeprefix('crm.')
     if action not in READS and action not in WRITES:
-        raise PublicDenied('This operation is available only inside Maverick, not on the public CRM.')
+        raise PublicDenied('This operation is available only inside Loopino, not on the public CRM.')
     if action in WRITES and access != 'read-write':
         raise PublicDenied('The public CRM is read-only. Changes are disabled by its administrator.')
     if action in {'import_plan', 'import_apply'}:
         source = body.get('source')
         if not isinstance(source, dict) or source.get('format', 'json') not in {'csv', 'json', 'versy'}:
-            raise PublicDenied('Full backup restore, including integration authority, is private to Maverick.')
+            raise PublicDenied('Full backup restore, including integration authority, is private to Loopino.')
     if action in {'approve_workflow_proposal', 'dismiss_workflow_proposal', 'reject_workflow_proposal', 'apply_workflow_proposal'}:
         _, preview = handle_action(root, 'crm.workflow_proposal_preview', {'id': body.get('id')})
         if preview['preview']['action_type'] == 'provider_operation':
-            raise PublicDenied('Integration proposals can only be reviewed inside Maverick.')
+            raise PublicDenied('Integration proposals can only be reviewed inside Loopino.')
     canonical = 'crm.' + action
     code, result = handle_action(root, canonical, {**body, 'action': canonical})
     # Public visitors never inherit the owner's shared private view selection.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CacheLifecycleController, LOCAL_PERSISTENCE_POLICY_REVISION, PWA_CACHE_ENTRY_SCHEMA_VERSION, type CacheEntryMetadata } from '@maverick/pwa-cache';
+import { CacheLifecycleController, LOCAL_PERSISTENCE_POLICY_REVISION, PWA_CACHE_ENTRY_SCHEMA_VERSION, type CacheEntryMetadata } from '@loopino/pwa-cache';
 import { CacheBus, MemoryCacheBackend, cacheEntryKey } from '../../../../packages/pwa-cache/src/testing';
 
 function metadata(userId: string, workspaceId = 'default'): CacheEntryMetadata {

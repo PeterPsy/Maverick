@@ -179,7 +179,7 @@ def discover_antigravity_native_catalog(
             return cached
         try:
             with tempfile.TemporaryDirectory(
-                prefix="maverick-antigravity-catalog-"
+                prefix="loopino-antigravity-catalog-"
             ) as folder:
                 runtime = Path(folder)
                 home = prepare_antigravity_runtime_home(

@@ -116,7 +116,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         )
 
     def make_json_store(self, repo_root: Path) -> RuntimeDocumentStore:
-        state_root = repo_root / ".maverick" / "local-state" / "runtime"
+        state_root = repo_root / ".loopino" / "local-state" / "runtime"
         return RuntimeDocumentStore(
             RuntimeCollections(
                 sessions=RuntimeSessionJsonCollection(start_path=repo_root, filename="session.json"),
@@ -133,7 +133,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         (repo_root / "core").mkdir(parents=True)
         (repo_root / "apps").mkdir()
         (repo_root / "workspaces").mkdir()
@@ -205,7 +205,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
 
     def test_runtime_cleanup_refuses_to_delete_unexpected_runtime_root(self) -> None:
         repo_root = self.make_repo_root()
-        unsafe_root = repo_root / ".maverick" / "local-state"
+        unsafe_root = repo_root / ".loopino" / "local-state"
         unsafe_root.mkdir(parents=True, exist_ok=True)
         marker = unsafe_root / "do-not-delete.txt"
         marker.write_text("keep\n", encoding="utf-8")
@@ -804,10 +804,10 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertTrue((session_root / "turns.json").is_file())
         self.assertTrue((session_root / "events.json").is_file())
         self.assertTrue((session_root / "state.json").is_file())
-        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "sessions.json").exists())
-        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "turns.json").exists())
-        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "events.json").exists())
-        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "states.json").exists())
+        self.assertFalse((repo_root / ".loopino" / "local-state" / "runtime" / "sessions.json").exists())
+        self.assertFalse((repo_root / ".loopino" / "local-state" / "runtime" / "turns.json").exists())
+        self.assertFalse((repo_root / ".loopino" / "local-state" / "runtime" / "events.json").exists())
+        self.assertFalse((repo_root / ".loopino" / "local-state" / "runtime" / "states.json").exists())
 
     def test_json_event_history_is_bounded_per_session_partition(self) -> None:
         repo_root = self.make_repo_root()
@@ -901,7 +901,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(second_store.get_thread("thread-1").runtime_session_id, "sess-thread")
         self.assertEqual(second_store.list_threads("acme")[0].thread_id, "thread-1")
         self.assertTrue((repo_root / "workspaces" / "acme" / "runtime" / "threads.json").is_file())
-        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "threads.json").exists())
+        self.assertFalse((repo_root / ".loopino" / "local-state" / "runtime" / "threads.json").exists())
 
     def test_runtime_threads_are_ordered_by_latest_user_message_only(self) -> None:
         store = self.make_store()

@@ -10,10 +10,10 @@ from external_apps.tls_requests import requested_hosts
 
 class InstallationDomainTests(unittest.TestCase):
     def test_domain_follows_any_installation_not_a_provider_or_fixed_hostname(self):
-        for installation in ("maverick.loopino.ai", "example.org", "tenant.tools.example.net"):
+        for installation in ("loopino.giuntitrail.com", "example.org", "tenant.tools.example.net"):
             self.assertEqual(public_domain(installation), "apps." + installation)
-        self.assertEqual(public_domain("MAVERICK.EXAMPLE.ORG"), "apps.maverick.example.org")
-        for invalid in ("", "localhost", "34.17.71.112", "https://maverick.example.org", "*.example.org", "example.org:443", "example.org/path"):
+        self.assertEqual(public_domain("LOOPINO.EXAMPLE.ORG"), "apps.loopino.example.org")
+        for invalid in ("", "localhost", "34.17.71.112", "https://loopino.example.org", "*.example.org", "example.org:443", "example.org/path"):
             with self.subTest(invalid=invalid), self.assertRaises(AppError):
                 public_domain(invalid)
 
@@ -21,9 +21,9 @@ class InstallationDomainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             first = configure(root, "example.org", has_apps=False)
-            updated = configure(root, "maverick.example.net", has_apps=False)
+            updated = configure(root, "loopino.example.net", has_apps=False)
             self.assertEqual(first["namespace"], updated["namespace"])
-            self.assertEqual(load(root)["installation_domain"], "maverick.example.net")
+            self.assertEqual(load(root)["installation_domain"], "loopino.example.net")
             with self.assertRaisesRegex(AppError, "domain_change_not_supported"):
                 configure(root, "other.example.net", has_apps=True)
 

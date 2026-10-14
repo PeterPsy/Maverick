@@ -1,7 +1,7 @@
 import { startMailThreadPointerDrag } from '../../../../mail/frontend/src/lib/mailThreadPointerDrag';
 import { mailThreadDragPayloadFromThread, writeMailThreadDragData } from '../../../../mail/frontend/src/lib/mailThreadDragDrop';
 
-Object.defineProperty(window, '__MAVERICK_PLATFORM_ORIGIN__', { value: new URLSearchParams(location.search).get('shell_origin') });
+Object.defineProperty(window, '__LOOPINO_PLATFORM_ORIGIN__', { value: new URLSearchParams(location.search).get('shell_origin') });
 const row = document.getElementById('row')!;
 const mail = document.getElementById('mail')!;
 const thread = {

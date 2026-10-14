@@ -121,5 +121,5 @@ class RuntimeUsageSqliteSurfaceTests(RuntimeUsageSurfaceTests):
         self.addCleanup(scratch.cleanup)
         store = UsageSqliteStore(Path(scratch.name) / "usage.sqlite")
         store.initialize()
-        store.save_sample_if_absent(self.sample)
+        store.ingest_observation(lambda _history: self.sample, payload={})
         self.usage = store

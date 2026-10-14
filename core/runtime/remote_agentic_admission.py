@@ -8,10 +8,10 @@ from core.providers.agentic_data_policies import (
 )
 from core.providers.errors import AgenticProfileError
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-    MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
     feature_enabled,
 )
 from core.workspaces.data_governance import WorkspaceDataAttestation
@@ -19,15 +19,15 @@ from core.workspaces.data_governance import WorkspaceDataAttestation
 
 REMOTE_AGENTIC_PROVIDER_FLAGS = {
     "antigravity-cli": (
-        MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+        LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
         "antigravity_agentic_preview_disabled",
     ),
     "google-ai-studio": (
-        MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+        LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
         "google_agentic_preview_disabled",
     ),
     "openrouter": (
-        MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+        LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
         "openrouter_agentic_preview_disabled",
     ),
 }
@@ -100,7 +100,7 @@ def remote_agentic_availability_reason(
     if not is_remote_agentic_identity(binding_or_definition):
         return None
     if not feature_enabled(
-        MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+        LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
         environment=environment,
     ):
         return "hosted_agent_runtime_disabled"

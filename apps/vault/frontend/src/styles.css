@@ -1,31 +1,31 @@
 :root {
   color-scheme: dark;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-bg-strong: #171717;
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-glass-highlight:
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-bg-strong: #171717;
+  --loopino-surface: rgba(255, 255, 255, 0.055);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-border: rgba(255, 255, 255, 0.08);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-glass-surface: rgba(12, 12, 14, 0.58);
+  --loopino-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
     linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #9ff0ca;
-  --maverick-warning: #ffd891;
-  --maverick-danger: #ffb3bf;
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
-  background: var(--maverick-bg);
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  --loopino-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.66);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-accent-soft: rgba(255, 255, 255, 0.18);
+  --loopino-text-on-accent: #0a0a0b;
+  --loopino-success: #9ff0ca;
+  --loopino-warning: #ffd891;
+  --loopino-danger: #ffb3bf;
+  --loopino-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  background: var(--loopino-bg);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 * {
@@ -43,7 +43,7 @@ body {
   margin: 0;
   min-width: 320px;
   overflow: hidden;
-  background: var(--maverick-bg);
+  background: var(--loopino-bg);
 }
 
 button,
@@ -55,9 +55,9 @@ textarea {
 }
 
 button {
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
   min-height: 2.35rem;
   padding: 0 0.86rem;
   display: inline-flex;
@@ -68,8 +68,8 @@ button {
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
 }
 
 button:disabled {
@@ -82,25 +82,25 @@ select,
 textarea {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.045);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0.72rem 0.78rem;
   outline: none;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 input:focus,
 select:focus,
 textarea:focus,
 button:focus-visible {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 select {
@@ -108,8 +108,8 @@ select {
 }
 
 select option {
-  background: var(--maverick-bg-strong);
-  color: var(--maverick-text);
+  background: var(--loopino-bg-strong);
+  color: var(--loopino-text);
 }
 
 fieldset,
@@ -188,7 +188,7 @@ fieldset {
 td span,
 .vault-stat em,
 .vault-timeline time {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .vault-topbar__actions {
@@ -228,10 +228,10 @@ td > button {
 .vault-panel,
 .vault-table-wrap,
 .vault-timeline {
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 14px;
-  background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  background: var(--loopino-glass-highlight), var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
 }
 
 .vault-stat {
@@ -248,13 +248,13 @@ td > button {
 }
 
 .vault-stat:hover {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-glass-highlight), var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-glass-highlight), var(--loopino-surface-hover);
 }
 
 .vault-stat.is-active {
-  border-color: var(--maverick-accent);
-  box-shadow: var(--maverick-inner-edge), 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: var(--loopino-inner-edge), 0 0 0 3px var(--loopino-accent-soft);
 }
 
 .vault-stat__icon {
@@ -263,8 +263,8 @@ td > button {
   width: 1.72rem;
   height: 1.72rem;
   border-radius: 999px;
-  background: var(--maverick-surface);
-  color: var(--maverick-text);
+  background: var(--loopino-surface);
+  color: var(--loopino-text);
 }
 
 .vault-stat strong {
@@ -288,14 +288,14 @@ td > button {
   gap: 10px;
   width: min(640px, 100%);
   min-height: 44px;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-glass-surface);
+  background: var(--loopino-glass-surface);
   padding: 0 14px;
 }
 
 .vault-search svg {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .vault-search input {
@@ -303,26 +303,26 @@ td > button {
   min-width: 0;
   border: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
   padding: 0;
   box-shadow: none;
 }
 
 .vault-search input::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .vault-search:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 .vault-error {
   border: 1px solid rgba(255, 179, 191, 0.3);
   border-radius: 12px;
   background: rgba(255, 179, 191, 0.11);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
   padding: 0.78rem 0.92rem;
 }
 
@@ -368,10 +368,10 @@ td > button {
 
 .vault-panel-header > span {
   flex: 0 0 auto;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-surface);
+  color: var(--loopino-text-muted);
   padding: 0.32rem 0.62rem;
   font-size: 0.78rem;
 }
@@ -387,7 +387,7 @@ td > button {
   top: 0;
   z-index: 2;
   min-height: 64px;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   background: rgba(12, 12, 14, 0.96);
   padding: 0.86rem 0.95rem;
 }
@@ -401,20 +401,20 @@ table {
 th,
 td {
   padding: 0.82rem 0.95rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   text-align: left;
   vertical-align: middle;
 }
 
 th {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 td {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.9rem;
 }
 
@@ -444,7 +444,7 @@ td span {
 }
 
 .vault-secret-row:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--maverick-accent);
+  box-shadow: inset 0 0 0 2px var(--loopino-accent);
 }
 
 .vault-actions {
@@ -466,26 +466,26 @@ td span {
   padding: 0 0.58rem;
   font-size: 0.76rem;
   font-weight: 700;
-  background: var(--maverick-surface-active);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-surface-active);
+  color: var(--loopino-text-muted);
 }
 
 .vault-status.is-active,
 .vault-status.is-succeeded,
 .vault-status.is-healthy {
   background: rgba(159, 240, 202, 0.14);
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .vault-status.is-disabled,
 .vault-status.is-failed {
   background: rgba(255, 179, 191, 0.12);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .vault-status.is-revoked {
   background: rgba(255, 255, 255, 0.1);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .vault-status.is-attempted,
@@ -500,15 +500,15 @@ td span {
 .vault-status.is-orphaned,
 .vault-status.is-expired {
   background: rgba(255, 216, 145, 0.12);
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
 }
 
 .vault-readiness {
   min-height: 0;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 14px;
-  background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  background: var(--loopino-glass-highlight), var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
   overflow: auto;
 }
 
@@ -516,7 +516,7 @@ td span {
   position: sticky;
   top: 0;
   z-index: 2;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   background: rgba(12, 12, 14, 0.96);
   padding: 0.86rem 0.95rem;
 }
@@ -531,7 +531,7 @@ td span {
   gap: 0.82rem;
   align-items: center;
   padding: 0.9rem 0.95rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
 }
 
 .vault-readiness-item__icon {
@@ -541,12 +541,12 @@ td span {
   height: 2rem;
   border-radius: 10px;
   background: rgba(255, 216, 145, 0.12);
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
 }
 
 .vault-readiness-item.is-blocked .vault-readiness-item__icon {
   background: rgba(255, 179, 191, 0.12);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .vault-readiness-item strong {
@@ -556,7 +556,7 @@ td span {
 
 .vault-readiness-item p {
   margin: 0 0 0.45rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   line-height: 1.35;
 }
 
@@ -576,7 +576,7 @@ td span {
 }
 
 .vault-readiness-item__body dt {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -586,7 +586,7 @@ td span {
   margin: 0.16rem 0 0;
   min-width: 0;
   overflow: hidden;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -594,14 +594,14 @@ td span {
 
 .vault-technical-details {
   margin-top: 0.42rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.8rem;
 }
 
 .vault-technical-details summary {
   width: fit-content;
   cursor: pointer;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .vault-technical-details p {
@@ -615,10 +615,10 @@ td span {
 }
 
 .vault-import-view {
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 14px;
-  background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  background: var(--loopino-glass-highlight), var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
   padding: 0.95rem;
 }
 
@@ -638,7 +638,7 @@ td span {
   position: sticky;
   top: 0;
   z-index: 2;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   background: rgba(12, 12, 14, 0.96);
   padding: 0.86rem 0.95rem;
 }
@@ -650,7 +650,7 @@ td span {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
   gap: 0.55rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   background: rgba(12, 12, 14, 0.96);
   padding: 0.72rem 0.95rem;
 }
@@ -660,12 +660,12 @@ td span {
   grid-template-columns: 7.5rem minmax(0, 1fr);
   gap: 0.9rem;
   padding: 0.9rem 0.95rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
 }
 
 .vault-timeline p {
   margin: 0.2rem 0 0.32rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   line-height: 1.35;
 }
 
@@ -677,7 +677,7 @@ td span {
   display: grid;
   place-items: center;
   min-height: 12rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 1rem;
   text-align: center;
 }

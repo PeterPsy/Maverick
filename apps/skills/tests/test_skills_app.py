@@ -38,10 +38,25 @@ def load_skills_backend_modules():
 
 
 class SkillsAppTestCase(unittest.TestCase):
+    def test_bundled_templates_respect_installation_selection(self) -> None:
+        load_skills_backend_modules()
+        seeds = importlib.import_module("seeds")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "core").mkdir()
+            (root / "AGENTS.md").touch()
+            for name in ("standard", "company-extension"):
+                skill = root / "apps" / name / "skills" / (name + "-skill")
+                skill.mkdir(parents=True)
+                (skill / "SKILL.md").write_text("# Bundled template\n")
+                (root / "apps" / name / "app_contract.json").write_text("{}")
+            (root / "apps/bootstrap.json").write_text(json.dumps({"schema_version": "1", "app_ids": ["standard"]}))
+            self.assertEqual([path.name for path in seeds.source_skill_roots(root)], ["standard-skill"])
+
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -81,8 +96,8 @@ class SkillsAppTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -94,7 +109,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "skills")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
-        self.assertIn("maverick_skills_app", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("loopino_skills_app", parsed.contract.capabilities.mcp_tools)
         self.assertIn("skills_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("skills_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["skills", "sync"])
@@ -127,15 +142,15 @@ class SkillsAppTestCase(unittest.TestCase):
     def test_bundled_sdk_skill_sources_do_not_reference_installation_global_paths(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         skill_paths = [
-            app_root / "skills" / "maverick-code-skill" / "SKILL.md",
-            app_root / "skills" / "maverick-app-creator" / "SKILL.md",
+            app_root / "skills" / "loopino-code-skill" / "SKILL.md",
+            app_root / "skills" / "loopino-app-creator" / "SKILL.md",
         ]
 
         for skill_path in skill_paths:
             with self.subTest(skill_path=skill_path):
                 content = skill_path.read_text(encoding="utf-8")
                 self.assertNotIn("<repo>", content)
-                self.assertNotIn("maverick/workspaces/default", content)
+                self.assertNotIn("loopino/workspaces/default", content)
                 self.assertNotIn("docs/architecture", content)
                 self.assertNotIn("core_architecture", content)
                 self.assertNotIn("workspace_root_architecture", content)
@@ -161,7 +176,7 @@ class SkillsAppTestCase(unittest.TestCase):
         mcp_schema = json.loads((Path(__file__).resolve().parents[1] / "mcp" / "tool_schemas.json").read_text())
         for schema in (
             cli_schema["commands"]["skills"],
-            mcp_schema["tools"]["maverick_skills_app"],
+            mcp_schema["tools"]["loopino_skills_app"],
         ):
             effects = schema["effect_class_by_argument"]["value_effect_classes"]
             self.assertEqual(effects["prompts_chat.search_skills"], "read")
@@ -170,11 +185,11 @@ class SkillsAppTestCase(unittest.TestCase):
 
     def test_app_creator_requires_an_app_owned_compact_icon(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
-        content = (app_root / "skills" / "maverick-app-creator" / "SKILL.md").read_text(encoding="utf-8")
+        content = (app_root / "skills" / "loopino-app-creator" / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertIn("## App Icon Is Part Of The App", content)
-        self.assertIn("frontend/public/maverick-icon-compact.png", content)
-        self.assertIn("frontend/dist/maverick-icon-compact.png", content)
+        self.assertIn("frontend/public/loopino-icon-compact.png", content)
+        self.assertIn("frontend/dist/loopino-icon-compact.png", content)
         self.assertIn("desktop rail", content)
         self.assertIn("App Store", content)
         self.assertIn("do not add the new app id to a hardcoded core", content)
@@ -275,7 +290,7 @@ class SkillsAppTestCase(unittest.TestCase):
             self.assertEqual(detail_status, 404)
             self.assertEqual(detail_payload["error"], "skill_not_found")
 
-    def test_seeded_skills_are_identified_as_maverick_templates(self) -> None:
+    def test_seeded_skills_are_identified_as_loopino_templates(self) -> None:
         service, store = load_skills_backend_modules()
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "skills"
@@ -289,8 +304,8 @@ class SkillsAppTestCase(unittest.TestCase):
 
             self.assertEqual(status, 200)
             skills_by_id = {item["id"]: item for item in payload["skills"]}
-            self.assertEqual(skills_by_id["skills-ops"]["origin"], "maverick")
-            self.assertEqual(store.get_skill(data_root, "skills-ops")["origin"], "maverick")
+            self.assertEqual(skills_by_id["skills-ops"]["origin"], "loopino")
+            self.assertEqual(store.get_skill(data_root, "skills-ops")["origin"], "loopino")
 
     def test_catalog_drops_stale_state_entries_without_skill_files(self) -> None:
         service, store = load_skills_backend_modules()
@@ -320,14 +335,14 @@ class SkillsAppTestCase(unittest.TestCase):
         service, store = load_skills_backend_modules()
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "skills"
-            skill_root = data_root / "skills" / "maverick-app-creator"
+            skill_root = data_root / "skills" / "loopino-app-creator"
             skill_root.mkdir(parents=True)
             skill_root.joinpath("SKILL.md").write_text(
                 "---\n"
-                "name: maverick-app-creator\n"
+                "name: loopino-app-creator\n"
                 "description: Current clean-slate creator.\n"
                 "---\n\n"
-                "# Maverick App Creator\n\nCreate a new app.\n",
+                "# Loopino App Creator\n\nCreate a new app.\n",
                 encoding="utf-8",
             )
             store.ensure_data_root(data_root)
@@ -335,14 +350,14 @@ class SkillsAppTestCase(unittest.TestCase):
                 data_root,
                 [
                     {
-                        "id": "maverick-app-creator",
-                        "name": "maverick-app-creator",
+                        "id": "loopino-app-creator",
+                        "name": "loopino-app-creator",
                         "description": "Old duplicate description.",
                         "enabled": True,
                     },
                     {
-                        "id": "maverick-app-creator",
-                        "name": "maverick-app-creator",
+                        "id": "loopino-app-creator",
+                        "name": "loopino-app-creator",
                         "description": "Another stale duplicate.",
                         "enabled": True,
                     },
@@ -359,9 +374,9 @@ class SkillsAppTestCase(unittest.TestCase):
             rewritten = store.read_state(data_root)
 
             self.assertEqual(status, 200)
-            self.assertEqual([item["id"] for item in payload["skills"]], ["maverick-app-creator"])
+            self.assertEqual([item["id"] for item in payload["skills"]], ["loopino-app-creator"])
             self.assertEqual(payload["skills"][0]["description"], "Current clean-slate creator.")
-            self.assertEqual([item["id"] for item in rewritten["skills"]], ["maverick-app-creator"])
+            self.assertEqual([item["id"] for item in rewritten["skills"]], ["loopino-app-creator"])
 
     @integration_test("skills platform integration suite; run with scripts/test_suite.py --level integration")
     def test_bootstrap_installs_skills_and_exposes_surfaces(self) -> None:
@@ -378,7 +393,7 @@ class SkillsAppTestCase(unittest.TestCase):
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         skills = list_available_workspace_skills(workspace_id="default", start_path=repo_root)
 
-        self.assertIn("app.skills.maverick_skills_app", [tool.tool_name for tool in tools])
+        self.assertIn("app.skills.loopino_skills_app", [tool.tool_name for tool in tools])
         self.assertIn("app.skills.skills", [command.command_id for command in commands])
         self.assertIn("skills-ops", [skill.skill_id for skill in skills])
         self.assertIn("generate-image", [skill.skill_id for skill in skills])
@@ -416,7 +431,7 @@ class SkillsAppTestCase(unittest.TestCase):
         state = bootstrap_platform_state(start_path=repo_root)
 
         mcp_payload = call_mcp_tool(
-            tool_name="app.skills.maverick_skills_app",
+            tool_name="app.skills.loopino_skills_app",
             context=McpInvocationContext(
                 caller_kind="sandbox_agent",
                 workspace_id="default",

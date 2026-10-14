@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { syncAppFrameShellLayout } from "../src/lib/appFrameShellLayout";
-import { setMaverickFrameOrigin } from "../src/iframePolicy";
+import { setLoopinoFrameOrigin } from "../src/iframePolicy";
 
 const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-one", workspaceId: "default" });
 
@@ -15,20 +15,20 @@ describe("app frame shell layout bridge", () => {
     expect(syncAppFrameShellLayout(iframe, true)).toBe(false);
     expect(postMessage).not.toHaveBeenCalled();
 
-    setMaverickFrameOrigin(iframe, "https://af-layout.sidecars.maverick.test", "chat", FRAME_SCOPE);
+    setLoopinoFrameOrigin(iframe, "https://af-layout.sidecars.loopino.test", "chat", FRAME_SCOPE);
     expect(syncAppFrameShellLayout(iframe, true)).toBe(true);
     expect(postMessage).toHaveBeenLastCalledWith(
-      { mobile: true, type: "maverick.shell.layout-changed" },
-      "https://af-layout.sidecars.maverick.test",
+      { mobile: true, type: "loopino.shell.layout-changed" },
+      "https://af-layout.sidecars.loopino.test",
     );
 
     expect(syncAppFrameShellLayout(iframe, false)).toBe(true);
     expect(postMessage).toHaveBeenLastCalledWith(
-      { mobile: false, type: "maverick.shell.layout-changed" },
-      "https://af-layout.sidecars.maverick.test",
+      { mobile: false, type: "loopino.shell.layout-changed" },
+      "https://af-layout.sidecars.loopino.test",
     );
 
-    setMaverickFrameOrigin(iframe, null, "chat", FRAME_SCOPE);
+    setLoopinoFrameOrigin(iframe, null, "chat", FRAME_SCOPE);
     iframe.remove();
   });
 });

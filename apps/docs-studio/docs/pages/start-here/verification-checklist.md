@@ -11,22 +11,22 @@ python3 scripts/check_unused_imports.py
 ## Workspace-local app checks
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-id <app_id> --json
-maverick core cli run core.app-sdk.register-local --app-id <app_id> --json
-maverick core cli run core.app-sdk.install-local --app-id <app_id> --json
-maverick core cli run core.app-sdk.status --app-id <app_id> --json
+loopino core cli run core.app-sdk.validate --app-id <app_id> --json
+loopino core cli run core.app-sdk.register-local --app-id <app_id> --json
+loopino core cli run core.app-sdk.install-local --app-id <app_id> --json
+loopino core cli run core.app-sdk.status --app-id <app_id> --json
 ```
 
 ## Frontend checks
 
 ```bash
 npm run build
-maverick app <app_id> frontend build --json
+loopino app <app_id> frontend build --json
 ```
 
 ## Smoke checks
 
-- [ ] App is listed by `maverick apps list --json`.
+- [ ] App is listed by `loopino apps list --json`.
 - [ ] Declared CLI commands appear in scoped CLI discovery.
 - [ ] Declared MCP tools appear in scoped MCP discovery.
 - [ ] App data exists under `data/<app_id>`.

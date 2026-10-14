@@ -45,13 +45,13 @@ class BoundedHandlerProcessRunner:
         self.process_stop_grace_seconds = process_stop_grace_seconds
 
     def run(self, context: JobExecutionContext, handler: JobHandler) -> JobExecutionResult:
-        scratch_root = Path(tempfile.mkdtemp(prefix="maverick-job-executor-"))
+        scratch_root = Path(tempfile.mkdtemp(prefix="loopino-job-executor-"))
         parent_connection, child_connection = self.process_context.Pipe(duplex=True)
         handler_job = _without_lease_authority(context.job)
         process = self.process_context.Process(
             target=_handler_process_main,
             args=(handler, handler_job, context.executor_id, child_connection, scratch_root),
-            name=f"maverick-job-{context.job.job_id}",
+            name=f"loopino-job-{context.job.job_id}",
         )
         process.daemon = False
         started_at = time.monotonic()

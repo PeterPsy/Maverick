@@ -133,7 +133,7 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
 
     async def test_launch_rejects_api_key_or_provider_binding(self):
         for secret_env, credential_binding_id in (
-            ({"MAVERICK_PROVIDER_SECRET": "wrong-credential-kind"}, None),
+            ({"LOOPINO_PROVIDER_SECRET": "wrong-credential-kind"}, None),
             ({}, "google-api-binding"),
         ):
             with self.subTest(

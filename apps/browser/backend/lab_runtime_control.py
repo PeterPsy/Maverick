@@ -50,7 +50,7 @@ def ensure_running(*, enable: bool = False) -> dict:
     if not node:
         return {"status": "failed", "error": "node_runtime_unavailable"}
     subprocess.run([node, str(APP_ROOT.parents[1] / "scripts/check-node-runtime.mjs")], check=True, capture_output=True, timeout=5)
-    # The host's install/recovery hooks start this app runtime worker. It remains
+    # An explicit Lab start action starts this app runtime worker. It remains
     # in Core's service cgroup and is shut down with the backend; recovery reopens it.
     subprocess.Popen([sys.executable, str(Path(__file__).with_name("lab_runtime_worker.py")), node],
                      cwd=APP_ROOT, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

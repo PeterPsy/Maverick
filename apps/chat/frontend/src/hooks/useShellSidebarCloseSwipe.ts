@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
 
 const MOBILE_SIDEBAR_SWIPE_QUERY = "(max-width: 979px)";
-const CLOSE_SIDEBAR_MESSAGE = { type: "maverick.shell.sidebar.close" };
+const CLOSE_SIDEBAR_MESSAGE = { type: "loopino.shell.sidebar.close" };
 
 type TouchTarget = EventTarget | null;
 

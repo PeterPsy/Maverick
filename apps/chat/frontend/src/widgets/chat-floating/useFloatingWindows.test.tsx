@@ -43,7 +43,7 @@ describe("contextual window ownership", () => {
   async function context(mode: string, navigationScope = "a", threadId = "old-thread") {
     await act(async () => window.dispatchEvent(new MessageEvent("message", {
       origin: window.location.origin,
-      data: { type: "maverick.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
+      data: { type: "loopino.widget.context-changed", owner_app_id: "chat", widget_id: "chat-floating",
         context: { content: { workspace_id: "default", payload: { mode, navigation_scope: navigationScope, thread_id: threadId } } } },
     })));
   }
@@ -86,7 +86,7 @@ describe("contextual window ownership", () => {
     const windowId = state.windows.at(-1)!.id;
     await act(async () => window.dispatchEvent(new MessageEvent("message", {
       origin: window.location.origin,
-      data: { type: "maverick.chat.active-thread-changed", owner_app_id: "chat", navigation_scope: windowId, active_thread_id: "thread-a" },
+      data: { type: "loopino.chat.active-thread-changed", owner_app_id: "chat", navigation_scope: windowId, active_thread_id: "thread-a" },
     })));
     expect(state.windows.at(-1)).toMatchObject({ id: windowId, isDraft: false, threadId: "thread-a" });
     await act(async () => state.resetDeletedThreads(["thread-a"]));

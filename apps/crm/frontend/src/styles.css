@@ -1,66 +1,66 @@
 :root {
   color-scheme: dark;
-  --maverick-color-scheme: dark;
-  --maverick-contrast-rgb: 255, 255, 255;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-bg-strong: #171717;
-  --maverick-surface: rgba(var(--maverick-contrast-rgb), 0.055);
-  --maverick-surface-hover: rgba(var(--maverick-contrast-rgb), 0.105);
-  --maverick-surface-active: rgba(var(--maverick-contrast-rgb), 0.14);
-  --maverick-border: rgba(var(--maverick-contrast-rgb), 0.08);
-  --maverick-border-strong: rgba(var(--maverick-contrast-rgb), 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-glass-highlight:
+  --loopino-color-scheme: dark;
+  --loopino-contrast-rgb: 255, 255, 255;
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-bg-strong: #171717;
+  --loopino-surface: rgba(var(--loopino-contrast-rgb), 0.055);
+  --loopino-surface-hover: rgba(var(--loopino-contrast-rgb), 0.105);
+  --loopino-surface-active: rgba(var(--loopino-contrast-rgb), 0.14);
+  --loopino-border: rgba(var(--loopino-contrast-rgb), 0.08);
+  --loopino-border-strong: rgba(var(--loopino-contrast-rgb), 0.14);
+  --loopino-glass-surface: rgba(12, 12, 14, 0.58);
+  --loopino-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
     linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-shadow-panel: rgba(0, 0, 0, 0.36);
-  --maverick-success: #9ff0ca;
-  --maverick-danger: #ffb3bf;
-  --maverick-card-radius: 22px;
-  --maverick-control-radius: 18px;
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
-  --crm-panel-shadow: var(--maverick-glass-edge), 0 24px 80px rgba(0, 0, 0, 0.26);
-  background: var(--maverick-bg);
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  --loopino-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.66);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-accent-soft: rgba(255, 255, 255, 0.18);
+  --loopino-text-on-accent: #0a0a0b;
+  --loopino-shadow-panel: rgba(0, 0, 0, 0.36);
+  --loopino-success: #9ff0ca;
+  --loopino-danger: #ffb3bf;
+  --loopino-card-radius: 22px;
+  --loopino-control-radius: 18px;
+  --loopino-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --crm-panel-shadow: var(--loopino-glass-edge), 0 24px 80px rgba(0, 0, 0, 0.26);
+  background: var(--loopino-bg);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 :root[data-theme="light"],
-:root[data-maverick-theme="light"] {
+:root[data-loopino-theme="light"] {
   color-scheme: light;
-  --maverick-color-scheme: light;
-  --maverick-contrast-rgb: 15, 23, 42;
-  --maverick-bg: #f7f8fb;
-  --maverick-bg-strong: #ffffff;
-  --maverick-surface: rgba(var(--maverick-contrast-rgb), 0.055);
-  --maverick-surface-hover: rgba(var(--maverick-contrast-rgb), 0.085);
-  --maverick-surface-active: rgba(var(--maverick-contrast-rgb), 0.12);
-  --maverick-border: rgba(var(--maverick-contrast-rgb), 0.1);
-  --maverick-border-strong: rgba(var(--maverick-contrast-rgb), 0.16);
-  --maverick-glass-surface: rgba(255, 255, 255, 0.72);
-  --maverick-glass-highlight:
+  --loopino-color-scheme: light;
+  --loopino-contrast-rgb: 15, 23, 42;
+  --loopino-bg: #f7f8fb;
+  --loopino-bg-strong: #ffffff;
+  --loopino-surface: rgba(var(--loopino-contrast-rgb), 0.055);
+  --loopino-surface-hover: rgba(var(--loopino-contrast-rgb), 0.085);
+  --loopino-surface-active: rgba(var(--loopino-contrast-rgb), 0.12);
+  --loopino-border: rgba(var(--loopino-contrast-rgb), 0.1);
+  --loopino-border-strong: rgba(var(--loopino-contrast-rgb), 0.16);
+  --loopino-glass-surface: rgba(255, 255, 255, 0.72);
+  --loopino-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.74), transparent 38%),
-    linear-gradient(315deg, rgba(var(--maverick-contrast-rgb), 0.035), transparent 44%);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  --maverick-text: #111827;
-  --maverick-text-muted: rgba(17, 24, 39, 0.66);
-  --maverick-text-soft: rgba(17, 24, 39, 0.42);
-  --maverick-accent: #111827;
-  --maverick-accent-soft: rgba(var(--maverick-contrast-rgb), 0.1);
-  --maverick-text-on-accent: #ffffff;
-  --maverick-shadow-panel: rgba(15, 23, 42, 0.16);
-  --maverick-success: #176b4b;
-  --maverick-danger: #b4233c;
-  --crm-panel-shadow: var(--maverick-glass-edge), 0 24px 80px rgba(15, 23, 42, 0.12);
+    linear-gradient(315deg, rgba(var(--loopino-contrast-rgb), 0.035), transparent 44%);
+  --loopino-glass-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --loopino-text: #111827;
+  --loopino-text-muted: rgba(17, 24, 39, 0.66);
+  --loopino-text-soft: rgba(17, 24, 39, 0.42);
+  --loopino-accent: #111827;
+  --loopino-accent-soft: rgba(var(--loopino-contrast-rgb), 0.1);
+  --loopino-text-on-accent: #ffffff;
+  --loopino-shadow-panel: rgba(15, 23, 42, 0.16);
+  --loopino-success: #176b4b;
+  --loopino-danger: #b4233c;
+  --crm-panel-shadow: var(--loopino-glass-edge), 0 24px 80px rgba(15, 23, 42, 0.12);
 }
 
 * {
@@ -77,12 +77,12 @@ body,
 }
 
 body {
-  background: var(--maverick-bg);
+  background: var(--loopino-bg);
   overflow: hidden;
 }
 
 select {
-  color-scheme: var(--maverick-color-scheme);
+  color-scheme: var(--loopino-color-scheme);
 }
 
 html,
@@ -151,7 +151,7 @@ p {
   overflow: auto;
   padding: 0;
   scrollbar-width: thin;
-  scrollbar-color: var(--maverick-border-strong) transparent;
+  scrollbar-color: var(--loopino-border-strong) transparent;
 }
 
 .crm-workspace.is-showing-detail {
@@ -165,9 +165,9 @@ p {
   margin-bottom: 1rem;
   padding: 0.8rem 0.95rem;
   border: 1px solid rgba(255, 179, 191, 0.24);
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 179, 191, 0.12);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .crm-view-banner {
@@ -176,10 +176,10 @@ p {
   gap: 0.6rem;
   margin-bottom: 1rem;
   padding: 0.66rem 0.78rem 0.66rem 0.95rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-inner-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
 }
 
@@ -188,7 +188,7 @@ p {
 }
 
 .crm-view-banner strong {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.82rem;
   font-weight: 400;
 }
@@ -196,9 +196,9 @@ p {
 .crm-view-banner button {
   min-height: 2rem;
   margin-left: auto;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
   padding: 0 0.72rem;
   font-size: 0.78rem;
 }
@@ -217,9 +217,9 @@ p {
 .metric,
 .crm-panel,
 .pipeline-column {
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
   box-shadow: var(--crm-panel-shadow);
   backdrop-filter: blur(26px);
   position: relative;
@@ -234,7 +234,7 @@ p {
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  background: var(--maverick-glass-highlight);
+  background: var(--loopino-glass-highlight);
   opacity: 0.7;
   pointer-events: none;
 }
@@ -245,7 +245,7 @@ p {
   gap: 0.35rem 0.5rem;
   min-height: 7.1rem;
   padding: 1rem;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-align: left;
   transition:
     border-color 160ms ease,
@@ -254,7 +254,7 @@ p {
 }
 
 .metric:hover {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.075);
   transform: translateY(-1px);
 }
@@ -262,7 +262,7 @@ p {
 .metric svg {
   width: 1.08rem;
   height: 1.08rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .metric span,
@@ -270,7 +270,7 @@ p {
 .deal-card span,
 .record-list small,
 dt {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .metric strong {
@@ -294,8 +294,8 @@ dt {
   gap: 0.75rem;
   margin: 0;
   padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--maverick-border);
-  color: var(--maverick-text);
+  border-bottom: 1px solid var(--loopino-border);
+  color: var(--loopino-text);
   font-size: 0.84rem;
   font-weight: 400;
 }
@@ -319,9 +319,9 @@ dt {
 .pipeline-agent-deck {
   display: grid;
   gap: 0.72rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
   box-shadow: var(--crm-panel-shadow);
   padding: 0.82rem;
   backdrop-filter: blur(26px);
@@ -337,10 +337,10 @@ dt {
 .agent-deck-header > div:first-child,
 .agent-deck-metrics,
 .agent-deck-lane {
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.04);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .agent-deck-header > div:first-child {
@@ -357,7 +357,7 @@ dt {
 }
 
 .agent-deck-header p {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
@@ -373,7 +373,7 @@ dt {
   gap: 0.22rem;
   min-height: 4.6rem;
   padding: 0.68rem 0.78rem;
-  border-left: 1px solid var(--maverick-border);
+  border-left: 1px solid var(--loopino-border);
 }
 
 .agent-deck-metrics div:first-child {
@@ -381,7 +381,7 @@ dt {
 }
 
 .agent-deck-metrics span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
 }
 
@@ -405,7 +405,7 @@ dt {
 }
 
 .agent-deck-lane h3 {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.7rem;
   font-weight: 400;
   text-transform: uppercase;
@@ -435,7 +435,7 @@ dt {
 
 .operations-loading {
   margin: 0 0 0.75rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
@@ -448,17 +448,17 @@ dt {
   display: grid;
   gap: 0.34rem;
   width: 100%;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0.78rem 0.85rem;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-align: left;
 }
 
 button.operation-card:hover,
 button.operation-card:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
@@ -474,7 +474,7 @@ button.operation-card:focus-visible {
 
 .operation-card-meta,
 .operation-card-reason {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
 }
 
@@ -490,15 +490,15 @@ button.operation-card:focus-visible {
   align-items: center;
   gap: 0.4rem;
   min-height: 2rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0 0.65rem;
 }
 
 .operation-duplicate-card > button:hover,
 .operation-duplicate-card > button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
@@ -512,32 +512,32 @@ button.operation-card:focus-visible {
   display: grid;
   gap: 0.12rem;
   width: 100%;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0.45rem 0.55rem;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-align: left;
 }
 
 .duplicate-record-list button:hover,
 .duplicate-record-list button:focus-visible {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   outline: none;
 }
 
 .duplicate-record-list small,
 .duplicate-merge-summary {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .operations-success {
   margin: 0;
-  border: 1px solid color-mix(in srgb, #059669 45%, var(--maverick-border));
-  border-radius: var(--maverick-control-radius);
-  background: color-mix(in srgb, #059669 10%, var(--maverick-surface));
+  border: 1px solid color-mix(in srgb, #059669 45%, var(--loopino-border));
+  border-radius: var(--loopino-control-radius);
+  background: color-mix(in srgb, #059669 10%, var(--loopino-surface));
   padding: 0.75rem;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .duplicate-review-dialog {
@@ -555,14 +555,14 @@ button.operation-card:focus-visible {
   grid-template-columns: minmax(10rem, 1fr) minmax(10rem, 1fr) auto auto;
   gap: 0.6rem;
   align-items: center;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0.65rem;
 }
 
 .duplicate-review-records article.active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .duplicate-review-records strong,
@@ -574,7 +574,7 @@ button.operation-card:focus-visible {
 }
 
 .duplicate-review-records > article > span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
 }
 
@@ -582,7 +582,7 @@ button.operation-card:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
@@ -594,16 +594,16 @@ button.operation-card:focus-visible {
 }
 
 .duplicate-diff-list code {
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0.4rem 0.5rem;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   white-space: normal;
 }
 
 .duplicate-diff-list code.active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .workflow-review-indicator {
@@ -612,10 +612,10 @@ button.operation-card:focus-visible {
   justify-content: center;
   gap: 0.38rem;
   min-height: 2rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   padding: 0 0.65rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
 }
 
@@ -647,7 +647,7 @@ button.operation-card:focus-visible {
 
 .workflow-preview-summary dt,
 .workflow-preview-task dt {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
@@ -660,9 +660,9 @@ button.operation-card:focus-visible {
 .workflow-preview-issues {
   display: grid;
   gap: 0.45rem;
-  border: 1px solid color-mix(in srgb, #d97706 45%, var(--maverick-border));
-  border-radius: var(--maverick-control-radius);
-  background: color-mix(in srgb, #d97706 10%, var(--maverick-surface));
+  border: 1px solid color-mix(in srgb, #d97706 45%, var(--loopino-border));
+  border-radius: var(--loopino-control-radius);
+  background: color-mix(in srgb, #d97706 10%, var(--loopino-surface));
   padding: 0.7rem;
 }
 
@@ -675,7 +675,7 @@ button.operation-card:focus-visible {
 .workflow-preview-issues ul {
   margin: 0;
   padding-left: 1.1rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .workflow-preview-section {
@@ -685,7 +685,7 @@ button.operation-card:focus-visible {
 
 .workflow-preview-section h3 {
   margin: 0;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.78rem;
   font-weight: 400;
   text-transform: uppercase;
@@ -709,26 +709,26 @@ button.operation-card:focus-visible {
 }
 
 .workflow-preview-change-list code {
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0.35rem 0.45rem;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   white-space: normal;
 }
 
 .workflow-preview-actions {
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   padding: 0.85rem 0.95rem;
 }
 
 .operations-empty {
   margin: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 1rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .report-list {
@@ -744,28 +744,28 @@ button.operation-card:focus-visible {
   justify-content: space-between;
   gap: 1rem;
   min-height: 2.6rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0.65rem 0.75rem;
 }
 
 .report-list button {
   width: 100%;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-align: left;
   cursor: pointer;
 }
 
 .report-list button:hover,
 .report-list button:focus-visible {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
 .report-list span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .report-row strong,
@@ -791,7 +791,7 @@ button.operation-card:focus-visible {
 .report-conversion span,
 .report-empty span,
 .report-activity-row em {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .report-empty {
@@ -822,11 +822,11 @@ button.operation-card:focus-visible {
 }
 
 .report-type-chips small {
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.045);
   padding: 0.18rem 0.45rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
@@ -850,16 +850,16 @@ button.operation-card:focus-visible {
   gap: 10px;
   width: min(640px, 100%);
   min-height: 44px;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
   padding: 0 14px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .crm-search:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 .crm-search input {
@@ -870,7 +870,7 @@ button.operation-card:focus-visible {
 }
 
 .crm-search input::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .topbar-actions {
@@ -886,11 +886,11 @@ button.operation-card:focus-visible {
   align-items: center;
   gap: 0.45rem;
   min-height: 2.25rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
   padding: 0 0.72rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
@@ -922,11 +922,11 @@ button.operation-card:focus-visible {
   gap: 0.2rem;
   width: min(16rem, calc(100vw - 2rem));
   padding: 0.38rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   border-radius: 0.86rem;
   background: rgba(18, 18, 20, 0.98);
   box-shadow:
-    var(--maverick-glass-edge),
+    var(--loopino-glass-edge),
     0 18px 56px rgba(0, 0, 0, 0.42);
 }
 
@@ -942,9 +942,9 @@ button.operation-card:focus-visible {
 
 .toolbar-admin-popover button:hover,
 .toolbar-admin-popover button:focus-visible {
-  border-color: var(--maverick-border);
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  border-color: var(--loopino-border);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
   outline: none;
 }
 
@@ -963,7 +963,7 @@ button.operation-card:focus-visible {
   gap: 1rem;
   padding: 0.82rem 1rem;
   border: 0;
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   border-radius: 0;
   background: transparent;
   text-align: left;
@@ -974,7 +974,7 @@ button.operation-card:focus-visible {
 
 .record-list button:hover,
 .record-list button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
@@ -984,7 +984,7 @@ button.operation-card:focus-visible {
   align-items: center;
   gap: 0.75rem;
   padding: 0.78rem 1rem;
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
 }
 
 .workflow-proposal span,
@@ -1004,15 +1004,15 @@ button.operation-card:focus-visible {
   width: 2rem;
   height: 2rem;
   padding: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  color: var(--maverick-text);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
+  color: var(--loopino-text);
 }
 
 .workflow-proposal-actions button:hover,
 .workflow-proposal-actions button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
@@ -1024,7 +1024,7 @@ table {
 th,
 td {
   padding: 0.78rem 1rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   text-align: left;
   font-size: 0.86rem;
 }
@@ -1035,7 +1035,7 @@ td input[type="checkbox"] {
 }
 
 th {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.72rem;
   font-weight: 400;
   text-transform: uppercase;
@@ -1046,7 +1046,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 @media (max-width: 980px) {
@@ -1134,7 +1134,7 @@ tbody tr:hover {
 
   .agent-deck-metrics div {
     border-left: 0;
-    border-top: 1px solid var(--maverick-border);
+    border-top: 1px solid var(--loopino-border);
   }
 
   .agent-deck-metrics div:first-child {

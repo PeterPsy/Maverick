@@ -21,7 +21,7 @@ test('creates a conversation, connects a person and links the selected Mail prov
   await page.locator('input[name="relationship"]').fill('participant');
   await page.getByRole('button', { name: 'Link record', exact: true }).click();
   await expect(page.getByRole('button', { name: /Contact · participant Ada Example/ })).toBeVisible();
-  await page.getByText('Connect a Maverick app record', { exact: true }).click();
+  await page.getByText('Connect a Loopino app record', { exact: true }).click();
   await page.locator('select[name="provider_alias"]').selectOption('mail');
   await page.locator('input[name="source_entity_type"]').fill('email_thread');
   await page.locator('input[name="source_entity_id"]').fill('provider_thread_123');

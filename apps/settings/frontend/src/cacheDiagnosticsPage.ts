@@ -1,4 +1,4 @@
-import type { PwaCacheDashboard, PwaCacheMetricsSnapshot } from '@maverick/pwa-cache';
+import type { PwaCacheDashboard, PwaCacheMetricsSnapshot } from '@loopino/pwa-cache';
 import type { CacheDiagnosticsViewState } from './cacheDiagnosticsController';
 import { escapeHtml } from './html';
 
@@ -9,7 +9,7 @@ export function cacheDiagnosticsPageHtml(state: CacheDiagnosticsViewState): stri
     <div class="settings-heading">
       <div>
         <span class="settings-kicker">This browser</span>
-        <h3>Maverick cache</h3>
+        <h3>Loopino cache</h3>
       </div>
       <span class="settings-pill settings-pill-muted">Disposable</span>
     </div>
@@ -27,7 +27,7 @@ export function cacheDiagnosticsPageHtml(state: CacheDiagnosticsViewState): stri
       </button>
 
     </div>
-    <p class="settings-cache-diagnostics__note">Clear cache removes only Maverick's structured data and versioned file cache from this browser container. It does not delete server files, static app assets, or unrelated origin storage.</p>
+    <p class="settings-cache-diagnostics__note">Clear cache removes only Loopino's structured data and versioned file cache from this browser container. It does not delete server files, static app assets, or unrelated origin storage.</p>
   </section>`;
 }
 

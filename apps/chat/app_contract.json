@@ -3,8 +3,8 @@
   "contract_version": "1.0",
   "name": "Chat",
   "version": "0.2.0",
-  "description": "Workspace chat app that talks to the selected Maverick runtime provider.",
-  "publisher": "maverick",
+  "description": "Workspace chat app that talks to the selected Loopino runtime provider.",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

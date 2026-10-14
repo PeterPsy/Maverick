@@ -2,9 +2,9 @@
   display: inline-flex;
   justify-self: center;
   gap: 0.24rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
   padding: 0.24rem;
 }
 
@@ -12,13 +12,13 @@
   min-width: 6.5rem;
   border-radius: 999px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 0.5rem 0.88rem;
 }
 
 .skills-view-switcher button.is-active {
-  background: var(--maverick-surface-active);
-  color: var(--maverick-text);
+  background: var(--loopino-surface-active);
+  color: var(--loopino-text);
 }
 
 .skills-explore {
@@ -41,7 +41,7 @@
 
 .skills-explore__header p,
 .skills-explore__detail-header p {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   line-height: 1.45;
 }
 
@@ -49,7 +49,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
 }
 
@@ -58,9 +58,9 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.7rem;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 0.42rem 0.48rem 0.42rem 0.85rem;
 }
 
@@ -82,10 +82,10 @@
 .skills-explore__results,
 .skills-explore__detail {
   min-width: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
   padding: 14px;
 }
 
@@ -100,7 +100,7 @@
   gap: 0.42rem;
   width: 100%;
   border: 1px solid transparent;
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.035);
   padding: 0.85rem;
   text-align: left;
@@ -108,8 +108,8 @@
 
 .skills-explore__result:hover,
 .skills-explore__result.is-active {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-active);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-active);
 }
 
 .skills-explore__result strong {
@@ -117,7 +117,7 @@
 }
 
 .skills-explore__result span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.4;
 }
@@ -125,7 +125,7 @@
 .skills-explore__result small,
 .skills-explore__meta,
 .skills-explore__validation {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.7rem;
 }
 
@@ -151,7 +151,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.32rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.74rem;
   text-decoration: none;
   white-space: nowrap;
@@ -166,7 +166,7 @@
 
 .skills-explore__meta span,
 .skills-explore__files button {
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
   padding: 0.38rem 0.62rem;
@@ -176,14 +176,14 @@
   display: inline-flex;
   align-items: center;
   gap: 0.34rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .skills-explore__files button.is-active {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-active);
-  color: var(--maverick-text);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-active);
+  color: var(--loopino-text);
 }
 
 .skills-explore__preview {
@@ -200,8 +200,8 @@
 }
 
 .skills-explore__install-row label {
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
   padding: 0.58rem 0.72rem;
 }
@@ -214,16 +214,16 @@
 .install-skill-summary {
   display: grid;
   gap: 0.58rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
   padding: 14px;
 }
 
 .install-skill-summary span,
 .install-skill-summary code {
   overflow-wrap: anywhere;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.74rem;
 }
 

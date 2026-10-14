@@ -1,7 +1,7 @@
 .settings-provider-usage {
   display: grid;
   gap: 12px;
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   padding-top: 14px;
 }
 
@@ -27,7 +27,7 @@
 .settings-provider-usage-limit-copy > strong,
 .settings-provider-usage-loading strong,
 .settings-provider-usage-unavailable strong {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.86rem;
   line-height: 1.25;
 }
@@ -37,7 +37,7 @@
 .settings-provider-usage-loading small,
 .settings-provider-usage-unavailable small,
 .settings-provider-usage-value > small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
   line-height: 1.35;
 }
@@ -46,10 +46,10 @@
   display: inline-flex;
   align-items: center;
   min-height: 1.25rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   border-radius: 999px;
-  background: var(--maverick-surface);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-surface);
+  color: var(--loopino-text-muted);
   font-size: 0.66rem;
   font-weight: 500;
   line-height: 1;
@@ -78,18 +78,18 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.055), transparent 58%),
     rgba(255, 255, 255, 0.028);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 12px;
 }
 
 .settings-provider-usage-limit.is-reached {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
 }
 
 .settings-provider-usage-value {
@@ -98,7 +98,7 @@
 }
 
 .settings-provider-usage-value > strong {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 1rem;
   font-weight: 500;
   line-height: 1;
@@ -111,8 +111,8 @@
   align-items: center;
   gap: 12px;
   min-height: 5rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.025);
   padding: 10px 12px;
 }
@@ -123,7 +123,7 @@
 }
 
 .settings-provider-usage-unavailable > .material-symbols-rounded {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .settings-usage-history-card {
@@ -163,7 +163,7 @@
 }
 
 .settings-usage-filter > span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.65rem;
   font-weight: 600;
 }
@@ -183,7 +183,7 @@
 }
 
 .settings-usage-time-range legend {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 0;
   font-size: 0.65rem;
   font-weight: 600;
@@ -198,25 +198,25 @@
 .settings-usage-time-range-options button {
   flex: 1 1 5.5rem;
   min-height: 2.2rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.045);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .settings-usage-time-range-options button:hover:not(:disabled) {
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
 }
 
 .settings-usage-time-range-options button.is-selected {
-  border-color: var(--maverick-accent);
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
+  border-color: var(--loopino-accent);
+  background: var(--loopino-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .settings-usage-time-range-options button:focus-visible {
-  outline: 3px solid var(--maverick-accent-soft);
+  outline: 3px solid var(--loopino-accent-soft);
   outline-offset: 1px;
 }
 
@@ -225,17 +225,17 @@
   align-content: start;
   gap: 10px;
   min-width: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 58%),
     rgba(255, 255, 255, 0.025);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 14px;
 }
 
 .settings-usage-history-panel h3 {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.92rem;
 }
 
@@ -251,15 +251,15 @@
   justify-content: center;
   gap: 8px;
   min-height: 15rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
 .settings-usage-chart-loader {
   width: 0.9rem;
   height: 0.9rem;
-  border: 2px solid var(--maverick-border-strong);
-  border-top-color: var(--maverick-accent);
+  border: 2px solid var(--loopino-border-strong);
+  border-top-color: var(--loopino-accent);
   border-radius: 50%;
   animation: settings-provider-usage-spin 900ms linear infinite;
 }
@@ -271,14 +271,14 @@
 }
 
 .settings-usage-chart-total strong {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 1.18rem;
   font-weight: 550;
 }
 
 .settings-usage-chart-total span,
 .settings-usage-chart-coverage {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
 }
 
@@ -290,12 +290,12 @@
 }
 
 .settings-usage-chart-gridline {
-  stroke: var(--maverick-border-strong);
+  stroke: var(--loopino-border-strong);
   stroke-width: 1;
 }
 
 .settings-usage-chart-bar {
-  fill: var(--maverick-accent);
+  fill: var(--loopino-accent);
   opacity: 0.82;
 }
 
@@ -304,7 +304,7 @@
 }
 
 .settings-usage-chart-axis-label {
-  fill: var(--maverick-text-muted);
+  fill: var(--loopino-text-muted);
   font-size: 8px;
 }
 
@@ -319,26 +319,26 @@
   gap: 2px;
   min-width: 0;
   padding: 7px;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 8px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
 }
 
 .settings-usage-chart-breakdown > span.is-selected {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.08);
 }
 
 .settings-usage-chart-breakdown small {
   overflow: hidden;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.62rem;
   text-overflow: ellipsis;
 }
 
 .settings-usage-chart-breakdown strong {
   overflow: hidden;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.74rem;
   text-overflow: ellipsis;
 }

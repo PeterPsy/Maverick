@@ -259,7 +259,7 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
 
     def test_runtime_event_recovery_query_skips_large_partition_without_removing_history(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = Path(temp_dir) / "maverick"
+            repo_root = Path(temp_dir) / "loopino"
             event_path = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "session-1" / "events.json"
             event_path.parent.mkdir(parents=True)
             event_path.write_text(json.dumps([{"event_id": f"event-{index}", "session_id": "session-1"} for index in range(20)]), encoding="utf-8")
@@ -273,7 +273,7 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
 
     def test_runtime_event_recovery_query_quarantines_corrupt_legacy_partition(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = Path(temp_dir) / "maverick"
+            repo_root = Path(temp_dir) / "loopino"
             event_path = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "session-1" / "events.json"
             event_path.parent.mkdir(parents=True)
             event_path.write_text("[", encoding="utf-8")

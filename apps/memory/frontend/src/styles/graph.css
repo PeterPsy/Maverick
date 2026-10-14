@@ -1,16 +1,16 @@
 .node-panel {
   position: absolute;
-  top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 4.75rem);
+  top: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 4.75rem);
   left: 1rem;
   right: auto;
   z-index: 4;
   display: grid;
   gap: 1rem;
   width: min(430px, calc(100% - 2rem));
-  max-height: calc(100dvh - var(--maverick-shell-mobile-content-top-offset, 0px) - 5.9rem);
+  max-height: calc(100dvh - var(--loopino-shell-mobile-content-top-offset, 0px) - 5.9rem);
   overflow: auto;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-card-radius);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-card-radius);
   background: rgba(12, 12, 14, 0.86);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(26px);
@@ -40,7 +40,7 @@
 
 .eyebrow,
 .node-panel h3 {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0.08em;
@@ -53,10 +53,10 @@
   justify-content: center;
   width: 2.15rem;
   min-height: 2.15rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0;
 }
 
@@ -70,10 +70,10 @@
   display: grid;
   gap: 0.16rem;
   min-width: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  box-shadow: var(--maverick-inner-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.7rem;
 }
 
@@ -85,20 +85,20 @@
 
 .metrics small,
 .detail-list dt {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .summary,
 .body-copy {
   margin: 0;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.88rem;
   line-height: 1.55;
 }
 
 .body-copy {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   white-space: pre-wrap;
 }
 
@@ -117,7 +117,7 @@
 .detail-list dd {
   min-width: 0;
   margin: 0;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.8rem;
   overflow-wrap: anywhere;
 }
@@ -137,10 +137,10 @@
 .lint-card {
   display: grid;
   gap: 0.32rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0.7rem;
   text-align: left;
 }
@@ -153,7 +153,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.74rem;
 }
 
@@ -179,14 +179,14 @@
 .claim-card small,
 .lint-card span,
 .muted {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
 }
 
 code {
   display: block;
   overflow-wrap: anywhere;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.74rem;
 }
 
@@ -216,18 +216,18 @@ code {
   width: 100%;
   box-sizing: border-box;
   padding: .6rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-glass-surface);
-  color: var(--maverick-text);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-glass-surface);
+  color: var(--loopino-text);
   font: inherit;
 }
 .memory-management button, .reference-card button {
   padding: .5rem .7rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255,255,255,.06);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   cursor: pointer;
   font: inherit;
   font-size: .76rem;
@@ -236,8 +236,8 @@ code {
 .node-panel details { margin-block: .5rem; min-width: 0; }
 .node-panel summary { cursor: pointer; overflow-wrap: anywhere; }
 .node-panel blockquote { margin: .5rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.node-panel a { color: var(--maverick-text); text-decoration: underline; }
-.node-panel :focus-visible { outline: 2px solid var(--maverick-accent); outline-offset: 2px; }
+.node-panel a { color: var(--loopino-text); text-decoration: underline; }
+.node-panel :focus-visible { outline: 2px solid var(--loopino-accent); outline-offset: 2px; }
 .node-panel button:disabled { opacity: .55; cursor: wait; }
 
 .node-panel { box-sizing: border-box; overflow-x: hidden; }

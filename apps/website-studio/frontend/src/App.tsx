@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import {
   callBackend,
   cachedWorkspaceSnapshot,
@@ -297,9 +297,9 @@ export function App() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { type?: string; resource?: string; params?: Record<string, string> };
-      if (payload.type === 'maverick.app.data-changed' && (payload as { owner_app_id?: string }).owner_app_id === 'website-studio') {
+      if (payload.type === 'loopino.app.data-changed' && (payload as { owner_app_id?: string }).owner_app_id === 'website-studio') {
         const resource = payload.resource || '';
         const resetsPreview = ['source', 'navigation'].includes(resource);
         if (resetsPreview) {
@@ -310,7 +310,7 @@ export function App() {
         void refresh(viewRequestRef.current, { resetPreview: resetsPreview });
         return;
       }
-      if (payload.type !== 'maverick.app.navigate') return;
+      if (payload.type !== 'loopino.app.navigate') return;
       if (payload.params?.new_website_request_id) {
         cancelView();
         viewRequestRef.current = EMPTY_VIEW;
@@ -785,7 +785,7 @@ function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset
   const activeView = target.kind || (asset ? 'asset' : route && !page ? 'route' : page ? 'page' : 'site');
   window.parent?.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       app_id: 'website-studio',
       owner_app_id: 'website-studio',
       params: {

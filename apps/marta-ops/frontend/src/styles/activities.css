@@ -3,7 +3,7 @@
   border: 1px solid var(--marta-border);
   border-radius: 22px;
   background: var(--marta-surface);
-  box-shadow: var(--maverick-glass-edge);
+  box-shadow: var(--loopino-glass-edge);
 }
 .task-row {
   display: grid;

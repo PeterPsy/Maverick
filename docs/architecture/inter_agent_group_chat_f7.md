@@ -11,12 +11,12 @@ The feature flags and low-level executor constraints remain applicable.
 ## Decision
 
 `group_chat` is the first advanced inter-agent mode promoted to a product-facing
-Maverick mode.
+Loopino mode.
 
 The mode is not default-on. Product exposure requires both:
 
-- server/public-surface flag: `MAVERICK_FEATURE_GROUP_CHAT=1`
-- Chat frontend build flag: `VITE_MAVERICK_FEATURE_GROUP_CHAT=1`
+- server/public-surface flag: `LOOPINO_FEATURE_GROUP_CHAT=1`
+- Chat frontend build flag: `VITE_LOOPINO_FEATURE_GROUP_CHAT=1`
 
 When either flag is absent, Chat must not show the composer option and the HTTP
 inter-agent API plus core CLI/MCP public inter-agent surfaces must reject
@@ -27,7 +27,7 @@ They are not promoted as F7 product modes.
 
 ## Ownership Boundary
 
-Maverick remains the owner of:
+Loopino remains the owner of:
 
 - `InterAgentRun`, participant, edge, event, artifact, approval, and budget
   records
@@ -57,7 +57,7 @@ history surfaces. Nothing from that board is projected onto the root Chat
 transcript.
 
 The core HTTP API and core CLI/MCP public inter-agent surfaces allow
-`group_chat` only when `MAVERICK_FEATURE_GROUP_CHAT=1`. The existing
+`group_chat` only when `LOOPINO_FEATURE_GROUP_CHAT=1`. The existing
 product-facing modes `manager_tools`, `sequential`, and `concurrent` remain
 available. Public creation of `handoff` and `magentic_like` is rejected because
 those modes are not product-facing.
@@ -81,7 +81,7 @@ superseding ADR.
 - Budget: all participant turns go through existing budget reservations and
   ledger enforcement.
 - Cancel: Chat uses existing Agent nodes stop, which closes the inter-agent run
-  as `cancelled` and cleans up hidden participant sessions through Maverick.
+  as `cancelled` and cleans up hidden participant sessions through Loopino.
 - Replay/history: all user-facing state comes from `InterAgentEventRecord`,
   event pages, and `WS /ws/inter-agent/runs/<run_id>`.
 - Visibility: Chat-created runs use detail visibility for safe participant

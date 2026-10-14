@@ -62,7 +62,7 @@ def start_orchestrated_execution_worker(
                 if _ACTIVE_WORKERS.get(key) is current_thread():
                     _ACTIVE_WORKERS.pop(key, None)
 
-    thread = Thread(target=worker, name=f"maverick-orchestration-{run_id}", daemon=True)
+    thread = Thread(target=worker, name=f"loopino-orchestration-{run_id}", daemon=True)
     with _ACTIVE_WORKERS_LOCK:
         if key in _ACTIVE_WORKERS:
             return False

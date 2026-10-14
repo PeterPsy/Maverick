@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregate runtime turn latency spans from persisted Maverick events."""
+"""Aggregate runtime turn latency spans from persisted Loopino events."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import sys
 from typing import Any, Iterator
 
 
-DATETIME_MARKER = "__maverick_datetime__"
+DATETIME_MARKER = "__loopino_datetime__"
 INTERESTING_EVENT_TYPES = {
     "runtime.turn.queued",
     "runtime.turn.receive_to_queued",
@@ -461,7 +461,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--repository-root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
-        help="Maverick repository root. Defaults to the parent of scripts/.",
+        help="Loopino repository root. Defaults to the parent of scripts/.",
     )
     parser.add_argument(
         "--workspace",

@@ -56,7 +56,7 @@ export function ChatSurface({ composerProps, surfaceActions, surfaceState, trans
               <div className="chatapp-empty-chat-stage__copy">
                 <h1>How can I help today?</h1>
                 <span aria-hidden="true" />
-                <p>Type a command or ask Maverick a question</p>
+                <p>Type a command or ask Loopino a question</p>
               </div>
               <ChatComposer {...composerProps} isEmptyMode />
             </div>

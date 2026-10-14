@@ -195,7 +195,7 @@ class FullWorkspaceInstructionScopeContractTest(FullWorkspaceContractFixture, un
                         (
                             "import os; "
                             "os.setxattr('nested/metadata.txt', "
-                            "b'user.maverick.effect', b'ignored')"
+                            "b'user.loopino.effect', b'ignored')"
                         ),
                     ],
                     "mutation_scopes": [
@@ -209,7 +209,7 @@ class FullWorkspaceInstructionScopeContractTest(FullWorkspaceContractFixture, un
                 None,
             )
         with self.assertRaises(OSError):
-            os.getxattr(metadata_file, "user.maverick.effect")
+            os.getxattr(metadata_file, "user.loopino.effect")
 
         original_mtime_ns = metadata_file.stat().st_mtime_ns
         with self.assertRaisesRegex(

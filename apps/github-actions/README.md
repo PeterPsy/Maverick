@@ -1,9 +1,9 @@
 # GitHub Actions
 
-Installation-level Maverick utility for dispatching and inspecting GitHub Actions
+Installation-level Loopino utility for dispatching and inspecting GitHub Actions
 workflows through a GitHub App installation.
 
-The source lives in `apps/github-actions/` on the Maverick `design` branch.
+The source lives in `apps/github-actions/` on the Loopino `design` branch.
 Workspace installation binds to this shared source; credentials and app data
 remain scoped to each workspace.
 
@@ -24,24 +24,24 @@ repository-administration permission.
 
 Default target:
 
-- repository: `giuntiocram/maverick-glasses-ios`
-- branch: `maverick-integration`
+- repository: `giuntiocram/loopino-glasses-ios`
+- branch: `loopino-integration`
 - workflow: `ios-install-device.yml`
 
 ## Validate
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-root apps/github-actions --json
+loopino core cli run core.app-sdk.validate --app-root apps/github-actions --json
 ```
 
 ## Install
 
 ```bash
-maverick core cli run app.github-actions.install --json
+loopino core cli run app.github-actions.install --json
 ```
 
 ## Use
 
 ```bash
-maverick app github-actions cli run github-actions --json --arguments-json '{"action":"dispatch_and_wait","timeout_seconds":900}'
+loopino app github-actions cli run github-actions --json --arguments-json '{"action":"dispatch_and_wait","timeout_seconds":900}'
 ```

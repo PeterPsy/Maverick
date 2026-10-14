@@ -117,11 +117,11 @@ class WorkflowTests(unittest.TestCase):
     def test_all_social_sources_have_real_search_routes(self):
         for source in SOCIAL:
             with self.subTest(source=source):
-                status,data=self.call("run.start",source=source,operation="search",parameters={"query":"Maverick","session_id":"chrome-"+hashlib.sha256(source.encode()).hexdigest()[:36]})
+                status,data=self.call("run.start",source=source,operation="search",parameters={"query":"Loopino","session_id":"chrome-"+hashlib.sha256(source.encode()).hexdigest()[:36]})
                 self.assertEqual(status,200,data)
                 req=data["dependency_backend_requests"][0]
                 self.assertEqual(req["body"]["action"],"content.collect")
-                self.assertIn("Maverick",req["body"]["urls"][0])
+                self.assertIn("Loopino",req["body"]["urls"][0])
         self.assertEqual({s["id"] for s in SOURCES},{"instagram","twitter","reddit","facebook","linkedin","youtube","rss","web","github"})
         for removed in ("exa_search","bilibili","xiaohongshu","v2ex","xueqiu","boss","xiaoyuzhou"):
             status,_=self.call("run.start",source=removed,operation="read",parameters={})

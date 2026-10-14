@@ -26,7 +26,7 @@ export function notifyActiveStorageSelection(file: StorageFile, options: NotifyO
   const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'storage',
       selection: {
         file_id: file.id,
@@ -59,7 +59,7 @@ export function notifyActiveStorageFolderSelection(folder: StorageFolder, option
     };
   parentWindow.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'storage',
       selection
     },
@@ -69,7 +69,7 @@ export function notifyActiveStorageFolderSelection(folder: StorageFolder, option
 }
 
 export function storageSelectionFromMessage(message: ActiveStorageSelectionMessage, ownerAppId = 'storage'): StorageNavigationTarget | null {
-  if (message.type !== 'maverick.app.selection-changed' || message.owner_app_id !== ownerAppId) {
+  if (message.type !== 'loopino.app.selection-changed' || message.owner_app_id !== ownerAppId) {
     return null;
   }
   const selection = message.selection;

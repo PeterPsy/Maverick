@@ -383,7 +383,7 @@ describe("speech provider client calls", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    const parsedUrl = new URL(path, "https://maverick.test");
+    const parsedUrl = new URL(path, "https://loopino.test");
     expect(parsedUrl.pathname).toBe("/api/apps/speech/backend");
     expect(Object.fromEntries(parsedUrl.searchParams.entries())).toEqual({
       action: "transcribe_audio",

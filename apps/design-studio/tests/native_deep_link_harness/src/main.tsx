@@ -13,7 +13,7 @@ const app: AppRegistryItem = {
   name: "Design Studio",
   version: "e2e",
   description: "Native OpenDesign browser proof",
-  publisher: "maverick",
+  publisher: "loopino",
   status: "enabled",
   distribution_mode: "built_in",
   source_access: "platform",

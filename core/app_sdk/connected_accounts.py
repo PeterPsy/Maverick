@@ -22,7 +22,7 @@ def platform_access_handle(app_secrets, connection_id):
         return None
     handle = (app_secrets or {}).get("platform-google-access:" + connection_id)
     if not handle:
-        raise ValueError("Enable this Google account in Maverick Connected accounts for this workspace.")
+        raise ValueError("Enable this Google account in Loopino Connected accounts for this workspace.")
     return str(handle)
 
 
@@ -35,7 +35,7 @@ def account_urlopen(request, *args, **kwargs):
     if not isinstance(request, Request):
         return direct_urlopen(request, *args, **kwargs)
     authorization = next((value for key, value in request.header_items() if key.lower() == "authorization"), "")
-    marker = "Bearer maverick-account:"
+    marker = "Bearer loopino-account:"
     if not authorization.startswith(marker):
         return direct_urlopen(request, *args, **kwargs)
     try:

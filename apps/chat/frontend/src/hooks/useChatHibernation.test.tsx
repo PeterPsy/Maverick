@@ -3,12 +3,12 @@ import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useChatHibernation } from './useChatHibernation';
-import type { registerMaverickAppHibernation } from '@maverick/pwa-cache';
+import type { registerLoopinoAppHibernation } from '@loopino/pwa-cache';
 import { clearQueuedMessageMemory, rememberQueuedMessages } from '../lib/queuedMessages';
 
-const lifecycle = vi.hoisted(() => ({ options: null as Parameters<typeof registerMaverickAppHibernation>[0] | null }));
-vi.mock('@maverick/pwa-cache', async (importOriginal) => ({ ...await importOriginal<typeof import('@maverick/pwa-cache')>(),
-  registerMaverickAppHibernation: (options: typeof lifecycle.options) => {
+const lifecycle = vi.hoisted(() => ({ options: null as Parameters<typeof registerLoopinoAppHibernation>[0] | null }));
+vi.mock('@loopino/pwa-cache', async (importOriginal) => ({ ...await importOriginal<typeof import('@loopino/pwa-cache')>(),
+  registerLoopinoAppHibernation: (options: typeof lifecycle.options) => {
   lifecycle.options = options;
   return () => { lifecycle.options = null; };
 } }));

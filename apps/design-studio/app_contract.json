@@ -4,7 +4,7 @@
   "name": "Design Studio",
   "version": "0.5.5",
   "description": "Host an unchanged official OpenDesign installation with optional naked-model and external-delegation bridges.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
@@ -247,10 +247,10 @@
           "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
           "DO_NOT_TRACK": "1",
           "NEXT_TELEMETRY_DISABLED": "1",
-          "MAVERICK_OPENDESIGN_DATA_DIR": "${app.data_dir}",
-          "MAVERICK_OPENDESIGN_STORE_ROOT": "${artifact.opendesign}",
-          "MAVERICK_OPENDESIGN_MODEL_BRIDGE": "auto",
-          "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE": "disabled"
+          "LOOPINO_OPENDESIGN_DATA_DIR": "${app.data_dir}",
+          "LOOPINO_OPENDESIGN_STORE_ROOT": "${artifact.opendesign}",
+          "LOOPINO_OPENDESIGN_MODEL_BRIDGE": "auto",
+          "LOOPINO_OPENDESIGN_DELEGATION_BRIDGE": "disabled"
         },
         "artifact_mounts": [
           {
@@ -268,7 +268,7 @@
           "entrypoint": "hooks/sidecar_prepare.py",
           "timeout_seconds": 30,
           "environment_keys": [
-            "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+            "LOOPINO_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
           ]
         },
         "prewarm": {

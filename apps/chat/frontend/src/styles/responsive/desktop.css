@@ -1,10 +1,10 @@
 @media (min-width: 980px) {
   .chatapp-shell {
-    --maverick-shell-gap: 0.9rem;
-    grid-template-columns: var(--maverick-sidebar-width) 10px minmax(0, 1fr);
+    --loopino-shell-gap: 0.9rem;
+    grid-template-columns: var(--loopino-sidebar-width) 10px minmax(0, 1fr);
     grid-template-rows: 1fr;
-    gap: var(--maverick-shell-gap);
-    padding: var(--maverick-shell-gap);
+    gap: var(--loopino-shell-gap);
+    padding: var(--loopino-shell-gap);
   }
 
   .chatapp-shell.is-sidebar-collapsed {
@@ -28,7 +28,7 @@
     z-index: auto;
     width: auto;
     min-height: 0;
-    background: var(--maverick-bg-strong);
+    background: var(--loopino-bg-strong);
     backdrop-filter: none;
     box-shadow: none;
   }
@@ -53,10 +53,10 @@
     z-index: 24;
     width: min(19rem, calc(100vw - 1.8rem));
     height: calc(100vh - 1.8rem);
-    border-color: rgba(var(--maverick-contrast-rgb), 0.08);
-    background: var(--maverick-overlay-panel-surface);
+    border-color: rgba(var(--loopino-contrast-rgb), 0.08);
+    background: var(--loopino-overlay-panel-surface);
     backdrop-filter: blur(16px);
-    box-shadow: var(--maverick-overlay-panel-shadow);
+    box-shadow: var(--loopino-overlay-panel-shadow);
   }
 
   .chatapp-shell.is-swarm-view .chatapp-chat-panel {

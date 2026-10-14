@@ -39,7 +39,7 @@
     "browser_session_create": {
       "platform_browser_session": true,
       "effect_class": "mutating",
-      "description": "Create a temporary Browser Lab session. Core automatically authenticates Maverick for the invoking user's current workspace. Use maverick_dev_inspector for Maverick UI; the result's platform_origin is the authenticated entry point. Public research uses read_only.",
+      "description": "Create a temporary Browser Lab session. Core automatically authenticates Loopino for the invoking user's current workspace. Use loopino_dev_inspector for Loopino UI; the result's platform_origin is the authenticated entry point. Public research uses read_only.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -47,7 +47,7 @@
             "type": "string",
             "enum": [
               "read_only",
-              "maverick_dev_inspector"
+              "loopino_dev_inspector"
             ],
             "default": "read_only"
           },
@@ -102,7 +102,7 @@
             "type": "string",
             "enum": [
               "read_only",
-              "maverick_dev_inspector",
+              "loopino_dev_inspector",
               "interactive"
             ],
             "default": "read_only"
@@ -351,7 +351,7 @@
     },
     "browser_click": {
       "effect_class": "mutating",
-      "description": "Click a snapshot ref in your interactive Chrome Agent tab (queued operation), or a governed Maverick dev-inspector target. Chrome needs session_id and ref; Lab additionally requires target_url and mode=maverick_dev_inspector.",
+      "description": "Click a snapshot ref in your interactive Chrome Agent tab (queued operation), or a governed Loopino dev-inspector target. Chrome needs session_id and ref; Lab additionally requires target_url and mode=loopino_dev_inspector.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -367,7 +367,7 @@
           "mode": {
             "type": "string",
             "enum": [
-              "maverick_dev_inspector",
+              "loopino_dev_inspector",
               "interactive"
             ]
           }
@@ -382,7 +382,7 @@
     },
     "browser_type": {
       "effect_class": "mutating",
-      "description": "Replace text in an editable snapshot ref in your interactive Chrome Agent tab (queued operation), or type in a governed dev-inspector target. Chrome needs session_id, ref and text; Lab additionally requires target_url and mode=maverick_dev_inspector.",
+      "description": "Replace text in an editable snapshot ref in your interactive Chrome Agent tab (queued operation), or type in a governed dev-inspector target. Chrome needs session_id, ref and text; Lab additionally requires target_url and mode=loopino_dev_inspector.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -401,7 +401,7 @@
           "mode": {
             "type": "string",
             "enum": [
-              "maverick_dev_inspector",
+              "loopino_dev_inspector",
               "interactive"
             ]
           }
@@ -417,7 +417,7 @@
     },
     "browser_press_key": {
       "effect_class": "mutating",
-      "description": "Press a supported page key on a Chrome snapshot ref (queued operation), or in a Maverick dev-inspector target. Chrome requires ref; Lab additionally requires target_url and mode=maverick_dev_inspector. Chrome keys include Enter, Tab, Escape, arrows, Backspace and optional Shift.",
+      "description": "Press a supported page key on a Chrome snapshot ref (queued operation), or in a Loopino dev-inspector target. Chrome requires ref; Lab additionally requires target_url and mode=loopino_dev_inspector. Chrome keys include Enter, Tab, Escape, arrows, Backspace and optional Shift.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -433,7 +433,7 @@
           "mode": {
             "type": "string",
             "enum": [
-              "maverick_dev_inspector",
+              "loopino_dev_inspector",
               "interactive"
             ]
           },

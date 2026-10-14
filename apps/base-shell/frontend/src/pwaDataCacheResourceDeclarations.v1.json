@@ -1,6 +1,6 @@
 {
-  "schema": "maverick.pwa-data-cache-runtime-resources.v1",
-  "policy_revision": "maverick.local-persistence-policy.v2",
+  "schema": "loopino.pwa-data-cache-runtime-resources.v1",
+  "policy_revision": "loopino.local-persistence-policy.v2",
   "canonical_data_classes": [
     "public",
     "workspace_internal_fake",

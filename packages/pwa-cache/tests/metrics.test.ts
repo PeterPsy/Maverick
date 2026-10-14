@@ -98,7 +98,7 @@ describe("redaction-safe PWA cache metrics", () => {
     const collector = createPwaCacheMetricsCollector({ storage: null });
 
     collector.recordDataCache({ kind: "error", reason: "budget-or-quota" });
-    collector.recordDataCache({ kind: "error", reason: "MaverickTransportError", revalidation: true });
+    collector.recordDataCache({ kind: "error", reason: "LoopinoTransportError", revalidation: true });
 
     expect(collector.snapshot().counters.pwa_data_cache_error).toBe(1);
     expect(collector.snapshot().counters.pwa_revalidate_error).toBe(1);

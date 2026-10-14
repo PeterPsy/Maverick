@@ -5,8 +5,8 @@ import unittest
 
 from core.api.pwa_api import handle_pwa_api
 from core.pwa.feature_flags import (
-    MAVERICK_FEATURE_PWA_DATA_CACHE,
-    MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2,
+    LOOPINO_FEATURE_PWA_DATA_CACHE,
+    LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2,
 )
 from core.pwa.rollout import ROLLOUT_USER_PERCENT_SUFFIX
 
@@ -23,7 +23,7 @@ class PwaApiTests(unittest.TestCase):
             handle_pwa_api(
                 {"PATH_INFO": "/api/pwa/config", "REQUEST_METHOD": "GET"},
                 start_response,
-                environment={MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2: "off"},
+                environment={LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2: "off"},
             )
             or []
         )
@@ -31,7 +31,7 @@ class PwaApiTests(unittest.TestCase):
         self.assertEqual(captured["status"], "200 OK")
         self.assertEqual(captured["headers"]["Cache-Control"], "no-store")
         payload = json.loads(body)
-        self.assertEqual(payload["schema"], "maverick.pwa-config.v2")
+        self.assertEqual(payload["schema"], "loopino.pwa-config.v2")
         self.assertFalse(payload["service_worker"]["enabled"])
         self.assertEqual(payload["features"], {"data_cache": False, "storage_file_cache": False})
 
@@ -62,8 +62,8 @@ class PwaApiTests(unittest.TestCase):
                 {"PATH_INFO": "/api/pwa/config", "REQUEST_METHOD": "GET"},
                 start_response,
                 environment={
-                    MAVERICK_FEATURE_PWA_DATA_CACHE: "1",
-                    f"{MAVERICK_FEATURE_PWA_DATA_CACHE}{ROLLOUT_USER_PERCENT_SUFFIX}": "0",
+                    LOOPINO_FEATURE_PWA_DATA_CACHE: "1",
+                    f"{LOOPINO_FEATURE_PWA_DATA_CACHE}{ROLLOUT_USER_PERCENT_SUFFIX}": "0",
                 },
                 user_id="sensitive-user-id",
                 workspace_id="sensitive-workspace-id",

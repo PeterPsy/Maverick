@@ -5,9 +5,9 @@ import {
 } from "./metricsTypes";
 import type { CacheCleanupResult, CacheDiagnostics } from "./types";
 
-export const PWA_CACHE_OPERATIONS_REQUEST = "maverick.pwa.cache-operations.request.v1";
-export const PWA_CACHE_OPERATIONS_ACCEPTED = "maverick.pwa.cache-operations.accepted.v1";
-export const PWA_CACHE_OPERATIONS_RESULT = "maverick.pwa.cache-operations.result.v1";
+export const PWA_CACHE_OPERATIONS_REQUEST = "loopino.pwa.cache-operations.request.v1";
+export const PWA_CACHE_OPERATIONS_ACCEPTED = "loopino.pwa.cache-operations.accepted.v1";
+export const PWA_CACHE_OPERATIONS_RESULT = "loopino.pwa.cache-operations.result.v1";
 
 const DEFAULT_ACCEPTANCE_TIMEOUT_MS = 750;
 const DEFAULT_RESULT_TIMEOUT_MS = 10_000;
@@ -128,7 +128,7 @@ async function requestParentOperation(
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error("Maverick cache diagnostics are unavailable."));
+      reject(new Error("Loopino cache diagnostics are unavailable."));
     }
 
     channel.port1.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -226,7 +226,7 @@ function defaultParentWindow(): ParentMessageWindow | null {
 function defaultParentOrigin(): string | null {
   if (typeof window === "undefined") return null;
   const platformOrigin = exactHttpOrigin(
-    (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__,
+    (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__,
   );
   const frameOrigin = exactHttpOrigin(window.location.origin);
   return platformOrigin && frameOrigin && platformOrigin !== frameOrigin ? platformOrigin : null;

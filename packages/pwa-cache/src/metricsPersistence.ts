@@ -19,7 +19,7 @@ export {
   type PersistedMetricsShard,
 } from "./metricsPersistenceFormat";
 
-const RESET_SCHEMA = "maverick.pwa-cache-metrics-reset.v1";
+const RESET_SCHEMA = "loopino.pwa-cache-metrics-reset.v1";
 const INITIAL_RESET_ID = "initial";
 const COLLECTOR_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/u;
 const PRUNE_BATCH_SIZE = 64;

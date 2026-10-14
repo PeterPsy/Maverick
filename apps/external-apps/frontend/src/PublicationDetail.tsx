@@ -1,4 +1,4 @@
-import { requestParentExternalUrl } from '@maverick/pwa-cache';
+import { requestParentExternalUrl } from '@loopino/pwa-cache';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { copyPublicUrl, date, label, type Detail, type Plan } from './api';
 

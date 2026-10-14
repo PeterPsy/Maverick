@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
-    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
+    "@loopino/pwa-cache": "file:../../packages/pwa-cache",
     "@radix-ui/react-dialog": "^1.1.16",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

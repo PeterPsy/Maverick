@@ -21,13 +21,13 @@ class SidecarHostPrepareTests(unittest.TestCase):
             hook.write_text(
                 "import json\n"
                 "print(json.dumps({'ok': True, 'environment': "
-                "{'MAVERICK_APP_SELECTION': 'digest-locked'}}))\n",
+                "{'LOOPINO_APP_SELECTION': 'digest-locked'}}))\n",
                 encoding="utf-8",
             )
             declaration = HttpSidecarHostPrepareSpec(
                 entrypoint="prepare.py",
                 timeout_seconds=5,
-                environment_keys=["MAVERICK_APP_SELECTION"],
+                environment_keys=["LOOPINO_APP_SELECTION"],
             )
 
             projected = run_sidecar_host_prepare(
@@ -38,7 +38,7 @@ class SidecarHostPrepareTests(unittest.TestCase):
 
             self.assertEqual(
                 projected,
-                {"MAVERICK_APP_SELECTION": "digest-locked"},
+                {"LOOPINO_APP_SELECTION": "digest-locked"},
             )
 
     def test_runner_rejects_undeclared_output(self) -> None:
@@ -47,13 +47,13 @@ class SidecarHostPrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=repository / "tmp") as temporary:
             source = Path(temporary)
             (source / "prepare.py").write_text(
-                "print('{\"ok\":true,\"environment\":{\"MAVERICK_APP_EXTRA\":\"x\"}}')\n",
+                "print('{\"ok\":true,\"environment\":{\"LOOPINO_APP_EXTRA\":\"x\"}}')\n",
                 encoding="utf-8",
             )
             declaration = HttpSidecarHostPrepareSpec(
                 entrypoint="prepare.py",
                 timeout_seconds=5,
-                environment_keys=["MAVERICK_APP_SELECTION"],
+                environment_keys=["LOOPINO_APP_SELECTION"],
             )
 
             with self.assertRaisesRegex(AppHostingError, "invalid projection"):

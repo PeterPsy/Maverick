@@ -13,7 +13,7 @@
 }
 
 .chatapp-multi-agent-control__button.is-active {
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 .chatapp-multi-agent-control__label {
@@ -36,10 +36,10 @@
   display: grid;
   width: min(13.5rem, calc(100vw - 2rem));
   overflow: hidden;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.1);
   border-radius: 0.75rem;
-  background: var(--maverick-popover-surface);
-  box-shadow: var(--maverick-popover-shadow);
+  background: var(--loopino-popover-surface);
+  box-shadow: var(--loopino-popover-shadow);
   backdrop-filter: blur(20px);
 }
 
@@ -51,9 +51,9 @@
   min-height: 2.45rem;
   padding: 0.58rem 0.72rem;
   border: 0;
-  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  border-top: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   cursor: pointer;
   font: inherit;
   font-size: 0.84rem;
@@ -66,18 +66,18 @@
 }
 
 .chatapp-multi-agent-menu__item:hover {
-  background: rgba(var(--maverick-contrast-rgb), 0.08);
+  background: rgba(var(--loopino-contrast-rgb), 0.08);
 }
 
 .chatapp-multi-agent-menu__item .material-symbols-rounded {
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
   font-size: 1rem;
 }
 
 .chatapp-multi-agent-menu__budget {
   padding: 0.48rem 0.72rem 0.58rem;
-  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
-  color: var(--maverick-text-soft);
+  border-top: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
+  color: var(--loopino-text-soft);
   font-size: 0.74rem;
   line-height: 1.3;
 }

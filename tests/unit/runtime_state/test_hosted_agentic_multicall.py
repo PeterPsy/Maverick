@@ -19,7 +19,7 @@ from core.providers.google_interactions_state import inspect_google_interaction_
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
 )
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
     OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )

@@ -20,35 +20,35 @@ const pinnedPlaywrightVersion = appPackage.dependencies?.playwright || "unknown"
 const defaultBrokerTokenFile = fileURLToPath(new URL("../../../runtime/browser/playwright-broker-token", import.meta.url));
 const policyManifest = loadPolicyManifest();
 
-const brokerHost = process.env.MAVERICK_BROWSER_BROKER_HOST || "127.0.0.1";
-const brokerPort = Number.parseInt(process.env.MAVERICK_BROWSER_BROKER_PORT || "9323", 10);
-const wsEndpoint = process.env.MAVERICK_BROWSER_PLAYWRIGHT_WS_ENDPOINT || "ws://127.0.0.1:3100/";
-const expectedPlaywrightVersion = process.env.MAVERICK_BROWSER_PLAYWRIGHT_VERSION || pinnedPlaywrightVersion;
-const connectTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_CONNECT_TIMEOUT_MS, 1000, 60000, 15000);
-const actionTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_ACTION_TIMEOUT_MS, 1000, 60000, 30000);
-const dnsTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_DNS_TIMEOUT_MS, 1000, 30000, 5000);
-const maxLogRecords = clampInt(process.env.MAVERICK_BROWSER_MAX_LOG_RECORDS, 20, 1000, 200);
+const brokerHost = process.env.LOOPINO_BROWSER_BROKER_HOST || "127.0.0.1";
+const brokerPort = Number.parseInt(process.env.LOOPINO_BROWSER_BROKER_PORT || "9323", 10);
+const wsEndpoint = process.env.LOOPINO_BROWSER_PLAYWRIGHT_WS_ENDPOINT || "ws://127.0.0.1:3100/";
+const expectedPlaywrightVersion = process.env.LOOPINO_BROWSER_PLAYWRIGHT_VERSION || pinnedPlaywrightVersion;
+const connectTimeoutMs = clampInt(process.env.LOOPINO_BROWSER_CONNECT_TIMEOUT_MS, 1000, 60000, 15000);
+const actionTimeoutMs = clampInt(process.env.LOOPINO_BROWSER_ACTION_TIMEOUT_MS, 1000, 60000, 30000);
+const dnsTimeoutMs = clampInt(process.env.LOOPINO_BROWSER_DNS_TIMEOUT_MS, 1000, 30000, 5000);
+const maxLogRecords = clampInt(process.env.LOOPINO_BROWSER_MAX_LOG_RECORDS, 20, 1000, 200);
 const sessionIdleTtlMs = clampInt(
-  process.env.MAVERICK_BROWSER_SESSION_IDLE_TTL_MS,
+  process.env.LOOPINO_BROWSER_SESSION_IDLE_TTL_MS,
   60000,
   86400000,
   15 * 60 * 1000,
 );
 const sessionHardTtlMs = clampInt(
-  process.env.MAVERICK_BROWSER_SESSION_HARD_TTL_MS,
+  process.env.LOOPINO_BROWSER_SESSION_HARD_TTL_MS,
   60000,
   7 * 86400000,
   4 * 60 * 60 * 1000,
 );
 const sessionReaperIntervalMs = clampInt(
-  process.env.MAVERICK_BROWSER_SESSION_REAPER_INTERVAL_MS,
+  process.env.LOOPINO_BROWSER_SESSION_REAPER_INTERVAL_MS,
   1000,
   60 * 60 * 1000,
   30 * 1000,
 );
-const proxyBindHost = process.env.MAVERICK_BROWSER_PROXY_BIND_HOST || "127.0.0.1";
-const proxyPort = Number.parseInt(process.env.MAVERICK_BROWSER_PROXY_PORT || "9324", 10);
-const proxyAdvertisedServer = process.env.MAVERICK_BROWSER_PROXY_SERVER || `http://127.0.0.1:${proxyPort}`;
+const proxyBindHost = process.env.LOOPINO_BROWSER_PROXY_BIND_HOST || "127.0.0.1";
+const proxyPort = Number.parseInt(process.env.LOOPINO_BROWSER_PROXY_PORT || "9324", 10);
+const proxyAdvertisedServer = process.env.LOOPINO_BROWSER_PROXY_SERVER || `http://127.0.0.1:${proxyPort}`;
 const allowedSchemes = new Set(policyManifest.allowed_schemes.map((scheme) => String(scheme).toLowerCase()));
 const adminDevTargets = new Set(
   policyManifest.admin_dev_targets.map((target) =>
@@ -296,7 +296,7 @@ async function createSession(payload) {
       permissions: [],
       proxy: {
         server: proxyAdvertisedServer,
-        username: "maverick",
+        username: "loopino",
         password: proxyPassword,
       },
       reducedMotion: "reduce",
@@ -312,7 +312,7 @@ async function createSession(payload) {
       context,
       pages: new Set(),
       activePage: null,
-      mode: payload.mode === "maverick_dev_inspector" ? "maverick_dev_inspector" : "read_only",
+      mode: payload.mode === "loopino_dev_inspector" ? "loopino_dev_inspector" : "read_only",
       viewport,
       policyContext,
       userId: payload.caller_context?.user_id || null,
@@ -757,8 +757,8 @@ function assertSessionAccessAllowed(session, payload) {
 
 async function assertDevInspectorActionAllowed(session, payload) {
   assertSessionAccessAllowed(session, payload);
-  if (session.mode !== "maverick_dev_inspector") {
-    throw brokerError(403, "interactive_action_forbidden", "Interactive actions require maverick_dev_inspector mode.");
+  if (session.mode !== "loopino_dev_inspector") {
+    throw brokerError(403, "interactive_action_forbidden", "Interactive actions require loopino_dev_inspector mode.");
   }
   const targetUrl = requireString(payload, "target_url");
   const targetDecision = await evaluateBrokerEgressUrl(targetUrl, session.policyContext);
@@ -1100,7 +1100,7 @@ function proxyPolicyContext(request) {
   const username = separator >= 0 ? decoded.slice(0, separator) : "";
   const password = separator >= 0 ? decoded.slice(separator + 1) : "";
   const policyContext = sessionLifecycle.proxyPolicy(password);
-  if (username !== "maverick" || !policyContext) {
+  if (username !== "loopino" || !policyContext) {
     throw brokerError(407, "proxy_auth_required", "Browser broker proxy credentials are invalid.");
   }
   return policyContext;
@@ -1148,7 +1148,7 @@ function sendProxyHttpError(response, error) {
   }
   const status = error.statusCode === 407 ? 407 : error.statusCode || 502;
   if (status === 407) {
-    response.setHeader("Proxy-Authenticate", 'Basic realm="maverick-browser"');
+    response.setHeader("Proxy-Authenticate", 'Basic realm="loopino-browser"');
   }
   sendJson(response, status, {
     error: error.code || "proxy_error",
@@ -1160,7 +1160,7 @@ function sendProxyHttpError(response, error) {
 function sendProxyConnectError(socket, error) {
   const status = error.statusCode === 407 ? 407 : error.statusCode || 502;
   const headers =
-    status === 407 ? 'Proxy-Authenticate: Basic realm="maverick-browser"\r\n' : "Content-Type: text/plain\r\n";
+    status === 407 ? 'Proxy-Authenticate: Basic realm="loopino-browser"\r\n' : "Content-Type: text/plain\r\n";
   socket.write(`HTTP/1.1 ${status} Proxy Error\r\n${headers}\r\n`);
   socket.destroy();
 }
@@ -1213,11 +1213,11 @@ async function activeHealthPayload() {
 }
 
 function resolveBrokerTokenState() {
-  const token = (process.env.MAVERICK_BROWSER_BROKER_TOKEN || "").trim();
+  const token = (process.env.LOOPINO_BROWSER_BROKER_TOKEN || "").trim();
   if (token) {
     return { token, source: "env" };
   }
-  const configuredTokenFile = (process.env.MAVERICK_BROWSER_BROKER_TOKEN_FILE || "").trim();
+  const configuredTokenFile = (process.env.LOOPINO_BROWSER_BROKER_TOKEN_FILE || "").trim();
   const tokenFile = resolve(configuredTokenFile || defaultBrokerTokenFile);
   const existing = readBrokerTokenFile(tokenFile);
   if (existing) {
@@ -1388,7 +1388,7 @@ async function runPolicySelfTest() {
     }
   }
   const devSession = {
-    mode: "maverick_dev_inspector",
+    mode: "loopino_dev_inspector",
     policyContext: { allow_admin_dev_targets: true },
     activePage: { url: () => "http://hostmachine:8000/apps/base-shell/" },
   };

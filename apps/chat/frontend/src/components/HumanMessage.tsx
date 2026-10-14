@@ -10,7 +10,7 @@ import { openAppParamsInShell, type ShellRouteParams } from "../lib/shellNavigat
 import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 import { MessageFooter } from "./MessageFooter";
 
-const URL_PARSE_BASE = "https://maverick.local";
+const URL_PARSE_BASE = "https://loopino.local";
 
 export function HumanMessage({
   mentionItems,

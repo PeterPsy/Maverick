@@ -20,7 +20,7 @@ from core.runtime.remote_agentic_admission import (
 )
 
 if TYPE_CHECKING:
-    from core.providers.maverick_agent_onboarding import MaverickProtocolAdapterManifest
+    from core.providers.loopino_agent_onboarding import LoopinoProtocolAdapterManifest
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ class HostedProviderRuntime:
     endpoint_url: str = ""
     allowed_upstream_ids: tuple[str, ...] = ()
     # Supplied by the executable factory, never copied from publication data.
-    implementation_manifest: MaverickProtocolAdapterManifest | None = None
+    implementation_manifest: LoopinoProtocolAdapterManifest | None = None
 
 
 class HostedProviderRuntimeRegistry:

@@ -141,7 +141,7 @@ def ensure_default_workspace_record(store: WorkspaceStore, now: datetime | None 
             workspace_id="default",
             name="Default",
             slug="default",
-            description="Default workspace for the current Maverick installation.",
+            description="Default workspace for the current Loopino installation.",
             created_by_user_id=None,
             now=timestamp,
         )

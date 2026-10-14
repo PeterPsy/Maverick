@@ -90,7 +90,7 @@ class GeneralistOrchestrationContextTest(unittest.TestCase):
             [{"file_id": "file-1", "workspace_relative_path": "storage/generated/report.md"}],
         )
         self.assertIn("Come sta andando?", provider_input)
-        self.assertIn("Maverick governed orchestration read", provider_input)
+        self.assertIn("Loopino governed orchestration read", provider_input)
         self.assertIn("Implementation completed with regression coverage", provider_input)
         self.assertNotIn("unsafe-runtime-secret", provider_input)
         self.assertNotIn("must-not-leak", provider_input)

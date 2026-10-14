@@ -377,13 +377,13 @@ function grantMatchesKnownConsumer(grant: SecretGrant, knownTargetKeys: Set<stri
 
 export function appSecretTarget(surface: string): string {
   const normalized = surface.trim().toLowerCase().replace(/_/g, '-') || 'entrypoint';
-  return `maverick://app.backend/${normalized}`;
+  return `loopino://app.backend/${normalized}`;
 }
 
 function resourceScopedAppSecretTarget(target: string, resourceType?: string | null, resourceId?: string | null): string | null {
   const normalizedResourceType = normalizeTargetSegment(resourceType);
   const normalizedResourceId = normalizeTargetSegment(resourceId);
-  if (!normalizedResourceType || !normalizedResourceId || !target.startsWith('maverick://app.backend/')) {
+  if (!normalizedResourceType || !normalizedResourceId || !target.startsWith('loopino://app.backend/')) {
     return null;
   }
   return `${target}/${normalizedResourceType}/${normalizedResourceId}`;
@@ -430,7 +430,7 @@ function grantMatchesConsumerTarget(grant: SecretGrant, appId: string, logicalNa
 }
 
 function consumerLabel(target: string): string {
-  return target.replace('maverick://app.backend/', '').replace(/^cli\//, 'CLI ').replace(/^mcp\//, 'MCP ');
+  return target.replace('loopino://app.backend/', '').replace(/^cli\//, 'CLI ').replace(/^mcp\//, 'MCP ');
 }
 
 function normalizeTargetSegment(value?: string | null): string {

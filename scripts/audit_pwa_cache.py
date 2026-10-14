@@ -38,8 +38,8 @@ from scripts.pwa_cache_audit_retry import (
 
 
 POLICY_PATH = Path("docs/product/pwa_cache_operational_policy.v1.json")
-POLICY_SCHEMA = "maverick.pwa-cache-operational-policy.v1"
-INVENTORY_SCHEMA = "maverick.pwa-cache-resource-inventory.v2"
+POLICY_SCHEMA = "loopino.pwa-cache-operational-policy.v1"
+INVENTORY_SCHEMA = "loopino.pwa-cache-resource-inventory.v2"
 
 
 def audit_repository(root: Path) -> list[str]:
@@ -96,7 +96,7 @@ def audit_frontend_manifests(root: Path, policy: dict[str, Any], errors: list[st
     for build in builds:
         output_files = [
             path for path in build.rglob("*")
-            if path.is_file() and path.name != "maverick-frontend-assets.json" and path.suffix != ".map"
+            if path.is_file() and path.name != "loopino-frontend-assets.json" and path.suffix != ".map"
         ]
         relative_build = build.relative_to(root)
         total = sum(path.stat().st_size for path in output_files)
@@ -106,7 +106,7 @@ def audit_frontend_manifests(root: Path, policy: dict[str, Any], errors: list[st
         if max_manifest is not None and total > max_manifest:
             errors.append(f"{relative_build}: frontend bytes {total} exceed {max_manifest}")
 
-        manifest_path = build / "maverick-frontend-assets.json"
+        manifest_path = build / "loopino-frontend-assets.json"
         if not manifest_path.is_file():
             continue
         manifest_count += 1

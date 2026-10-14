@@ -11,7 +11,7 @@ from core.apps.remote_store import catalog_base_url
 
 
 def _catalog_base_url() -> str:
-    return catalog_base_url(os.environ.get("MAVERICK_APP_STORE_URL"))
+    return catalog_base_url(os.environ.get("LOOPINO_APP_STORE_URL"))
 
 
 def _safe_app_id_response(raw_app_id: str, start_response: StartResponse) -> str | list[bytes]:

@@ -1,7 +1,7 @@
 import {
-  observeMaverickVisibility,
-  maverickAppIsVisible,
-} from "@maverick/pwa-cache";
+  observeLoopinoVisibility,
+  loopinoAppIsVisible,
+} from "@loopino/pwa-cache";
 import { useEffect, useRef, useState } from "react";
 import { findFreeTime, checkAvailability } from "@/api";
 import { readPreferences, t } from "@/preferences";
@@ -65,7 +65,7 @@ export function FindTime({
   useEffect(() => {
     const changed = () => setPreferencesVersion((v) => v + 1);
     window.addEventListener("calendar-preferences-changed", changed);
-    const stop = observeMaverickVisibility((visible) => {
+    const stop = observeLoopinoVisibility((visible) => {
       if (!visible) {
         read.current?.abort();
         setBusy(false);
@@ -82,7 +82,7 @@ export function FindTime({
       readOnly ||
       !draft?.startTime ||
       !draft?.endTime ||
-      !maverickAppIsVisible()
+      !loopinoAppIsVisible()
     )
       return;
     read.current?.abort();

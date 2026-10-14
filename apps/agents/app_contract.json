@@ -4,7 +4,7 @@
   "name": "Agents",
   "version": "0.2.0",
   "description": "Workspace app for self-contained custom agent definitions.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
@@ -59,7 +59,7 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_agents_app",
+      "loopino_agents_app",
       "agents_catalog_compact",
       "agents_get_agent_definition",
       "agents_upsert_agent_definition",

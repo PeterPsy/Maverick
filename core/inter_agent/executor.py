@@ -1143,7 +1143,7 @@ _ROUTING_ROLE_LABEL_RE = re.compile(
 
 
 def _worker_request_context(value: str) -> str:
-    """Return user task context with obvious Maverick routing instructions removed."""
+    """Return user task context with obvious Loopino routing instructions removed."""
 
     text = " ".join(str(value or "").split())
     if not text:
@@ -1179,7 +1179,7 @@ def _participant_input(
     specific = participant_inputs.get(participant.participant_id, "").strip()
     request_text = _worker_request_context(base_input)
     sections = [
-        "You are a delegated worker in a Maverick multi-agent run.",
+        "You are a delegated worker in a Loopino multi-agent run.",
         f"Participant: {participant.label} ({participant.participant_id}).",
         (
             "Complete only the delegated task below. Do not act as the orchestrator, "
@@ -1215,7 +1215,7 @@ def _group_chat_participant_input(
     specific = participant_inputs.get(participant.participant_id, "").strip()
     request_text = _worker_request_context(base_input)
     sections = [
-        "You are one participant in a Maverick group chat run.",
+        "You are one participant in a Loopino group chat run.",
         f"Participant: {participant.label} ({participant.participant_id}).",
         (
             "Contribute your bounded answer for this participant role. Do not act as the orchestrator, "
@@ -1248,7 +1248,7 @@ def _manager_tools_participant_input(
     user_request = _worker_request_context(base_input)
     if specific:
         sections = [
-            "You are a delegated worker in a Maverick multi-agent manager-tools run.",
+            "You are a delegated worker in a Loopino multi-agent manager-tools run.",
             f"Participant: {participant.label} ({participant.participant_id}).",
             (
                 "Complete only the delegated task below. Do not act as the orchestrator, "
@@ -1262,7 +1262,7 @@ def _manager_tools_participant_input(
     if user_request:
         return "\n\n".join(
             [
-                "You are a delegated worker in a Maverick multi-agent manager-tools run.",
+                "You are a delegated worker in a Loopino multi-agent manager-tools run.",
                 f"Participant: {participant.label} ({participant.participant_id}).",
                 (
                     "Produce the final answer for the user's request. Do not act as the orchestrator, "
@@ -1273,7 +1273,7 @@ def _manager_tools_participant_input(
         )
     return "\n\n".join(
         [
-            "You are a delegated worker in a Maverick multi-agent manager-tools run.",
+            "You are a delegated worker in a Loopino multi-agent manager-tools run.",
             f"Participant: {participant.label} ({participant.participant_id}).",
             "Execute the assigned task and return the final answer. Do not act as the orchestrator or delegate further.",
         ]

@@ -313,7 +313,7 @@ def normalized_app_entity_request(data_root: Path, body: dict[str, Any], source:
         "summary": summary,
         "body_markdown": body_markdown,
         "version_hash": version_hash,
-        "extracted_ref": deep_link or f"maverick://app/{owning_app_id}/{entity_type}/{entity_id}",
+        "extracted_ref": deep_link or f"loopino://app/{owning_app_id}/{entity_type}/{entity_id}",
         "hash_kind": "reference_snapshot",
         "extraction_status": "available",
         "source_modified_at": str(source.get("modified_at") or body.get("modified_at") or ""),

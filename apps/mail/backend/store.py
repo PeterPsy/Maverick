@@ -94,7 +94,7 @@ def disconnect_connection(data_root: Path, connection_id: str, *, reason: str = 
         if row is None:
             raise ValueError(f"Connection `{connection_id}` was not found")
         if _loads_object(row["settings_json"]).get("managed_by") == "platform":
-            raise ValueError("Disconnect Google or disable Mail from Maverick Connected accounts.")
+            raise ValueError("Disconnect Google or disable Mail from Loopino Connected accounts.")
         previous_status = str(row["status"])
         db.execute("UPDATE connections SET status = ?, updated_at = ? WHERE id = ?", ("disconnected", now, connection_id))
         credential_rows = db.execute(
@@ -142,7 +142,7 @@ def delete_disconnected_connection(data_root: Path, connection_id: str) -> dict[
         if str(row["status"]) != "disconnected":
             raise ValueError(f"Connection `{connection_id}` must be disconnected before removal")
         if _loads_object(row["settings_json"]).get("managed_by") == "platform":
-            raise ValueError("Manage this Google account from Maverick Connected accounts.")
+            raise ValueError("Manage this Google account from Loopino Connected accounts.")
         cache_counts = _connection_cache_counts(db, connection_id)
         folder_count = int(db.execute("SELECT COUNT(*) AS count FROM folders WHERE connection_id = ?", (connection_id,)).fetchone()["count"])
         label_count = int(db.execute("SELECT COUNT(*) AS count FROM labels WHERE connection_id = ?", (connection_id,)).fetchone()["count"])

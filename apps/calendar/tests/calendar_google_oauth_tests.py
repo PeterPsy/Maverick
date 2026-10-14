@@ -468,11 +468,11 @@ class CalendarGoogleOAuthTest(unittest.TestCase):
     def test_connection_actions_emit_connection_data_events(self) -> None:
         self.assertEqual(
             _app_events_for_action("calendar_connections.start_oauth"),
-            [{"type": "maverick.app.data-changed", "owner_app_id": "calendar", "resource": "connections"}],
+            [{"type": "loopino.app.data-changed", "owner_app_id": "calendar", "resource": "connections"}],
         )
         self.assertEqual(
             _app_events_for_action("calendar_connections.complete_oauth"),
-            [{"type": "maverick.app.data-changed", "owner_app_id": "calendar", "resource": "connections"}],
+            [{"type": "loopino.app.data-changed", "owner_app_id": "calendar", "resource": "connections"}],
         )
 
     def test_disconnect_revokes_google_token_and_disables_connection(self) -> None:

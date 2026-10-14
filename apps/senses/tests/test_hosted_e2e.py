@@ -27,8 +27,8 @@ from tests.support.env import apply_test_environment_defaults
 from tests.support.repo import link_app_sources, make_temp_repo_root
 
 
-MAVERICK_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
-SENSES_BACKEND_ROOT = MAVERICK_ROOT / "apps" / "senses" / "backend"
+LOOPINO_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
+SENSES_BACKEND_ROOT = LOOPINO_ROOT / "apps" / "senses" / "backend"
 sys.path.insert(0, str(SENSES_BACKEND_ROOT))
 import service as senses_service
 
@@ -213,7 +213,7 @@ class SensesHostedE2ETest(unittest.TestCase):
                     "dependency_provider_app_id": "speech",
                     "json": {
                         "job_id": "hosted-stt-1",
-                        "text": "ciao Maverick",
+                        "text": "ciao Loopino",
                         "language": "it",
                         "duration_seconds": 1.2,
                     },
@@ -232,7 +232,7 @@ class SensesHostedE2ETest(unittest.TestCase):
         status, transcribed = self._post_senses(stack, {"action": "captures.get", "capture_id": capture_id})
         self.assertEqual(status, 200)
         self.assertEqual(transcribed["capture"]["transcription"]["status"], "completed")
-        self.assertEqual(transcribed["capture"]["transcription"]["text"], "ciao Maverick")
+        self.assertEqual(transcribed["capture"]["transcription"]["text"], "ciao Loopino")
 
         runtime_results: list[dict[str, object]] = []
         with (
@@ -250,7 +250,7 @@ class SensesHostedE2ETest(unittest.TestCase):
         self.assertEqual(status, 202)
         self.assertEqual(dispatch["runtime_request_results"][0]["status"], "submitted")
         runtime_request = self._stored_runtime_request(stack, capture_id)
-        self.assertIn("Transcript: ciao Maverick", runtime_request["input_text"])
+        self.assertIn("Transcript: ciao Loopino", runtime_request["input_text"])
         self.assertEqual(runtime_request["attachments"][0]["content_type"], "audio/wav")
         self.assertEqual(len(runtime_results), 1)
 
@@ -353,8 +353,8 @@ class SensesHostedE2ETest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_SPEECH_WHISPER_CPP_BINARY": str(whisper_binary),
-                "MAVERICK_SPEECH_WHISPER_CPP_MODEL": str(whisper_model),
+                "LOOPINO_SPEECH_WHISPER_CPP_BINARY": str(whisper_binary),
+                "LOOPINO_SPEECH_WHISPER_CPP_MODEL": str(whisper_model),
             },
         ):
             for app_id in ("base-shell", "chat", "storage", "speech", "senses"):
@@ -438,7 +438,7 @@ class SensesHostedE2ETest(unittest.TestCase):
             cookie=stack.cookie,
         )
         self.assertEqual(launch_status, 200, launch_payload)
-        self.assertNotEqual(launch_payload["origin"], "http://maverick.localhost")
+        self.assertNotEqual(launch_payload["origin"], "http://loopino.localhost")
         self.assertTrue(launch_payload["bootstrap_url"].startswith(launch_payload["origin"]))
 
     def _pair_device(self, stack: HostedSensesStack) -> dict[str, object]:
@@ -464,7 +464,7 @@ class SensesHostedE2ETest(unittest.TestCase):
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": "admin", "password": "maverick"},
+            body={"username": "admin", "password": "loopino"},
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]
@@ -496,13 +496,13 @@ class SensesHostedE2ETest(unittest.TestCase):
             "REQUEST_METHOD": method,
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
-            "HTTP_HOST": "maverick.localhost",
+            "HTTP_HOST": "loopino.localhost",
             "QUERY_STRING": "",
             "wsgi.url_scheme": "http",
             "wsgi.input": BytesIO(payload),
         }
         if method not in {"GET", "HEAD", "OPTIONS"}:
-            environ["HTTP_ORIGIN"] = "http://maverick.localhost"
+            environ["HTTP_ORIGIN"] = "http://loopino.localhost"
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
 

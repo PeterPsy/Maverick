@@ -1,5 +1,5 @@
 {
-  "schema": "maverick.pwa-mutation-retry-registry.v2",
+  "schema": "loopino.pwa-mutation-retry-registry.v2",
   "contracts": [
     {
       "audit_id": "base-shell.pinned-apps.set.v1",

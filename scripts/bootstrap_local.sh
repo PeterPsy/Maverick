@@ -2,11 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT_DIR}/scripts/installation_environment.sh"
 VENV_DIR="${ROOT_DIR}/.venv"
-BUILD_FRONTENDS="${MAVERICK_BUILD_FRONTENDS:-0}"
-REBASE_LOCAL_STATE="${MAVERICK_REBASE_LOCAL_STATE_PATHS:-0}"
-PYTHON_BIN="${MAVERICK_PYTHON:-}"
-PYPROJECT_EXTRAS="${MAVERICK_PYPROJECT_EXTRAS:-dev}"
+BUILD_FRONTENDS="${LOOPINO_BUILD_FRONTENDS:-0}"
+REBASE_LOCAL_STATE="${LOOPINO_REBASE_LOCAL_STATE_PATHS:-0}"
+PYTHON_BIN="${LOOPINO_PYTHON:-}"
+PYPROJECT_EXTRAS="${LOOPINO_PYPROJECT_EXTRAS:-dev}"
 
 for argument in "$@"; do
   case "${argument}" in
@@ -43,7 +44,7 @@ raise SystemExit(0 if sys.version_info >= (3, 12) else 1)
 PY
 then
   cat >&2 <<EOF
-Maverick requires Python 3.12 or newer.
+Loopino requires Python 3.12 or newer.
 
 The selected interpreter is:
   ${PYTHON_BIN}
@@ -53,7 +54,7 @@ Install Python 3.12 and its venv package, then rerun bootstrap. On Ubuntu:
   sudo apt-get install -y python3.12 python3.12-venv
 
 If Python 3.12 is installed in a custom path, run:
-  MAVERICK_PYTHON=/path/to/python3.12 ./scripts/bootstrap_local.sh
+  LOOPINO_PYTHON=/path/to/python3.12 ./scripts/bootstrap_local.sh
 EOF
   exit 1
 fi
@@ -69,14 +70,14 @@ python3 -m pip install --upgrade pip
 python3 -m pip install -e ".[${PYPROJECT_EXTRAS}]"
 
 if [[ ! -f "${ROOT_DIR}/.env" ]]; then
-  python3 "${ROOT_DIR}/scripts/install_maverick.py" \
+  python3 "${ROOT_DIR}/scripts/install_loopino.py" \
     --local-only \
     --skip-bootstrap \
     --skip-verify \
     --render-only \
     --yes \
     --install-env "${ROOT_DIR}/.env" \
-    --core-port "${MAVERICK_PORT:-8000}" \
+    --core-port "${LOOPINO_PORT:-8000}" \
     >/dev/null
 fi
 

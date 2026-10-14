@@ -1,7 +1,7 @@
 {
-  "name": "@maverick/pwa-cache",
+  "name": "@loopino/pwa-cache",
   "version": "1.0.0",
-  "description": "Framework-neutral, scope-safe browser data cache and RAM retry primitives for Maverick apps.",
+  "description": "Framework-neutral, scope-safe browser data cache and RAM retry primitives for Loopino apps.",
   "license": "MIT",
   "private": true,
   "type": "module",

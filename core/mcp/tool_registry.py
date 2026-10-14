@@ -44,7 +44,7 @@ class McpToolRegistry:
         """Invoke one registered MCP tool through its resolved handler."""
         return self._handlers[tool_name](arguments or {}, context)
 
-    def discovery_manifest(self, *, server_name: str = "maverick") -> McpDiscoveryManifest:
+    def discovery_manifest(self, *, server_name: str = "loopino") -> McpDiscoveryManifest:
         """Build a deterministic discovery manifest for the current registry."""
         tools = self.list_tools()
         return McpDiscoveryManifest(server_name=server_name, tool_count=len(tools), tools=tools)

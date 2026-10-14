@@ -1,9 +1,9 @@
 .installation-view {
-  --installation-text: var(--maverick-text, #ececec);
-  --installation-muted: var(--maverick-text-muted, #aaa);
-  --installation-border: var(--maverick-border, rgba(255,255,255,.1));
-  --installation-surface: var(--maverick-surface, rgba(255,255,255,.055));
-  color: var(--installation-text); font: 14px/1.5 var(--maverick-font, 'Avenir Next', 'Segoe UI', system-ui, sans-serif);
+  --installation-text: var(--loopino-text, #ececec);
+  --installation-muted: var(--loopino-text-muted, #aaa);
+  --installation-border: var(--loopino-border, rgba(255,255,255,.1));
+  --installation-surface: var(--loopino-surface, rgba(255,255,255,.055));
+  color: var(--installation-text); font: 14px/1.5 var(--loopino-font, 'Avenir Next', 'Segoe UI', system-ui, sans-serif);
   display: grid; gap: 18px; min-width: 0;
 }
 .installation-view * { box-sizing: border-box; }
@@ -19,11 +19,11 @@
 .installation-facts strong { display: block; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .installation-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .installation-field { display: grid; gap: 7px; margin: 16px 0; font-size: 13px; font-weight: 500; }
-.installation-view input:not([type=checkbox]), .installation-view select { display: block; width: 100%; min-width: 0; height: 44px; padding: 0 14px; border: 1px solid var(--installation-border); border-radius: 18px; background: var(--maverick-bg-strong, #171717); color: inherit; font: inherit; }
+.installation-view input:not([type=checkbox]), .installation-view select { display: block; width: 100%; min-width: 0; height: 44px; padding: 0 14px; border: 1px solid var(--installation-border); border-radius: 18px; background: var(--loopino-bg-strong, #171717); color: inherit; font: inherit; }
 .installation-view input::placeholder { color: var(--installation-muted); opacity: .7; }
 .installation-view select { color-scheme: inherit; }
 .installation-view button { min-height: 40px; padding: 8px 15px; border-radius: 18px; border: 1px solid var(--installation-border); background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.installation-view button.installation-primary { background: var(--maverick-accent, #ececec); color: var(--maverick-text-on-accent, #111); border-color: transparent; font-weight: 600; }
+.installation-view button.installation-primary { background: var(--loopino-accent, #ececec); color: var(--loopino-text-on-accent, #111); border-color: transparent; font-weight: 600; }
 .installation-view button:hover { filter: brightness(.92); }
 .installation-view button:disabled { opacity: .45; cursor: default; }
 .installation-view :is(button,input,select,a,summary):focus-visible { outline: 2px solid var(--installation-text); outline-offset: 3px; }

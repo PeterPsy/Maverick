@@ -1,6 +1,6 @@
-import { readMaverickAppFrameContext } from './appFrameContext';
-import { isExactMaverickParentMessage } from './dataCacheBrokerProtocol';
-import { maverickAppIsVisible, observeMaverickVisibility } from './appVisibility';
+import { readLoopinoAppFrameContext } from './appFrameContext';
+import { isExactLoopinoParentMessage } from './dataCacheBrokerProtocol';
+import { loopinoAppIsVisible, observeLoopinoVisibility } from './appVisibility';
 
 type Subscriber = { event: (event: unknown) => void; refresh: () => void };
 const subscribers = new Set<Subscriber>();
@@ -19,7 +19,7 @@ export function connectAppEventSocket<T>(onEvent: (event: T) => void, onReconnec
 }
 
 function startTransport(): () => void {
-  const context = readMaverickAppFrameContext();
+  const context = readLoopinoAppFrameContext();
   const embedded = Boolean(context && window.parent && window.parent !== window);
   const documentSuspended = () => Boolean(globalThis.document?.hidden || globalThis.navigator?.onLine === false);
   let awaitingParentResume = embedded && documentSuspended();
@@ -28,7 +28,7 @@ function startTransport(): () => void {
   let disposed = false;
   let interrupted = false;
   let failures = 0;
-  const visible = maverickAppIsVisible;
+  const visible = loopinoAppIsVisible;
   let wasVisible = visible();
   interrupted = !wasVisible;
   const refresh = () => { for (const subscriber of subscribers) subscriber.refresh(); };
@@ -87,18 +87,18 @@ function startTransport(): () => void {
   }
 
   function onMessage(message: MessageEvent): void {
-    if (!embedded || !isExactMaverickParentMessage(message) || !message.data || typeof message.data !== 'object') return;
+    if (!embedded || !isExactLoopinoParentMessage(message) || !message.data || typeof message.data !== 'object') return;
     const payload = message.data;
-    if (payload.type === 'maverick.app.events-resync') {
+    if (payload.type === 'loopino.app.events-resync') {
       awaitingParentResume = false;
       if (visible()) { interrupted = false; refresh(); } else interrupted = true;
-    } else if (payload.type === 'maverick.app.event' && payload.event && typeof payload.event === 'object') {
+    } else if (payload.type === 'loopino.app.event' && payload.event && typeof payload.event === 'object') {
       if (payload.event.workspace_id && payload.event.workspace_id !== context!.workspaceId) return;
       if (visible()) deliver(payload.event); else interrupted = true;
     }
   }
 
-  const stopVisibility = observeMaverickVisibility(updateVisibility);
+  const stopVisibility = observeLoopinoVisibility(updateVisibility);
   window.addEventListener?.('offline', onDocumentSuspended);
   globalThis.document?.addEventListener('visibilitychange', onDocumentSuspended);
   window.addEventListener?.('message', onMessage);

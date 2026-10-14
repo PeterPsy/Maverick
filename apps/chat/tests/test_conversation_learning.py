@@ -59,7 +59,7 @@ class ConversationLearningTests(unittest.TestCase):
         return result['background_generation_requests'][0]
 
     def finish(self, request, memory=None, improvements=None, **changes):
-        improvements = [{**item, 'scope':'maverick', 'problem_kind':'reliability', 'generalization':'Reusable across workspace tasks',
+        improvements = [{**item, 'scope':'loopino', 'problem_kind':'reliability', 'generalization':'Reusable across workspace tasks',
                          'verification': 'Reproduce and verify the failure'} for item in improvements or []]
         return complete_analysis(self.root, {**request['callback']['payload'], "request_id": request['request_id'],
             "status": "completed", "output_text": json.dumps(analysis_output(json.loads(request['input_text']), memory, improvements)),

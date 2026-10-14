@@ -52,7 +52,7 @@
 }
 
 .delivery-column-heading h2 i[data-status="approval"] {
-  background: var(--maverick-warning);
+  background: var(--loopino-warning);
 }
 
 .delivery-column-heading h2 i[data-status="scheduled"] {
@@ -60,7 +60,7 @@
 }
 
 .delivery-column-heading h2 i[data-status="published"] {
-  background: var(--maverick-success);
+  background: var(--loopino-success);
 }
 
 .delivery-column-heading > span {
@@ -86,7 +86,7 @@
   border-radius: 18px;
   margin-bottom: 9px;
   background: var(--marta-card-bg);
-  box-shadow: var(--maverick-glass-edge);
+  box-shadow: var(--loopino-glass-edge);
   padding: 12px;
 }
 
@@ -196,7 +196,7 @@
   border: 1px solid var(--marta-border);
   border-radius: var(--marta-radius-card);
   background: var(--marta-surface);
-  box-shadow: var(--maverick-glass-edge);
+  box-shadow: var(--loopino-glass-edge);
 }
 
 .admin-row {
@@ -243,7 +243,7 @@
 
 .admin-identity small {
   margin-top: 5px;
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
   font-size: 0.62rem;
 }
 

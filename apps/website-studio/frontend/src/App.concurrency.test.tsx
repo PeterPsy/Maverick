@@ -108,7 +108,7 @@ describe('Website Studio data and selection lifetimes', () => {
     const recovery = deferred<WorkspaceSnapshot>();
     useRead(recovery.promise);
     await changed();
-    await message({ type: 'maverick.app.navigate', params: { site_id: 'site', info_panel: '1' } });
+    await message({ type: 'loopino.app.navigate', params: { site_id: 'site', info_panel: '1' } });
     expectPreview('a', '/about');
     await act(async () => { state.current = snapshot('b'); recovery.resolve(state.current); });
     expectPreview('b', '/about');
@@ -187,7 +187,7 @@ describe('Website Studio data and selection lifetimes', () => {
     await changed();
     const oldSignal = vi.mocked(cachedWorkspaceSnapshot).mock.calls.at(-1)![2]!.signal;
     if (action === 'unmount') unmount();
-    else await message({ type: 'maverick.app.navigate', params: { new_website_request_id: 'new' } });
+    else await message({ type: 'loopino.app.navigate', params: { new_website_request_id: 'new' } });
     expect(oldSignal?.aborted).toBe(true);
     await act(async () => { oldRead.resolve(snapshot('b')); oldBuild.reject(new Error('Retired view build')); });
     expect(frame()).toBeNull();

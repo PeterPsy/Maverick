@@ -1,7 +1,7 @@
 """Startup performance instrumentation helpers.
 
 The instrumentation is intentionally opt-in so normal development logs do not
-become noisy. Set ``MAVERICK_STARTUP_PERF_LOGS=1`` to emit structured timing
+become noisy. Set ``LOOPINO_STARTUP_PERF_LOGS=1`` to emit structured timing
 records while collecting startup baselines.
 """
 
@@ -17,14 +17,14 @@ import time
 from typing import Iterator, Mapping
 
 
-logger = logging.getLogger("maverick.startup")
+logger = logging.getLogger("loopino.startup")
 
 _ENABLED_VALUES = {"1", "true", "yes", "on", "debug"}
 
 
 def startup_performance_enabled() -> bool:
     """Return whether startup performance logs should be emitted."""
-    return os.environ.get("MAVERICK_STARTUP_PERF_LOGS", "").strip().lower() in _ENABLED_VALUES
+    return os.environ.get("LOOPINO_STARTUP_PERF_LOGS", "").strip().lower() in _ENABLED_VALUES
 
 
 @dataclass(frozen=True)

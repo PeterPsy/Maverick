@@ -17,7 +17,7 @@ describe('storage preview modal mobile styles', () => {
 
     expect(source).toContain('previewViewportSize.width > 780');
     expect(source).toContain('icon-button preview-fullscreen-action');
-    expect(styles).toMatch(/\.storage-shell\s*{[\s\S]*--storage-shell-top-offset:\s*var\(--maverick-shell-mobile-content-top-offset,\s*0px\);/);
+    expect(styles).toMatch(/\.storage-shell\s*{[\s\S]*--storage-shell-top-offset:\s*var\(--loopino-shell-mobile-content-top-offset,\s*0px\);/);
     expect(styles).toMatch(/@media \(max-width: 780px\)[\s\S]*\.preview-modal-backdrop\s*{[\s\S]*inset:\s*var\(--storage-shell-top-offset\) 0 0 0;[\s\S]*padding:\s*0;/);
     expect(styles).toMatch(/@media \(max-width: 780px\)[\s\S]*\.preview-modal\s*{[\s\S]*position:\s*absolute;[\s\S]*inset:\s*0;[\s\S]*width:\s*100%;[\s\S]*height:\s*auto;[\s\S]*border:\s*0;[\s\S]*border-radius:\s*0;/);
     expect(styles).toMatch(/@media \(max-width: 780px\)[\s\S]*\.preview-modal-header\s*{[\s\S]*align-items:\s*center;[\s\S]*padding:\s*0 max\(10px,\s*env\(safe-area-inset-right\)\) 0 max\(12px,\s*env\(safe-area-inset-left\)\);/);

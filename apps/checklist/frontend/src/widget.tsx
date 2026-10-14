@@ -1,4 +1,4 @@
-import { connectAppEventSocket } from '@maverick/pwa-cache';
+import { connectAppEventSocket } from '@loopino/pwa-cache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AgentPlan from './components/ui/agent-plan';
@@ -71,7 +71,7 @@ function Widget() {
       lastHeightRef.current = nextHeight;
       window.parent?.postMessage(
         {
-          type: 'maverick.widget.resize',
+          type: 'loopino.widget.resize',
           owner_app_id: APP_ID,
           widget_id: WIDGET_ID,
           height: `${nextHeight}px`
@@ -103,7 +103,7 @@ function Widget() {
 
 
   useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((payload) => {
-    if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === APP_ID) {
+    if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === APP_ID) {
       void load();
     }
   }, () => { void load(); }), [checklistId]);

@@ -43,11 +43,11 @@ class GitHubActionsServiceTest(unittest.TestCase):
             }],
         })
 
-        result = client.run_jobs({"repository": "giuntiocram/maverick-glasses-ios", "run_id": 99})
+        result = client.run_jobs({"repository": "giuntiocram/loopino-glasses-ios", "run_id": 99})
 
         self.assertEqual(
             client.requested_path,
-            "GET /repos/giuntiocram/maverick-glasses-ios/actions/runs/99/jobs?filter=all&per_page=100",
+            "GET /repos/giuntiocram/loopino-glasses-ios/actions/runs/99/jobs?filter=all&per_page=100",
         )
         self.assertEqual(result["action"], "run_jobs")
         self.assertEqual(result["jobs"], [{

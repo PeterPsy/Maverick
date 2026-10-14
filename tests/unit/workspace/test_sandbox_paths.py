@@ -86,7 +86,7 @@ class WorkspaceSandboxTest(unittest.TestCase):
 
     def test_bwrap_command_mounts_workspace_without_mounting_repository_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo_root = Path(temp) / "maverick"
+            repo_root = Path(temp) / "loopino"
             workspace_root = repo_root / "workspaces" / "ceida"
             runtime_root = workspace_root / "runtime"
             dependency_root = Path(temp) / ".nvm"
@@ -133,7 +133,7 @@ class WorkspaceSandboxTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("bwrap"), "bubblewrap is not installed")
     def test_bwrap_command_denies_writes_outside_workspace_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo_root = Path(temp) / "maverick"
+            repo_root = Path(temp) / "loopino"
             workspace_root = repo_root / "workspaces" / "ceida"
             runtime_root = workspace_root / ".runtime"
             workspace_root.mkdir(parents=True)
@@ -166,7 +166,7 @@ class WorkspaceSandboxTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("bwrap"), "bubblewrap is not installed")
     def test_bwrap_command_binds_dependency_file_to_runtime_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo_root = Path(temp) / "maverick"
+            repo_root = Path(temp) / "loopino"
             workspace_root = repo_root / "workspaces" / "ceida"
             runtime_root = workspace_root / ".runtime"
             host_tool = Path(temp) / "host-tool"
@@ -190,7 +190,7 @@ class WorkspaceSandboxTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("bwrap") and shutil.which("rg"), "bubblewrap and rg are required")
     def test_bwrap_command_allows_bound_rg_inside_workspace_without_outside_reads(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo_root = Path(temp) / "maverick"
+            repo_root = Path(temp) / "loopino"
             workspace_root = repo_root / "workspaces" / "ceida"
             runtime_root = workspace_root / ".runtime"
             runtime_bin = runtime_root / "bin"
@@ -227,7 +227,7 @@ class WorkspaceSandboxTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("bwrap"), "bubblewrap is not installed")
     def test_bwrap_command_masks_system_document_roots_without_breaking_shell(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo_root = Path(temp) / "maverick"
+            repo_root = Path(temp) / "loopino"
             workspace_root = repo_root / "workspaces" / "ceida"
             runtime_root = workspace_root / ".runtime"
             workspace_root.mkdir(parents=True)

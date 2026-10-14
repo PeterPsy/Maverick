@@ -2,15 +2,15 @@
 
 ## Provider boundary
 
-The native app runs through Maverick's official SDK entrypoints. Its persistent WhatsApp provider is a separate, operator-owned process bound only to `127.0.0.1:2785`. The current governed HTTP sidecar has no outbound network, so it cannot host a WhatsApp browser. The app does not change that policy.
+The native app runs through Loopino's official SDK entrypoints. Its persistent WhatsApp provider is a separate, operator-owned process bound only to `127.0.0.1:2785`. The current governed HTTP sidecar has no outbound network, so it cannot host a WhatsApp browser. The app does not change that policy.
 
 `provider/local_gateway.py` launches the pinned provider with bubblewrap: private user, PID, IPC and UTS namespaces; read-only source/system mounts; a private writable data directory; and a temporary filesystem. It deliberately retains host networking for WhatsApp. This is filesystem/process isolation, not a network sandbox. The app validates and pins public remote gateway addresses separately.
 
-Source belongs to `/home/ubuntu/projects/maverick-v3/apps/openwa` on `design`, not the workspace app repository. The default workspace is bound to the registered platform source. PM2 uses the private `workspaces/default/data/openwa/supervisor` namespace and a minimal environment. Provider state remains under `workspaces/default/data/openwa/gateway`; app configuration and actor-scoped notification receipts remain in `data/openwa/app.sqlite`. The provider's linked-device profile is private engine-owned state. Do not expose or export it through app tools.
+Source belongs to `/projects/loopino/apps/openwa` on `design`, not the workspace app repository. The default workspace is bound to the registered platform source. PM2 uses the private `workspaces/default/data/openwa/supervisor` namespace and a minimal environment. Provider state remains under `workspaces/default/data/openwa/gateway`; app configuration and actor-scoped notification receipts remain in `data/openwa/app.sqlite`. The provider's linked-device profile is private engine-owned state. Do not expose or export it through app tools.
 
 ## Install and maintain
 
-Run the source installer from the Maverick root repository. It is pinned and idempotent. Bootstrap is only for a fresh provider database; it refuses an initialized database. Skip both provisioning commands when restoring the already initialized default provider.
+Run the source installer from the Loopino root repository. It is pinned and idempotent. Bootstrap is only for a fresh provider database; it refuses an initialized database. Skip both provisioning commands when restoring the already initialized default provider.
 
 ```bash
 python3 apps/openwa/provider/install_upstream.py
@@ -20,33 +20,33 @@ python3 apps/openwa/provider/bootstrap_local.py
 Use the installed app's native CLI for authorized provider maintenance. Only the trusted platform administrator in the default workspace can invoke these operations, and they require no API key delivery:
 
 ```bash
-maverick app openwa cli run provider --action status --json
-maverick app openwa cli run provider --action start --json
-maverick app openwa cli run provider --action restart --json
-maverick app openwa cli run provider --action stop --json
+loopino app openwa cli run provider --action status --json
+loopino app openwa cli run provider --action start --json
+loopino app openwa cli run provider --action restart --json
+loopino app openwa cli run provider --action stop --json
 ```
 
 The `default` installation is already bootstrapped. Check provider readiness before use; do not bootstrap it again. Bootstrap creates the API key in memory, stores it through Core Secrets, grants the logical `openwa-api-key` to the declared app surfaces, and initializes the provider's hashed key record. It suppresses plaintext key-file creation and banner output. Ongoing provider launches need no raw key in their environment. Gateway credentials are managed directly in Vault. To switch providers, preserve the local provider credential, bind the new credential to `openwa-api-key`, and retain the declared backend/CLI/MCP grant targets before saving the new gateway URL. The app does not rotate or replace Core secrets from its settings screen.
 
 The health hook verifies that `app.sqlite` exists and calls the configured gateway’s `/api/health/ready` with a bounded, credential-free request. An unavailable process, failing provider database or invalid readiness response reports `ok: false`; a linked phone is not required for provider readiness. Start/restart wait for `/api/health/ready`. PM2 restarts a crashed process with a five-second delay and a 600 MB memory limit.
 
-Start/restart atomically persist recovery intent in private `provider-control.json`. The existing generic `backend_recovery` and `background_tick` hooks restore the dedicated supervisor after Maverick restarts or the supervisor disappears, while retaining the initialized database and linked-device profile. Background checks request a 30-second cadence; failures back off to 60 seconds. Missing intent never starts a provider or bootstraps a database. Stop persists disabled intent before stopping the dedicated process, and recovery rechecks it under the same lock. Read-only status does not spawn a supervisor. No system-wide startup unit is installed; recovery requires Maverick to be running. The host operator can also use `python3 apps/openwa/provider/manage.py <action>` when native app invocation is unavailable. Do not restart Maverick's shared backend or another PM2 namespace for OpenWA maintenance. A second workspace needs its own port, supervisor name and Core credential; these local scripts intentionally target default only.
+Start/restart atomically persist recovery intent in private `provider-control.json`. The existing generic `backend_recovery` and `background_tick` hooks restore the dedicated supervisor after Loopino restarts or the supervisor disappears, while retaining the initialized database and linked-device profile. Background checks request a 30-second cadence; failures back off to 60 seconds. Missing intent never starts a provider or bootstraps a database. Stop persists disabled intent before stopping the dedicated process, and recovery rechecks it under the same lock. Read-only status does not spawn a supervisor. No system-wide startup unit is installed; recovery requires Loopino to be running. The host operator can also use `python3 apps/openwa/provider/manage.py <action>` when native app invocation is unavailable. Do not restart Loopino's shared backend or another PM2 namespace for OpenWA maintenance. A second workspace needs its own port, supervisor name and Core credential; these local scripts intentionally target default only.
 
 ## Source and local patches
 
 The provider is OpenWA 0.24.0 at revision `8a45366a287750cf52c2658b0b783747cf51fad2`. Its downloaded source, dependencies and build live in ignored `provider/upstream/`; installation provenance is written there. The reviewed dependency tree is preserved in `provider/provider-package-lock.json` and installed with `npm ci`. Provider source uses `provider/` because generic app promotion excludes reserved runtime directories. See the accompanying license notice and [SOURCE_INVENTORY.md](SOURCE_INVENTORY.md).
 
-The reproducible installer binds NestJS to loopback, suppresses bootstrap plaintext key files when `API_MASTER_KEY` is supplied, masks the key banner, and overrides `music-metadata` to 11.16.0 to address the dependency advisory found during installation. It builds the API without enabling the upstream dashboard, Docker manager, plugin console, Swagger or upstream MCP service. The Maverick app exposes only its own declared operations.
+The reproducible installer binds NestJS to loopback, suppresses bootstrap plaintext key files when `API_MASTER_KEY` is supplied, masks the key banner, and overrides `music-metadata` to 11.16.0 to address the dependency advisory found during installation. It builds the API without enabling the upstream dashboard, Docker manager, plugin console, Swagger or upstream MCP service. The Loopino app exposes only its own declared operations.
 
-The provider uses the wwebjs engine, SQLite and bounded concurrent sessions. Its opt-in session-age send governor is disabled for this personal linked-device installation: linking an established account creates a young provider session, and synchronised outgoing history also spends that governor's daily allowance. This could refuse the first app send even though the user had sent nothing through Maverick. The upstream HTTP rate limits and typing delay retain their defaults. Optional Redis, queue and cache services are disabled for this installation.
+The provider uses the wwebjs engine, SQLite and bounded concurrent sessions. Its opt-in session-age send governor is disabled for this personal linked-device installation: linking an established account creates a young provider session, and synchronised outgoing history also spends that governor's daily allowance. This could refuse the first app send even though the user had sent nothing through Loopino. The upstream HTTP rate limits and typing delay retain their defaults. Optional Redis, queue and cache services are disabled for this installation.
 
 ## Verification and limits
 
 ```bash
 python3 -m unittest discover -s apps/openwa/tests -v
-maverick core cli run core.app-sdk.validate --app-root /home/ubuntu/projects/maverick-v3/apps/openwa --json
-maverick core cli run core.app-sdk.status --app-id openwa --workspace default --json
-maverick app openwa cli run openwa --action sessions.list --json
+loopino core cli run core.app-sdk.validate --app-root /projects/loopino/apps/openwa --json
+loopino core cli run core.app-sdk.status --app-id openwa --workspace default --json
+loopino app openwa cli run openwa --action sessions.list --json
 ```
 
 The native and frontend regression suites cover provider readiness, transport status preservation, timeout/remount, quoted replies, uncertain/in-progress conflicts, recovery, concurrent refreshes, cancelled pages, gateway/credential changes, QR failures, shell theme/navigation and notification isolation. A cold first browser start can outlast one HTTP request; the app observes the live session state rather than starting a second job.
@@ -67,7 +67,7 @@ are never forwarded. The image stays in browser memory and is not automatically
 saved to Storage. Navigating away cancels the browser read. Revoked, expired or
 never-stored media cannot be recovered by this operation. No provider restart or
 private database access is required.
-Native CLI callers consuming bytes must request `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full`
+Native CLI callers consuming bytes must request `LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE=full`
 for that call; generic text compaction is not a binary transport. Consume the JSON
 directly into an image viewer or Storage without logging the base64.
 
@@ -88,6 +88,6 @@ The app owns a dedicated WhatsApp compact SVG and transparent PNG. The registry 
 
 The initial October 2026 review observed a ready linked session and a real chat list before the platform backend restart. After that restart, no provider process was listening on `127.0.0.1:2785`. The mounted app was inspected at desktop 1440×1000 and mobile 390×844, including the outage state, desktop dark/light themes, mobile shell clearance, and gateway settings. Tab focus cycled inside the dialog, and Escape restored focus to the settings button.
 
-On October 13 the existing provider was restored from the root source without bootstrapping or changing its account. Its readiness probe and authenticated native session/chat reads succeeded: the saved session was ready and a bounded chat page returned successfully. Installation and the official frontend build now resolve the platform source in the design repository. The 37 native and 40 frontend tests passed, including recovery after supervisor loss, explicit-stop persistence, scope checks, credential-free supervision and CLI routing. Recovery regressions simulate process loss; Maverick's shared backend was not restarted to exercise them. Send regressions use simulated responses; no WhatsApp message was sent during this review.
+On October 13 the existing provider was restored from the root source without bootstrapping or changing its account. Its readiness probe and authenticated native session/chat reads succeeded: the saved session was ready and a bounded chat page returned successfully. Installation and the official frontend build now resolve the platform source in the design repository. The 37 native and 40 frontend tests passed, including recovery after supervisor loss, explicit-stop persistence, scope checks, credential-free supervision and CLI routing. Recovery regressions simulate process loss; Loopino's shared backend was not restarted to exercise them. Send regressions use simulated responses; no WhatsApp message was sent during this review.
 
 The subsequent send-refusal investigation found a configured allowance of 40 against 96 counted outgoing rows, including synchronised history. The session-age governor was disabled, the dedicated provider restarted, and its live process configuration verified; the existing linked session returned ready. The 39 native and 45 frontend tests passed, including pacing-code redaction and same-key recovery for existing rate-limit warnings. The official frontend build and focused unused-import check passed. Actual WhatsApp sends were not used for verification.

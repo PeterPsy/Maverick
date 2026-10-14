@@ -119,7 +119,7 @@ class ProviderNetworkRequirement:
 
 @dataclass(frozen=True)
 class ProviderExecutionContract:
-    """Describe how a model provider can be executed by a Maverick-owned adapter."""
+    """Describe how a model provider can be executed by a Loopino-owned adapter."""
 
     adapter_type: str | None = None
     provider_protocol: str | None = None

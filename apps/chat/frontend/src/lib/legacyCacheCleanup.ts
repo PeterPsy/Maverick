@@ -1,4 +1,4 @@
-const prefixes = ['maverick.chat.projects-cache.v1:', 'maverick.chat.runtime-transcript-cache.v2:', 'maverick.chat.queued-messages.v1:'];
+const prefixes = ['loopino.chat.projects-cache.v1:', 'loopino.chat.runtime-transcript-cache.v2:', 'loopino.chat.queued-messages.v1:'];
 /** Unscoped display data, runtime authority and old send queues are deleted, never imported. */
 export function purgeLegacyChatCaches(): void {
   if (typeof window === 'undefined') return;

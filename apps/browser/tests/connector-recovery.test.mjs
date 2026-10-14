@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 test("reload resumes the live lease, expiry replaces it, and completion delivery is never an action replay",async t=>{
-  const origin="https://af-browser.sidecars.maverick.test",listeners=[],calls=[],sent=[];
+  const origin="https://af-browser.sidecars.loopino.test",listeners=[],calls=[],sent=[];
   const lease={connection:{session_id:"old"},connector_secret:"private"};
   let owned={session_id:"old",status:"connected",expires_at:Date.now()/1000+100};
   const previous={window:globalThis.window,location:globalThis.location};
   globalThis.location={origin};
   globalThis.window={addEventListener(_event,listener){listeners.push(listener);},postMessage(message){sent.push(message.action);queueMicrotask(()=>{
-    for(const listener of listeners)listener({source:window,origin,data:{type:"maverick.browser.response",id:message.id,result:message.action === "lease.restore" ? {lease} : {saved:true}}});
+    for(const listener of listeners)listener({source:window,origin,data:{type:"loopino.browser.response",id:message.id,result:message.action === "lease.restore" ? {lease} : {saved:true}}});
   });}};
   t.after(()=>{for(const [key,value] of Object.entries(previous)){if(value === undefined)delete globalThis[key];else globalThis[key]=value;}});
   t.mock.method(globalThis,"fetch",async(_url,options)=>{

@@ -161,7 +161,7 @@ class CodexResearchRuntimeTest(unittest.TestCase):
 
             with patch.dict(
                 "os.environ",
-                {"MAVERICK_CODEX_HOME": str(source_home)},
+                {"LOOPINO_CODEX_HOME": str(source_home)},
                 clear=False,
             ):
                 spec = CodexProviderAdapter(codex_command=str(codex)).build_launch_spec(
@@ -207,7 +207,7 @@ class CodexResearchRuntimeTest(unittest.TestCase):
                 {"enabled": False},
             )
             self.assertFalse(
-                any(key.startswith("MAVERICK_") for key in spec.env_overrides)
+                any(key.startswith("LOOPINO_") for key in spec.env_overrides)
             )
             self.assertNotIn("PYTHONPATH", spec.env_overrides)
 

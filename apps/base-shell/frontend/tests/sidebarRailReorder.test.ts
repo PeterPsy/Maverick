@@ -18,7 +18,7 @@ function app(app_id: string, frontend_mount = `/apps/${app_id}/`): AppRegistryIt
     frontend_launchable: Boolean(frontend_mount),
     logo: null,
     name: app_id,
-    publisher: "maverick",
+    publisher: "loopino",
     source_access: "none",
     status: "enabled",
     version: "1.0.0",

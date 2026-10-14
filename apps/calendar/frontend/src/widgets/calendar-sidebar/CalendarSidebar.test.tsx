@@ -28,7 +28,7 @@ let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  localStorage.setItem('maverick.calendar.preferences', JSON.stringify({ locale: 'en-US' }));
+  localStorage.setItem('loopino.calendar.preferences', JSON.stringify({ locale: 'en-US' }));
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);

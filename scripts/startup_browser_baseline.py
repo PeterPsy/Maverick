@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run an authenticated browser startup baseline against Maverick."""
+"""Run an authenticated browser startup baseline against Loopino."""
 
 from __future__ import annotations
 
@@ -35,16 +35,16 @@ def _wait_for_health(base_url: str, *, timeout_seconds: float = 30.0) -> None:
         except (OSError, URLError) as error:
             last_error = error
         time.sleep(0.2)
-    raise RuntimeError(f"Maverick host did not become healthy at {base_url}: {last_error}")
+    raise RuntimeError(f"Loopino host did not become healthy at {base_url}: {last_error}")
 
 
 def _credentials(args: argparse.Namespace, env: dict[str, str]) -> tuple[str, str] | None:
-    username = args.username or env.get("MAVERICK_STARTUP_USERNAME") or env.get("MAVERICK_ADMIN_USERNAME")
-    password = args.password or env.get("MAVERICK_STARTUP_PASSWORD") or env.get("MAVERICK_ADMIN_PASSWORD")
+    username = args.username or env.get("LOOPINO_STARTUP_USERNAME") or env.get("LOOPINO_ADMIN_USERNAME")
+    password = args.password or env.get("LOOPINO_STARTUP_PASSWORD") or env.get("LOOPINO_ADMIN_PASSWORD")
     if username and password:
         return username, password
     if args.use_insecure_test_defaults:
-        return "admin", "maverick"
+        return "admin", "loopino"
     return None
 
 
@@ -60,18 +60,18 @@ def _print_skipped(*, reason: str, json_output: bool) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
-    parser.add_argument("--base-url", help="use an already-running Maverick host")
+    parser.add_argument("--base-url", help="use an already-running Loopino host")
     parser.add_argument("--port", type=int, help="local port to use when starting a host")
     parser.add_argument("--runs", type=int, default=1, help="cold browser runs per profile")
     parser.add_argument("--warm-reloads", type=int, default=1, help="warm reloads to measure after each cold run")
     parser.add_argument("--max-composer-ready-p95-ms", type=float, help="fail when composer p95 exceeds this threshold")
     parser.add_argument("--max-runtime-thread-websocket-p95", type=float, help="fail when runtime thread WebSocket count p95 exceeds this threshold")
-    parser.add_argument("--username", help="login username; defaults to MAVERICK_STARTUP_USERNAME or MAVERICK_ADMIN_USERNAME")
-    parser.add_argument("--password", help="login password; defaults to MAVERICK_STARTUP_PASSWORD or MAVERICK_ADMIN_PASSWORD")
+    parser.add_argument("--username", help="login username; defaults to LOOPINO_STARTUP_USERNAME or LOOPINO_ADMIN_USERNAME")
+    parser.add_argument("--password", help="login password; defaults to LOOPINO_STARTUP_PASSWORD or LOOPINO_ADMIN_PASSWORD")
     parser.add_argument(
         "--use-insecure-test-defaults",
         action="store_true",
-        help="start the local host with admin/maverick test credentials when no credentials are provided",
+        help="start the local host with admin/loopino test credentials when no credentials are provided",
     )
     args = parser.parse_args()
     if args.runs < 1:
@@ -91,9 +91,9 @@ def main() -> int:
         port = args.port or _free_port()
         base_url = f"http://127.0.0.1:{port}"
         if args.use_insecure_test_defaults:
-            env.setdefault("MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS", "1")
-            env.setdefault("MAVERICK_ADMIN_USERNAME", username)
-            env.setdefault("MAVERICK_ADMIN_PASSWORD", password)
+            env.setdefault("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS", "1")
+            env.setdefault("LOOPINO_ADMIN_USERNAME", username)
+            env.setdefault("LOOPINO_ADMIN_PASSWORD", password)
         server = subprocess.Popen(
             [sys.executable, "-m", "core.api.server", "--host", "127.0.0.1", "--port", str(port)],
             cwd=ROOT,

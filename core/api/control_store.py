@@ -23,7 +23,7 @@ from core.usage.handoff import selected_adapter
 from core.workspaces.store import WorkspaceCollections
 
 
-DEFAULT_MONGO_DATABASE = "maverick"
+DEFAULT_MONGO_DATABASE = "loopino"
 DEFAULT_JSON_CONTROL_STORE_ROOT = "data/control-plane/json"
 
 MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
@@ -102,19 +102,19 @@ class ControlStoreSettings:
         environment: Mapping[str, str] | None = None,
     ) -> "ControlStoreSettings":
         env = environment if environment is not None else os.environ
-        mongo_uri = env.get("MAVERICK_MONGODB_URI", "").strip() or None
+        mongo_uri = env.get("LOOPINO_MONGODB_URI", "").strip() or None
         json_root = Path(
-            env.get("MAVERICK_JSON_CONTROL_STORE_ROOT", "").strip()
-            or env.get("MAVERICK_LOCAL_STATE_ROOT", "").strip()
+            env.get("LOOPINO_JSON_CONTROL_STORE_ROOT", "").strip()
+            or env.get("LOOPINO_LOCAL_STATE_ROOT", "").strip()
             or DEFAULT_JSON_CONTROL_STORE_ROOT
         )
         if not json_root.is_absolute():
             json_root = repository_root / json_root
-        configured_kind = env.get("MAVERICK_CONTROL_STORE", "").strip().lower()
+        configured_kind = env.get("LOOPINO_CONTROL_STORE", "").strip().lower()
         kind = _resolve_control_store_kind(configured_kind=configured_kind, mongo_uri=mongo_uri, environment=env)
-        mongo_database = env.get("MAVERICK_MONGODB_DATABASE", "").strip() or _database_from_mongo_uri(mongo_uri) or DEFAULT_MONGO_DATABASE
-        mongo_username = env.get("MAVERICK_MONGODB_USERNAME", "").strip() or None
-        mongo_password_ref = env.get("MAVERICK_MONGODB_PASSWORD_REF", "").strip() or None
+        mongo_database = env.get("LOOPINO_MONGODB_DATABASE", "").strip() or _database_from_mongo_uri(mongo_uri) or DEFAULT_MONGO_DATABASE
+        mongo_username = env.get("LOOPINO_MONGODB_USERNAME", "").strip() or None
+        mongo_password_ref = env.get("LOOPINO_MONGODB_PASSWORD_REF", "").strip() or None
         return cls(
             kind=kind,
             json_root=json_root,
@@ -313,7 +313,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
 
 def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneCollections:
     if not settings.mongo_uri:
-        raise RuntimeError("MAVERICK_MONGODB_URI is required when MAVERICK_CONTROL_STORE=mongo.")
+        raise RuntimeError("LOOPINO_MONGODB_URI is required when LOOPINO_CONTROL_STORE=mongo.")
     database = _mongo_database(settings)
     collection = _MongoCollectionFactory(database)
     return ControlPlaneCollections(
@@ -385,11 +385,11 @@ def _mongo_database(settings: ControlStoreSettings) -> Any:
     try:
         from pymongo import MongoClient
     except ImportError as exc:
-        raise RuntimeError("Install pymongo to use MAVERICK_CONTROL_STORE=mongo.") from exc
+        raise RuntimeError("Install pymongo to use LOOPINO_CONTROL_STORE=mongo.") from exc
     kwargs: dict[str, Any] = {"tz_aware": True, "tzinfo": UTC}
     if settings.mongo_password_ref:
         if not settings.mongo_username:
-            raise RuntimeError("MAVERICK_MONGODB_USERNAME is required when MAVERICK_MONGODB_PASSWORD_REF is set.")
+            raise RuntimeError("LOOPINO_MONGODB_USERNAME is required when LOOPINO_MONGODB_PASSWORD_REF is set.")
         kwargs["username"] = settings.mongo_username
         kwargs["password"] = resolve_bootstrap_secret(settings.mongo_password_ref)
     elif settings.mongo_username:
@@ -445,5 +445,5 @@ def _resolve_control_store_kind(
             return "mongo"
         return "json"
     if configured_kind not in {"json", "mongo"}:
-        raise RuntimeError(f"Unsupported MAVERICK_CONTROL_STORE `{configured_kind}`.")
+        raise RuntimeError(f"Unsupported LOOPINO_CONTROL_STORE `{configured_kind}`.")
     return configured_kind

@@ -1,4 +1,4 @@
-import { connectAppEventSocket, isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { connectAppEventSocket, isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateNodeModal } from "./components/CreateNodeModal";
 import { GraphCanvas } from "./components/GraphCanvas";
@@ -155,12 +155,12 @@ export function MemoryApp() {
   }, []);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, "*");
+    window.parent?.postMessage({ type: "loopino.app.ready", app_id: appId }, "*");
   }, [appId]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") return;
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== "object") return;
       const payload = event.data as {
         app_id?: string;
         owner_app_id?: string;
@@ -168,7 +168,7 @@ export function MemoryApp() {
         resource?: string;
         type?: string;
       };
-      if (payload.type === "maverick.app.navigate" && (!payload.app_id || payload.app_id === appId)) {
+      if (payload.type === "loopino.app.navigate" && (!payload.app_id || payload.app_id === appId)) {
         void handleNavigationParams(payload.params || {});
         return;
       }
@@ -178,7 +178,7 @@ export function MemoryApp() {
   }, [appId, scheduleEventRefresh]);
 
   useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string }>((payload) => {
-    if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === appId) scheduleEventRefresh();
+    if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === appId) scheduleEventRefresh();
   }, scheduleEventRefresh), [appId, scheduleEventRefresh]);
 
 

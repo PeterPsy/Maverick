@@ -115,7 +115,7 @@ def list_drive_connections(data_root: Path, payload: dict[str, Any]) -> dict[str
 def start_oauth(data_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
     provider = _provider(payload.get("provider"))
     if any(item.get("external_refs", {}).get("managed_by") == "platform" for item in list_connections(data_root)):
-        raise StorageValidationError("Manage Google permissions and accounts from Maverick Connected accounts.", operation="drive_connections.start_oauth")
+        raise StorageValidationError("Manage Google permissions and accounts from Loopino Connected accounts.", operation="drive_connections.start_oauth")
     access_mode = _access_mode(payload.get("access_mode") or payload.get("mode") or "full_rw")
     secrets_map = _secret_map(payload.get("_app_secrets"))
     client_id = str(secrets_map.get(GOOGLE_DRIVE_CLIENT_ID_SECRET) or "").strip()
@@ -336,7 +336,7 @@ def disconnect_connection(data_root: Path, payload: dict[str, Any]) -> dict[str,
     except ValueError as error:
         raise StorageValidationError(str(error), operation="drive_connections.disconnect") from error
     if connection.get("external_refs", {}).get("managed_by") == "platform":
-        raise StorageValidationError("Disconnect Google or disable Storage from Maverick Connected accounts.", operation="drive_connections.disconnect")
+        raise StorageValidationError("Disconnect Google or disable Storage from Loopino Connected accounts.", operation="drive_connections.disconnect")
     previous_status = str(connection.get("status") or "")
     now = now_timestamp()
     disconnected = {

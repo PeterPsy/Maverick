@@ -11,5 +11,5 @@ from maintenance import maintain_memory
 payload = json.loads(sys.stdin.read() or '{}')
 result = maintain_memory(Path(payload['data_root']), {})
 if result['jobs_run']:
-    result['app_events'] = [{'type':'maverick.app.data-changed', 'resource':resource} for resource in ('graph','wiki')]
+    result['app_events'] = [{'type':'loopino.app.data-changed', 'resource':resource} for resource in ('graph','wiki')]
 print(json.dumps(result))

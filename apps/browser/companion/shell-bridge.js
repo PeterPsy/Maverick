@@ -1,6 +1,6 @@
 // Only the user-selected /app/browser connector window receives this observer.
-if (!globalThis.maverickConnectorShellInstalled) {
-  globalThis.maverickConnectorShellInstalled = true;
+if (!globalThis.loopinoConnectorShellInstalled) {
+  globalThis.loopinoConnectorShellInstalled = true;
   let timer;
   const refresh = () => {
     clearTimeout(timer);

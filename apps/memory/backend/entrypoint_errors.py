@@ -8,7 +8,7 @@ import sqlite3
 from typing import Any
 
 
-LOGGER = logging.getLogger("maverick.memory")
+LOGGER = logging.getLogger("loopino.memory")
 SENSITIVE_ERROR_MARKERS = ("secret", "token", "password", "authorization", "raw_value")
 
 

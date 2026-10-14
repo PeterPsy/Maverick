@@ -1,0 +1,23 @@
+[Unit]
+Description=Loopino backend downtime watchdog
+After=network.target loopino-rescue.service
+Wants=loopino-rescue.service
+
+[Service]
+Type=oneshot
+User={{SERVICE_USER}}
+Group={{SERVICE_GROUP}}
+WorkingDirectory={{INSTALL_ROOT}}
+Environment=PATH={{INSTALL_ROOT}}/.venv/bin:{{INSTALL_ROOT}}/.toolchains/bin:{{INSTALL_ROOT}}/.toolchains/node/bin:/usr/local/bin:/usr/bin:/bin
+Environment=LD_LIBRARY_PATH={{INSTALL_ROOT}}/.toolchains/sqlite/3.51.3/lib
+Environment=TMPDIR={{INSTALL_ROOT}}/.cache/tmp
+Environment=XDG_CACHE_HOME={{INSTALL_ROOT}}/.cache
+Environment=npm_config_cache={{INSTALL_ROOT}}/.cache/npm
+Environment=HOME={{INSTALL_ROOT}}/data/service-home
+Environment=LOOPINO_CODEX_HOME={{INSTALL_ROOT}}/data/provider-auth/codex
+Environment=LOOPINO_ANTIGRAVITY_HOME={{INSTALL_ROOT}}/data/provider-auth/antigravity
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile={{ENV_FILE}}
+Environment=LOOPINO_CORE_HEALTH_URL=http://{{BIND_HOST}}:{{CORE_PORT}}/health
+ExecStart={{INSTALL_ROOT}}/.venv/bin/python scripts/rescue_backend_watchdog.py
+TimeoutStartSec=infinity

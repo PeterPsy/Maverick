@@ -52,7 +52,7 @@ for (const width of [390, 480]) {
       await expect(page.locator(".chat-floating-window-slot")).toHaveCount(2);
       await expect(page.locator(".chat-floating-window-slot").last().getByRole("textbox")).toBeEditable();
       await expect(page.locator(".chat-floating-window-slot").last()).toBeInViewport();
-      const state = await page.evaluate(() => JSON.parse(localStorage.getItem("maverick.chat.floating-widget.state.v1:default")!));
+      const state = await page.evaluate(() => JSON.parse(localStorage.getItem("loopino.chat.floating-widget.state.v1:default")!));
       expect(state.windows.at(-1)).toMatchObject({ isDraft: true, draftProjectId: "project-demo" });
     });
   });
@@ -92,7 +92,7 @@ test("bounds the shared picker and scrolls a long group inside it", async ({ pag
   await page.routeWebSocket("**/ws/runtime/threads", (socket) => socket.send(JSON.stringify({
     type: "runtime.thread.snapshot", workspace_id: "default", threads, at: now,
   })));
-  await page.addInitScript((threadId) => localStorage.setItem("maverick.chat.floating-widget.state.v1:default", JSON.stringify({
+  await page.addInitScript((threadId) => localStorage.setItem("loopino.chat.floating-widget.state.v1:default", JSON.stringify({
     version: 1, windows: [{ id: "scroll-window", threadId, isDraft: false, isCollapsed: false }],
   })), SESSION_ID);
   await page.setViewportSize({ width: 390, height: 844 });

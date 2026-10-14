@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 MAX_EGRESS_BLOCK_BYTES = 1_048_576
-_DIGEST_DOMAIN = b"maverick.agentic-egress.content.v1\x00"
+_DIGEST_DOMAIN = b"loopino.agentic-egress.content.v1\x00"
 _KNOWN_DATA_CLASSES = {
     "public",
     "workspace_internal_fake",
@@ -164,7 +164,7 @@ class AgenticEgressEvaluator:
                 NAMESPACE_URL,
                 ":".join(
                     [
-                        "maverick-egress",
+                        "loopino-egress",
                         block.workspace_id,
                         block.session_id,
                         block.turn_id,

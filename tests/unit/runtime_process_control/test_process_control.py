@@ -49,8 +49,8 @@ class RuntimeProcessControlTestCase(unittest.TestCase):
 
         env = {
             **os.environ,
-            "MAVERICK_RUNTIME_SESSION_ID": "sess-lost-codex-process",
-            "MAVERICK_RUNTIME_ENGINE_ID": "codex",
+            "LOOPINO_RUNTIME_SESSION_ID": "sess-lost-codex-process",
+            "LOOPINO_RUNTIME_ENGINE_ID": "codex",
         }
         process = subprocess.Popen(
             ["bash", "-c", "exec -a 'codex app-server --listen stdio://' sleep 30"],

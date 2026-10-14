@@ -5,7 +5,7 @@ from pathlib import Path
 
 from core.installation.private_state import write_private
 
-TIMER = 'maverick-wildcard-tls.timer'
+TIMER = 'loopino-wildcard-tls.timer'
 
 
 def handoff_legacy_timer(manager, private: Path, *, managed: bool, restoring: bool, is_active):

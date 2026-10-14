@@ -5,9 +5,9 @@ import re
 from core.shared.env_file import quote_env_value
 
 ADDRESS_KEYS = {
-    "MAVERICK_SIDECAR_ORIGIN_MODE", "MAVERICK_SIDECAR_INSTALLATION_DOMAIN",
-    "MAVERICK_SIDECAR_PLATFORM_ORIGIN", "MAVERICK_BROWSER_ORIGIN_TLS_MODE",
-    "MAVERICK_GOOGLE_REDIRECT_URI", "MAVERICK_INSTALLATION_PUBLIC_IP",
+    "LOOPINO_SIDECAR_ORIGIN_MODE", "LOOPINO_SIDECAR_INSTALLATION_DOMAIN",
+    "LOOPINO_SIDECAR_PLATFORM_ORIGIN", "LOOPINO_BROWSER_ORIGIN_TLS_MODE",
+    "LOOPINO_GOOGLE_REDIRECT_URI", "LOOPINO_INSTALLATION_PUBLIC_IP",
 }
 
 
@@ -31,9 +31,9 @@ def address_environment(content: str, values: dict[str, str | None]) -> str:
 
 
 def target_environment(plan: dict) -> dict:
-    return {"MAVERICK_SIDECAR_ORIGIN_MODE": "hosted",
-            "MAVERICK_SIDECAR_INSTALLATION_DOMAIN": plan["hostname"],
-            "MAVERICK_SIDECAR_PLATFORM_ORIGIN": plan["public_url"],
-            "MAVERICK_BROWSER_ORIGIN_TLS_MODE": "external_wildcard",
-            "MAVERICK_INSTALLATION_PUBLIC_IP": plan["target_ip"],
-            "MAVERICK_GOOGLE_REDIRECT_URI": plan["public_url"] + "/api/auth/google/callback"}
+    return {"LOOPINO_SIDECAR_ORIGIN_MODE": "hosted",
+            "LOOPINO_SIDECAR_INSTALLATION_DOMAIN": plan["hostname"],
+            "LOOPINO_SIDECAR_PLATFORM_ORIGIN": plan["public_url"],
+            "LOOPINO_BROWSER_ORIGIN_TLS_MODE": "external_wildcard",
+            "LOOPINO_INSTALLATION_PUBLIC_IP": plan["target_ip"],
+            "LOOPINO_GOOGLE_REDIRECT_URI": plan["public_url"] + "/api/auth/google/callback"}

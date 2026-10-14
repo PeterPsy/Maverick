@@ -1,6 +1,6 @@
 ---
 name: agents-ops
-description: Manage self-contained Maverick custom agent definitions through the Agents app.
+description: Manage self-contained Loopino custom agent definitions through the Agents app.
 ---
 
 # Agents Ops

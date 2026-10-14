@@ -34,7 +34,7 @@ from core.runtime.tool_private_payloads import (
 )
 
 
-_IDEMPOTENCY_DOMAIN = b"maverick.runtime.tool-idempotency.v1\x00"
+_IDEMPOTENCY_DOMAIN = b"loopino.runtime.tool-idempotency.v1\x00"
 _TRANSITIONS: dict[ToolInvocationState, frozenset[ToolInvocationState]] = {
     "proposed": frozenset({"validating", "cancelled"}),
     "validating": frozenset({"denied", "validated", "cancelled"}),
@@ -132,7 +132,7 @@ class RuntimeToolLedger:
             raise RuntimeToolError("tool_arguments_invalid")
         digest = tool_arguments_digest(digest_key=self._digest_key, canonical_arguments=canonical)
         invocation_id = str(
-            uuid5(NAMESPACE_URL, f"maverick:tool:{workspace_id}:{session_id}:{turn_id}:{provider_tool_call_id}")
+            uuid5(NAMESPACE_URL, f"loopino:tool:{workspace_id}:{session_id}:{turn_id}:{provider_tool_call_id}")
         )
         private_ref = _tool_arguments_private_ref(invocation_id)
         existing = self.store.find_tool_invocation_by_provider_call(
@@ -376,7 +376,7 @@ class RuntimeToolLedger:
             disposition_id = str(
                 uuid5(
                     NAMESPACE_URL,
-                    f"maverick:tool-disposition:{record.invocation_id}:"
+                    f"loopino:tool-disposition:{record.invocation_id}:"
                     f"{effective_resolution}",
                 )
             )
@@ -387,7 +387,7 @@ class RuntimeToolLedger:
             result_id = str(
                 uuid5(
                     NAMESPACE_URL,
-                    f"maverick:tool-result:{record.invocation_id}",
+                    f"loopino:tool-result:{record.invocation_id}",
                 )
             )
         next_execution_lease_id = record.execution_lease_id
@@ -554,7 +554,7 @@ class RuntimeToolLedger:
                     or str(
                         uuid5(
                             NAMESPACE_URL,
-                            f"maverick:tool-result:{record.invocation_id}",
+                            f"loopino:tool-result:{record.invocation_id}",
                         )
                     )
                 ),
@@ -796,6 +796,6 @@ def _resolution_for_state(
 
 def _tool_arguments_private_ref(invocation_id: str) -> str:
     token = hashlib.sha256(
-        b"maverick.tool-arguments-ref.v1\x00" + invocation_id.encode("utf-8")
+        b"loopino.tool-arguments-ref.v1\x00" + invocation_id.encode("utf-8")
     ).hexdigest()[:32]
     return f"tool-private:v1:{token}"

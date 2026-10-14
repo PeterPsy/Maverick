@@ -1,4 +1,4 @@
-"""Runtime-token authenticated Maverick CLI surface."""
+"""Runtime-token authenticated Loopino CLI surface."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def handle_runtime_cli_api(
     *,
     start_path: Path,
 ) -> list[bytes] | None:
-    """Run official Maverick CLI commands for a workspace runtime session."""
+    """Run official Loopino CLI commands for a workspace runtime session."""
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
     if path != "/api/runtime/cli":

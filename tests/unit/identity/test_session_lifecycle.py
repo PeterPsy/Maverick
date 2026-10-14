@@ -70,7 +70,7 @@ class SessionLifecycleTests(unittest.TestCase):
         old = replace(self.session, created_at=self.now - timedelta(days=91))
         self.store.save_auth_session(old)
         with patch("core.api.session_api._now", return_value=self.now):
-            context = resolve_request_session(SimpleNamespace(identity_store=self.store), {"HTTP_COOKIE": "maverick_session=fake-login"})
+            context = resolve_request_session(SimpleNamespace(identity_store=self.store), {"HTTP_COOKIE": "loopino_session=fake-login"})
         self.assertIsNone(context)
 
     def test_concurrent_revocation_returns_anonymous_without_cookie(self):
@@ -88,6 +88,6 @@ class SessionLifecycleTests(unittest.TestCase):
         context = RequestSession(user, self.session, "default")
         headers = []
         with patch("core.api.session_api.resolve_request_session", return_value=context):
-            handle_session_api(SimpleNamespace(identity_store=self.store), {"PATH_INFO": "/api/session", "maverick.app_frame_proxy": True}, lambda status, values: headers.extend(values))
+            handle_session_api(SimpleNamespace(identity_store=self.store), {"PATH_INFO": "/api/session", "loopino.app_frame_proxy": True}, lambda status, values: headers.extend(values))
         self.assertNotIn("Set-Cookie", dict(headers))
         self.assertEqual(self.store.get_auth_session(self.session.session_id), self.session)

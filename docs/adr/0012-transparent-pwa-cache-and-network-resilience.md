@@ -12,7 +12,7 @@ implementation that preceded this correction.
 
 ## Context
 
-Maverick is an online application whose browser caches are transparent
+Loopino is an online application whose browser caches are transparent
 performance and resilience mechanisms. The M2 implementation correctly added
 verified static artifacts, atomic service-worker installation, bounded cache
 ownership, recovery, and a kill switch. It also made transport reachability a
@@ -32,7 +32,7 @@ recovery remains internal.
 ### 1. There is one product UI
 
 The Base Shell and mounted apps render the same normal component tree whether
-the network is available, slow, intermittent, or absent. Maverick has no
+the network is available, slow, intermittent, or absent. Loopino has no
 network-absence mode, route, page, banner, badge, dialog, icon replacement, or
 global Online/Offline copy.
 
@@ -59,7 +59,7 @@ app-agnostic and scope-isolated.
 
 ### 3. Local persistence policy v2 has three values
 
-The policy revision is `maverick.local-persistence-policy.v2`. Its only values
+The policy revision is `loopino.local-persistence-policy.v2`. Its only values
 are `deny`, `session`, and `cache`:
 
 | Canonical `data_class` | Default | Maximum after a reviewed resource rule |
@@ -86,7 +86,7 @@ idempotent read into an internal waiting/retry substate while it continues to
 render as loading. Retry is
 single-flight per request key, cancellable, rate-limited, and uses exponential
 backoff with jitter. Browser `online`, focus, and visibility events are hints
-that may advance a retry; only a Maverick response confirms useful transport.
+that may advance a retry; only a Loopino response confirms useful transport.
 
 `401`, `403`, `409`, and `422` are not transport failures. Mutation retry
 requires a stable idempotency key and server deduplication. No pending request,
@@ -96,7 +96,7 @@ logout, user/workspace change, scope revision, or unmount.
 ### 5. The service worker caches the standard shell
 
 The verified frontend manifest uses the explicit
-`maverick.frontend-assets.v2` schema and a neutral `navigation_fallback` that
+`loopino.frontend-assets.v2` schema and a neutral `navigation_fallback` that
 names the normal HTML entrypoint. The worker intercepts only `/`, `/app`, and
 `/app/*` navigations for network-first loading with a bounded timeout and falls
 back to that verified entrypoint. Other navigations retain normal browser and
@@ -116,15 +116,15 @@ worker, and imported-media URLs relative to the already public module URL via
 module, media, font, PDF, and WebAssembly build outputs are public cross-origin
 artifacts, while immutable caching remains conditional on exact manifest
 verification. All such responses retain CORS/CORP and compression. The former
-`maverick-app-static-v2` Cache API path is retained only as an exact legacy name
+`loopino-app-static-v2` Cache API path is retained only as an exact legacy name
 for bounded deletion; it is not part of normal app loading.
 
 ### 6. Rollout configuration is cache-centric
 
-The browser projection uses `maverick.pwa-config.v2`. It retains the service
+The browser projection uses `loopino.pwa-config.v2`. It retains the service
 worker and data-cache gates, exposes the automatic Storage file-cache gate,
 and contains no mutation-outbox or network-absence capability. Invalid flag
-values fail closed. Disabling the worker removes only known Maverick static
+values fail closed. Disabling the worker removes only known Loopino static
 cache namespaces and never clears the whole origin, IndexedDB, or OPFS.
 
 ### 7. Evidence measures behavior, not a product mode
@@ -154,9 +154,9 @@ ordinary navigation failure.
 
 ## M3 implementation profile
 
-The shared `@maverick/pwa-cache` mechanics are implemented by M3 while the
+The shared `@loopino/pwa-cache` mechanics are implemented by M3 while the
 data-cache rollout gate remains disabled by default. The browser database is
-`maverick-pwa-data-v1`, currently at database and entry schema version 3. Entry
+`loopino-pwa-data-v1`, currently at database and entry schema version 3. Entry
 identity includes host-attested user, workspace and app identity plus resource,
 entity, policy revision, app-owned resource schema revision, and entry schema
 version. Metadata and payload records are committed atomically; schema upgrades
@@ -170,7 +170,7 @@ cache access until the primary store confirms removal.
 
 The conservative platform defaults are:
 
-- policy revision `maverick.local-persistence-policy.v2`;
+- policy revision `loopino.local-persistence-policy.v2`;
 - a private access lease of at most 15 minutes after fresh server
   authentication; a later authoritative authentication may renew an existing
   entry without coupling the new lease to the entry's original cache time;
@@ -199,7 +199,7 @@ not to shell-owned IndexedDB or OPFS. The default-off data gate remains
 mandatory until app-owned resource, privacy, and physical-device rollout gates
 are complete.
 
-This is a fail-closed invariant rather than a deployment toggle. Maverick does
+This is a fail-closed invariant rather than a deployment toggle. Loopino does
 not provide a same-platform-origin launch fallback for executable app or widget
 documents. Hosted app-frame and sidecar hosts require either the exact
 `*.sidecars.<installation-domain>` TLS wildcard or the managed-exact HTTP-01
@@ -211,9 +211,9 @@ satisfy the boundary.
 ## M4 implementation profile
 
 M4 adds the automatic file-cache engine without changing the product UI or
-enabling its rollout gate. `maverick-pwa-file-v1` is the separate IndexedDB
+enabling its rollout gate. `loopino-pwa-file-v1` is the separate IndexedDB
 manifest at database version 1 and record schema 2;
-`maverick-pwa-file-cache-v1` is the only owned OPFS directory. A ready identity
+`loopino-pwa-file-cache-v1` is the only owned OPFS directory. A ready identity
 contains the host-attested user/workspace/storage
 scope, stable file id, source version, current policy/schema revision, exact
 size, strong ETag, SHA-256 digest, and private access-lease bound. OPFS names
@@ -228,7 +228,7 @@ has durably approved that exact current file/version. Such an approval projects
 only that representation as `workspace_internal`; revocation or version change
 returns it to network-only. A missing, malformed, stale, denied, oversized, or
 unapproved descriptor produces an ordinary network fallback rather than a
-cache error. `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE` remains off by default;
+cache error. `LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE` remains off by default;
 the global flag is not a classification or privacy override.
 
 Writes stream best-effort to a random opaque unpublished OPFS path. A shared
@@ -287,7 +287,7 @@ immutable context injected by Core into the authenticated isolated document,
 never from mutable URL query parameters. App Store
 catalog rows remain read-only until fresh workspace, installation, pin, and
 other authority inputs arrive. Across every pilot, expired data is a miss,
-`maverick.app.data-changed` is accepted only from the shell or a frame whose
+`loopino.app.data-changed` is accepted only from the shell or a frame whose
 registered owner exactly matches the declared owner. A `401`/`403` triggers
 scoped cleanup and platform session confirmation. Confirmed platform loss
 notifies the shell to clear authenticated UI and unmount all app/widget frames;

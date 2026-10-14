@@ -23,7 +23,7 @@ def start_backend_restart_recovery(
     thread = Thread(
         target=_recover_backend_restart_after,
         args=(state, tuple(after_threads), max(0.0, float(maximum_defer_seconds))),
-        name="maverick-backend-recovery",
+        name="loopino-backend-recovery",
         daemon=True,
     )
     thread.start()

@@ -41,7 +41,7 @@
 .chatapp-bubble__time {
   font-size: 0.72rem;
   line-height: 1;
-  color: rgba(var(--maverick-contrast-rgb), 0.48);
+  color: rgba(var(--loopino-contrast-rgb), 0.48);
   white-space: nowrap;
 }
 
@@ -71,8 +71,8 @@
   max-width: min(84%, 46rem);
   padding: 0.8rem 0.95rem;
   border-radius: var(--chatapp-cell-radius);
-  background: color-mix(in srgb, var(--maverick-accent) 8%, #1f2430 92%);
-  border: 1px solid color-mix(in srgb, var(--maverick-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--loopino-accent) 8%, #1f2430 92%);
+  border: 1px solid color-mix(in srgb, var(--loopino-accent) 22%, transparent);
   color: #eef3ff;
 }
 

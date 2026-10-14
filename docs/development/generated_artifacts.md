@@ -1,6 +1,6 @@
 # Generated Artifact Policy
 
-Maverick currently commits selected generated frontend artifacts under `apps/*/frontend/dist/`.
+Loopino currently commits selected generated frontend artifacts under `apps/*/frontend/dist/`.
 
 This is intentional for built-in apps that must mount in a fresh checkout before a frontend rebuild step is available.
 
@@ -36,6 +36,6 @@ The command is read-only. It separates tracked `frontend/dist` churn, workspace 
 
 ## Rationale
 
-Maverick's app contract serves declared static frontend output. During the pre-release period, committed dist assets keep app mounting deterministic while the app packaging and release pipeline matures.
+Loopino's app contract serves declared static frontend output. During the pre-release period, committed dist assets keep app mounting deterministic while the app packaging and release pipeline matures.
 
 This policy should be revisited before the first stable release.

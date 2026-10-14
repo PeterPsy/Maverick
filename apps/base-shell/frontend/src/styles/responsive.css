@@ -4,10 +4,10 @@
 
 @media (max-width: 979px) {
   :root {
-    --maverick-sidebar-rail-width: 3.7rem;
-    --maverick-sidebar-gap: 0.45rem;
-    --maverick-sidebar-details-width: calc(100vw - 5.7rem);
-    --maverick-sidebar-width: calc(var(--maverick-sidebar-rail-width) + var(--maverick-sidebar-gap) + var(--maverick-sidebar-details-width));
+    --loopino-sidebar-rail-width: 3.7rem;
+    --loopino-sidebar-gap: 0.45rem;
+    --loopino-sidebar-details-width: calc(100vw - 5.7rem);
+    --loopino-sidebar-width: calc(var(--loopino-sidebar-rail-width) + var(--loopino-sidebar-gap) + var(--loopino-sidebar-details-width));
   }
 
   .bs-app-grid-panel,
@@ -70,7 +70,7 @@
       calc(var(--bs-mobile-shell-content-top-offset) + 0.75rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
     border: 0;
     border-radius: 0;
-    background: var(--maverick-bg);
+    background: var(--loopino-bg);
     box-shadow: none;
     backdrop-filter: blur(26px);
     overscroll-behavior: contain;

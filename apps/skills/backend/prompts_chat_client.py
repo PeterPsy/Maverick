@@ -54,7 +54,7 @@ class PublicPromptsChatMcpClient:
             headers={
                 "Accept": "application/json, text/event-stream",
                 "Content-Type": "application/json",
-                "User-Agent": "Maverick-Skills/0.1",
+                "User-Agent": "Loopino-Skills/0.1",
             },
             method="POST",
         )

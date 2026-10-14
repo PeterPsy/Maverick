@@ -7,9 +7,9 @@
   justify-content: center;
   min-width: 2rem;
   min-height: 2rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
 }
 
 .pipeline-stage-actions {
@@ -19,7 +19,7 @@
 .pipeline-stage-actions summary {
   min-width: 1.75rem;
   min-height: 1.75rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   cursor: pointer;
   list-style: none;
 }
@@ -37,11 +37,11 @@
   gap: 0.2rem;
   width: min(13rem, calc(100vw - 2rem));
   padding: 0.38rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   border-radius: 0.86rem;
   background: rgba(18, 18, 20, 0.98);
   box-shadow:
-    var(--maverick-glass-edge),
+    var(--loopino-glass-edge),
     0 18px 56px rgba(0, 0, 0, 0.42);
 }
 
@@ -59,28 +59,28 @@
   border-radius: 0.62rem;
   background: transparent;
   padding: 0 0.62rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .pipeline-stage-actions button:hover,
 .pipeline-stage-actions button:focus-visible,
 .pipeline-admin-actions button:hover,
 .pipeline-admin-actions button:focus-visible {
-  border-color: var(--maverick-border);
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  border-color: var(--loopino-border);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .pipeline-stage-actions button.danger {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .pipeline-stage-actions button.danger:hover,
 .pipeline-stage-actions button.danger:focus-visible {
   border-color: rgba(255, 179, 191, 0.3);
   background: rgba(255, 179, 191, 0.12);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .pipeline-admin-actions {
@@ -88,7 +88,7 @@
   flex: 0 0 clamp(17rem, 24vw, 22rem);
   width: clamp(17rem, 24vw, 22rem);
   align-self: start;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .pipeline-admin-actions summary {
@@ -96,7 +96,7 @@
   min-height: 3rem;
   gap: 0.45rem;
   padding: 0 1rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   cursor: pointer;
   list-style: none;
 }
@@ -114,7 +114,7 @@
   overflow-y: visible;
   padding-bottom: 0.5rem;
   scrollbar-width: thin;
-  scrollbar-color: var(--maverick-border-strong) transparent;
+  scrollbar-color: var(--loopino-border-strong) transparent;
 }
 
 .pipeline-column {
@@ -133,7 +133,7 @@
 
 .pipeline-stage-title strong {
   overflow: hidden;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.9rem;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -141,7 +141,7 @@
 }
 
 .pipeline-stage-title span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
@@ -150,7 +150,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
   padding: 0.75rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
 }
 
 .pipeline-stage-metrics > span {
@@ -158,13 +158,13 @@
   gap: 0.18rem;
   min-width: 0;
   padding: 0.55rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
 }
 
 .pipeline-stage-metrics small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
   line-height: 1;
 }
@@ -191,9 +191,9 @@
   margin: 0;
   padding: 0.78rem;
   border: 1px solid transparent;
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  box-shadow: var(--maverick-inner-edge);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
+  box-shadow: var(--loopino-inner-edge);
   text-align: left;
   transition:
     border-color 150ms ease,
@@ -203,19 +203,19 @@
 
 .deal-card:hover,
 .deal-card:focus-visible {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
   outline: none;
   transform: translateY(-1px);
 }
 
 .deal-card strong {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-weight: 500;
 }
 
 .deal-card__value {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.94rem;
 }
 
@@ -239,9 +239,9 @@
 .deal-card__health {
   justify-self: start;
   padding: 0.18rem 0.48rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.7rem;
   line-height: 1.2;
 }

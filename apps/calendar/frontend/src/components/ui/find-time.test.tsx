@@ -9,9 +9,9 @@ vi.mock("@/api", () => ({
   findFreeTime: vi.fn(),
   checkAvailability: vi.fn(async () => ({ conflicts: [] })),
 }));
-vi.mock("@maverick/pwa-cache", () => ({
-  maverickAppIsVisible: () => true,
-  observeMaverickVisibility: () => () => {},
+vi.mock("@loopino/pwa-cache", () => ({
+  loopinoAppIsVisible: () => true,
+  observeLoopinoVisibility: () => () => {},
 }));
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

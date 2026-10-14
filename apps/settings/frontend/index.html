@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <script>
       (() => {
-        const theme = new URLSearchParams(location.search).get('maverick_theme');
+        const theme = new URLSearchParams(location.search).get('loopino_theme');
         if (theme !== 'light' && theme !== 'dark') return;
-        document.documentElement.dataset.maverickTheme = theme;
+        document.documentElement.dataset.loopinoTheme = theme;
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
       })();

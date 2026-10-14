@@ -66,7 +66,7 @@ class OpenRouterHttpTransport:
                         "Accept-Encoding": "identity",
                         "Authorization": f"Bearer {credential}",
                         "Content-Type": "application/json",
-                        "User-Agent": "Maverick-Model-Access-Bridge/1",
+                        "User-Agent": "Loopino-Model-Access-Bridge/1",
                     },
                 )
             raise_if_cancelled(cancellation)

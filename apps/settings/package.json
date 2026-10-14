@@ -1,5 +1,5 @@
 {
-  "name": "@maverick/settings",
+  "name": "@loopino/settings",
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
+    "@loopino/pwa-cache": "file:../../packages/pwa-cache",
     "@tailwindcss/vite": "^4.3.3",
     "clsx": "^2.1.1",
     "react": "^19.2.8",

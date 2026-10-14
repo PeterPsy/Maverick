@@ -19,15 +19,15 @@ BROWSER_SESSION_TTL = timedelta(hours=4)
 
 def platform_browser_origin() -> str:
     """Use the configured platform origin, including named local app-frame hosts."""
-    origin = os.environ.get("MAVERICK_SIDECAR_PLATFORM_ORIGIN", "").strip().rstrip("/")
+    origin = os.environ.get("LOOPINO_SIDECAR_PLATFORM_ORIGIN", "").strip().rstrip("/")
     if not origin:
-        api = urlsplit(os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014"))
-        port = api.port or int(os.environ.get("MAVERICK_PORT", "8014"))
-        origin = f"http://maverick.localhost:{port}"
+        api = urlsplit(os.environ.get("LOOPINO_API_BASE", "http://127.0.0.1:8014"))
+        port = api.port or int(os.environ.get("LOOPINO_PORT", "8014"))
+        origin = f"http://loopino.localhost:{port}"
     parsed = urlsplit(origin)
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username
             or parsed.password or parsed.path or parsed.query or parsed.fragment
-            or (parsed.scheme == "http" and parsed.hostname != "maverick.localhost")):
+            or (parsed.scheme == "http" and parsed.hostname != "loopino.localhost")):
         raise ValueError("platform_browser_origin_invalid")
     return origin
 
@@ -87,9 +87,9 @@ def issue_platform_browser_session(identity_store, workspace_store, runtime_stor
     if not browser_session_is_current(identity_store, workspace_store, runtime_store, session, now=timestamp):
         raise ValueError("platform_browser_authentication_unavailable")
     identity_store.save_auth_session(session)
-    frame_domain = os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
+    frame_domain = os.environ.get("LOOPINO_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
     frame_suffix = f".sidecars.{frame_domain or urlsplit(session.browser_origin).hostname}"
-    return {"origin": session.browser_origin, "cookie_name": "maverick_session",
+    return {"origin": session.browser_origin, "cookie_name": "loopino_session",
             "cookie_value": session.session_id, "expires_at": session.expires_at.timestamp(),
             "user_id": user_id, "workspace_id": workspace_id, "frame_host_suffix": frame_suffix}
 

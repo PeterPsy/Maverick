@@ -1,4 +1,4 @@
-import { readAppCacheModel, type AppReadModelOptions } from '@maverick/pwa-cache';
+import { readAppCacheModel, type AppReadModelOptions } from '@loopino/pwa-cache';
 import { sanitizeMailReadModel } from './pwaReadModel';
 
 export async function readMailDisplay<T>(parameters: Record<string, unknown>, options: AppReadModelOptions<T> = {}): Promise<T> {

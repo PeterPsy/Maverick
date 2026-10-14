@@ -1,12 +1,12 @@
 # Design Studio
 
-Design Studio is the Maverick host identity for an unchanged official
+Design Studio is the Loopino host identity for an unchanged official
 [OpenDesign](https://github.com/nexu-io/open-design) installation. It is not a
 fork, overlay, or replacement editor.
 
-Design Studio declares `presentation.sidebar_enabled: false`: Maverick keeps
+Design Studio declares `presentation.sidebar_enabled: false`: Loopino keeps
 the app rail and exposes shell controls in compact rail menus, leaving the
-OpenDesign canvas free of a Maverick detail sidebar. On mobile, the shell
+OpenDesign canvas free of a Loopino detail sidebar. On mobile, the shell
 header menu provides those controls.
 
 ## Native product boundary
@@ -33,7 +33,7 @@ Release selection, quiescence, update journals, delegation metadata, and
 immutable backups remain sibling host-control data and are never mounted into
 OpenDesign or Codex.
 
-The Maverick frontend obtains a one-shot isolated-browser ticket and a separate
+The Loopino frontend obtains a one-shot isolated-browser ticket and a separate
 Core confirmation token. Because Design Studio itself runs in an authenticated
 isolated app frame, Core binds the ticket and sidecar CSP to that exact parent;
 the frontend redeems the ticket with a credentialed CORS `POST` before
@@ -62,7 +62,7 @@ Upstream cloud panels remain subject to the isolated installation's capabilities
 Vela/AMR requires an unavailable Vela runtime and cloud identity, while GitHub,
 the Vela message center, and external media catalogs require outbound network
 access. Their upstream error responses do not imply that the native editor or
-Maverick model bridge is unavailable. The official frontend is kept unchanged.
+Loopino model bridge is unavailable. The official frontend is kept unchanged.
 
 ## Optional naked-model bridge
 
@@ -77,20 +77,20 @@ provides two native integration forms and registers both in the supported
 native OpenDesign profile file:
 
 - an OpenAI-compatible endpoint at `http://127.0.0.1:49491/v1`, using the
-  non-secret local handle `maverick-local`; and
+  non-secret local handle `loopino-local`; and
 - a local agent profile named `installed-codex-cli`, based on the upstream
-  `codex` adapter and the technical wrapper `service/maverick-codex`; and
-- a local agent profile named `installed-maverick-api`, based on the upstream
+  `codex` adapter and the technical wrapper `service/loopino-codex`; and
+- a local agent profile named `installed-loopino-api`, based on the upstream
 `opencode` adapter. Its generated OpenCode provider configuration exposes
-every API model granted by Core under the `maverick/` provider namespace.
+every API model granted by Core under the `loopino/` provider namespace.
 
 The unchanged daemon resolves both technical wrappers from `/app/service`, the
 read-only app mount defined by Core for this sidecar type. The wrappers use the
 minimal `/usr/bin/python3` runtime supplied by the sandbox; they never depend on
-the artifact-root-only `/maverick/python` layout.
+the artifact-root-only `/loopino/python` layout.
 
 The install/upgrade hook also attempts to materialize a separately
-digest-pinned official OpenCode technical runtime. `service/maverick-opencode`
+digest-pinned official OpenCode technical runtime. `service/loopino-opencode`
 invokes only that verified runtime. Consequently, granted API models appear in
 OpenDesign's native selector on a fresh or upgraded installation without asking
 the user to add an API provider manually. Download or verification failure is
@@ -105,7 +105,7 @@ and cancellation semantics to a separately sandboxed Codex process. Core—not
 the sidecar-writable native profile—requires exactly one `--model` on every
 non-diagnostic execution and authorizes it against the live catalog for the
 lease's workspace/app scope before the executor starts. It does not create a
-Maverick runtime session and does not add Maverick prompts, memory, Chat
+Loopino runtime session and does not add Loopino prompts, memory, Chat
 history, personas, skills, tools, planning, or model substitution.
 
 OpenDesign 0.21 also supplies a fixed Codex shell-environment policy block on
@@ -121,7 +121,7 @@ undeclared, non-directory, traversal, and symlink-escape paths fail closed.
 Before Core publishes native readiness, the launcher reads OpenDesign's
 supported `/api/app-config` surface. An unset selection, or
 the upstream `amr` cloud selection that cannot run inside the credential-free
-sidecar, is moved to the primary available Maverick native profile with
+sidecar, is moved to the primary available Loopino native profile with
 `PUT /api/app-config`. Explicit non-cloud user selections are preserved. This
 prevents OpenDesign's cloud sign-in flow from hiding the locally integrated
 product without modifying the official root filesystem or frontend.
@@ -134,7 +134,7 @@ providers through OpenDesign's own settings.
 The host-only launch preparation writes only the release-bound delegation
 projection to `data/design-studio/bridge-capabilities.json`. Core separately
 mounts one declared diagnostics file—not the surrounding app-data root—at
-`/run/maverick/sidecar-status.json`. The thin launcher writes its real
+`/run/loopino/sidecar-status.json`. The thin launcher writes its real
 lifecycle and Model Access result through that single-file capability, so
 `native-host-status.json` cannot remain a stale prelaunch placeholder. Native
 operation remains available when a bridge is degraded or disabled.
@@ -156,10 +156,10 @@ An administrator selects a digest-locked official OCI release descriptor from
 the workspace and applies it with the dedicated CLI surface:
 
 ```bash
-maverick app design-studio cli run design-studio-update --action status --json
-maverick app design-studio cli run design-studio-update \
+loopino app design-studio cli run design-studio-update --action status --json
+loopino app design-studio cli run design-studio-update \
   --action recover --confirm true --json
-maverick app design-studio cli run design-studio-update \
+loopino app design-studio cli run design-studio-update \
   --action apply \
   --release-descriptor storage/uploaded/opendesign-release.json \
   --confirm true --json
@@ -168,7 +168,7 @@ maverick app design-studio cli run design-studio-update \
 The descriptor must name the official source repository and
 `ghcr.io/nexu-io/od`, contain empty customizations, and lock the index,
 platform manifest, config, every layer, provenance attestation, source commit,
-and supported upstream runtime contract. Maverick installs and snapshots those
+and supported upstream runtime contract. Loopino installs and snapshots those
 unchanged bytes under their manifest digest. The workspace selection in
 `official-release-selection.json` is itself digest-protected.
 
@@ -225,11 +225,11 @@ is recorded as degraded and never rolls back or stops native OpenDesign.
 
 ## External delegation bridge
 
-Maverick agents delegate through the backend/CLI/MCP entrypoints as external
+Loopino agents delegate through the backend/CLI/MCP entrypoints as external
 clients of supported public OpenDesign APIs. One call selects or creates a
 native project and conversation, uploads only explicitly authorized
 attachments, appends exactly one ordinary visible message headed `Brief
-delegated by Maverick`, and starts one native OpenDesign run. OpenDesign alone
+delegated by Loopino`, and starts one native OpenDesign run. OpenDesign alone
 selects and launches the requested naked agent/model.
 
 The caller supplies a workspace-scoped idempotency key. The bridge binds that
@@ -241,7 +241,7 @@ POST, a durable submission fence is written. A response-loss retry recovers
 the canonical `runId` from the native assistant message and never repeats an
 uncertain POST. A disconnected caller does not cancel the OpenDesign run.
 
-Maverick persists only the delegation id/status, canonical native ids, event
+Loopino persists only the delegation id/status, canonical native ids, event
 cursor, display-safe result references, exact conversation deep link, and
 technical timestamps. It never persists the brief, transcript, attachment
 body, artifact body/manifest, model request, process details, or a parallel
@@ -250,7 +250,7 @@ native product.
 
 ## Host-owned surfaces
 
-Maverick keeps only:
+Loopino keeps only:
 
 - official release verification and process lifecycle;
 - workspace binding, authentication, isolated browser origin, and readiness;
@@ -272,7 +272,7 @@ files. It restores two disposable copies, runs the unchanged same-version
 official package with both bridges disabled, and compares redaction-safe
 hashes for projects, conversations, ordered messages, Design Systems, project
 files, artifacts, settings, and run references using only public APIs. It then
-atomically selects the certified copy, removes only Maverick runtime metadata,
+atomically selects the certified copy, removes only Loopino runtime metadata,
 and makes the retired generation and writer state read-only.
 
 Activation is explicit and ordered:
@@ -301,7 +301,7 @@ succeeds does it close rollback to the legacy writer, release quiescence, and
 synchronously start the native sidecar. A failed post-preflight native
 readiness check records `activation_failed` but never re-enables the legacy
 writer. Backups and certification records contain recovery bytes or
-category hashes as appropriate; the live Maverick marker contains no project,
+category hashes as appropriate; the live Loopino marker contains no project,
 transcript, file, artifact, or settings bodies.
 
 The CLI and MCP surfaces must use supported public OpenDesign APIs. They must
@@ -320,7 +320,7 @@ passes directly to the same official OpenDesign daemon.
 
 ## Contract Notes
 
-The contract deliberately denies Maverick runtime-session creation and direct
+The contract deliberately denies Loopino runtime-session creation and direct
 secret delivery. Its provider permission authorizes only the scoped Model
 Access Bridge; sidecar route policy remains pass-through. Attachment bytes must
 be obtained through their owning authorized app surface and are handed directly

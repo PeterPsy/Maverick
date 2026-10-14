@@ -120,8 +120,8 @@ def build_transport_probe_budget() -> HostedAgenticBudget:
 
 def build_transport_probe_context(root: Path):
     binding = SimpleNamespace(
-        runtime_engine_id="maverick-tool-loop",
-        adapter_id="maverick-hosted-tool-loop",
+        runtime_engine_id="loopino-tool-loop",
+        adapter_id="loopino-hosted-tool-loop",
         adapter_version="security-probe",
         model_provider_id=PROBE_PROVIDER_ID,
         model_id="security-probe-model",

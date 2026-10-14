@@ -32,7 +32,7 @@ from core.model_access.models import CliFrame, ModelAccessScope
 
 MAX_CLI_STDIN_BYTES = 32 * 1024 * 1024
 class CodexCliExecutor:
-    """Launch Codex in an outer filesystem sandbox with no Maverick runtime."""
+    """Launch Codex in an outer filesystem sandbox with no Loopino runtime."""
 
     def __init__(self, *, repository_root: Path) -> None:
         self.repository_root = Path(repository_root).resolve(strict=True)
@@ -130,7 +130,7 @@ class CodexCliExecutor:
                 writer = Thread(
                     target=_write_stdin,
                     args=(process.stdin, stdin),
-                    name="maverick-model-access-codex-stdin",
+                    name="loopino-model-access-codex-stdin",
                     daemon=True,
                 )
                 writer.start()

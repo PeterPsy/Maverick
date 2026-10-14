@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a disposable native OpenDesign proof with Maverick bridges disabled."""
+"""Run a disposable native OpenDesign proof with Loopino bridges disabled."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def run_native_smoke(
         },
         "bridges": {"model_access": "disabled", "delegation": "disabled"},
         "native_surfaces": probes,
-        "maverick_runtime_session_created": False,
+        "loopino_runtime_session_created": False,
         "data_directory": str(data_dir.resolve()),
     }
 

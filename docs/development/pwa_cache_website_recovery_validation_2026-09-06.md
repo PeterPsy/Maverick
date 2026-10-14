@@ -104,7 +104,7 @@ npm --prefix packages/pwa-cache run typecheck
 npm --prefix apps/base-shell run test:service-worker
 .venv/bin/python -m unittest discover -s tests/unit/pwa
 .venv/bin/python -m unittest tests.unit.scripts.test_audit_pwa_cache tests.unit.scripts.test_pwa_device_regression
-maverick app website-studio frontend build --json
+loopino app website-studio frontend build --json
 .venv/bin/python scripts/audit_pwa_cache.py
 python3 scripts/check_unused_imports.py
 .venv/bin/python scripts/pwa_shell_cache_smoke.py --app-read-models
@@ -132,7 +132,7 @@ must not be marked complete until all three operational gates are recorded.
 
 ## Storage-owned plan synchronization
 
-`storage/generated/development/maverick-pwa-cache-development-plan.md` was
+`storage/generated/development/loopino-pwa-cache-development-plan.md` was
 updated through `storage_update_markdown_file` with six guarded exact
 replacements. Previous SHA-256:
 `9f15092ab50418891e022de0500707bda2f68331072eb2fd0507dfb48a1d11e2`.

@@ -60,12 +60,12 @@ test('trusted cross-origin context wins over late bootstrap; sibling messages ca
   // A real sibling shares the app origin but is not the exact shell parent.
   await canvas.locator('body').evaluate((_, origin) => {
     const target = window.parent.frames[0];
-    target.postMessage({ type: 'maverick.widget.context-changed', context: { content: { payload: { active_app_params: { app_page: 'expenses' } } } } }, origin);
-    target.postMessage({ type: 'maverick.widget.data-changed', owner_app_id: 'crm' }, origin);
+    target.postMessage({ type: 'loopino.widget.context-changed', context: { content: { payload: { active_app_params: { app_page: 'expenses' } } } } }, origin);
+    target.postMessage({ type: 'loopino.widget.data-changed', owner_app_id: 'crm' }, origin);
   }, appOrigin);
   // Even an event with the correct claimed origin needs the actual parent source.
   await widget.locator('body').evaluate((_, origin) => window.dispatchEvent(new MessageEvent('message', {
-    origin, source: window, data: { type: 'maverick.widget.context-changed', context: { content: { payload: { active_app_params: { app_page: 'expenses' } } } } },
+    origin, source: window, data: { type: 'loopino.widget.context-changed', context: { content: { payload: { active_app_params: { app_page: 'expenses' } } } } },
   })), shellOrigin);
   await expect(widget.getByRole('button', { name: 'Brief archive', exact: true })).toHaveAttribute('aria-current', 'page');
   backend(dataRoot, { action: 'crm.create_contact', display_name: 'Second Person' });

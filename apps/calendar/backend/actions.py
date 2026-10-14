@@ -340,27 +340,27 @@ def list_payload(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
 def app_events_for_action(action: str, *, app_id: str = "calendar") -> list[dict[str, str]]:
     normalized = normalize_action(action)
     if normalized in {"notifications.dismiss", "notifications.read"}:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "notifications"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "notifications"}]
     if normalized in MUTATING_ACTIONS:
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "events"},
-            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "notifications"},
+            {"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "events"},
+            {"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "notifications"},
         ]
     if normalized == "calendar_sync":
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "events"},
-            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "calendars"},
-            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "connections"},
+            {"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "events"},
+            {"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "calendars"},
+            {"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "connections"},
         ]
     if normalized == "calendar_calendars.select":
         return [
-            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "calendars"},
-            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "events"},
+            {"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "calendars"},
+            {"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "events"},
         ]
     if normalized in {"calendar_connections.start_oauth", "calendar_connections.complete_oauth", "calendar_connections.disconnect"}:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "connections"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "connections"}]
     if normalized in VIEW_STATE_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "view-state"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": app_id, "resource": "view-state"}]
     return []
 
 

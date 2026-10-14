@@ -48,7 +48,7 @@ from core.runtime.confined_filesystem_mutation_support import (
 
 MAX_CONFINED_LIST_ENTRIES = 10_000
 MAX_CONFINED_PATH_COMPONENTS = 256
-_CURSOR_DOMAIN = b"maverick.confined-filesystem.cursor.v1\x00"
+_CURSOR_DOMAIN = b"loopino.confined-filesystem.cursor.v1\x00"
 _PROCESS_CURSOR_KEY = secrets.token_bytes(32)
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
@@ -552,7 +552,7 @@ class ConfinedWorkspaceFilesystem:
             raise RuntimeToolError("filesystem_expected_version_incomplete")
         components = self._components(relative_path, allow_root=False)
         chain = self._open_chain(components[:-1], create_missing=create_parents)
-        temporary_name = f".maverick-write-{secrets.token_hex(16)}"
+        temporary_name = f".loopino-write-{secrets.token_hex(16)}"
         temp_fd: int | None = None
         previous_fd: int | None = None
         committed = False

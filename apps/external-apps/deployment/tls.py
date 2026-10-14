@@ -65,7 +65,7 @@ def refresh(requests, domain, *, root=TLS_ROOT, webroot=ACME_ROOT, acme_server="
     attempts = read_json(attempts_path) if attempts_path.exists() else {}
     certificates, errors, issued = [], [], 0
     for namespace, requested in sorted(requests.items()):
-        name = "maverick-external-" + hashlib.sha256(domain.encode()).hexdigest()[:12] + "-" + namespace
+        name = "loopino-external-" + hashlib.sha256(domain.encode()).hexdigest()[:12] + "-" + namespace
         lineage = root / "config/live" / name
         hosts, current = set(), False
         try:
@@ -118,7 +118,7 @@ def activate(contents, *, root=TLS_ROOT, runner=subprocess.run):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="/etc/maverick/external-apps.json")
+    parser.add_argument("--config", default="/projects/loopino/installation/config/external-apps.json")
     args = parser.parse_args()
     config = read_json(Path(args.config), 16384)
     domain = installation_domain(config["installation_domain"])

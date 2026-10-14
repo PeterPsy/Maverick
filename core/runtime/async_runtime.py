@@ -26,7 +26,7 @@ def run_runtime_coroutine(coroutine: Coroutine[Any, Any, T]) -> T:
         except BaseException as error:
             failures.append(error)
 
-    thread = Thread(target=worker, name="maverick-agentic-async-bridge")
+    thread = Thread(target=worker, name="loopino-agentic-async-bridge")
     thread.start()
     thread.join()
     if failures:

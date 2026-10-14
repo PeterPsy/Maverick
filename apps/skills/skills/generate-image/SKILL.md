@@ -3,7 +3,7 @@ name: generate-image
 description: Create an image with the image generation tool, save it into the active workspace with a suitable filename, and verify it through Storage.
 ---
 
-Use this skill when the user asks to create an image and wants the result saved in the current Maverick workspace.
+Use this skill when the user asks to create an image and wants the result saved in the current Loopino workspace.
 
 Workflow:
 

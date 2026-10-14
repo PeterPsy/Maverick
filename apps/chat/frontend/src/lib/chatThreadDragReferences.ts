@@ -2,7 +2,7 @@ import type { DragEvent } from "react";
 import type { AppEntityReference, ChatThread } from "../api/client";
 import { referenceKey, type MentionItem } from "./mentions";
 
-export const CHAT_THREAD_DRAG_DATA_TYPE = "application/x-maverick-chat-thread";
+export const CHAT_THREAD_DRAG_DATA_TYPE = "application/x-loopino-chat-thread";
 
 const CHAT_APP_ID = "chat";
 const CHAT_THREAD_SUMMARY = "Chat conversation available through the authorized runtime transcript reader";

@@ -25,7 +25,7 @@ class DeviceUseContinuationTestCase(unittest.TestCase):
         self.root = make_temp_repo_root(self)
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             self.state = bootstrap_platform_state(
@@ -82,7 +82,7 @@ class DeviceUseContinuationTestCase(unittest.TestCase):
                 activation_id="01234567-89ab-cdef-0123-456789abcdef",
                 workspace_id="default",
                 owner_user_id="user-1",
-                protocol_version="maverick.device-use.v1",
+                protocol_version="loopino.device-use.v1",
                 executor_contract="macos-v46",
                 tool_contract_digest="a" * 64,
                 mode="full",

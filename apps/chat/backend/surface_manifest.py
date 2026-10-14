@@ -99,10 +99,10 @@ OPERATIONS_MANIFEST = {
     },
     "examples": {
         "cli_manifest": {
-            "command": "maverick app chat cli run chat --json",
+            "command": "loopino app chat cli run chat --json",
         },
         "cli_search_projects": {
-            "command": "maverick app chat cli run chat --json --action references.search --entity-type project --query client",
+            "command": "loopino app chat cli run chat --json --action references.search --entity-type project --query client",
         },
         "mcp_search_projects": {
             "tool": "chat_reference_search",

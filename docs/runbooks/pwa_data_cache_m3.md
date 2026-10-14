@@ -8,15 +8,15 @@ documented in `docs/runbooks/pwa_data_cache_m5.md`.
 
 ## Owned browser state
 
-- package: `@maverick/pwa-cache`;
-- IndexedDB database: `maverick-pwa-data-v1`;
+- package: `@loopino/pwa-cache`;
+- IndexedDB database: `loopino-pwa-data-v1`;
 - current database version: `3`;
 - current entry schema: `3`;
-- current policy revision: `maverick.local-persistence-policy.v2`;
+- current policy revision: `loopino.local-persistence-policy.v2`;
 - metadata stores: `entries` and `metadata`;
 - payload store: `payloads`;
-- coordination channel: `maverick-pwa-cache-v1`;
-- durable cleanup barrier: `maverick-pwa-cache-cleanup-barrier-v1` plus
+- coordination channel: `loopino-pwa-cache-v1`;
+- durable cleanup barrier: `loopino-pwa-cache-cleanup-barrier-v1` plus
   IndexedDB cleanup markers;
 - retry state: RAM only.
 
@@ -68,7 +68,7 @@ An app adapter must:
 6. declare fresh and absolute expiry TTLs separately;
 7. set `allowStale` only after the resource owner accepts rendering stale data;
 8. sanitize an unknown payload into its exact cache read-model shape;
-9. publish `maverick.app.data-changed` only after server-confirmed mutation;
+9. publish `loopino.app.data-changed` only after server-confirmed mutation;
 10. dispose the client and cancel retry state on unmount; and
 11. use the same ordinary loading/success/error components for cache and
     network results.
@@ -102,7 +102,7 @@ const records = client.resource("records", {
 
 The host capability is app-bound and must not be exposed to an embedded app.
 `createPwaCacheHost` rejects embedded browser frames and browser workers.
-Every Maverick app frame now uses an authenticated per-app, per-session
+Every Loopino app frame now uses an authenticated per-app, per-session
 isolated origin. M5 additionally keeps the structured store in Base Shell and
 mediates app-owned adapters through an exact-source, exact-origin parent
 broker: the child receives neither IndexedDB nor a host principal. This closes
@@ -159,7 +159,7 @@ reported as `status: "pending"`; it never becomes RAM-fallback success. While
 any cleanup is pending, the resilient backend blocks persistent reads, writes,
 touches, and listings until deletion succeeds.
 
-`maverick.app.data-changed` requires `owner_app_id` and `resource`; optional
+`loopino.app.data-changed` requires `owner_app_id` and `resource`; optional
 `entity_id` narrows deletion. Base Shell forwards the invalidation to the
 lifecycle controller. The event is an acceleration hint, not the only
 correctness mechanism, so resource revisions and expiry remain mandatory.
@@ -174,11 +174,11 @@ The coordinator uses:
 - jitter from 0.75 to 1.25;
 - a 250 ms minimum interval for early hints;
 - server `Retry-After` when longer than the computed delay;
-- pause while the document or Maverick frame is hidden; and
+- pause while the document or Loopino frame is hidden; and
 - cancellation on abort, unmount, logout, or scope change.
 
 Browser `online`, focus, document visibility,
-`maverick.app.visibility-changed`, and a successful Maverick response are only
+`loopino.app.visibility-changed`, and a successful Loopino response are only
 hints. The coordinator never reads `navigator.onLine` as authority. `401`,
 `403`, `409`, `422`, and other terminal HTTP responses are not retried.
 Automatic HTTP retries are limited to transport/timeouts and
@@ -192,7 +192,7 @@ POST-based read actions and other opaque cache loaders remain one-shot unless a
 separate reviewed idempotent mutation executor applies.
 
 If a `401` or `403` triggers lifecycle cleanup while its request is still the
-active retry flight, the original `MaverickHttpError` remains the terminal
+active retry flight, the original `LoopinoHttpError` remains the terminal
 result. Scope cancellation must not replace it with `RetryCancelledError`, so
 Base Shell can always enter its normal authentication teardown.
 
@@ -223,7 +223,7 @@ hashes the exact canonical request semantics with SHA-256, sends one stable key
 and body across attempts, and the App Store atomically stores a bounded
 workspace idempotency ledger with the state mutation. A replay returns the
 original response, does not reapply or revert later state, and emits no second
-`maverick.app.data-changed` event.
+`loopino.app.data-changed` event.
 
 ## Settings diagnostics
 
@@ -282,8 +282,8 @@ npm --prefix packages/pwa-cache run typecheck
 npm --prefix packages/pwa-cache test
 npm --prefix apps/base-shell test
 npm --prefix apps/base-shell run test:service-worker
-maverick app base-shell frontend build --json
-maverick app settings frontend build --json
+loopino app base-shell frontend build --json
+loopino app settings frontend build --json
 python3 -m unittest apps.settings.tests.test_settings_app
 ```
 
@@ -293,7 +293,7 @@ not cache contents or principal identifiers.
 
 ## Rollback
 
-Disable `MAVERICK_FEATURE_PWA_DATA_CACHE` and app-specific rollout gates. A
+Disable `LOOPINO_FEATURE_PWA_DATA_CACHE` and app-specific rollout gates. A
 disabled client performs server-first reads and does not immediately destroy
 the database, allowing a separate bounded cleanup release. The RAM retry
 coordinator in Base Shell may remain active because it persists no request or

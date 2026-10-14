@@ -126,8 +126,8 @@ try {
       assert.ok(box.x >= 0 && box.x + box.width <= width, `${selector} clipped at ${width}px`);
     }
   }
-  await page.evaluate(() => window.postMessage({type: "maverick.shell.theme-changed", theme: {effective: "light", mode: "light", color_scheme: "light"}}, location.origin));
-  await page.waitForFunction(() => document.documentElement.dataset.maverickTheme === "light");
+  await page.evaluate(() => window.postMessage({type: "loopino.shell.theme-changed", theme: {effective: "light", mode: "light", color_scheme: "light"}}, location.origin));
+  await page.waitForFunction(() => document.documentElement.dataset.loopinoTheme === "light");
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "light");
   assert.deepEqual(errors, []);
   await context.close();

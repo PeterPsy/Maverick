@@ -1,12 +1,12 @@
-# macOS Device Use through Maverick
+# macOS Device Use through Loopino
 
-Status (2026-09-15): **the only macOS execution path**. Maverick Chat and Core
-own the model turn; `MaverickMac` is only the signed native executor. The old
+Status (2026-09-15): **the only macOS execution path**. Loopino Chat and Core
+own the model turn; `LoopinoMac` is only the signed native executor. The old
 local/direct Codex mode, local transcript, credential provisioning, native setup
 chrome and Chat execution switch have been deleted without a compatibility
 shim.
 
-The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
+The final paired v40 acceptance test took **4m48s through Loopino** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
 direct path was then removed. The current executor contract is `macos-v51`.
 
@@ -46,7 +46,7 @@ inventory and an explicit `window_id`. The public schemas and v52 contract are
 unchanged, so this native-only correction does not require a backend restart.
 
 Native commits `05fde65` and `c157c1d` were built and installed by workflow
-`38089725365` on 2026-10-10 at the existing `MaverickMac.app` path. The pipeline
+`38089725365` on 2026-10-10 at the existing `LoopinoMac.app` path. The pipeline
 passed the Swift suite, all 16 signed physical-host tests with empty failure
 diagnostics, Peekaboo catalog smoke checks, signing continuity and update tests.
 It reported the running client as 0.3.2 (63), source `c157c1d7617c`. Earlier runs
@@ -130,9 +130,9 @@ before installing the paired native release. macOS Full Disk Access requires
 system-settings consent; the executor neither claims it from Full mode nor
 modifies TCC.
 
-The native implementation lives in the sibling `maverick-glasses-ios`
+The native implementation lives in the sibling `loopino-glasses-ios`
 repository; its companion source document is
-`docs/maverick-macos-device-use.md`. Keep both sides synchronized.
+`docs/loopino-macos-device-use.md`. Keep both sides synchronized.
 
 ## General efficiency and diagnostics (v50 / 0.2.3 build 54)
 
@@ -304,13 +304,13 @@ checks at desktop/mobile widths passed. These checks cover chat admission,
 normal workspace context and native authority; they do not assert a physical
 cross-app business workflow was completed.
 
-The Mac app is a chrome-free WebView of the ordinary Maverick Chat. There is no
+The Mac app is a chrome-free WebView of the ordinary Loopino Chat. There is no
 native status/setup toolbar and no `Sul server` / `Su questo Mac` selector. Chat
 renders its Device Use control only when the trusted macOS bridge answers the
 status probe; browsers never render it.
 
 The native window, `WKWebView`, overscroll surface, and every WebKit frame use
-Maverick's dark loading background from construction and inject the same
+Loopino's dark loading background from construction and inject the same
 first-paint color at document start. The web shell replaces it with the
 selected theme when ready; a default white WebKit canvas is never a loading
 state.
@@ -318,10 +318,10 @@ state.
 Chat microphone recording is independent of Device Use activation. Native
 macOS declares its microphone purpose string so WebKit exposes audio capture.
 macOS 0.2.8 (59) and iOS 0.1.2 (3) compile the shared
-`MaverickWebMediaCapturePolicy` in the native repository. WebKit's callback
+`LoopinoWebMediaCapturePolicy` in the native repository. WebKit's callback
 origin identifies the top page, while `WKFrameInfo.securityOrigin` identifies
 the requesting frame; these are checked separately. The top origin and actual
-document must match Maverick. The frame must be the platform or an exact live
+document must match Loopino. The frame must be the platform or an exact live
 shell-registered app origin with exact microphone delegation. OS consent and
 live registration are revalidated before granting capture. External pages,
 popup receivers and camera requests remain denied. The opt-in signed Mac
@@ -347,7 +347,7 @@ active label:
   calls, including while a turn is running.
 
 There is no three-way selector or app-scope/consent settings modal. macOS
-permission requests remain available under **Maverick → Permessi PC use**
+permission requests remain available under **Loopino → Permessi PC use**
 while access is off. The emergency **Interrompi PC use** command retains
 `Shift-Command-.`. OS permissions and the existing Full executor's technical
 limits still apply.
@@ -395,10 +395,10 @@ the native transport; the current paired contract is `macos-v47`.
 ## Architecture
 
 ```text
-MaverickMac WebView / Chat iframe
+LoopinoMac WebView / Chat iframe
   -> authenticated one-shot Core activation
   -> trusted base-shell broker (control metadata only)
-  -> native WSS MaverickMac <-> Core
+  -> native WSS LoopinoMac <-> Core
   -> native provider tool call
   -> CompanionBrowser / ComputerTools / Peekaboo / EventKit executor
   -> JSON result plus optional binary JPEG
@@ -406,13 +406,13 @@ MaverickMac WebView / Chat iframe
 ```
 
 Model ownership, provider credentials, conversation state, image injection and
-audit remain in Core. WebKit exposes `maverickDeviceUse` for executor control
-and the platform-main-frame-only `maverickExternalURL` for system-browser links;
+audit remain in Core. WebKit exposes `loopinoDeviceUse` for executor control
+and the platform-main-frame-only `loopinoExternalURL` for system-browser links;
 the latter carries no Device Use authority. Live invocation
 arguments, results, screenshots and credentials do not travel through the bridge
 JavaScript. The separate owner-authorized audit UI can explicitly fetch historical
 results and images through Core; credentials and typed input text are withheld.
-The retired `maverickLocalRuntime` handler and broker do not exist.
+The retired `loopinoLocalRuntime` handler and broker do not exist.
 
 The v46 executor retains one native execution path, with two existing Core
 provider adapters:
@@ -420,7 +420,7 @@ provider adapters:
 - source app and agent `chat`;
 - Codex app-server uses dynamic tools and same-turn image steering with the
   model profile and reasoning effort already selected in Chat;
-- Antigravity CLI uses its existing private `maverick-device-use-mcp` wrapper,
+- Antigravity CLI uses its existing private `loopino-device-use-mcp` wrapper,
   forwarding the same five tools to Core's Device Use invoke API;
 - the native app remains a single executor, without provider runtime or
   credentials;
@@ -485,7 +485,7 @@ current native-window generation. Core returns a random bearer ticket valid for
 60 seconds and usable once; only its digest remains server-side. The Mac opens
 the WSS directly and sends:
 
-- protocol `maverick.device-use.v1`;
+- protocol `loopino.device-use.v1`;
 - executor `macos-v53`;
 - tool digest
   `1fae7ddd33dabce4111e3360226d2ba4252e616bb99f1d1762cd4edad12d2947`;
@@ -576,7 +576,7 @@ Source media is read-only. Native writes are limited to:
 
 ```text
 <project>/
-  .maverick/
+  .loopino/
     analysis.json
     transcript.json
     scenes.json
@@ -658,8 +658,8 @@ python3 -m unittest \
   tests.unit.api.test_device_use_api \
   tests.unit.api.test_inter_agent_api
 python3 scripts/check_unused_imports.py
-maverick app chat frontend build --json
-maverick app base-shell frontend build --json
+loopino app chat frontend build --json
+loopino app base-shell frontend build --json
 ```
 
 Native Linux structural checks:
@@ -671,8 +671,8 @@ python3 -m unittest discover -s scripts -p 'test_mac_*.py'
 The Apple-silicon workflow must also run Swift tests, release build, real
 Peekaboo catalog smoke and signing/designated-requirement checks. Deploy/restart
 Core before installing a v46 Mac client. Dispatch the existing workflow using
-`install_and_open=true`; the installer requests normal Quit if MaverickMac is
-running, then atomically replaces `~/Applications/MaverickMac.app`. Never create
+`install_and_open=true`; the installer requests normal Quit if LoopinoMac is
+running, then atomically replaces `~/Applications/LoopinoMac.app`. Never create
 a second app bundle.
 
 Unit/CI checks prove contract and build integrity, not physical GUI behavior.
@@ -684,11 +684,11 @@ replay/duplicate effects and bridge metrics before restart.
 
 | Path | Total | Result |
 |---|---:|---|
-| Via Maverick, pre-optimization | 5m55s | Complete with recoverable failures |
+| Via Loopino, pre-optimization | 5m55s | Complete with recoverable failures |
 | Direct control, paired final run | **4m44s** | Complete |
-| Via Maverick, paired final run | **4m48s** | Complete; one pre-dispatch recovery |
+| Via Loopino, paired final run | **4m48s** | Complete; one pre-dispatch recovery |
 
-The final delta was **+4s / +1.4%**. The optimized Maverick run used 77 native
+The final delta was **+4s / +1.4%**. The optimized Loopino run used 77 native
 invocations, 41 Code Mode blocks, 42 model samples and 42 observation JPEGs;
 ten fewer native calls and seven fewer model samples than the earlier run were
 the material improvement. The persistent binary bridge itself was not the
@@ -786,9 +786,9 @@ destination/edit plan, last verified step and one stage: `planning`,
 interrupted export succeeded. A resume observes the real app and inspects the
 existing destination before deciding whether to continue.
 
-Artifacts live below `.maverick/working/evidence/<uuid>/`; each analysis,
+Artifacts live below `.loopino/working/evidence/<uuid>/`; each analysis,
 transcript, edit plan, verification and contact sheet has a new path. Named
-`.maverick/scripts/` definitions remain explicitly replaceable. Final media stays
+`.loopino/scripts/` definitions remain explicitly replaceable. Final media stays
 below the selected project's `output/`, with its relative path/hash in evidence.
 The native executor does not transfer arbitrary local files to Storage; a workflow
 requiring a workspace deliverable must use a separately authorized Storage flow.
@@ -904,7 +904,7 @@ Native revision `26b16f7` was installed as 0.4.1 (75) by Actions run
 [38377630676](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38377630676).
 All 18 signed physical acceptance cases passed with empty failure diagnostics,
 including a real download with byte-count/SHA-256 evidence and actual Calculator,
-ChatGPT and Maverick capture through `PeekabooTools.execute`. The reconnected
+ChatGPT and Loopino capture through `PeekabooTools.execute`. The reconnected
 chat also captured all three applications through the public native tools.
 This verifies observation recovery, not ChatGPT model or task-performance parity.
 
@@ -986,7 +986,7 @@ Focused Core contract/provider/reconnection verification passed 59 tests.
 The ordinary `core.recovery.restart_backend` attempt returned `restarted=false`
 because its migrated root cannot reach host systemd, with `healthy=true`.
 After the user's explicit restart request, the existing host-namespace systemctl
-route verified the exact `maverick-core.service` identity and `Restart=always`,
+route verified the exact `loopino-core.service` identity and `Restart=always`,
 then restarted that managed service. PID 2780468 changed to 2862343 at
 16:19:56 UTC on 13 October 2026. The service is active/running, `/health` reports
 `status=ok`, and authenticated CLI discovery succeeds with the newly loaded

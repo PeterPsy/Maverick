@@ -58,10 +58,10 @@ class PwaCacheAuditTests(unittest.TestCase):
                 "sha256": hashlib.sha256(body).hexdigest(),
                 "size_bytes": len(body),
             }
-            (build / "maverick-frontend-assets.json").write_text(
+            (build / "loopino-frontend-assets.json").write_text(
                 json.dumps(
                     {
-                        "schema": "maverick.frontend-assets.v2",
+                        "schema": "loopino.frontend-assets.v2",
                         "build_id": "a" * 12,
                         "entrypoints": ["index.html"],
                         "immutable": [],
@@ -111,10 +111,10 @@ class PwaCacheAuditTests(unittest.TestCase):
             body = b"ok"
             (example / "index.html").write_bytes(body)
             (example / "extra.js").write_bytes(b"x")
-            (example / "maverick-frontend-assets.json").write_text(
+            (example / "loopino-frontend-assets.json").write_text(
                 json.dumps(
                     {
-                        "schema": "maverick.frontend-assets.v2",
+                        "schema": "loopino.frontend-assets.v2",
                         "build_id": "a" * 12,
                         "entrypoints": ["index.html"],
                         "immutable": [],

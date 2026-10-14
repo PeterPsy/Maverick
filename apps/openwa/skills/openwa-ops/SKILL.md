@@ -21,7 +21,7 @@ and GIF up to 4 MiB (`max_bytes` may reduce that limit). It does not send or sav
 file. Use Storage if a persistent copy is requested. A missing/expired image is an
 explicit failure, not permission to read provider-private files.
 
-For native CLI image bytes use `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` on
+For native CLI image bytes use `LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE=full` on
 that one invocation and consume the JSON into an image viewer or Storage;
 the default text compaction can truncate base64. Never print the payload.
 
@@ -35,6 +35,6 @@ Use `messages.send` or `messages.reply` with an `idempotency_key` of 12–100 le
 
 Only platform administrators configure a gateway. Manage its API key and grants directly in Vault, then save the gateway URL in the app. Preserve the local provider credential when binding a remote gateway, and retain backend, CLI and MCP grant targets; never ask for the API key in chat or save it in source, notes, environment files or private storage. App secret delivery is ephemeral.
 
-Connection and uncertain-send notices belong to Maverick's central inbox and the trusted current user. Do not build or use a separate app notification bell.
+Connection and uncertain-send notices belong to Loopino's central inbox and the trusted current user. Do not build or use a separate app notification bell.
 
-For an explicitly requested local-provider maintenance task, consult the shared app source's `OPERATIONS.md` in the Maverick design repository. Inspect the native `provider` CLI descriptor, then use its `status`, `start`, `restart` or `stop` action for the dedicated `maverick-openwa-default` supervisor. It is restricted to the trusted default-workspace platform administrator and requests no WhatsApp API key. Start enables persisted recovery; stop disables it. Host operator scripts live in `apps/openwa/provider/`. Do not restart other PM2 processes or Maverick's shared backend as part of ordinary OpenWA maintenance. Do not alter provider private data or authentication files.
+For an explicitly requested local-provider maintenance task, consult the shared app source's `OPERATIONS.md` in the Loopino design repository. Inspect the native `provider` CLI descriptor, then use its `status`, `start`, `restart` or `stop` action for the dedicated `loopino-openwa-default` supervisor. It is restricted to the trusted default-workspace platform administrator and requests no WhatsApp API key. Start enables persisted recovery; stop disables it. Host operator scripts live in `apps/openwa/provider/`. Do not restart other PM2 processes or Loopino's shared backend as part of ordinary OpenWA maintenance. Do not alter provider private data or authentication files.

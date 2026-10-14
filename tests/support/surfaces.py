@@ -134,7 +134,7 @@ class SurfaceTestBase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -172,7 +172,7 @@ class SurfaceTestBase(unittest.TestCase):
             name="Checklists",
             version="1.0.0",
             description="Checklist app",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 provides=provides,
                 requires=requires,

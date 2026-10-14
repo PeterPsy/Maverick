@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWidgetContext, listWidgets, type WidgetRegistryItem } from "../src/api";
 import { WidgetSlot } from "../src/components/WidgetSlot";
 import type { WidgetPrimaryActionState } from "../src/components/WidgetSlot";
-import { setMaverickFrameOrigin } from "../src/iframePolicy";
-import type { MaverickFrameScope } from "../src/iframePolicy";
+import { setLoopinoFrameOrigin } from "../src/iframePolicy";
+import type { LoopinoFrameScope } from "../src/iframePolicy";
 
 vi.mock("../src/api", () => ({
   createWidgetContext: vi.fn(),
@@ -142,7 +142,7 @@ describe("WidgetSlot primary action protocol", () => {
   it("discards cached action state when the authenticated frame scope changes", async () => {
     vi.mocked(fetch).mockImplementation(async () => isolatedLaunchResponse());
     const callback = vi.fn();
-    async function renderFooter(frameScope: MaverickFrameScope = FRAME_SCOPE) {
+    async function renderFooter(frameScope: LoopinoFrameScope = FRAME_SCOPE) {
       await act(async () => root.render(<WidgetSlot
         activeWorkspaceId="default" content={{}} contentKind="shell.sidebar.footer"
         frameScope={frameScope} hostAppId="base-shell" label="App sidebar footer"
@@ -175,11 +175,11 @@ describe("WidgetSlot primary action protocol", () => {
     const iframe = await waitForIframe(container);
     const source = iframe.contentWindow!;
     const send = vi.spyOn(source, "postMessage");
-    const origin = iframe.dataset.maverickFrameOrigin!;
+    const origin = iframe.dataset.loopinoFrameOrigin!;
     async function ready(sender: MessageEventSource, owner = ownerAppId, from = origin) {
       await act(async () => window.dispatchEvent(new MessageEvent("message", {
         source: sender, origin: from,
-        data: { type: "maverick.widget.ready", owner_app_id: owner, widget_id: widgetId },
+        data: { type: "loopino.widget.ready", owner_app_id: owner, widget_id: widgetId },
       })));
     }
     await act(async () => {
@@ -193,7 +193,7 @@ describe("WidgetSlot primary action protocol", () => {
     expect(send).not.toHaveBeenCalled();
     await ready(source);
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      type: "maverick.widget.context-changed", owner_app_id: ownerAppId, widget_id: widgetId,
+      type: "loopino.widget.context-changed", owner_app_id: ownerAppId, widget_id: widgetId,
     }), origin);
   });
 
@@ -218,10 +218,10 @@ describe("WidgetSlot primary action protocol", () => {
     expect(framePostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         owner_app_id: ownerAppId,
-        type: "maverick.widget.primary-action.query",
+        type: "loopino.widget.primary-action.query",
         widget_id: widgetId,
       }),
-      iframe.dataset.maverickFrameOrigin,
+      iframe.dataset.loopinoFrameOrigin,
     );
 
     await dispatchWidgetState(window);
@@ -239,10 +239,10 @@ describe("WidgetSlot primary action protocol", () => {
     expect(framePostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         owner_app_id: ownerAppId,
-        type: "maverick.widget.primary-action.invoke",
+        type: "loopino.widget.primary-action.invoke",
         widget_id: widgetId,
       }),
-      iframe.dataset.maverickFrameOrigin,
+      iframe.dataset.loopinoFrameOrigin,
     );
   });
 
@@ -374,10 +374,10 @@ async function waitForIframe(parent: HTMLElement): Promise<HTMLIFrameElement> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const iframe = parent.querySelector("iframe");
     if (iframe instanceof HTMLIFrameElement) {
-      if (!iframe.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test", ownerAppId, FRAME_SCOPE);
+      if (!iframe.dataset.loopinoFrameOrigin) {
+        setLoopinoFrameOrigin(iframe, "https://af-widget.sidecars.loopino.test", ownerAppId, FRAME_SCOPE);
       }
-      iframe.dataset.maverickFrameBootstrapArmed = "true";
+      iframe.dataset.loopinoFrameBootstrapArmed = "true";
       return iframe;
     }
     await act(async () => {
@@ -416,7 +416,7 @@ async function dispatchWidgetState(source: MessageEventSource) {
           label: "New Agent",
           owner_app_id: ownerAppId,
           preferred_surface: "sidebar",
-          type: "maverick.widget.primary-action.state",
+          type: "loopino.widget.primary-action.state",
           widget_id: widgetId,
         },
         origin: messageOrigin(source),
@@ -430,7 +430,7 @@ async function dispatchSidebarOpen() {
   await act(async () => {
     window.dispatchEvent(
       new MessageEvent("message", {
-        data: { type: "maverick.shell.sidebar.open" },
+        data: { type: "loopino.shell.sidebar.open" },
         origin: window.location.origin,
         source: window,
       }),
@@ -442,14 +442,14 @@ function messageOrigin(source: MessageEventSource): string {
   if (source === window) return window.location.origin;
   const frame = [...document.querySelectorAll("iframe")]
     .find((candidate) => candidate.contentWindow === source);
-  return frame?.dataset.maverickFrameOrigin || "https://foreign-frame.invalid";
+  return frame?.dataset.loopinoFrameOrigin || "https://foreign-frame.invalid";
 }
 
 function isolatedLaunchResponse(): Response {
   return new Response(JSON.stringify({
-    bootstrap_url: "https://af-widget.sidecars.maverick.test/.well-known/maverick-app-frame-bootstrap",
+    bootstrap_url: "https://af-widget.sidecars.loopino.test/.well-known/loopino-app-frame-bootstrap",
     method: "POST",
-    origin: "https://af-widget.sidecars.maverick.test",
+    origin: "https://af-widget.sidecars.loopino.test",
     ticket: "test-ticket",
     ticket_field: "ticket",
   }), { headers: { "Content-Type": "application/json" }, status: 200 });
@@ -461,7 +461,7 @@ async function dispatchExternalUrl(source: MessageEventSource, url: string) {
       new MessageEvent("message", {
         data: {
           owner_app_id: ownerAppId,
-          type: "maverick.app.external-url",
+          type: "loopino.app.external-url",
           url,
           widget_id: widgetId,
         },

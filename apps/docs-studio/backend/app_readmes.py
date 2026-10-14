@@ -307,7 +307,7 @@ def build_apps_section(workspace_root: Path | None = None) -> dict[str, object]:
     install_root = workspace_root.parents[1]
     replacements = [
         (str(workspace_root) + "/", "<workspace>/"),
-        (str(install_root) + "/", "<maverick-root>/"),
+        (str(install_root) + "/", "<loopino-root>/"),
         (str(Path.home()) + "/", "<home>/"),
     ]
     sources = [

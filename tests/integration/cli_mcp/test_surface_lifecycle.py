@@ -64,7 +64,7 @@ class TestSurfaceLifecycle(SurfaceTestBase):
             name="Tasks",
             version="1.0.0",
             description="Tasks app",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 capabilities=build_app_capabilities(
                     mcp_tools=["checklists.list"],

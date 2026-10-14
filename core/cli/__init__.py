@@ -1,1 +1,1 @@
-"""Machine-readable CLI surfaces for the Maverick core."""
+"""Machine-readable CLI surfaces for the Loopino core."""

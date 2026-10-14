@@ -8,21 +8,21 @@ import json
 from core.device_use.code_contract import CODE_GUIDANCE, code_tool_spec
 
 
-DEVICE_USE_PROTOCOL_VERSION = "maverick.device-use.v1"
+DEVICE_USE_PROTOCOL_VERSION = "loopino.device-use.v1"
 DEVICE_USE_EXECUTOR_CONTRACT = "macos-v53"
 DEVICE_USE_MAX_JPEG_BYTES = 4_000_000
 # EventKit v40 admits a bounded 200 KB JSON read before it is wrapped as a
 # dynamic-tool result. The relay bound includes JSON string escaping so the
-# Maverick path does not reject a result accepted by the direct Mac runtime.
+# Loopino path does not reject a result accepted by the direct Mac runtime.
 DEVICE_USE_MAX_RESULT_BYTES = 401_000
 DEVICE_USE_MAX_ARGUMENT_BYTES = 32_000
 
-DEVICE_USE_CAPABILITY_INSTRUCTIONS = """Mac control is an additional capability of this ordinary Maverick workspace chat. Preserve the agent's platform instructions, skills, workspace tools, app surfaces, attachments and references. Use the official Maverick CLI/app tools for Maverick data and operations; use native mac_* tools for work on the user's Mac. Native app scope and project permissions apply only to the Mac, independently of server/workspace execution permissions. Mac access does not grant additional server permissions. If the Mac is stopped or disconnected, continue workspace and app work and report its unavailability only for requested native operations. Native authority belongs to this chat; do not share its activation, tickets, project handles or observation receipts with other agents."""
+DEVICE_USE_CAPABILITY_INSTRUCTIONS = """Mac control is an additional capability of this ordinary Loopino workspace chat. Preserve the agent's platform instructions, skills, workspace tools, app surfaces, attachments and references. Use the official Loopino CLI/app tools for Loopino data and operations; use native mac_* tools for work on the user's Mac. Native app scope and project permissions apply only to the Mac, independently of server/workspace execution permissions. Mac access does not grant additional server permissions. If the Mac is stopped or disconnected, continue workspace and app work and report its unavailability only for requested native operations. Native authority belongs to this chat; do not share its activation, tickets, project handles or observation receipts with other agents."""
 
 
 
 
-DEVICE_USE_FULL_INSTRUCTIONS = """You are Maverick with Full Device Use authority on this Mac. Operate any running application, window, system surface, secure field, credential dialog, or consequential workflow needed for the user's request. There is no application allowlist, native confirmation, sensitive-action confirmation, per-turn request ceiling, action-count ceiling, or time ceiling. The application list supplied at activation is only a discovery snapshot and never limits authority. Do not ask the user to approve intermediate native Mac actions. Maverick app and workspace operations retain their own authorization rules.
+DEVICE_USE_FULL_INSTRUCTIONS = """You are Loopino with Full Device Use authority on this Mac. Operate any running application, window, system surface, secure field, credential dialog, or consequential workflow needed for the user's request. There is no application allowlist, native confirmation, sensitive-action confirmation, per-turn request ceiling, action-count ceiling, or time ceiling. The application list supplied at activation is only a discovery snapshot and never limits authority. Do not ask the user to approve intermediate native Mac actions. Loopino app and workspace operations retain their own authorization rules.
 
 Only an explicit Stop or a positively detected screen lock revokes Full authority. Tool failures, focus changes, display changes, sleep/wake notifications, turn boundaries, and application changes do not revoke it; recover autonomously with a fresh observation. macOS privacy permissions, a terminated application, transport loss, and unavailable hardware remain unavoidable technical conditions, not policy denials.
 
@@ -30,7 +30,7 @@ Use mac_peekaboo with any bundle_id for exact-window background work, and mac_co
 
 DEVICE_USE_SEMANTIC_GUIDANCE = """For semantic browser actions, observe the exact tab first and select an observed frame_id, including cross-origin frames. Use locate with selector role, label and/or text (exact by default) for match-count, visibility and disabled diagnostics. click_element, fill, set_checked, select_option, select_text, paste and upload_files require one unique target, stable geometry and no occluder; each input consumes that tab's receipt. select_text requires unique text with optional before/after context. paste accepts plain text and optional sanitized HTML for contenteditable without the system clipboard. upload_files accepts explicit readable Mac files and sends them to the selected page; do not infer permission to upload unrelated files. Native observations may additionally expose native_editing_targets with native_ element IDs. Those are independently verified AX targets bound to the same screenshot receipt, even when the capture engine is pixels-only. set_value replaces AXValue; type/replace/select_text/paste accept these exact native_ IDs. Before input, the executor rechecks process birth, window bounds, field value and selection. Native RTF paste requires text matching the RTF and restores the clipboard only if no later human clipboard change occurred. PID input and app-local AX focus never activate the app or move the personal cursor. A suspected_noop or dispatched_unverified result requires observation; never replay automatically. A read-only capture may retry once after fresh exact-window validation; inputs never retry."""
 
-DEVICE_USE_FULL_PROJECT_GUIDANCE = """Full mac_project uses a working directory shared with mac_code, without a folder grant or required project_id. Set directory directly to the requested existing local media folder; authorize_project/resume_project return working-directory metadata without scanning Home. choose_directory=true on authorize_project is reserved for an explicit user request to choose a folder. For inventory and media capabilities use preflight in the actual media folder, with explicit sources where known. Media primitives retain project-relative source paths and generated output/ or .maverick/ destinations to protect source media; general local filesystem work and other destinations use mac_code. Reuse the same chat's optional shared context ID. run_project_script is declarative native media operations, not source code or a shell. Keep measured timing, source identity, non-destructive preparation and verification rules from the media tool schema. A file or command error requires file/process diagnosis, not unrelated GUI focus observations."""
+DEVICE_USE_FULL_PROJECT_GUIDANCE = """Full mac_project uses a working directory shared with mac_code, without a folder grant or required project_id. Set directory directly to the requested existing local media folder; authorize_project/resume_project return working-directory metadata without scanning Home. choose_directory=true on authorize_project is reserved for an explicit user request to choose a folder. For inventory and media capabilities use preflight in the actual media folder, with explicit sources where known. Media primitives retain project-relative source paths and generated output/ or .loopino/ destinations to protect source media; general local filesystem work and other destinations use mac_code. Reuse the same chat's optional shared context ID. run_project_script is declarative native media operations, not source code or a shell. Keep measured timing, source identity, non-destructive preparation and verification rules from the media tool schema. A file or command error requires file/process diagnosis, not unrelated GUI focus observations."""
 
 _COMPUTER_ACTIONS = [
     "observe", "open_app", "select_app", "click", "double_click", "right_click",
@@ -190,8 +190,8 @@ def _project_properties(*, include_script: bool = True) -> dict[str, object]:
         "directory": {"type": "string", "maxLength": 1000, "description": "Full only: existing local media working directory, set directly without a picker. Shared with mac_code."},
         "choose_directory": {"type": "boolean", "description": "Full authorize_project only: open a picker only when the user explicitly asks to choose a directory. Default false."},
         "source": {"type": "string", "maxLength": 1000, "description": "Project-relative source media path. Absolute paths and traversal are rejected."},
-        "output": {"type": "string", "maxLength": 1000, "description": "Project-relative output path under output/ or .maverick/."},
-        "overwrite": {"type": "boolean", "description": "Replace only an existing generated file under output/ or .maverick/. Source media can never be overwritten."},
+        "output": {"type": "string", "maxLength": 1000, "description": "Project-relative output path under output/ or .loopino/."},
+        "overwrite": {"type": "boolean", "description": "Replace only an existing generated file under output/ or .loopino/. Source media can never be overwritten."},
         "language": {"type": "string", "maxLength": 32, "description": "BCP-47 locale for on-device Speech transcription, for example it-IT."},
         "sources": {"type": "array", "minItems": 1, "maxItems": 24, "uniqueItems": True, "items": {"type": "string", "maxLength": 1000}, "description": "Optional project-relative media paths for preflight; otherwise inspect the first 24 inventory entries."},
         "checkpoint": {
@@ -256,7 +256,7 @@ def _project_properties(*, include_script: bool = True) -> dict[str, object]:
         "expected_fps": {"type": "number", "exclusiveMinimum": 0, "maximum": 240},
         "minimum_duration_seconds": {"type": "number", "minimum": 0},
         "maximum_duration_seconds": {"type": "number", "exclusiveMinimum": 0},
-        "script_name": {"type": "string", "maxLength": 80, "description": "Safe filename stem saved below .maverick/scripts/."},
+        "script_name": {"type": "string", "maxLength": 80, "description": "Safe filename stem saved below .loopino/scripts/."},
     }
     if include_script:
         step_properties = _project_properties(include_script=False)
@@ -279,7 +279,7 @@ def _project_properties(*, include_script: bool = True) -> dict[str, object]:
 def _project_spec() -> dict[str, object]:
     return {
         "type": "function", "name": "mac_project",
-        "description": "Use native media primitives in a working directory shared with mac_code. Full requires no folder authorization: directory sets the context directly, project_id is optional, and a picker is explicit via choose_directory. Sources are immutable; generated artifacts use output/ or .maverick/.",
+        "description": "Use native media primitives in a working directory shared with mac_code. Full requires no folder authorization: directory sets the context directly, project_id is optional, and a picker is explicit via choose_directory. Sources are immutable; generated artifacts use output/ or .loopino/.",
         "inputSchema": {
             "type": "object", "additionalProperties": False, "required": ["action"],
             "properties": _project_properties(),

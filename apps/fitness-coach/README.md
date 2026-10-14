@@ -1,6 +1,6 @@
 # Fitness Coach
 
-Source-available Maverick v3 app for building reusable exercise libraries, composing workouts, validating start readiness, and running mobile-first workout sessions.
+Source-available Loopino app for building reusable exercise libraries, composing workouts, validating start readiness, and running mobile-first workout sessions.
 
 ## Surfaces
 
@@ -19,7 +19,7 @@ Fitness Coach owns only app-domain state under `data/fitness-coach/state.json`.
 Storage remains the owner of files, Drive, uploads, previews, media streaming, provider secrets, and Drive localization. Fitness Coach persists stable Storage references such as `file_id`, `stable_storage_file_id`, `connection_id`, `drive_file_id`, display metadata, and source version metadata. It must not persist `stream_url`, raw Drive URLs, tokens, or local filesystem paths.
 
 The main app opens Storage and receives video selections through the Shell's
-`maverick.app.open-app` frame navigation contract, preserving the exercise draft.
+`loopino.app.open-app` frame navigation contract, preserving the exercise draft.
 
 ## Runtime Performance Path
 
@@ -50,10 +50,10 @@ The app contract, README, and tests in this directory are the portable source of
 ## SDK Flow
 
 ```bash
-maverick app fitness-coach frontend build --json
-maverick core cli run core.app-sdk.validate --app-root apps/fitness-coach --json
-maverick app fitness-coach mcp list --json
-maverick app fitness-coach cli list --json
+loopino app fitness-coach frontend build --json
+loopino core cli run core.app-sdk.validate --app-root apps/fitness-coach --json
+loopino app fitness-coach mcp list --json
+loopino app fitness-coach cli list --json
 ```
 
 ## Contract Notes
@@ -67,8 +67,8 @@ Last full V1 verification: 2026-06-09.
 - Backend unit and contract tests passed with `python3 -m unittest discover -s apps/fitness-coach/tests -p 'test_*.py'`.
 - Python modules compiled with `python3 -m compileall apps/fitness-coach/backend apps/fitness-coach/cli apps/fitness-coach/mcp apps/fitness-coach/hooks apps/fitness-coach/tests`.
 - Frontend tests passed with `npm test`.
-- Official frontend build passed with `maverick app fitness-coach frontend build --json`.
-- MCP and CLI discovery passed with `maverick app fitness-coach mcp list --json` and `maverick app fitness-coach cli list --json`.
+- Official frontend build passed with `loopino app fitness-coach frontend build --json`.
+- MCP and CLI discovery passed with `loopino app fitness-coach mcp list --json` and `loopino app fitness-coach cli list --json`.
 - SDK validate and platform app discovery passed for `fitness-coach`.
 - Mobile Playwright smoke passed at 390x844 and 430x932 for setup, library, workout start, non-overlap, and media placeholder rendering.
 - Drive smoke used Storage file `file_7b28509e085d4612ac3f9c5936f94958` and its containing Google Drive folder. The workout opened and started from stable Storage refs; media localization was blocked by a missing active Google Drive OAuth secret grant, and the UI handled that as a retryable media error without crashing.
@@ -80,7 +80,7 @@ Performance-focused verification: 2026-06-10.
 - Backend unit tests passed with `python3 -m unittest discover -s apps/fitness-coach/tests -p 'test_*.py'`.
 - Python modules compiled with `python3 -m compileall apps/fitness-coach/backend apps/fitness-coach/cli apps/fitness-coach/mcp apps/fitness-coach/hooks apps/fitness-coach/tests`.
 - Frontend tests passed with `npm test`.
-- Official frontend build passed with `maverick app fitness-coach frontend build --json`.
+- Official frontend build passed with `loopino app fitness-coach frontend build --json`.
 - SDK validate and platform app status passed for `fitness-coach`.
-- MCP and CLI discovery passed with `maverick app fitness-coach mcp list --json` and `maverick app fitness-coach cli list --json`.
+- MCP and CLI discovery passed with `loopino app fitness-coach mcp list --json` and `loopino app fitness-coach cli list --json`.
 - Browser app policy preflight blocked local Playwright smoke for `http://127.0.0.1:8014/app/fitness-coach` with `blocked_restricted_ip`; no browser-policy bypass was attempted.

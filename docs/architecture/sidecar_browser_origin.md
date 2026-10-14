@@ -2,13 +2,13 @@
 
 Date: 2026-08-03
 Status: Accepted (G1), implemented by WP2 and WP3
-Owners: Maverick Core app hosting and app contract domains
+Owners: Loopino Core app hosting and app contract domains
 Amended: 2026-09-07 to bind sidecars nested below authenticated app-frame origins
 
 ## Context
 
 An app-owned web sidecar can use absolute paths such as `/api/projects`. A
-path-mounted proxy under the Maverick origin sends those requests to Maverick
+path-mounted proxy under the Loopino origin sends those requests to Loopino
 instead of the sidecar and also shares the platform cookie origin. Rewriting an
 upstream application is brittle and does not create a browser security
 boundary.
@@ -26,9 +26,9 @@ origin of the form:
 ```
 
 The opaque label identifies one installed app/sidecar/workspace generation. It
-is not a credential. In local mode Maverick itself must use a named loopback
-host such as `maverick.localhost`; the label is placed beneath
-`sidecars.maverick.localhost` and uses the core listener's port. Keeping the
+is not a credential. In local mode Loopino itself must use a named loopback
+host such as `loopino.localhost`; the label is placed beneath
+`sidecars.loopino.localhost` and uses the core listener's port. Keeping the
 platform and sidecar hosts under the same named `.localhost` site preserves the
 `SameSite=Strict` main-session boundary. Bare `localhost` and IP-literal
 platform hosts fail closed. Hosted installations must route the dynamic
@@ -39,12 +39,12 @@ host. Core fails closed when the declared isolated origin cannot be constructed
 or served securely.
 
 The sidecar origin routes `/`, `/_next`, `/api`, `/artifacts`, and `/frames`
-through the generic sidecar policy. It does not mount Maverick API routes and
+through the generic sidecar policy. It does not mount Loopino API routes and
 does not fall through to the normal platform host. Unknown routes are denied.
 
 ## Bootstrap And Session Protocol
 
-1. On the authenticated Maverick origin, the mounted app requests a one-shot
+1. On the authenticated Loopino origin, the mounted app requests a one-shot
    ticket. Core binds its hash to actor, workspace, local app id, sidecar id,
    exact sidecar host, and active bundle/data generation. Ticket TTL is no more
    than 30 seconds. Core also returns a distinct confirmation token and stores
@@ -63,7 +63,7 @@ does not fall through to the normal platform host. Unknown routes are denied.
    URL. It sets a host-only, `HttpOnly`, `SameSite=Strict` main cookie with
    `Path=/`; hosted mode also requires `Secure`. If and only if the app declares
    sandboxed-frame resources, Core sets a second host-only
-   `__Host-maverick_sidecar_resource_session` cookie with `HttpOnly`,
+   `__Host-loopino_sidecar_resource_session` cookie with `HttpOnly`,
    `SameSite=None`, `Secure`, and `Path=/`. An opaque-origin child can send that
    second cookie, but Core accepts it only for `GET` or `HEAD` on an exactly
    declared resource path. It cannot authorize undeclared documents or
@@ -85,7 +85,7 @@ does not fall through to the normal platform host. Unknown routes are denied.
 6. Logout, workspace switch, app disable/uninstall, sidecar restart, and active
    generation change revoke related sessions.
 
-The browser never receives the sidecar technical token. Maverick session
+The browser never receives the sidecar technical token. Loopino session
 cookies are neither copied nor forwarded upstream. Core strips sidecar
 `Set-Cookie`, unsafe redirects, hop-by-hop headers, and technical authorization
 material before a response reaches the browser.
@@ -142,7 +142,7 @@ that are safe to embed cross-origin; user-private APIs and media are forbidden.
 CSP is derived from contract data, defaults to
 `default-src 'self'`, permits `connect-src` only to the same sidecar origin and
 declared brokers, and sets `frame-ancestors` to the same isolated origin plus
-the expected Maverick platform origin. For a launch made through an
+the expected Loopino platform origin. For a launch made through an
 authenticated app frame, Core adds that exact app-frame origin as the immediate
 parent; both it and the platform ancestor must match. The same-origin entry is
 required because the policy is attached to every proxied document, including
@@ -169,7 +169,7 @@ python3 -m unittest tests.architecture.test_sidecar_browser_origin_proof
 The proof starts an actual local HTTP listener and demonstrates that a nested
 `.localhost` host resolves to loopback, a body ticket is one-shot, the `303`
 location is clean, the issued cookie is distinct and host-only, absolute
-`/api/projects` reaches the sidecar surface, Maverick `/api/status` does not,
+`/api/projects` reaches the sidecar surface, Loopino `/api/status` does not,
 and unsafe requests without an exact origin/Fetch Metadata are denied. The
 proof must not log the ticket or expose it in response headers.
 
@@ -218,15 +218,15 @@ rejected. A separate `static_tree` form is restricted to GET/HEAD roots outside
 `/api` for immutable web assets. Policy precedence remains blocked, then
 handled-by-core, then pass-through, with unknown routes denied.
 
-Local mode is the default and is available only when Maverick itself is
+Local mode is the default and is available only when Loopino itself is
 accessed through a named `.localhost` origin. Hosted mode is explicitly enabled
 with:
 
 ```text
-MAVERICK_SIDECAR_ORIGIN_MODE=hosted
-MAVERICK_SIDECAR_INSTALLATION_DOMAIN=<installation-domain>
-MAVERICK_SIDECAR_PLATFORM_ORIGIN=https://<platform-host>
-MAVERICK_BROWSER_ORIGIN_TLS_MODE=external_wildcard|managed_exact
+LOOPINO_SIDECAR_ORIGIN_MODE=hosted
+LOOPINO_SIDECAR_INSTALLATION_DOMAIN=<installation-domain>
+LOOPINO_SIDECAR_PLATFORM_ORIGIN=https://<platform-host>
+LOOPINO_BROWSER_ORIGIN_TLS_MODE=external_wildcard|managed_exact
 ```
 
 The hosted listener must terminate valid TLS for the exact requested name and
@@ -242,7 +242,7 @@ unencrypted private key, requires a currently valid leaf SAN for the exact
 match.
 
 `managed_exact` is the supported alternative when the wildcard DNS record
-already routes to Maverick but the operator cannot perform DNS-01. The
+already routes to Loopino but the operator cannot perform DNS-01. The
 installer prepares a service-private ACME account area, an HTTP-01 webroot, and
 a setgid Nginx-readable publication area. It obtains exact certificates only
 for the reserved `sc-<24 hex>` and `af-<24 hex>` namespace. Core batches all
@@ -307,7 +307,7 @@ and distinct workspace A/B origins. The evidence is
 `apps/design-studio/service/opendesign_product_acceptance_0_16_1.json`.
 
 This closes the declared Design Studio browser-origin gate; it does not make
-Maverick generally production-ready or remove the blockers in
+Loopino generally production-ready or remove the blockers in
 `docs/security/production_readiness.md`.
 
 ### Transition an existing installation to wildcard TLS
@@ -318,14 +318,14 @@ live router. An existing installation can switch without rerunning bootstrap:
 ```bash
 sudo .venv/bin/python scripts/deploy/activate_browser_origin_wildcard.py \
   --hostname <installation-domain> \
-  --certificate-dir /etc/letsencrypt/live/<installation-domain>-sidecars-wildcard \
-  --nginx-config /etc/nginx/sites-enabled/maverick-sidecars.<installation-domain>.conf
+  --certificate-dir /projects/loopino/installation/tls/certbot/config/live/<installation-domain>-sidecars-wildcard \
+  --nginx-config /etc/nginx/sites-enabled/loopino-sidecars.<installation-domain>.conf
 ```
 
 The default is certificate validation only. `--apply` requires a current wildcard
 SAN and matching private key, saves restricted backups under
-`/var/backups/maverick-wildcard`, installs the canonical wildcard router, tests
-Nginx, updates only `MAVERICK_BROWSER_ORIGIN_TLS_MODE` in the existing installation
+`/var/backups/loopino-wildcard`, installs the canonical wildcard router, tests
+Nginx, updates only `LOOPINO_BROWSER_ORIGIN_TLS_MODE` in the existing installation
 environment and reloads Nginx. A failure restores both configuration files.
 The platform's main router, provider settings, user sessions and app data stay
 in their existing owners. Restart the backend after a successful transition,

@@ -1,6 +1,6 @@
 {
   "tools": {
-    "maverick_dynamic_views": {
+    "loopino_dynamic_views": {
       "effect_class": "destructive",
       "effect_class_by_argument": {
         "argument_name": "action",

@@ -18,7 +18,7 @@ async function setup(controlled: boolean) {
   vi.stubEnv("PROD", true);
   vi.spyOn(document, "readyState", "get").mockReturnValue("complete");
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-    schema: "maverick.pwa-config.v2", service_worker: { enabled: true, generation: "v2" },
+    schema: "loopino.pwa-config.v2", service_worker: { enabled: true, generation: "v2" },
   }))));
   const waiting = { postMessage: vi.fn() };
   const registration = Object.assign(new EventTarget(), { waiting, update: vi.fn(async () => {}) });
@@ -44,7 +44,7 @@ it.each([true, false])("keeps the document on unsolicited controller changes (co
 it("reloads once only after this document explicitly applies a waiting update", async () => {
   const { worker, waiting, reload, pwa } = await setup(true);
   await expect(pwa.applyShellServiceWorkerUpdate()).resolves.toBe(true);
-  expect(waiting.postMessage).toHaveBeenCalledWith({ type: "MAVERICK_SKIP_WAITING" });
+  expect(waiting.postMessage).toHaveBeenCalledWith({ type: "LOOPINO_SKIP_WAITING" });
   expect(reload).not.toHaveBeenCalled();
   worker.dispatchEvent(new Event("controllerchange"));
   worker.dispatchEvent(new Event("controllerchange"));

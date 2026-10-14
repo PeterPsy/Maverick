@@ -18,7 +18,7 @@ class InterAgentAdapterUnavailableError(InterAgentOperationError):
 
 @dataclass(frozen=True)
 class AdapterEventMappingContext:
-    """Maverick-owned context required to project adapter events safely."""
+    """Loopino-owned context required to project adapter events safely."""
 
     run: InterAgentRunRecord
     visibility_plane: InterAgentVisibilityPlane = "detail"
@@ -55,5 +55,5 @@ class InterAgentAdapter(Protocol):
         context: AdapterEventMappingContext,
         events: Iterable[object],
     ) -> list[InterAgentEventRecord]:
-        """Project controlled adapter events into Maverick event records."""
+        """Project controlled adapter events into Loopino event records."""
         ...

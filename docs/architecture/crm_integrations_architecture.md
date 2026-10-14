@@ -31,7 +31,7 @@ arbitrary provider action runner or a campaign send path.
 
 Mail, Calendar and Speech backend entrypoints explicitly handle the core's
 `secret_selector` preflight without executing the requested business action.
-Calendar creation here is native Maverick scheduling, not Google invitations.
+Calendar creation here is native Loopino scheduling, not Google invitations.
 Storage writes are create-only Markdown documents under `storage/generated/crm/`.
 
 ## Sync and business workflows
@@ -67,7 +67,7 @@ avoid silently retargeting previously approved external effects.
 
 Test selection changes, callback forgery/replay, concurrent execution, uncertain
 outcomes, idempotent retry, failed refresh preservation, native export/import and
-real isolated provider contracts. Build through Maverick and compare existing CRM
+real isolated provider contracts. Build through Loopino and compare existing CRM
 business data before/after the additive backed-up migration. No production email,
 calendar event, file, task or transcription is created during verification.
 

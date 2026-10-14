@@ -32,16 +32,16 @@ class BrowserSetupIsolationTests(SidecarBrowserOriginTestSupport, unittest.TestC
             shutil.copytree(built, source / "frontend/dist")
             write_app_contract_file(source, build_parsed_app_contract(
                 app_id="browser", name="Browser", version="1.0.0",
-                description="Browser setup frontend isolation acceptance.", publisher="maverick",
+                description="Browser setup frontend isolation acceptance.", publisher="loopino",
                 contract=build_app_contract(entrypoints=build_app_entrypoints(frontend="frontend/dist")),
             ))
             record = register_app_source_from_contract(state.app_store, source_kind="platform", source_path=str(source))
             install_store_app(state.app_store, source_id=record.source_id, workspace_id="default",
                               start_path=repo, observability_store=state.observability_store)
             app = PlatformAsgiHost(state)
-            host = "maverick.localhost:8000"
+            host = "loopino.localhost:8000"
             cookie = await self._login(app, host=host)
-            archive = next(built.glob("assets/maverick-browser-companion-*.zip"))
+            archive = next(built.glob("assets/loopino-browser-companion-*.zip"))
             status, body, headers = await self._invoke(app, host=host, path=f"/apps/browser/assets/{archive.name}")
             self.assertEqual(status, 200)
             self.assertEqual(body, archive.read_bytes())
@@ -69,7 +69,7 @@ class BrowserSetupIsolationTests(SidecarBrowserOriginTestSupport, unittest.TestC
             status, body, _headers = await self._invoke(app, host=frame_host, path="/apps/browser/",
                 headers={"cookie": frame_cookie}, scope_extra={"query_string": b"connector=1"})
             self.assertEqual(status, 200)
-            self.assertIn(b"__MAVERICK_PLATFORM_ORIGIN__", body)
+            self.assertIn(b"__LOOPINO_PLATFORM_ORIGIN__", body)
             self.assertIn(f'http://{host}/apps/browser/assets/'.encode(), body)
 
 

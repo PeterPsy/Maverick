@@ -6,15 +6,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { baseUrl, chromium, executablePath } from './performance_browser_support.mjs';
 
-const headless = process.env.MAVERICK_PERFORMANCE_HEADFUL !== '1';
-const phaseDuration = Number(process.env.MAVERICK_PERFORMANCE_IDLE_PHASE_MS || 5_000);
+const headless = process.env.LOOPINO_PERFORMANCE_HEADFUL !== '1';
+const phaseDuration = Number(process.env.LOOPINO_PERFORMANCE_IDLE_PHASE_MS || 5_000);
 assert(Number.isInteger(phaseDuration) && phaseDuration >= 5_000 && phaseDuration <= 60_000);
 // Playwright's normal contexts force focus emulation, hiding real tab suspension.
 // Own a disposable browser/profile and attach without changing native visibility.
 async function launchNativeBrowser() {
   const binary = executablePath();
   assert(binary, 'A local Chromium executable is required.');
-  const profile = mkdtempSync(join(tmpdir(), 'maverick-idle-browser-'));
+  const profile = mkdtempSync(join(tmpdir(), 'loopino-idle-browser-'));
   const child = spawn(binary, ['--remote-debugging-port=0', '--no-sandbox', '--no-first-run',
     '--no-default-browser-check', `--user-data-dir=${profile}`, '--window-size=1440,1000',
     ...(headless ? ['--headless=new'] : []), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -80,8 +80,8 @@ async function openApp(appId) {
   for (let attempt = 0; attempt < 3 && new URL(page.url()).pathname !== `/app/${appId}`; attempt++) {
     const previous = await activeFrame();
     try {
-      await previous.evaluate(appId => window.parent.postMessage({ type: 'maverick.app.open-app', app_id: appId },
-        window.__MAVERICK_PLATFORM_ORIGIN__), appId);
+      await previous.evaluate(appId => window.parent.postMessage({ type: 'loopino.app.open-app', app_id: appId },
+        window.__LOOPINO_PLATFORM_ORIGIN__), appId);
       break;
     } catch (error) {
       // A successful app switch can replace the sender while evaluate is still

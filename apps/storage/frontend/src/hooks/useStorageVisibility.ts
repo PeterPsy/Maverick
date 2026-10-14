@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { maverickAppIsVisible, observeMaverickVisibility } from '@maverick/pwa-cache';
+import { loopinoAppIsVisible, observeLoopinoVisibility } from '@loopino/pwa-cache';
 
 export function useStorageVisibility(): boolean {
-  const [visible, setVisible] = useState(maverickAppIsVisible);
-  useEffect(() => observeMaverickVisibility(setVisible), []);
+  const [visible, setVisible] = useState(loopinoAppIsVisible);
+  useEffect(() => observeLoopinoVisibility(setVisible), []);
   return visible;
 }

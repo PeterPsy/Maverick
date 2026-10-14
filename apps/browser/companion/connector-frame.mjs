@@ -6,8 +6,8 @@ export async function attachConnectorFrame(b, currentBinding) {
   const frames = await chrome.scripting.executeScript({
     target: {tabId: b.connectorTabId, allFrames: true}, world: "MAIN",
     func: () => {
-      if (window.__MAVERICK_APP_FRAME_CONTEXT__?.app_id !== "browser") return null;
-      return {url: location.href, platformOrigin: window.__MAVERICK_PLATFORM_ORIGIN__};
+      if (window.__LOOPINO_APP_FRAME_CONTEXT__?.app_id !== "browser") return null;
+      return {url: location.href, platformOrigin: window.__LOOPINO_PLATFORM_ORIGIN__};
     },
   });
   const selected = frames.filter(frame => frame.result?.platformOrigin === b.origin && connectorFrameUrl(frame.result.url, b.origin, b.frameDomain));

@@ -20,9 +20,9 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
         with patch.dict(
             "os.environ",
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             return bootstrap_platform_state(start_path=repo_root)
@@ -93,7 +93,7 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
                     "name": "web_search",
                     "tool_kind": "web_search",
                     "tool_call_id": "call-safe-1",
-                    "query": "Maverick launch",
+                    "query": "Loopino launch",
                     "summary": "Web search completed",
                     "raw_debug_payload": "must not leak",
                     "runtime_session_id": "must-not-leak",
@@ -173,7 +173,7 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
         self.assertEqual(len(tool_items), 1)
         self.assertEqual(tool_items[0]["role"], "tool")
         self.assertEqual(tool_items[0]["tool_call"]["name"], "web_search")
-        self.assertEqual(tool_items[0]["tool_call"]["detail"]["query"], "Maverick launch")
+        self.assertEqual(tool_items[0]["tool_call"]["detail"]["query"], "Loopino launch")
         self.assertNotIn("transcript-child", serialized)
         self.assertNotIn("turn-transcript-1", serialized)
         self.assertNotIn("runtime_session_id", serialized)

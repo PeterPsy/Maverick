@@ -14,7 +14,7 @@ const engine = String(args.engine || "chromium").toLowerCase();
 const browserType = engine === "chromium" ? chromium : engine === "webkit" ? webkit : null;
 const username = optionalArg(args, "username");
 const password = optionalArg(args, "password");
-const profileRoot = mkdtempSync(resolve(tmpdir(), "maverick-pwa-shell-"));
+const profileRoot = mkdtempSync(resolve(tmpdir(), "loopino-pwa-shell-"));
 
 if (!browserType) {
   throw new Error("--engine must be chromium or webkit");
@@ -34,7 +34,7 @@ try {
   } catch (error) {
     if (args["require-browser"]) throw error;
     emit({
-      schema: "maverick.pwa-shell-cache-smoke.v2",
+      schema: "loopino.pwa-shell-cache-smoke.v2",
       skipped: true,
       engine,
       reason: `browser unavailable: ${safeError(error)}`,
@@ -59,10 +59,10 @@ try {
   await firstPage.waitForFunction(() => Boolean(navigator.serviceWorker.controller), null, { timeout: 15_000 });
 
   const install = await firstPage.evaluate(async () => {
-    const manifestResponse = await fetch("/apps/base-shell/maverick-frontend-assets.json", { cache: "no-store" });
+    const manifestResponse = await fetch("/apps/base-shell/loopino-frontend-assets.json", { cache: "no-store" });
     if (!manifestResponse.ok) throw new Error(`asset manifest HTTP ${manifestResponse.status}`);
     const manifest = await manifestResponse.json();
-    const expectedCache = `maverick-static-v2:${manifest.build_id}`;
+    const expectedCache = `loopino-static-v2:${manifest.build_id}`;
     const cache = await caches.open(expectedCache);
     const missing = [];
     for (const record of manifest.precache || []) {
@@ -82,7 +82,7 @@ try {
       worker_controlled: Boolean(navigator.serviceWorker.controller),
     };
   });
-  assert(install.manifest_schema === "maverick.frontend-assets.v2", "asset manifest is not schema v2");
+  assert(install.manifest_schema === "loopino.frontend-assets.v2", "asset manifest is not schema v2");
   assert(install.navigation_fallback === "index.html", "navigation fallback is not the standard entrypoint");
   assert(install.fallback_selected, "standard navigation fallback is not selected for precache");
   assert(install.worker_controlled, "first online install did not acquire a controller");
@@ -134,7 +134,7 @@ try {
         excluded.push(true);
       }
     }
-    const legacySelector = ".bs-offline-workspace-shell, .bs-offline-indicator, [data-maverick-connectivity]";
+    const legacySelector = ".bs-offline-workspace-shell, .bs-offline-indicator, [data-loopino-connectivity]";
     return {
       excluded_requests_failed: excluded.every(Boolean),
       iframe_count: document.querySelectorAll("iframe").length,
@@ -179,7 +179,7 @@ try {
   assert(recovered.legacy_marker_count === 0, "transport recovery rendered a mode indicator");
 
   emit({
-    schema: "maverick.pwa-shell-cache-smoke.v2",
+    schema: "loopino.pwa-shell-cache-smoke.v2",
     captured_at: new Date().toISOString(),
     engine,
     environment: "playwright-persistent-profile",
@@ -224,7 +224,7 @@ async function exerciseSettingsCacheDiagnostics(page) {
   await frameLocator.waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForFunction(() => {
     const frame = document.querySelector('iframe[title="Settings viewport"].is-active');
-    return Boolean(frame?.dataset.maverickFrameOrigin);
+    return Boolean(frame?.dataset.loopinoFrameOrigin);
   }, null, { timeout: 30_000 });
   const frameElement = await frameLocator.elementHandle();
   const frame = await frameElement?.contentFrame();
@@ -232,7 +232,7 @@ async function exerciseSettingsCacheDiagnostics(page) {
   await frame.locator(".settings-cache-diagnostics").waitFor({ state: "visible", timeout: 30_000 });
   await frame.locator('.settings-cache-diagnostics[aria-busy="false"]').waitFor({ timeout: 30_000 });
 
-  const declaredOrigin = await frameLocator.getAttribute("data-maverick-frame-origin");
+  const declaredOrigin = await frameLocator.getAttribute("data-loopino-frame-origin");
   assert(declaredOrigin && new URL(frame.url()).origin === declaredOrigin, "Settings frame origin does not match shell authority");
   assert(declaredOrigin !== new URL(baseUrl).origin, "Settings cache diagnostics did not run in an isolated origin");
 
@@ -253,7 +253,7 @@ async function standardTreeSnapshot(page) {
     return {
       iframe_count: document.querySelectorAll("iframe").length,
       legacy_marker_count: document.querySelectorAll(
-        ".bs-offline-workspace-shell, .bs-offline-indicator, [data-maverick-connectivity]",
+        ".bs-offline-workspace-shell, .bs-offline-indicator, [data-loopino-connectivity]",
       ).length,
       root_class: root?.className || "",
     };
@@ -267,7 +267,7 @@ function launchPersistentContext() {
 }
 
 function discoverChromiumExecutablePath() {
-  const configured = process.env.MAVERICK_PLAYWRIGHT_CHROMIUM || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  const configured = process.env.LOOPINO_PLAYWRIGHT_CHROMIUM || process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   if (configured && existsSync(configured)) return configured;
   for (const candidate of ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"]) {
     if (existsSync(candidate)) return candidate;

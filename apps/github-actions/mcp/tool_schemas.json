@@ -42,7 +42,7 @@
           "repo": {"type": "string"},
           "workflow_id": {"type": "string", "default": "ios-install-device.yml"},
           "workflow": {"type": "string"},
-          "ref": {"type": "string", "default": "maverick-integration"},
+          "ref": {"type": "string", "default": "loopino-integration"},
           "branch": {"type": "string"},
           "event": {"type": "string"},
           "inputs": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean"]}},

@@ -71,9 +71,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -212,9 +212,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -274,9 +274,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -378,9 +378,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -457,9 +457,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -483,9 +483,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -531,9 +531,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)

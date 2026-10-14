@@ -871,7 +871,7 @@ def _staged_provider_private_ref(
     provider_request_id: str,
 ) -> str:
     token = hashlib.sha256(
-        b"maverick.provider-stage.v1\x00"
+        b"loopino.provider-stage.v1\x00"
         + session_id.encode("utf-8")
         + b"\x00"
         + provider_request_id.encode("utf-8")
@@ -886,7 +886,7 @@ def _final_output_private_ref(
     provider_request_id: str,
 ) -> str:
     token = hashlib.sha256(
-        b"maverick.provider-final-output.v1\x00"
+        b"loopino.provider-final-output.v1\x00"
         + session_id.encode("utf-8")
         + b"\x00"
         + journal_id.encode("utf-8")

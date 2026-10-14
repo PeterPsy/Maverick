@@ -12,7 +12,7 @@ import subprocess
 import sys
 from typing import Any
 
-from app_surface_transport import json_response, run_json_subprocess, run_maverick_app_mcp
+from app_surface_transport import json_response, run_json_subprocess, run_loopino_app_mcp
 from content_store import canonical_body
 from errors import MemoryValidationError
 
@@ -96,15 +96,15 @@ def default_storage_file_surface(data_root: Path, tool_name: str, arguments: dic
     workspace_root = workspace_root_for_data_root(data_root)
     if workspace_root is None:
         raise MemoryValidationError("Memory data_root must live under a workspace data directory for Storage ingestion.")
-    if shutil.which("maverick"):
+    if shutil.which("loopino"):
         return platform_storage_file_surface(workspace_root, tool_name, arguments)
-    if os.environ.get("MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK") != "1":
+    if os.environ.get("LOOPINO_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK") != "1":
         raise MemoryValidationError("Storage MCP surface is unavailable; local Storage source fallback is disabled.")
     return local_storage_file_surface(workspace_root, tool_name, arguments)
 
 
 def platform_storage_file_surface(workspace_root: Path, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    completed = run_maverick_app_mcp(workspace_root, app_id="storage", operation="call", tool_name=tool_name, arguments=arguments)
+    completed = run_loopino_app_mcp(workspace_root, app_id="storage", operation="call", tool_name=tool_name, arguments=arguments)
     return _checked_storage_response(completed)
 
 

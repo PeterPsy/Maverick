@@ -100,7 +100,7 @@ class AppFrontendBuildTests(AppHostingTestBase):
             self.assertEqual(result["frontend_mount"], "frontend/dist")
             self.assertEqual(result["asset_manifest"]["immutable_assets"], 0)
             self.assertEqual(result["asset_manifest"]["revalidated_assets"], 1)
-            self.assertTrue((app_root / "frontend" / "dist" / "maverick-frontend-assets.json").is_file())
+            self.assertTrue((app_root / "frontend" / "dist" / "loopino-frontend-assets.json").is_file())
             build_calls = [call for call in run.call_args_list if call.args and call.args[0] == ["npm", "run", "build"]]
             self.assertEqual(len(build_calls), 1)
             self.assertEqual(build_calls[0].kwargs["cwd"], app_root / "frontend")
@@ -109,7 +109,7 @@ class AppFrontendBuildTests(AppHostingTestBase):
             self.assertEqual(
                 event,
                 {
-                    "type": "maverick.app.frontend-changed",
+                    "type": "loopino.app.frontend-changed",
                     "workspace_id": "default",
                     "owner_app_id": "buildable",
                     "resource": "frontend",
@@ -242,7 +242,7 @@ class AppFrontendBuildTests(AppHostingTestBase):
                 )
 
             self.assertEqual(status_holder["status"], "200 OK")
-            self.assertEqual(app_events.get_nowait()["type"], "maverick.app.frontend-changed")
+            self.assertEqual(app_events.get_nowait()["type"], "loopino.app.frontend-changed")
 
 
 if __name__ == "__main__":

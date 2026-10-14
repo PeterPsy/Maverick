@@ -3,7 +3,7 @@ import { accessSync, constants } from "node:fs";
 
 export function browserExecutable() {
   const candidates = [
-    process.env.MAVERICK_BROWSER_BIN,
+    process.env.LOOPINO_BROWSER_BIN,
     "/usr/bin/google-chrome",
     "/usr/bin/chromium-browser",
     "/snap/bin/chromium",

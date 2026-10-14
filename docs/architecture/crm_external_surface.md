@@ -36,10 +36,10 @@ Refresh is disabled while editing or saving so it cannot discard a draft.
 The widget owns one scroll area and a persistent action bar, including on small
 screens; state/error feedback and manual refresh replace indefinite loading.
 It follows the exact shell parent's light/dark theme. The standalone document
-wraps the shared CRM navigation in the same glass frame used by Maverick and
+wraps the shared CRM navigation in the same glass frame used by Loopino and
 adds only the brand/theme footer. It deliberately omits workspace/settings
 controls, app-specific create actions and the desktop/mobile app rail because
-those surfaces require the private Maverick shell. The private shell-owned
+those surfaces require the private Loopino shell. The private shell-owned
 controls are unchanged.
 
 ## Deployment and revocation
@@ -59,13 +59,13 @@ listener. HTTP-01 uses the existing public namespace's challenge directory;
 certificate issuance/renewal is operator-owned, never triggered by requests.
 Enabling a UI setting does not claim DNS, TLS or the service is already ready.
 
-This service has independent stop/status paths and never restarts Maverick Core.
+This service has independent stop/status paths and never restarts Loopino Core.
 See `apps/crm/public_server/README.md` for activation and rollback. Do not describe
 the CRM as online until a real HTTPS request and browser check have passed.
 
 ## Installation verification — 2026-09-20
 
-`https://crm.apps.maverick.loopino.ai` is enabled for workspace `default`, with
+`https://crm.apps.loopino.giuntitrail.com` is enabled for workspace `default`, with
 anonymous **read-only** access. Its exact certificate expires 2026-12-19 and has
 an independent renewal timer. Trusted HTTPS, all 20 navigation sections, reload,
 desktop/mobile, denied writes/private routes, immediate suspend and supervisor

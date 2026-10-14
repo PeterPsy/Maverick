@@ -416,7 +416,7 @@ def write_content_bytes(*, content: object, content_base64: object) -> bytes:
 def atomic_write_bytes(target: Path, payload: bytes) -> None:
     temporary_path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile("wb", dir=target.parent, prefix=f".maverick-storage-write-{target.name}.", suffix=".tmp", delete=False) as handle:
+        with tempfile.NamedTemporaryFile("wb", dir=target.parent, prefix=f".loopino-storage-write-{target.name}.", suffix=".tmp", delete=False) as handle:
             temporary_path = Path(handle.name)
             handle.write(payload)
             handle.flush()
@@ -451,7 +451,7 @@ def storage_write_lock(data_root: Path):
 
 
 def _configured_storage_budget() -> int | None:
-    raw_value = os.environ.get("MAVERICK_STORAGE_MAX_BYTES") or os.environ.get("MAVERICK_WORKSPACE_MAX_STORAGE_BYTES")
+    raw_value = os.environ.get("LOOPINO_STORAGE_MAX_BYTES") or os.environ.get("LOOPINO_WORKSPACE_MAX_STORAGE_BYTES")
     if raw_value is None or raw_value == "":
         return None
     try:

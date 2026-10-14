@@ -89,7 +89,7 @@ def collect_baseline() -> dict[str, object]:
 
 
 def _print_text(payload: dict[str, object]) -> None:
-    print("Maverick startup asset baseline")
+    print("Loopino startup asset baseline")
     print("source: committed frontend dist assets")
     for app_id in payload["apps"]:
         total = payload["totals"][app_id]

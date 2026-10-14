@@ -105,11 +105,11 @@ def complete_claimed_flow(state, *, flow, browser, code, context=None, now=None,
     elif existing:
         user = state.identity_store.get_user(existing.user_id)
     else:
-        # An email match is not proof that an existing Maverick identity may be
+        # An email match is not proof that an existing Loopino identity may be
         # taken over. That user must sign in locally and explicitly link Google.
         if any((item.email or "").casefold() == claims["email"].casefold() for item in state.identity_store.list_users()):
             raise google.AccountError("google_account_link_required", status=403)
-        if os.environ.get("MAVERICK_GOOGLE_ALLOW_REGISTRATION", "1") != "1":
+        if os.environ.get("LOOPINO_GOOGLE_ALLOW_REGISTRATION", "1") != "1":
             raise google.AccountError("google_registration_disabled", status=403)
         username = "google_" + digest(claims["sub"])[:24]
         user = build_user_record(user_id="user:" + username, username=username,
@@ -138,7 +138,7 @@ def complete_claimed_flow(state, *, flow, browser, code, context=None, now=None,
                                secret_ref, "connected", existing.created_at if existing else timestamp, timestamp,
                                google_picture_url(claims.get("picture")))
     account = state.account_store.claim_account(account)
-    # Service accounts never supply the Maverick identity photo, including its first photo.
+    # Service accounts never supply the Loopino identity photo, including its first photo.
     avatar = google_picture_url(claims.get("picture"))
     if avatar and flow.mode == "login":
         user = state.identity_store.update_user_avatar(user.user_id, avatar, now=timestamp)

@@ -1,4 +1,4 @@
-# Maverick App SDK Frontend Guide
+# Loopino App SDK Frontend Guide
 
 Date: 2026-04-21
 
@@ -26,7 +26,7 @@ Do not call another app's private backend or private files directly. Use the own
 
 ## Shell Route Contract
 
-Maverick has two different frontend URL families:
+Loopino has two different frontend URL families:
 
 - `/app/<app_id>/<app_page>` is the user-facing shell route. It selects the active app in `base-shell` and may be copied, reloaded, or used as a deep link.
 - `/apps/<app_id>/...` is the internal mounted frontend asset route used by shell iframes and direct app asset serving. Apps must not use it as the canonical user-facing navigation URL.
@@ -36,7 +36,7 @@ Apps that want a stable page URL should send the page segment through shell navi
 ```js
 window.parent?.postMessage(
   {
-    type: "maverick.app.open-app",
+    type: "loopino.app.open-app",
     app_id: "chat",
     params: { app_page: "threads/<thread_id>" }
   },
@@ -44,7 +44,7 @@ window.parent?.postMessage(
 );
 ```
 
-The shell renders that as `/app/chat/threads/<thread_id>` and sends the same `app_page` back to the mounted app with `maverick.app.navigate`.
+The shell renders that as `/app/chat/threads/<thread_id>` and sends the same `app_page` back to the mounted app with `loopino.app.navigate`.
 
 App page segments are app-owned. The core and shell do not interpret page semantics beyond selecting the app and forwarding `app_page`; each app is responsible for mapping its own page segments to internal state.
 
@@ -53,14 +53,14 @@ App page segments are app-owned. The core and shell do not interpret page semant
 If the app declares a frontend entrypoint, frontend updates should be published through:
 
 ```text
-maverick app <app_id> frontend build --json
+loopino app <app_id> frontend build --json
 ```
 
 That is the official path that:
 
 - runs the declared frontend build
 - verifies the declared frontend artifact root
-- emits `maverick.app.frontend-changed`
+- emits `loopino.app.frontend-changed`
 - lets mounted clients refresh without a manual full-page reload
 
 Do not rely on ad hoc static servers or undocumented rebuild shortcuts.
@@ -71,13 +71,13 @@ Keep Vite HTML files as thin mount documents and put UI behavior in React source
 
 Each app owns its frontend source and should keep its CSS tokens app-local. Do not import token files directly from another app, including `chat` or `base-shell`, because that creates a source-level dependency between app artifacts.
 
-When creating a new app or polishing an existing app, copy the current Maverick visual model into the app's own `frontend/src/styles/tokens.css` or equivalent local token file. The values should stay aligned across apps, but the files remain independently owned by each app.
+When creating a new app or polishing an existing app, copy the current Loopino visual model into the app's own `frontend/src/styles/tokens.css` or equivalent local token file. The values should stay aligned across apps, but the files remain independently owned by each app.
 
 Current token direction:
 
 - use white (`#ffffff`) as the primary interaction accent for buttons, focus emphasis, selected controls, and high-priority actions
-- do not define or use a dedicated Maverick green brand signal; the primary accent is pure white and app-specific tokens should stay neutral unless the product surface explicitly requires another color
-- prefer semantic tokens such as `--maverick-accent`, `--maverick-accent-soft`, `--maverick-text`, `--maverick-text-muted`, `--maverick-surface`, `--maverick-border`, and app-scoped component tokens
+- do not define or use a dedicated Loopino green brand signal; the primary accent is pure white and app-specific tokens should stay neutral unless the product surface explicitly requires another color
+- prefer semantic tokens such as `--loopino-accent`, `--loopino-accent-soft`, `--loopino-text`, `--loopino-text-muted`, `--loopino-surface`, `--loopino-border`, and app-scoped component tokens
 - avoid legacy color-role tokens such as `primary` and `secondary` when they imply a brand-color hierarchy
 - use app-scoped prefixes only for component geometry or app-specific surfaces, not for redefining the product palette
 
@@ -85,11 +85,11 @@ The `chat` app and the `base-shell` sidebar are the current visual references fo
 
 ## Live Update Rule
 
-If app writes emit `app_events` such as `maverick.app.data-changed`, the mounted frontend should react to them without manual refresh.
+If app writes emit `app_events` such as `loopino.app.data-changed`, the mounted frontend should react to them without manual refresh.
 
 Recommended pattern:
 
-- listen for same-origin `postMessage` events such as `maverick.app.data-changed` when the app is mounted inside `base-shell`
+- listen for same-origin `postMessage` events such as `loopino.app.data-changed` when the app is mounted inside `base-shell`
 - connect to the official app-event WebSocket at `/api/apps/events/ws` when the app also needs to refresh outside shell forwarding
 - filter by `owner_app_id` and `resource`
 - reload the affected view state through the app's own backend surface

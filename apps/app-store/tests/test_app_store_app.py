@@ -1,4 +1,4 @@
-"""Tests for the Maverick App Store app and install API."""
+"""Tests for the Loopino App Store app and install API."""
 
 from __future__ import annotations
 
@@ -84,8 +84,8 @@ class AppStoreAppTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": username or os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": password or os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": username or os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": password or os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -145,7 +145,7 @@ class AppStoreAppTestCase(unittest.TestCase):
             "name": name,
             "version": "1.0.0",
             "description": "Tiny notes app for app-store install tests.",
-            "publisher": "maverick",
+            "publisher": "loopino",
             "minimum_core_version": "0.1.0",
             "provides": [],
             "requires": [],
@@ -319,7 +319,7 @@ class AppStoreAppTestCase(unittest.TestCase):
                     "app_id": "notes",
                     "name": "Notes",
                     "description": "Tiny notes app for app-store install tests.",
-                    "publisher": "maverick",
+                    "publisher": "loopino",
                     "latest_version": "1.0.0",
                     "surfaces": [],
                     "versions": [
@@ -328,7 +328,7 @@ class AppStoreAppTestCase(unittest.TestCase):
                             "name": "Notes",
                             "version": "1.0.0",
                             "description": "Tiny notes app for app-store install tests.",
-                            "publisher": "maverick",
+                            "publisher": "loopino",
                             "status": "published",
                             "sha256": checksum,
                             "artifact_download_url": f"{base_url}/api/apps/notes/versions/1.0.0/artifact",
@@ -346,7 +346,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "app-store")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
-        self.assertIn("maverick_app_store", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("loopino_app_store", parsed.contract.capabilities.mcp_tools)
         self.assertIn("app_store_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("app_store_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["app-store"])
@@ -367,8 +367,8 @@ class AppStoreAppTestCase(unittest.TestCase):
 
         self.assertNotIn("urlopen", service_source)
         self.assertNotIn("urllib.request", service_source)
-        self.assertNotIn("MAVERICK_APP_STORE_URL", service_source)
-        self.assertNotIn("MAVERICK_PUBLIC_APP_STORE_URL", service_source)
+        self.assertNotIn("LOOPINO_APP_STORE_URL", service_source)
+        self.assertNotIn("LOOPINO_PUBLIC_APP_STORE_URL", service_source)
         self.assertTrue(
             (Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "index.html").is_file()
         )
@@ -385,7 +385,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
 
-        self.assertIn("app.app-store.maverick_app_store", [tool.tool_name for tool in tools])
+        self.assertIn("app.app-store.loopino_app_store", [tool.tool_name for tool in tools])
         self.assertIn("app.app-store.app-store", [command.command_id for command in commands])
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
@@ -544,14 +544,14 @@ function createElement(tagName) {{
     append(...nodes) {{ this.children.push(...nodes); }},
   }};
 }}
-const context = {{ window: {{ __MAVERICK_PLATFORM_ORIGIN__: "https://maverick.example" }}, document: {{ createElement }}, URL }};
+const context = {{ window: {{ __LOOPINO_PLATFORM_ORIGIN__: "https://loopino.example" }}, document: {{ createElement }}, URL }};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/frontend-presentation.js`, "utf8"), context);
 vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/app-icons.js`, "utf8"), context);
 vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/app-folder-data.js`, "utf8"), context);
-const presentation = context.window.MaverickFrontendPresentation;
-const icons = context.window.MaverickAppIcons;
-const foldersApi = context.window.MaverickAppFolderData;
+const presentation = context.window.LoopinoFrontendPresentation;
+const icons = context.window.LoopinoAppIcons;
+const foldersApi = context.window.LoopinoAppFolderData;
 function assert(condition, message) {{
   if (!condition) throw new Error(message);
 }}
@@ -588,11 +588,11 @@ assert(icon.classList.classes.includes("is-supporting-frontend"), "icons use ins
 assert(icon.classList.classes.includes("is-non-launchable"), "icons use installed binding launchability");
 const imageIcon = icons.renderIcon({{
   app_id: "browser", frontend_role: "workspace", surfaces: ["frontend"],
-  logo: {{kind: "image", value: "/apps/browser/maverick-icon-compact.png"}},
+  logo: {{kind: "image", value: "/apps/browser/loopino-icon-compact.png"}},
 }}, "test-icon");
 assert(imageIcon.classList.classes.includes("is-glyph"), "compact app assets use the native glyph frame");
 assert(imageIcon.children[0].style.backgroundColor === "currentColor", "compact assets inherit theme colour");
-assert(imageIcon.children[0].style.mask.includes("https://maverick.example/apps/browser/maverick-icon-compact.png"), "compact assets use the platform origin across app frames");
+assert(imageIcon.children[0].style.mask.includes("https://loopino.example/apps/browser/loopino-icon-compact.png"), "compact assets use the platform origin across app frames");
 const externalIcon = icons.renderIcon({{
   app_id: "external", frontend_role: "workspace", surfaces: ["frontend"],
   logo: {{kind: "image", value: "https://cdn.example/icon.png"}},
@@ -731,7 +731,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         shortcut_styles = (
             Path(__file__).resolve().parents[1] / "frontend" / "src" / "widgets" / "app-shortcuts" / "styles.css"
         ).read_text()
-        self.assertIn("MaverickAppIcons.renderIcon", shortcut_script)
+        self.assertIn("LoopinoAppIcons.renderIcon", shortcut_script)
         self.assertIn("logo?.kind === \"image\"", icon_script)
         self.assertIn("logo?.kind === \"glyph\"", icon_script)
         self.assertIn('"fitness-coach": "fitness_center"', icon_script)
@@ -748,7 +748,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         self.assertIn(".app-shortcuts__button:disabled", shortcut_styles)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
-    def test_catalog_and_install_require_maverick_authentication(self) -> None:
+    def test_catalog_and_install_require_loopino_authentication(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
@@ -916,7 +916,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
             )
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["schema"], "maverick.app-store-catalog.v1")
+        self.assertEqual(payload["schema"], "loopino.app-store-catalog.v1")
         self.assertRegex(payload["revision"], r"^[a-f0-9]{64}$")
         self.assertEqual(headers["ETag"], f'"{payload["revision"]}"')
         self.assertEqual(headers["Cache-Control"], "private, no-cache")
@@ -1585,7 +1585,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         self.assertEqual(conflict_status, 400)
         self.assertIn("already bound", conflict["detail"])
         expected_event = {
-            "type": "maverick.app.data-changed",
+            "type": "loopino.app.data-changed",
             "workspace_id": "default",
             "owner_app_id": "app-store",
             "resource": "state",
@@ -1631,7 +1631,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         self.assertEqual(
             app_events.get_nowait(),
             {
-                "type": "maverick.app.data-changed",
+                "type": "loopino.app.data-changed",
                 "workspace_id": "default",
                 "owner_app_id": "app-store",
                 "resource": "state",
@@ -1787,7 +1787,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         app = PlatformHost(state, start_path=repo_root)
         cookie = self.login(app)
 
-        with patch.dict("os.environ", {"MAVERICK_APP_STORE_URL": base_url}):
+        with patch.dict("os.environ", {"LOOPINO_APP_STORE_URL": base_url}):
             catalog_status, catalog, _catalog_headers = self.invoke(app, path="/api/app-store/apps", cookie=cookie)
             install_status, install, _install_headers = self.invoke(
                 app,
@@ -1836,7 +1836,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
             _validated_artifact_url("https://catalog.example", "http://catalog.example/app.tar.gz")
         with self.assertRaisesRegex(AppLifecycleError, "catalog origin"):
             _validated_artifact_url("https://catalog.example", "https://cdn.example/app.tar.gz")
-        with patch.dict("os.environ", {"MAVERICK_APP_STORE_ARTIFACT_HOSTS": "cdn.example"}):
+        with patch.dict("os.environ", {"LOOPINO_APP_STORE_ARTIFACT_HOSTS": "cdn.example"}):
             self.assertEqual(
                 _validated_artifact_url("https://catalog.example", "https://cdn.example/app.tar.gz"),
                 "https://cdn.example/app.tar.gz",
@@ -1865,7 +1865,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         app = PlatformHost(state, start_path=repo_root)
         cookie = self.login(app)
 
-        with patch.dict("os.environ", {"MAVERICK_APP_STORE_URL": base_url}):
+        with patch.dict("os.environ", {"LOOPINO_APP_STORE_URL": base_url}):
             self.invoke(
                 app,
                 path="/api/app-store/install",
@@ -2070,7 +2070,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         state = bootstrap_platform_state(start_path=repo_root)
 
         mcp_payload = call_mcp_tool(
-            tool_name="app.app-store.maverick_app_store",
+            tool_name="app.app-store.loopino_app_store",
             context=McpInvocationContext(
                 caller_kind="sandbox_agent",
                 workspace_id="default",
@@ -2109,7 +2109,7 @@ assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolut
         state = bootstrap_platform_state(start_path=repo_root)
 
         mcp_payload = call_mcp_tool(
-            tool_name="app.app-store.maverick_app_store",
+            tool_name="app.app-store.loopino_app_store",
             context=McpInvocationContext(
                 caller_kind="sandbox_agent",
                 workspace_id="default",

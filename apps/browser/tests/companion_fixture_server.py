@@ -102,7 +102,7 @@ class Handler(BaseHTTPRequestHandler):
         isolated = self.headers.get("Host", "").startswith("af-")
         if isolated and self.path not in {"/__test/bootstrap", REQUEST_PATH} and "fixture_frame=authorized" not in self.headers.get("Cookie", ""):
             self.send_error(401); return
-        if self.path == "/.well-known/maverick-app-frame-session":
+        if self.path == "/.well-known/loopino-app-frame-session":
             self.send_response(204); self.end_headers(); return
         length = int(self.headers.get("Content-Length", "0"))
         if not 0 < length <= 8 * 1024 * 1024:
@@ -120,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(403); return
             TICKETS.remove(ticket)
             self.send_response(303); self.send_header("Set-Cookie", "fixture_frame=authorized; Path=/; HttpOnly; SameSite=Strict")
-            self.send_header("Location", "/apps/browser/?maverick_theme=light"); self.end_headers(); return
+            self.send_header("Location", "/apps/browser/?loopino_theme=light"); self.end_headers(); return
         body = json.loads(raw)
         if self.path == "/api/apps/browser/backend":
             status,response = browser_request(body)
@@ -150,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
         # Exercise the real Core transport, including the extension's actual
         # browser Origin header. Only platform identity validation is a fixture.
         host = self.headers["Host"]
-        binding = SidecarBrowserBinding("fixture-user", "fixture", "browser", "frame", host, f"http://{host}", f"http://maverick.localhost:{self.server.server_port}", "fixture", "login", "/apps/browser/", False, "", platform_session_id="login")
+        binding = SidecarBrowserBinding("fixture-user", "fixture", "browser", "frame", host, f"http://{host}", f"http://loopino.localhost:{self.server.server_port}", "fixture", "login", "/apps/browser/", False, "", platform_session_id="login")
         scope = {"path": self.path, "method": self.command, "headers": [(key.lower().encode(), value.encode()) for key, value in self.headers.items()]}
         messages = []
         async def receive():
@@ -178,19 +178,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlsplit(self.path)
         isolated = self.headers.get("Host", "").startswith("af-")
-        origin = f"http://maverick.localhost:{self.server.server_port}"
-        frame_origin = f"http://{FRAME_LABEL}.sidecars.maverick.localhost:{self.server.server_port}"
+        origin = f"http://loopino.localhost:{self.server.server_port}"
+        frame_origin = f"http://{FRAME_LABEL}.sidecars.loopino.localhost:{self.server.server_port}"
         if parsed.path in {"/app/browser", "/__test/download"}:
             if parsed.path == "/__test/download":
-                archive = next((APP / "frontend/dist/assets").glob("maverick-browser-companion-*.zip"))
-                body = f'<a href="/apps/browser/assets/{archive.name}" download="maverick-browser-companion.zip">Download Companion</a>'
+                archive = next((APP / "frontend/dist/assets").glob("loopino-browser-companion-*.zip"))
+                body = f'<a href="/apps/browser/assets/{archive.name}" download="loopino-browser-companion.zip">Download Companion</a>'
             elif "fixture_platform=authorized" not in self.headers.get("Cookie", ""):
-                body = '<h1>Sign in to Maverick</h1><form action="/__test/login" method="post"><input type="hidden" name="fixture" value="1"><button>Sign in as fixture user</button></form>'
+                body = '<h1>Sign in to Loopino</h1><form action="/__test/login" method="post"><input type="hidden" name="fixture" value="1"><button>Sign in as fixture user</button></form>'
             else:
                 ticket = uuid4().hex; TICKETS.add(ticket)
                 bootstrap = f'<form method="post" action="{frame_origin}/__test/bootstrap"><input type="hidden" name="ticket" value="{ticket}"></form><script>document.querySelector("form").submit()</script>'
-                body = f'<iframe id="browser" title="Browser" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" srcdoc="{html.escape(bootstrap, quote=True)}" style="border:0;width:100%;height:100vh"></iframe><script>document.querySelector("iframe").addEventListener("load",()=>document.querySelector("iframe").contentWindow.postMessage({{type:"maverick.app.navigate",app_id:"browser",params:{{connector:"1"}}}},"{frame_origin}"));</script>'
-            content = f'<!doctype html><html><head><title>Maverick fixture</title></head><body style="margin:0">{body}</body></html>'.encode()
+                body = f'<iframe id="browser" title="Browser" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" srcdoc="{html.escape(bootstrap, quote=True)}" style="border:0;width:100%;height:100vh"></iframe><script>document.querySelector("iframe").addEventListener("load",()=>document.querySelector("iframe").contentWindow.postMessage({{type:"loopino.app.navigate",app_id:"browser",params:{{connector:"1"}}}},"{frame_origin}"));</script>'
+            content = f'<!doctype html><html><head><title>Loopino fixture</title></head><body style="margin:0">{body}</body></html>'.encode()
             self.send_response(200); self.send_header("Content-Type", "text/html"); self.send_header("Content-Length", str(len(content)))
             self.end_headers(); self.wfile.write(content); return
         if parsed.path.startswith("/apps/browser/") and not parsed.path.startswith("/apps/browser/assets/"):

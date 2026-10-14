@@ -21,8 +21,8 @@ from store import connect, delete_fts, initialize, utc_now
 
 
 class CrmServiceTest(unittest.TestCase):
-    def test_maverick_mail_adapter_previews_then_uses_approved_send(self) -> None:
-        from domains.website_intake import _send_mail_with_maverick
+    def test_loopino_mail_adapter_previews_then_uses_approved_send(self) -> None:
+        from domains.website_intake import _send_mail_with_loopino
 
         calls: list[list[str]] = []
 
@@ -46,7 +46,7 @@ class CrmServiceTest(unittest.TestCase):
             )
 
         with patch("domains.website_intake.subprocess.run", side_effect=fake_run):
-            result = _send_mail_with_maverick(
+            result = _send_mail_with_loopino(
                 "mail",
                 {
                     "to": [{"email": "ada@example.com"}],
@@ -54,7 +54,7 @@ class CrmServiceTest(unittest.TestCase):
                     "body_text": "Body",
                     "confirm": True,
                 },
-                maverick_command="/opt/maverick",
+                loopino_command="/projects/loopino",
             )
 
         self.assertTrue(result["result"]["sent"])
@@ -171,7 +171,7 @@ class CrmServiceTest(unittest.TestCase):
             status, result = handle_action(
                 temporary_dir,
                 "crm.website_intake",
-                self._website_intake_payload({"_app_dependencies": {"dependencies": []}, "_maverick_command": "/bin/false"}),
+                self._website_intake_payload({"_app_dependencies": {"dependencies": []}, "_loopino_command": "/bin/false"}),
             )
 
             self.assertEqual(status, 201)
@@ -237,14 +237,14 @@ class CrmServiceTest(unittest.TestCase):
             },
             "request": {
                 "type": "demo",
-                "service_interest": "maverick",
-                "primary_goal": "Vedere Maverick sul processo commerciale.",
+                "service_interest": "loopino",
+                "primary_goal": "Vedere Loopino sul processo commerciale.",
                 "preferred_contact": "email",
                 "urgency": "30-days",
                 "team_size": "2-10",
             },
             "answers": {"challenge_summary": "Follow-up manuali", "ricontatto_slot": "martedi mattina"},
-            "source_context": {"source_path": "/product/maverick/", "entry_label": "Demo Maverick"},
+            "source_context": {"source_path": "/product/loopino/", "entry_label": "Demo Loopino"},
             "notification": {"team_email": "team@loopino.ai", "send_team": True, "send_lead": True},
         }
         if extra:

@@ -2,20 +2,20 @@ import type { FileCacheOpenResult } from "./fileCacheTypes";
 
 export type FileCacheRevalidationResult = "unavailable" | "verified";
 
-export class MaverickFileRevalidationError extends Error {
+export class LoopinoFileRevalidationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "MaverickFileRevalidationError";
+    this.name = "LoopinoFileRevalidationError";
   }
 }
 
-export class MaverickFileHttpError extends Error {
+export class LoopinoFileHttpError extends Error {
   readonly retryAfterMs?: number;
   readonly status: number;
 
   constructor(response: Response) {
     super(`Storage file request failed with HTTP ${response.status}.`);
-    this.name = "MaverickFileHttpError";
+    this.name = "LoopinoFileHttpError";
     this.status = response.status;
     this.retryAfterMs = retryAfterMilliseconds(response.headers.get("Retry-After"));
   }
@@ -63,16 +63,16 @@ export async function revalidateFileResponse(
   }
   if (retryableFileStatus(response.status)) return "unavailable";
   if (response.status !== 200 && response.status !== 304) {
-    throw new MaverickFileHttpError(response);
+    throw new LoopinoFileHttpError(response);
   }
   const etag = response.headers.get("ETag")?.trim() ?? "";
   if (!isExactStrongEtag(etag, expectedEtag)) {
-    throw new MaverickFileRevalidationError("Storage returned a different file validator during cache revalidation.");
+    throw new LoopinoFileRevalidationError("Storage returned a different file validator during cache revalidation.");
   }
   if (response.status === 200) {
     const contentLength = Number(response.headers.get("Content-Length"));
     if (!Number.isSafeInteger(contentLength) || contentLength < 0 || contentLength !== expectedSize) {
-      throw new MaverickFileRevalidationError("Storage returned a different file size during cache revalidation.");
+      throw new LoopinoFileRevalidationError("Storage returned a different file size during cache revalidation.");
     }
   }
   return "verified";
@@ -123,7 +123,7 @@ export function retryableFileStatus(status: number): boolean {
 
 export function transportError(message: string, cause?: unknown): Error {
   const error = new Error(message, cause === undefined ? undefined : { cause });
-  error.name = "MaverickTransportError";
+  error.name = "LoopinoTransportError";
   return error;
 }
 

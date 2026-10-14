@@ -45,7 +45,7 @@ def _dimension_allows(feature_name: str, dimension: str, identifier: str | None,
     if not normalized_identifier:
         return False
     digest = sha256(
-        f"maverick-pwa-rollout-v1\0{feature_name}\0{dimension}\0{normalized_identifier}".encode("utf-8")
+        f"loopino-pwa-rollout-v1\0{feature_name}\0{dimension}\0{normalized_identifier}".encode("utf-8")
     ).digest()
     bucket = int.from_bytes(digest[:8], "big") % (_FULL_PERCENT * _BUCKETS_PER_PERCENT)
     return bucket < percentage * _BUCKETS_PER_PERCENT

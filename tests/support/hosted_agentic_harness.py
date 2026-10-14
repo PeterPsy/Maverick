@@ -23,9 +23,9 @@ from core.providers.agentic_models import RuntimeCapabilitySet
 from core.providers.service import builtin_provider_registry
 from core.runtime.authority import RuntimeAuthority, canonical_authority_digest
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-    MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
 )
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.event_collection import RuntimeEventJsonCollection
@@ -133,9 +133,9 @@ class HostedAgenticHarness:
         feature_flags = patch.dict(
             os.environ,
             {
-                MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-                MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
-                MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "1",
+                LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+                LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
+                LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "1",
             },
             clear=False,
         )
@@ -365,7 +365,7 @@ class HostedAgenticHarness:
                     codec_id="fake-hosted-codec",
                     codec_version="1",
                     schema_version="1",
-                    content_type="application/vnd.maverick.fake-private",
+                    content_type="application/vnd.loopino.fake-private",
                 ),
                 cost_estimator=cost_estimator or (lambda _request: 0),
                 finalization_policy=finalization_policy

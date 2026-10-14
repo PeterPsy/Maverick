@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createPwaCacheMetricsCollector, isParentDataCacheRetryMessage, PWA_DATA_CACHE_BROKER_RETRY } from "@maverick/pwa-cache";
+import { createPwaCacheMetricsCollector, isParentDataCacheRetryMessage, PWA_DATA_CACHE_BROKER_RETRY } from "@loopino/pwa-cache";
 import { PwaDataCacheRetryMetrics } from "./pwaDataCacheRetryMetrics";
 
 describe("broker retry metrics", () => {

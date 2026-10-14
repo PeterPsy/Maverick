@@ -1,5 +1,5 @@
 import { extensionEntities } from './vnext';
-import { isExactMaverickParentMessage, maverickAppIsVisible } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage, loopinoAppIsVisible } from '@loopino/pwa-cache';
 import { readCrmDisplay } from '../pwaCache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BootstrapPayload, CrmRecord, PipelineBoardPayload, RecordsTablePayload, callBackend } from '../api';
@@ -43,7 +43,7 @@ export function useCrmDataController() {
   const bootstrapGeneration = useRef(0);
   const [recordsLoading, setRecordsLoading] = useState(true);
   async function displayRead<T>(slot: string, parameters: Record<string, unknown>, apply: (data: T) => void) {
-    if (!maverickAppIsVisible({ requireOnline: false })) throw new DOMException('App hidden', 'AbortError');
+    if (!loopinoAppIsVisible({ requireOnline: false })) throw new DOMException('App hidden', 'AbortError');
     cacheReads.current.get(slot)?.abort();
     const controller = new AbortController();
     cacheReads.current.set(slot, controller);
@@ -62,7 +62,7 @@ export function useCrmDataController() {
   }, [foreground, connected]);
 
   async function refresh(notifyViews = true) {
-    if (!maverickAppIsVisible({ requireOnline: false })) return;
+    if (!loopinoAppIsVisible({ requireOnline: false })) return;
     const generation = ++bootstrapGeneration.current;
     if (notifyViews) window.dispatchEvent(new Event('crm-workspace-refresh'));
     setIsLoading(true);
@@ -71,7 +71,7 @@ export function useCrmDataController() {
       const controller = await displayRead<Partial<BootstrapPayload>>('bootstrap', { kind: 'bootstrap' }, (value) => setData((current) => ({ ...current, ...value })));
       // Workflow proposals, saved filters and other live-only surfaces are not
       // cached and never gate paint of the customer display projection.
-      if (controller.signal.aborted || !maverickAppIsVisible()) return;
+      if (controller.signal.aborted || !loopinoAppIsVisible()) return;
       void callBackend<BootstrapPayload>({ action: 'bootstrap' }, controller.signal).then((value) => {
         if (!controller.signal.aborted) setData(value);
       }).catch(() => undefined);
@@ -102,7 +102,7 @@ export function useCrmDataController() {
   refreshRecordsRef.current = refreshRecords;
 
   async function refreshReports() {
-    if (!maverickAppIsVisible()) return;
+    if (!loopinoAppIsVisible()) return;
     cacheReads.current.get('reports')?.abort();
     const controller = new AbortController();
     cacheReads.current.set('reports', controller);
@@ -125,12 +125,12 @@ export function useCrmDataController() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.data-changed' && event.data?.owner_app_id === 'crm') {
+      if (isExactLoopinoParentMessage(event) && event.data?.type === 'loopino.app.data-changed' && event.data?.owner_app_id === 'crm') {
         void refresh();
         void refreshPipelineBoard();
         void refreshRecordsRef.current();
       }
-      if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.navigate') {
+      if (isExactLoopinoParentMessage(event) && event.data?.type === 'loopino.app.navigate') {
         const params = event.data.params && typeof event.data.params === 'object' ? event.data.params : {};
         if (consumeNavigationEcho(params)) return;
         const appPage = typeof params.app_page === 'string' ? params.app_page : typeof event.data.app_page === 'string' ? event.data.app_page : '';
@@ -157,7 +157,7 @@ export function useCrmDataController() {
       }
     }
     window.addEventListener('message', handleMessage);
-    postToShell({ type: 'maverick.app.ready', app_id: 'crm' });
+    postToShell({ type: 'loopino.app.ready', app_id: 'crm' });
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 

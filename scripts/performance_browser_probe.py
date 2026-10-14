@@ -38,7 +38,7 @@ def main() -> int:
         'rev-parse', '--verify', f'{args.frontend_build_ref}^{{commit}}'], cwd=ROOT, text=True).strip() if args.frontend_build_ref else None
     if frontend_revision and args.scenario != 'app-idle':
         parser.error('--frontend-build-ref is supported only by the app-idle comparison.')
-    with tempfile.TemporaryDirectory(prefix='maverick-performance-browser-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='loopino-performance-browser-') as temporary:
         root = Path(temporary)
         repository = root / 'repository'
         repository.mkdir()
@@ -97,8 +97,8 @@ def main() -> int:
                 assets.extractall(repository, filter='data')
         chat_fixture = seed_chat_history(repository, turns=1000 if args.scenario == 'chat-stream' else 3000)
         env = _local_environment(root, 'fixture-admin', 'fixture-only-password')
-        env['MAVERICK_PERFORMANCE_BROWSER_FIXTURE'] = '1'
-        env['MAVERICK_PERFORMANCE_CHAT_EVENTS'] = str(repository / 'workspaces/default/runtime/sessions/performance-chat-history/events.json')
+        env['LOOPINO_PERFORMANCE_BROWSER_FIXTURE'] = '1'
+        env['LOOPINO_PERFORMANCE_CHAT_EVENTS'] = str(repository / 'workspaces/default/runtime/sessions/performance-chat-history/events.json')
         port = _free_port()
         with (root / 'host.log').open('wb') as log:
             server = subprocess.Popen([sys.executable, str(ROOT / 'scripts/pwa_smoke_host.py'),
@@ -115,7 +115,7 @@ def main() -> int:
                     'storage-media': 'performance_storage_media.mjs', 'app-idle': 'performance_app_idle.mjs',
                     'startup': 'performance_startup.mjs'}[args.scenario]
                 result = subprocess.run(['node', str(ROOT / 'scripts' / driver),
-                    f'http://maverick.localhost:{port}'], cwd=ROOT, env=env, check=False,
+                    f'http://loopino.localhost:{port}'], cwd=ROOT, env=env, check=False,
                     capture_output=True, text=True, timeout=360)
                 sys.stderr.write(result.stderr)
                 if result.returncode:
@@ -133,7 +133,7 @@ def main() -> int:
                 evidence['entry_sha256'] = {}
                 for app in sorted(measured_apps):
                     dist = apps / app / 'frontend/dist'
-                    manifest = dist / 'maverick-frontend-assets.json'
+                    manifest = dist / 'loopino-frontend-assets.json'
                     evidence['builds'][app] = json.loads(manifest.read_text())['build_id'] if manifest.exists() else None
                     evidence['entry_sha256'][app] = hashlib.sha256((dist / 'index.html').read_bytes()).hexdigest()
                 evidence['python'] = platform.python_version()

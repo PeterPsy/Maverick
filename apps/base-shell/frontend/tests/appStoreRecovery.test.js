@@ -18,7 +18,7 @@ it("routes only exact-parent catalog recovery to App Store display reads, never 
   await import("../../../app-store/frontend/src/assets/main.js");
   await vi.waitFor(() => expect(api.loadCachedCatalog).toHaveBeenCalledOnce());
   const authorityReads = api.requestJson.mock.calls.length;
-  const recovery = { type: "maverick.app.data-changed", owner_app_id: "app-store", resource: "records" };
+  const recovery = { type: "loopino.app.data-changed", owner_app_id: "app-store", resource: "records" };
   window.dispatchEvent(new MessageEvent("message", { data: recovery, origin: "https://unregistered.test", source: window }));
   expect(api.loadCachedCatalog).toHaveBeenCalledOnce();
   window.dispatchEvent(new MessageEvent("message", { data: recovery, origin: window.location.origin, source: window }));

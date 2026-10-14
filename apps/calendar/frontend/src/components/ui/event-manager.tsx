@@ -8,7 +8,7 @@ import {
   useState,
   type SetStateAction,
 } from "react";
-import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
+import { isExactLoopinoParentMessage } from "@loopino/pwa-cache";
 import {
   CALENDAR_UI_STATE_RESOURCE,
   notifyCalendarUiStateChanged,
@@ -103,7 +103,7 @@ export function EventManager({
   useEffect(() => {
     function handleUiStateMessage(event: MessageEvent) {
       if (
-        !isExactMaverickParentMessage(event) ||
+        !isExactLoopinoParentMessage(event) ||
         !event.data ||
         typeof event.data !== "object"
       ) {
@@ -115,7 +115,7 @@ export function EventManager({
         type?: string;
       };
       if (
-        payload.type === "maverick.app.data-changed" &&
+        payload.type === "loopino.app.data-changed" &&
         payload.owner_app_id === runtimeAppId &&
         payload.resource === CALENDAR_UI_STATE_RESOURCE
       ) {

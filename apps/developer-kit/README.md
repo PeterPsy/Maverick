@@ -1,6 +1,6 @@
 # Developer Kit
 
-Official Maverick app SDK developer UI for creating, validating, and managing workspace-local apps.
+Official Loopino app SDK developer UI for creating, validating, and managing workspace-local apps.
 
 ## Contract Notes
 
@@ -12,9 +12,9 @@ Official Maverick app SDK developer UI for creating, validating, and managing wo
 ## SDK Flow
 
 ```bash
-./scripts/maverick core cli run core.app-sdk.validate --app-id developer-kit --workspace default --json
-./scripts/maverick core cli run core.app-sdk.register-local --app-id developer-kit --workspace default --json
-./scripts/maverick core cli run core.app-sdk.install-local --app-id developer-kit --workspace default --json
-./scripts/maverick core cli run core.app-sdk.status --app-id developer-kit --workspace default --json
-./scripts/maverick core cli run core.app-sdk.package --app-id developer-kit --workspace default --json
+./scripts/loopino core cli run core.app-sdk.validate --app-id developer-kit --workspace default --json
+./scripts/loopino core cli run core.app-sdk.register-local --app-id developer-kit --workspace default --json
+./scripts/loopino core cli run core.app-sdk.install-local --app-id developer-kit --workspace default --json
+./scripts/loopino core cli run core.app-sdk.status --app-id developer-kit --workspace default --json
+./scripts/loopino core cli run core.app-sdk.package --app-id developer-kit --workspace default --json
 ```

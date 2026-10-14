@@ -1,18 +1,18 @@
 :root {
   color-scheme: dark;
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-success: #9ff0ca;
-  --maverick-warning: #f6d58f;
-  --maverick-danger: #ffb3bf;
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.66);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-surface: rgba(255, 255, 255, 0.055);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-border: rgba(255, 255, 255, 0.08);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-glass-surface: rgba(12, 12, 14, 0.58);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-success: #9ff0ca;
+  --loopino-warning: #f6d58f;
+  --loopino-danger: #ffb3bf;
   font-family: "Avenir Next", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -26,7 +26,7 @@ body,
   margin: 0;
   overflow: hidden;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 button,
@@ -57,8 +57,8 @@ select {
   min-height: var(--website-studio-sidebar-search-height);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
 }
@@ -77,7 +77,7 @@ select {
   display: block;
   width: 1rem;
   height: 1rem;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .website-studio-sitemap-search-icon::before {
@@ -112,7 +112,7 @@ select {
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .website-studio-sitemap-select-frame {
@@ -199,12 +199,12 @@ select {
 }
 
 .storage-folder-tree .hover\:bg-accent\/50:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .storage-folder-tree .bg-accent\/80 {
-  background: var(--maverick-surface-active);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-surface-active);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .storage-folder-tree .border-border\/40 {
@@ -226,7 +226,7 @@ select {
 }
 
 .storage-folder-tree .text-muted-foreground {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .storage-folder-tree .truncate {
@@ -250,15 +250,15 @@ select {
 }
 
 .website-studio-tree-trigger.has-warning {
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
 }
 
 .website-studio-tree-trigger.has-change {
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .website-studio-tree-trigger.is-empty {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .website-studio-tree-badge {
@@ -267,7 +267,7 @@ select {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.64rem;
   padding: 2px 6px;
   text-overflow: ellipsis;
@@ -276,17 +276,17 @@ select {
 
 .website-studio-tree-badge.warn {
   border-color: rgba(246, 213, 143, 0.28);
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
 }
 
 .website-studio-tree-badge.changed {
   border-color: rgba(159, 240, 202, 0.28);
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .website-studio-sitemap-empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
   padding: 0.72rem;

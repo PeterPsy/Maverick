@@ -12,7 +12,7 @@ export async function mountSidebarHost(page: Page, dataRoot: string, options: { 
   await page.context().grantPermissions(['local-network-access'], { origin: shellOrigin });
   backend(dataRoot, { action: 'crm.create_contact', id: 'contact_ada', display_name: 'Ada Example', email: 'ada@example.test' });
   await page.addInitScript(({ appOrigin, shellOrigin }) => {
-    if (location.origin === appOrigin) (window as any).__MAVERICK_PLATFORM_ORIGIN__ = shellOrigin;
+    if (location.origin === appOrigin) (window as any).__LOOPINO_PLATFORM_ORIGIN__ = shellOrigin;
   }, { appOrigin, shellOrigin });
   await page.route('**/api/apps/crm/backend', async (route) => {
     const body = route.request().postDataJSON();
@@ -45,17 +45,17 @@ export async function mountSidebarHost(page: Page, dataRoot: string, options: { 
       const crm = document.getElementById('crm-frame');
       let params = { app_page: 'overview' };
       window.navigationRequests = [];
-      function context() { sidebar.contentWindow.postMessage({ type: 'maverick.widget.context-changed', context: { content: { payload: { active_app_params: params, is_mobile_layout: innerWidth <= 979 } } } }, appOrigin); }
-      window.navigateCrm = (next) => { params = next; context(); crm.contentWindow.postMessage({ type: 'maverick.app.navigate', app_id: 'crm', params }, appOrigin); };
-      window.refreshCounts = () => sidebar.contentWindow.postMessage({ type: 'maverick.widget.data-changed', owner_app_id: 'crm' }, appOrigin);
+      function context() { sidebar.contentWindow.postMessage({ type: 'loopino.widget.context-changed', context: { content: { payload: { active_app_params: params, is_mobile_layout: innerWidth <= 979 } } } }, appOrigin); }
+      window.navigateCrm = (next) => { params = next; context(); crm.contentWindow.postMessage({ type: 'loopino.app.navigate', app_id: 'crm', params }, appOrigin); };
+      window.refreshCounts = () => sidebar.contentWindow.postMessage({ type: 'loopino.widget.data-changed', owner_app_id: 'crm' }, appOrigin);
       window.addEventListener('resize', context);
       window.addEventListener('message', (event) => {
         if (event.origin !== appOrigin) return;
         const message = event.data;
-        if (event.source === sidebar.contentWindow && message.type === 'maverick.widget.ready') context();
-        if (event.source === crm.contentWindow && message.type === 'maverick.app.ready') window.navigateCrm(params);
-        if ((event.source === sidebar.contentWindow && message.type === 'maverick.widget.open-app') ||
-            (event.source === crm.contentWindow && message.type === 'maverick.app.open-app')) {
+        if (event.source === sidebar.contentWindow && message.type === 'loopino.widget.ready') context();
+        if (event.source === crm.contentWindow && message.type === 'loopino.app.ready') window.navigateCrm(params);
+        if ((event.source === sidebar.contentWindow && message.type === 'loopino.widget.open-app') ||
+            (event.source === crm.contentWindow && message.type === 'loopino.app.open-app')) {
           window.navigationRequests.push(message);
           window.navigateCrm(message.params);
           document.body.classList.remove('sidebar-open');

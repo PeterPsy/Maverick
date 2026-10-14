@@ -380,7 +380,7 @@ class HostedWorkspaceEffectAdmissionTest(unittest.TestCase):
     def test_production_create_is_public_after_orchestrator_rebuild(self) -> None:
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(

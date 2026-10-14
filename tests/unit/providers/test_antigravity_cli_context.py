@@ -13,7 +13,7 @@ from tests.unit.providers.antigravity_cli_fixture import AntigravityCliFixture
 class AntigravityCliContextTest(AntigravityCliFixture, unittest.IsolatedAsyncioTestCase):
     async def test_mac_capability_preserves_workspace_skills_and_app_instructions(self):
         self.session.device_use_binding = SimpleNamespace(mode="full", approved_apps=("com.apple.Safari",), initial_app="com.apple.Safari")
-        self.session.system_prompt = "Use Maverick app surfaces."
+        self.session.system_prompt = "Use Loopino app surfaces."
         (Path(self.session.workspace_root) / "AGENTS.md").write_text("Keep workspace rules")
         skill_root = self.root / "engineering"
         skill_root.mkdir()
@@ -27,7 +27,7 @@ class AntigravityCliContextTest(AntigravityCliFixture, unittest.IsolatedAsyncioT
         with patch("core.providers.antigravity_cli_session.device_use_service_for_session", return_value=None):
             await self.collect("Read Storage and then use the Mac")
         wire = [message for message in self.messages() if message.get("event") == "user"][-1]
-        for value in ("Keep workspace rules", "Use Maverick app surfaces.", "maverick apps list", "additional capability", "Engineering"):
+        for value in ("Keep workspace rules", "Use Loopino app surfaces.", "loopino apps list", "additional capability", "Engineering"):
             self.assertIn(value, wire["message"]["content"])
 
     async def test_context_preserves_workspace_agent_skills_and_user_input_on_resume(self):
@@ -61,7 +61,7 @@ class AntigravityCliContextTest(AntigravityCliFixture, unittest.IsolatedAsyncioT
             ) / "SKILL.md"
             self.assertIn(str(copied_skill), text)
             self.assertEqual(copied_skill.read_text(), (skill_root / "SKILL.md").read_text())
-            self.assertTrue(text.endswith("[Maverick user input]\n" + prompt))
+            self.assertTrue(text.endswith("[Loopino user input]\n" + prompt))
             self.assertNotIn("fixture-oauth-token", text)
             if index == 0:
                 instructions.write_text("Updated workspace instructions.\n")

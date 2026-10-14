@@ -17,7 +17,7 @@ or runtime events.
 
 Inspect provider status and confirm:
 
-- family `maverick_agent`, runtime `maverick-tool-loop`;
+- family `loopino_agent`, runtime `loopino-tool-loop`;
 - model `z-ai/glm-5.3-flash` and reasoning `max`, `high`, `low`;
 - expected endpoint, Relace upstream and data destination;
 - enabled workspace config and credential binding;

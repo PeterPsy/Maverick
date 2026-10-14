@@ -12,6 +12,7 @@ from unittest.mock import patch
 from core.apps.artifact_mounts import (
     ARTIFACT_NAMESPACE_MARKER,
     create_artifact_namespace,
+    platform_artifact_store_root,
     resolve_artifact_mounts,
 )
 from core.apps.contracts import build_http_sidecar_artifact_mount
@@ -19,11 +20,11 @@ from core.apps.errors import AppHostingError
 
 
 class SidecarArtifactMountTests(unittest.TestCase):
-    def test_namespace_is_external_identity_bound_and_resolved_read_only_target(self) -> None:
+    def test_namespace_is_installation_owned_identity_bound_and_resolved_read_only_target(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = self._repository(Path(temp_dir))
-            store = Path(temp_dir) / "platform-artifacts"
-            with patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(store)}):
+            store = root / "data" / "app-artifacts"
+            with patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": str(store)}):
                 namespace = create_artifact_namespace(
                     repository_root=root,
                     app_id="design-studio",
@@ -37,7 +38,7 @@ class SidecarArtifactMountTests(unittest.TestCase):
 
             self.assertEqual(mounts[0].source, namespace)
             self.assertEqual(mounts[0].target, Path("/artifacts/opendesign"))
-            self.assertNotIn(root, namespace.parents)
+            self.assertIn(root / "data", namespace.parents)
             marker = json.loads((namespace / ARTIFACT_NAMESPACE_MARKER).read_text(encoding="utf-8"))
             self.assertEqual(mounts[0].store_generation, marker["store_generation"])
 
@@ -45,16 +46,16 @@ class SidecarArtifactMountTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = self._repository(Path(temp_dir))
             inside = root / "data" / "artifacts"
-            with patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(inside)}):
-                with self.assertRaisesRegex(AppHostingError, "outside the repository"):
+            with patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": str(inside)}):
+                with self.assertRaisesRegex(AppHostingError, "designated installation"):
                     create_artifact_namespace(
                         repository_root=root,
                         app_id="design-studio",
                         artifact_id="opendesign",
                     )
 
-            store = Path(temp_dir) / "platform-artifacts"
-            with patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(store)}):
+            store = root / "data" / "app-artifacts"
+            with patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": str(store)}):
                 namespace = create_artifact_namespace(
                     repository_root=root,
                     app_id="design-studio",
@@ -79,9 +80,31 @@ class SidecarArtifactMountTests(unittest.TestCase):
                         declarations=[build_http_sidecar_artifact_mount(artifact_id="opendesign")],
                     )
 
+    def test_default_and_overrides_cannot_escape_installation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = self._repository(Path(temp_dir))
+            with patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": ""}):
+                self.assertEqual(platform_artifact_store_root(root), root / "data/app-artifacts")
+            for value in (str(Path(temp_dir) / "external"), "relative", str(root / "apps/artifacts"), str(root / "installation/artifacts"), str(root / "data/control-plane"), str(root / "data")):
+                with self.subTest(value=value), patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": value}):
+                    with self.assertRaises(AppHostingError):
+                        platform_artifact_store_root(root)
+            (root / "data").symlink_to(Path(temp_dir), target_is_directory=True)
+            with patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": ""}):
+                with self.assertRaises(AppHostingError):
+                    platform_artifact_store_root(root)
+
+    def test_namespace_ids_cannot_traverse_or_select_absolute_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = self._repository(Path(temp_dir))
+            for app_id, artifact_id in (("..", "valid"), ("valid", "../escape"), ("/tmp", "valid")):
+                with self.subTest(app_id=app_id, artifact_id=artifact_id), self.assertRaises(AppHostingError):
+                    create_artifact_namespace(repository_root=root, app_id=app_id, artifact_id=artifact_id)
+            self.assertFalse((root / "data/app-artifacts").exists())
+
     @staticmethod
     def _repository(parent: Path) -> Path:
-        root = parent / "maverick"
+        root = parent / "loopino"
         for name in ("apps", "core", "workspaces"):
             (root / name).mkdir(parents=True, exist_ok=True)
         (root / "AGENTS.md").write_text("", encoding="utf-8")

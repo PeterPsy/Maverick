@@ -54,7 +54,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
 
         self.assertEqual(
             [item["family_id"] for item in payload["execution_families"]],
-            ["native_agent", "maverick_agent"],
+            ["native_agent", "loopino_agent"],
         )
         self.assertEqual(
             [item["label"] for item in payload["execution_families"]],
@@ -67,7 +67,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             [item["description"] for item in payload["execution_families"]],
             [
                 "Models running through native command-line agents.",
-                "Models running through Maverick's agentic API loop.",
+                "Models running through Loopino's agentic API loop.",
             ],
         )
         profile = payload["agentic_profiles"]["items"][0]

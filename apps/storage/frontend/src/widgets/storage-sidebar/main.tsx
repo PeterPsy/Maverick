@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type SVGProps } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home, LogOut, RefreshCw } from 'lucide-react';
-import { AccountAvatar } from '@maverick/account-avatar';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { AccountAvatar } from '@loopino/account-avatar';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import {
   TreeExpander,
   TreeIcon,
@@ -509,14 +509,14 @@ function openFolderInShell(node: FolderTreeNode, appId: string, ancestors: Folde
     };
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: appId,
       params
     },
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -978,7 +978,7 @@ function StorageSidebarWidget() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -999,7 +999,7 @@ function StorageSidebarWidget() {
         if (folderId) setSelectedFolderId(folderId);
         return;
       }
-      if (payload.type !== 'maverick.widget.data-changed' || payload.owner_app_id !== storageAppId) {
+      if (payload.type !== 'loopino.widget.data-changed' || payload.owner_app_id !== storageAppId) {
         return;
       }
       if (payload.resource === 'files') {

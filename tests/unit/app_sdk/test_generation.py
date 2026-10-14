@@ -1,4 +1,4 @@
-"""Split tests from tests.support.cases.app_sdk_cases.MaverickAppSdkTestCase."""
+"""Split tests from tests.support.cases.app_sdk_cases.LoopinoAppSdkTestCase."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ _SELECTED = {
 
 
 def _mask_unselected(cls) -> None:
-    for name in dir(cases.MaverickAppSdkTestCase):
+    for name in dir(cases.LoopinoAppSdkTestCase):
         if name.startswith("test_") and name not in _SELECTED:
             setattr(cls, name, None)
 
 
-class AppSdkGenerationTest(cases.MaverickAppSdkTestCase):
+class AppSdkGenerationTest(cases.LoopinoAppSdkTestCase):
     """Run the AppSdkGenerationTest subset."""
 
     pass

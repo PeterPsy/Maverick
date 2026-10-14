@@ -14,14 +14,14 @@ for(const name of readdirSync(source).sort()) {
   if(name === "build.mjs" || name.endsWith(".test.mjs"))continue;
   writeFileSync(join(target,name),readFileSync(join(source,name)));
 }
-writeFileSync(join(target,"reader.js"),`globalThis.maverickBrowserRead=${collectRenderedContent.toString()};\n`);
+writeFileSync(join(target,"reader.js"),`globalThis.loopinoBrowserRead=${collectRenderedContent.toString()};\n`);
 // A reproducible, dependency-free archive, downloadable from the app's public assets.
 execFileSync("python3",["-c",[
   "import pathlib,sys,zipfile",
   "root=pathlib.Path(sys.argv[1])",
   "with zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED) as archive:",
   " for path in sorted(root.iterdir()):",
-  "  info=zipfile.ZipInfo('maverick-browser-companion/'+path.name,date_time=(2026,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16",
+  "  info=zipfile.ZipInfo('loopino-browser-companion/'+path.name,date_time=(2026,1,1,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16",
   "  archive.writestr(info,path.read_bytes())",
-].join("\n"),target,join(packageRoot,"maverick-browser-companion.zip")]);
-rmSync(join(target,"../maverick-browser-companion.zip"),{force:true});
+].join("\n"),target,join(packageRoot,"loopino-browser-companion.zip")]);
+rmSync(join(target,"../loopino-browser-companion.zip"),{force:true});

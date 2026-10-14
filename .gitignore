@@ -18,10 +18,11 @@ venv/
 .env.*
 !.env.example
 .codex
-.maverick/
-.maverick/local-state/
+.loopino/
+.loopino/local-state/
 
 # Local databases and app-owned storage
+/data/
 *.db
 *.sqlite
 *.sqlite3
@@ -32,6 +33,7 @@ tmp/cleanup-backups/
 logs/
 data/control-plane/
 data/bootstrap-secrets/
+data/provider-auth/
 data/recovery-snapshots/
 tmp/
 output/

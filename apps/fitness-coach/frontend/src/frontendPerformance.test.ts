@@ -38,7 +38,7 @@ describe('frontend performance guardrails', () => {
 
   it('requires host-attested app and workspace scope for bootstrap cache reads', () => {
     const readModelSource = readFileSync(new URL('./bootstrapReadModelCache.ts', import.meta.url), 'utf8');
-    expect(readModelSource).toContain('readMaverickAppFrameContext');
+    expect(readModelSource).toContain('readLoopinoAppFrameContext');
     expect(readModelSource).toContain('frameContext.appId === appId');
     expect(readModelSource).toContain('payload.workspace_id !== frameContext.workspaceId');
     expect(bootstrapCacheSource).toContain('payload.workspace_id');

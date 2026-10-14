@@ -8,7 +8,7 @@ from pathlib import Path
 from core.apps.models import AppDataStateRecord
 
 
-APP_DATA_STATE_FILENAME = ".maverick-app.json"
+APP_DATA_STATE_FILENAME = ".loopino-app.json"
 
 
 def app_data_state_path(data_root: Path) -> Path:

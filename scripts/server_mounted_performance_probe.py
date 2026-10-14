@@ -64,9 +64,9 @@ def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False
     inventory_legacy.sync_inventory(data, uploaded_root=uploaded, generated_root=generated)
     migration = prepare_inventory(data, uploaded_root=uploaded, generated_root=generated)
     cutover_inventory(data, migration['migration_id'], uploaded_root=uploaded, generated_root=generated)
-    with patch.dict(os.environ, {'MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS': '1',
-            'MAVERICK_ADMIN_USERNAME': 'fixture-admin', 'MAVERICK_ADMIN_PASSWORD': 'fixture-only-password',
-            'MAVERICK_USAGE_STORE': 'document', 'PYTHONPATH': str(ROOT)}):
+    with patch.dict(os.environ, {'LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS': '1',
+            'LOOPINO_ADMIN_USERNAME': 'fixture-admin', 'LOOPINO_ADMIN_PASSWORD': 'fixture-only-password',
+            'LOOPINO_USAGE_STORE': 'document', 'PYTHONPATH': str(ROOT)}):
         state = bootstrap_platform_state(start_path=root)
         source = register_app_source_from_contract(state.app_store, source_kind='platform', source_path=str(source_root))
         install_store_app(state.app_store, source_id=source.source_id, workspace_id='default', start_path=root)
@@ -76,7 +76,7 @@ def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False
             app_root.mkdir()
             write_app_contract_file(app_root, build_parsed_app_contract(app_id=app_id,
                 name=f'Fixture {number}', version='1.0.0', description='Disposable discovery fixture.',
-                publisher='maverick', contract=build_app_contract()))
+                publisher='loopino', contract=build_app_contract()))
             extra = register_app_source_from_contract(state.app_store, source_kind='platform', source_path=str(app_root))
             install_store_app(state.app_store, source_id=extra.source_id, workspace_id='default', start_path=root)
         shutdown = EntrypointShutdownController()
@@ -196,7 +196,7 @@ def main():
         parser.error('count must be at least 100; requests positive; warmup and extra-apps nonnegative')
     if args.profile and args.concurrent:
         parser.error('--profile requires sequential requests')
-    with tempfile.TemporaryDirectory(prefix='maverick-mounted-probe-') as scratch:
+    with tempfile.TemporaryDirectory(prefix='loopino-mounted-probe-') as scratch:
         with mounted_storage(Path(scratch), args.count, args.shape, profile=args.profile, workers=args.workers,
                              extra_apps=args.extra_apps, workspace_catalog=args.workspace_catalog) as client:
             results = run(client, args.requests, args.warmup, concurrent=args.concurrent)

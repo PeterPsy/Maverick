@@ -35,26 +35,26 @@ def install(core_unit):
     # When invoked from the ordinary host, remove the service's chroot prefix.
     if directory and str(ROOT).startswith(directory + "/"):
         root = Path(str(ROOT)[len(directory):])
-    metadata = ROOT / ".maverick/installation"
+    metadata = ROOT / ".loopino/installation"
     metadata.mkdir(parents=True, exist_ok=True, mode=0o700)
     owner = service_account_ids(str(properties.Get("org.freedesktop.systemd1.Service", "User")),
                                str(properties.Get("org.freedesktop.systemd1.Service", "Group")))
     os.chown(metadata, *owner)
-    for name, content in [("maverick-installation.service", render_service(root, root_directory=directory, core_unit=core_unit)),
-                          ("maverick-installation.timer", TIMER)]:
+    for name, content in [("loopino-installation.service", render_service(root, root_directory=directory, core_unit=core_unit)),
+                          ("loopino-installation.timer", TIMER)]:
         path = host / "etc/systemd/system" / name
         path.write_text(content)
         path.chmod(0o644)
     manager.Reload()
-    manager.EnableUnitFiles(["maverick-installation.timer"], False, False)
-    manager.StartUnit("maverick-installation.timer", "replace")
-    manager.StartUnit("maverick-installation.service", "replace")
-    return {"installed": True, "service": "maverick-installation.service", "timer": "maverick-installation.timer"}
+    manager.EnableUnitFiles(["loopino-installation.timer"], False, False)
+    manager.StartUnit("loopino-installation.timer", "replace")
+    manager.StartUnit("loopino-installation.service", "replace")
+    return {"installed": True, "service": "loopino-installation.service", "timer": "loopino-installation.timer"}
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--core-unit", default="maverick-core.service")
+    parser.add_argument("--core-unit", default="loopino-core.service")
     arguments = parser.parse_args()
     if os.geteuid() != 0:
         raise SystemExit("Run with sudo.")

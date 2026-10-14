@@ -49,7 +49,7 @@ describe("mention autocomplete helpers", () => {
   });
 
   it("leaves dollar-prefixed text as ordinary composer content", () => {
-    expect(activeMentionAt("use $Maverick", "use $Maverick".length)).toBeNull();
+    expect(activeMentionAt("use $Loopino", "use $Loopino".length)).toBeNull();
   });
 
   it("does not treat email-style symbols as mention starts", () => {
@@ -98,7 +98,7 @@ describe("mention autocomplete helpers", () => {
   });
 
   it("finds readable mention tokens for chips", () => {
-    expect(findMentionTokens("Use @Test App with $maverick-code-skill", items).map((token) => token.text)).toEqual([
+    expect(findMentionTokens("Use @Test App with $loopino-code-skill", items).map((token) => token.text)).toEqual([
       "@Test App",
     ]);
   });
@@ -106,7 +106,7 @@ describe("mention autocomplete helpers", () => {
   it("extracts app and entity references for runtime payloads", () => {
     expect(
       appReferencesFromText(
-        "Use @Test App with $maverick-code-skill and @Agency launch [ref:checklist/checklist/check_123]",
+        "Use @Test App with $loopino-code-skill and @Agency launch [ref:checklist/checklist/check_123]",
         items,
       ),
     ).toEqual([

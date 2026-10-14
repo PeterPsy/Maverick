@@ -23,7 +23,7 @@ from core.identity.service import (
 from core.workspaces.service import resolve_active_workspace_for_user
 
 
-SESSION_COOKIE = "maverick_session"
+SESSION_COOKIE = "loopino_session"
 
 
 @dataclass(frozen=True)
@@ -134,14 +134,14 @@ def handle_session_api(state: PlatformState, environ: dict, start_response: Star
     method = environ.get("REQUEST_METHOD", "GET").upper()
     if path == "/api/session" and method == "GET":
         context = resolve_request_session(state, environ)
-        if context is not None and not is_browser_session(context.session) and not environ.get("maverick.app_frame_proxy"):
+        if context is not None and not is_browser_session(context.session) and not environ.get("loopino.app_frame_proxy"):
             try:
                 renewed = renew_auth_session(state.identity_store, context.session, now=_now())
                 context = replace(context, session=renewed) if renewed.status == "active" and renewed.expires_at > _now() else None
             except SessionNotFoundError:
                 context = None
         headers = []
-        if context is not None and not environ.get("maverick.app_frame_proxy"):
+        if context is not None and not environ.get("loopino.app_frame_proxy"):
             # Always synchronize expiry: another native/browser request may
             # already have renewed the same persisted session.
             headers.append(session_cookie_header(context.session.session_id, expires_at=context.session.expires_at, secure=_request_is_https(environ)))

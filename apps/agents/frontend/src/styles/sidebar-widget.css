@@ -17,8 +17,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -66,7 +66,7 @@ button {
 }
 
 .agents-sidebar-search-frame .material-symbols-rounded {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 1.05rem;
 }
 
@@ -74,17 +74,17 @@ button {
   width: 100%;
   min-width: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .agents-sidebar-search::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .agents-sidebar-search-frame:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 @media (max-width: 979px) {
@@ -140,15 +140,15 @@ button {
 
 .agents-sidebar-row:hover,
 .agents-sidebar-row.is-active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .agents-sidebar-row:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .agents-sidebar-row.is-active {
-  background: var(--maverick-surface-active);
+  background: var(--loopino-surface-active);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
@@ -162,11 +162,11 @@ button {
   width: 2rem;
   height: 2rem;
   border-radius: 15px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .agents-sidebar-row.is-active .agents-sidebar-row__icon {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .agents-sidebar-row__copy {
@@ -187,13 +187,13 @@ button {
 }
 
 .agents-sidebar-row__copy span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .agents-sidebar-empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -275,7 +275,7 @@ button {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0 0.82rem;
   font-size: 0.76rem;
   font-weight: 400;
@@ -285,7 +285,7 @@ button {
 
 .agents-sidebar-footer-button:hover,
 .agents-sidebar-footer-button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 

@@ -27,13 +27,13 @@ export async function request(body, {signal, timeoutMs = 30000} = {}) {
 
 const pending=new Map();
 window.addEventListener("message",event=>{
-  if(event.source !== window || event.origin !== location.origin || event.data?.type !== "maverick.browser.response")return;
+  if(event.source !== window || event.origin !== location.origin || event.data?.type !== "loopino.browser.response")return;
   const entry=pending.get(event.data.id);if(!entry)return;
   pending.delete(event.data.id);clearTimeout(entry.timer);
   const result=event.data.result;
   if(result?.error) {
     const guidance = ["connector_scope_required", "sharing_revoked"].includes(result.error)
-      ? "Open Companion in Chrome, choose Open agent tab, then connect it from the extension toolbar. Keep the agent tab open; Maverick is needed for initial authorization."
+      ? "Open Companion in Chrome, choose Open agent tab, then connect it from the extension toolbar. Keep the agent tab open; Loopino is needed for initial authorization."
       : result.detail || result.error;
     entry.reject(Object.assign(new Error(guidance),{code:result.error}));
   } else entry.resolve(result);
@@ -48,6 +48,6 @@ export function bridge(action,command,timeout=5000) {
         : "The Chrome command timed out. Keep the shared tab open and check the connection in Companion. Poll the existing operation before retrying an action.";
       reject(Object.assign(new Error(message),{code:action === "status" ? "companion_unavailable" : "companion_command_timeout"}));
     },timeout);
-    pending.set(id,{resolve,reject,timer});window.postMessage({type:"maverick.browser.request",id,action,command},location.origin);
+    pending.set(id,{resolve,reject,timer});window.postMessage({type:"loopino.browser.request",id,action,command},location.origin);
   });
 }

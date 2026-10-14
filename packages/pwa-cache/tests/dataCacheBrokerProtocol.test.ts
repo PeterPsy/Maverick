@@ -6,7 +6,7 @@ import {
   PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
   PWA_DATA_CACHE_BROKER_OPEN,
   PWA_DATA_CACHE_BROKER_RESULT,
-  isExactMaverickParentMessage,
+  isExactLoopinoParentMessage,
   readThroughParentDataCache,
   serializeParentDataCacheError,
 } from "../src";
@@ -78,7 +78,7 @@ describe("parent-mediated data-cache protocol", () => {
     });
 
     const result = await readThroughParentDataCache(request, loader, {
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow: parent,
       sanitize,
     });
@@ -94,22 +94,22 @@ describe("parent-mediated data-cache protocol", () => {
   it("recognizes shell events only from the exact injected parent origin", () => {
     const parent = {} as Window;
     const frameWindow = {
-      __MAVERICK_PLATFORM_ORIGIN__: "https://maverick.test",
-      location: { origin: "https://af-storage.sidecars.maverick.test" },
+      __LOOPINO_PLATFORM_ORIGIN__: "https://loopino.test",
+      location: { origin: "https://af-storage.sidecars.loopino.test" },
       parent,
-    } as unknown as Window & { __MAVERICK_PLATFORM_ORIGIN__: string };
+    } as unknown as Window & { __LOOPINO_PLATFORM_ORIGIN__: string };
     vi.stubGlobal("window", frameWindow);
 
-    expect(isExactMaverickParentMessage({
-      origin: "https://maverick.test",
+    expect(isExactLoopinoParentMessage({
+      origin: "https://loopino.test",
       source: parent,
     } as MessageEvent)).toBe(true);
-    expect(isExactMaverickParentMessage({
+    expect(isExactLoopinoParentMessage({
       origin: frameWindow.location.origin,
       source: parent,
     } as MessageEvent)).toBe(false);
-    expect(isExactMaverickParentMessage({
-      origin: "https://maverick.test",
+    expect(isExactLoopinoParentMessage({
+      origin: "https://loopino.test",
       source: {} as Window,
     } as MessageEvent)).toBe(false);
   });
@@ -165,7 +165,7 @@ describe("parent-mediated data-cache protocol", () => {
     });
 
     const result = await readThroughParentDataCache(request, loader, {
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow: parent,
       sanitize,
     });
@@ -202,7 +202,7 @@ describe("parent-mediated data-cache protocol", () => {
       payload: { value: "network" },
       revision: "revision-good",
     }), {
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow: parent,
       sanitize,
     });
@@ -225,24 +225,24 @@ describe("parent-mediated data-cache protocol", () => {
       payload: { value: "unused" },
       revision: "unused",
     }), {
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow: parent,
       sanitize,
       signal: controller.signal,
     })).rejects.toMatchObject({ name: "AbortError" });
 
-    await expect(cancellation).resolves.toMatchObject({ type: "maverick.pwa.data-cache.cancel.v1" });
+    await expect(cancellation).resolves.toMatchObject({ type: "loopino.pwa.data-cache.cancel.v1" });
   });
 
   it("preserves bounded auth and retry metadata without serializing error text", () => {
     const error = Object.assign(new Error("secret server detail"), {
-      name: "MaverickHttpError",
+      name: "LoopinoHttpError",
       retryAfterMs: 120_000,
       status: 403,
     });
 
     expect(serializeParentDataCacheError(error)).toEqual({
-      name: "MaverickHttpError",
+      name: "LoopinoHttpError",
       retry_after_ms: 60_000,
       status: 403,
     });

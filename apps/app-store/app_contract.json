@@ -3,8 +3,8 @@
   "contract_version": "1.0",
   "name": "App Store",
   "version": "0.1.0",
-  "description": "Authenticated Maverick app catalog for installing system apps into selected workspaces.",
-  "publisher": "maverick",
+  "description": "Authenticated Loopino app catalog for installing system apps into selected workspaces.",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
@@ -48,7 +48,7 @@
     },
     "network": {
       "outbound": [
-        "maverick-app-store.versy.ai"
+        "loopino-app-store.versy.ai"
       ]
     },
     "runtime": {
@@ -61,7 +61,7 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_app_store",
+      "loopino_app_store",
       "app_store_view_filter",
       "app_store_set_view_filter",
       "app_store_set_custom_view",

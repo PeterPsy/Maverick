@@ -27,7 +27,7 @@ class ShellWidgetBrowserOriginTests(SidecarBrowserOriginTestSupport, unittest.Te
             contract["presentation"] = {"frontend_role": "supporting"}
             path.write_text(json.dumps(contract))
             app = PlatformAsgiHost(state)
-            host = "maverick.localhost:8000"
+            host = "loopino.localhost:8000"
             origin = "http://" + host
             cookie = await self._login(app, host=host)
             headers = {"cookie": cookie, "origin": origin, "content-type": "application/json"}
@@ -37,7 +37,7 @@ class ShellWidgetBrowserOriginTests(SidecarBrowserOriginTestSupport, unittest.Te
             self.assertEqual(status, 200, body)
             context = json.loads(body)
             widget_path = "/api/apps/widgets/frame-demo/frame-widget/frontend/"
-            launch_path = widget_path + "?maverick_theme=dark#context=" + context["context_token"]
+            launch_path = widget_path + "?loopino_theme=dark#context=" + context["context_token"]
 
             async def launch(value, app_id="frame-demo"):
                 return await self._invoke(app, host=host, path=APP_FRAME_LAUNCH_PATH, method="POST", headers=headers,
@@ -61,7 +61,7 @@ class ShellWidgetBrowserOriginTests(SidecarBrowserOriginTestSupport, unittest.Te
             status, body, _ = await self._invoke(app, host=frame["host"], path=widget_path, headers={"cookie": frame["cookie"]})
             self.assertEqual(status, 200, body)
             self.assertIn(b"frame-widget", body)
-            self.assertIn(b"__MAVERICK_APP_FRAME_CONTEXT__", body)
+            self.assertIn(b"__LOOPINO_APP_FRAME_CONTEXT__", body)
             # Current declaration, not a past ticket, remains authoritative.
             contract["widgets"] = []
             path.write_text(json.dumps(contract))

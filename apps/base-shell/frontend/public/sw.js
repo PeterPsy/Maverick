@@ -1,12 +1,12 @@
 "use strict";
 
-const BUILD_ID = "__MAVERICK_BUILD_ID__";
-const PRECACHE = __MAVERICK_PRECACHE_MANIFEST__;
-const IMMUTABLE_SHELL_ASSETS = __MAVERICK_IMMUTABLE_ASSETS__;
-const STATIC_CACHE_PREFIX = "maverick-static-v2:";
+const BUILD_ID = "__LOOPINO_BUILD_ID__";
+const PRECACHE = __LOOPINO_PRECACHE_MANIFEST__;
+const IMMUTABLE_SHELL_ASSETS = __LOOPINO_IMMUTABLE_ASSETS__;
+const STATIC_CACHE_PREFIX = "loopino-static-v2:";
 const STATIC_CACHE_NAME = `${STATIC_CACHE_PREFIX}${BUILD_ID}`;
-const LEGACY_STATIC_CACHE_NAMES = new Set(["maverick-app-static-v2", "maverick-base-shell-v3"]);
-const SHELL_NAVIGATION_URL = __MAVERICK_NAVIGATION_FALLBACK_URL__;
+const LEGACY_STATIC_CACHE_NAMES = new Set(["loopino-app-static-v2", "loopino-base-shell-v3"]);
+const SHELL_NAVIGATION_URL = __LOOPINO_NAVIGATION_FALLBACK_URL__;
 const NAVIGATION_TIMEOUT_MS = 5_000;
 const PRECACHE_BY_URL = new Map(PRECACHE.map((record) => [record.url, record]));
 const IMMUTABLE_BY_URL = new Map(IMMUTABLE_SHELL_ASSETS.map((record) => [record.url, record]));
@@ -217,7 +217,7 @@ async function broadcast(message) {
 
 async function sendMetricToOneClient(metric) {
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
-  clients[0]?.postMessage({ type: "MAVERICK_PWA_METRIC", metric });
+  clients[0]?.postMessage({ type: "LOOPINO_PWA_METRIC", metric });
 }
 
 function emitMetric(metric) {
@@ -253,7 +253,7 @@ self.addEventListener("activate", (event) => {
           .map((key) => caches.delete(key)),
       );
       await self.clients.claim();
-      await broadcast({ type: "MAVERICK_SW_ACTIVATED", build_id: BUILD_ID });
+      await broadcast({ type: "LOOPINO_SW_ACTIVATED", build_id: BUILD_ID });
     })(),
   );
 });
@@ -284,25 +284,25 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("message", (event) => {
   const payload = event.data && typeof event.data === "object" ? event.data : {};
-  if (payload.type === "MAVERICK_SKIP_WAITING") {
+  if (payload.type === "LOOPINO_SKIP_WAITING") {
     event.waitUntil(self.skipWaiting());
     return;
   }
-  if (payload.type === "MAVERICK_GET_VERSION") {
-    event.source?.postMessage({ type: "MAVERICK_SW_VERSION", build_id: BUILD_ID });
+  if (payload.type === "LOOPINO_GET_VERSION") {
+    event.source?.postMessage({ type: "LOOPINO_SW_VERSION", build_id: BUILD_ID });
     return;
   }
-  if (payload.type === "MAVERICK_DISABLE") {
+  if (payload.type === "LOOPINO_DISABLE") {
     event.waitUntil(
       (async () => {
         await deleteKnownStaticCaches();
         await self.registration.unregister();
-        await broadcast({ type: "MAVERICK_SW_DISABLED", build_id: BUILD_ID });
+        await broadcast({ type: "LOOPINO_SW_DISABLED", build_id: BUILD_ID });
       })(),
     );
     return;
   }
-  if (payload.type === "MAVERICK_RECOVER") {
+  if (payload.type === "LOOPINO_RECOVER") {
     event.waitUntil(
       (async () => {
         try {
@@ -310,11 +310,11 @@ self.addEventListener("message", (event) => {
           // verified entries that still make the active shell usable.
           await recoverPrecache();
           await sendMetricToOneClient("pwa_sw_recovery");
-          await broadcast({ type: "MAVERICK_SW_RECOVERED", build_id: BUILD_ID });
+          await broadcast({ type: "LOOPINO_SW_RECOVERED", build_id: BUILD_ID });
         } catch {
           emitMetric("pwa_sw_error");
-          await broadcast({ type: "MAVERICK_SW_RECOVERY_FAILED", build_id: BUILD_ID });
-          throw new Error("Maverick static cache recovery failed.");
+          await broadcast({ type: "LOOPINO_SW_RECOVERY_FAILED", build_id: BUILD_ID });
+          throw new Error("Loopino static cache recovery failed.");
         }
       })(),
     );

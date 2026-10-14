@@ -73,7 +73,7 @@ class OpenRouterAgenticHttpTransport:
                 "Content-Type": "application/json",
                 "Accept": "text/event-stream",
                 "X-OpenRouter-Metadata": "enabled",
-                "User-Agent": "Maverick-Agentic-Runtime/1",
+                "User-Agent": "Loopino-Agentic-Runtime/1",
             },
         )
         response = None

@@ -1,4 +1,4 @@
-import type { RetryTelemetryEvent } from "@maverick/pwa-cache";
+import type { RetryTelemetryEvent } from "@loopino/pwa-cache";
 
 type Wait = { attempt: number; closed: boolean; startedAt: number };
 const MAX_READ_TRANSPORTS = 16;

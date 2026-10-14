@@ -1,7 +1,7 @@
 import { reportShellAuthorizationFailure } from "./shellAuthorization";
 import {
   DEFAULT_PWA_FILE_CACHE_MAX_ENTRY_BYTES,
-  MaverickFileHttpError,
+  LoopinoFileHttpError,
   PWA_FILE_CACHE_BROKER_ACCEPTED,
   PWA_FILE_CACHE_BROKER_OPEN,
   PWA_FILE_CACHE_BROKER_RESULT,
@@ -16,23 +16,23 @@ import {
   type FileCacheDescriptor,
   type FileCacheOpenRequest,
   type FileCacheOpenResult,
-  type MaverickDataClass,
+  type LoopinoDataClass,
   type ParentFileCacheAcceptedMessage,
   type ParentFileCacheOpenMessage,
   type ParentFileCacheResultMessage,
   type PwaFileCache,
   type FileCacheTelemetryEvent,
   type StorageQuotaAdapter,
-} from "@maverick/pwa-cache";
-import { MaverickHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
+} from "@loopino/pwa-cache";
+import { LoopinoHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
 import { shellRetryCoordinator } from "./pwaCacheRuntime";
 import { storageFileCacheFeatureEnabled } from "./pwa";
-import { isMaverickFrameMessage } from "./iframePolicy";
+import { isLoopinoFrameMessage } from "./iframePolicy";
 
-const DESCRIPTOR_SCHEMA = "maverick.storage-file-cache-descriptor.v1";
+const DESCRIPTOR_SCHEMA = "loopino.storage-file-cache-descriptor.v1";
 const MAX_SESSION_DESCRIPTORS = 128;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
-const DATA_CLASSES = new Set<MaverickDataClass>([
+const DATA_CLASSES = new Set<LoopinoDataClass>([
   "public",
   "workspace_internal_fake",
   "workspace_internal",
@@ -99,7 +99,7 @@ export class StorageFileCacheBroker {
   handleWindowMessage(event: MessageEvent, storageFrame: HTMLIFrameElement | null): boolean {
     const raw = messageRecord(event.data);
     if (raw?.type !== PWA_FILE_CACHE_BROKER_OPEN) return false;
-    if (!isMaverickFrameMessage(event, storageFrame)) return false;
+    if (!isLoopinoFrameMessage(event, storageFrame)) return false;
     if (!isParentFileCacheOpenMessage(event.data)) return true;
     const port = event.ports.length === 1 ? event.ports[0] : null;
     if (!port || this.disposed) return true;
@@ -172,7 +172,7 @@ export class StorageFileCacheBroker {
         try {
           payload = await this.resolveDescriptor(request, signal);
         } catch (error) {
-          if (error instanceof MaverickHttpError && (error.status === 401 || error.status === 403)) throw error;
+          if (error instanceof LoopinoHttpError && (error.status === 401 || error.status === 403)) throw error;
           descriptorUnavailable = isRetryableReadError(error);
         }
         resolved = sanitizeDescriptor(payload, request, this.hostOrigin);
@@ -210,7 +210,7 @@ export class StorageFileCacheBroker {
       } satisfies ParentFileCacheResultMessage);
       this.finish(request.request_id);
     } catch (error) {
-      if ((error instanceof MaverickFileHttpError || error instanceof MaverickHttpError)
+      if ((error instanceof LoopinoFileHttpError || error instanceof LoopinoHttpError)
           && (error.status === 401 || error.status === 403)) {
         this.featureWasExplicitlyDisabled = true;
         this.featureWasConfirmedEnabled = false;
@@ -272,7 +272,7 @@ function sanitizeDescriptor(
   const file = messageRecord(payload.file);
   if (!policy || !file
       || policy.policy_revision !== PWA_FILE_CACHE_POLICY_REVISION
-      || !DATA_CLASSES.has(policy.data_class as MaverickDataClass)
+      || !DATA_CLASSES.has(policy.data_class as LoopinoDataClass)
       || policy.provenance !== "attachment"
       || typeof policy.cache_approved !== "boolean"
       || typeof policy.privacy_approved !== "boolean"
@@ -292,7 +292,7 @@ function sanitizeDescriptor(
     descriptor: {
       cacheApproved: policy.cache_approved as boolean,
       contentType: file.content_type as string,
-      dataClass: policy.data_class as MaverickDataClass,
+      dataClass: policy.data_class as LoopinoDataClass,
       ...((file.expected_sha256 as string) ? { expectedSha256: file.expected_sha256 as string } : {}),
       fileId: request.file_id,
       privacyApproved: policy.privacy_approved as boolean,

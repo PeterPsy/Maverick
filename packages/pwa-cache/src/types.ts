@@ -1,7 +1,7 @@
-export const LOCAL_PERSISTENCE_POLICY_REVISION = "maverick.local-persistence-policy.v2";
+export const LOCAL_PERSISTENCE_POLICY_REVISION = "loopino.local-persistence-policy.v2";
 export const PWA_CACHE_ENTRY_SCHEMA_VERSION = 3;
 
-export type MaverickDataClass =
+export type LoopinoDataClass =
   | "public"
   | "workspace_internal_fake"
   | "workspace_internal"
@@ -11,7 +11,7 @@ export type MaverickDataClass =
   | "host_operational_metadata"
   | "unclassified";
 
-export type MaverickProvenance =
+export type LoopinoProvenance =
   | "platform_instruction"
   | "runtime_context"
   | "runtime_capabilities"
@@ -52,14 +52,14 @@ export type AccessLease = {
 export type ResourceCachePolicy<T> = {
   allowStale?: boolean;
   cacheApproved?: boolean;
-  dataClass: MaverickDataClass;
+  dataClass: LoopinoDataClass;
   expiryTtlMs: number;
   freshTtlMs: number;
   maxEntryBytes: number;
   maxScopeBytes: number;
   policyRevision: string;
   privacyApproved?: boolean;
-  provenance: MaverickProvenance;
+  provenance: LoopinoProvenance;
   regulatedAllowlisted?: boolean;
   revalidateOnRead?: "always" | "stale" | "never";
   schemaRevision: string;
@@ -69,14 +69,14 @@ export type ResourceCachePolicy<T> = {
 export type CacheEntryMetadata = CacheScope & {
   accessLeaseExpiresAt?: number;
   cachedAt: number;
-  dataClass: MaverickDataClass;
+  dataClass: LoopinoDataClass;
   entityId: string;
   etag?: string;
   expiresAt: number;
   key: string;
   lastAccessedAt: number;
   policy: "cache";
-  provenance: MaverickProvenance;
+  provenance: LoopinoProvenance;
   revision: string;
   schemaVersion: number;
   sizeBytes: number;

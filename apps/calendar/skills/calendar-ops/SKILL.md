@@ -1,19 +1,19 @@
 ---
 name: calendar-ops
-description: Use the Calendar app to inspect, create, move, and summarize workspace events through official Maverick surfaces.
+description: Use the Calendar app to inspect, create, move, and summarize workspace events through official Loopino surfaces.
 ---
 
 # Calendar Operations
 
 Use this skill when the user asks about workspace calendar events, availability, schedule summaries, or event references.
 
-Operate through Calendar's scoped MCP or CLI surfaces. Resolve the installed local app id first with `maverick apps list --json`; use `calendar` only when that is the workspace binding id.
+Operate through Calendar's scoped MCP or CLI surfaces. Resolve the installed local app id first with `loopino apps list --json`; use `calendar` only when that is the workspace binding id.
 
-- Discover MCP tools with `maverick app <calendar_app_id> mcp list --json`.
-- Inspect MCP schemas with `maverick app <calendar_app_id> mcp inspect <tool_name> --json`.
-- Invoke MCP tools with `maverick app <calendar_app_id> mcp call <tool_name> ...`.
-- Discover CLI commands with `maverick app <calendar_app_id> cli list --json`.
-- Invoke CLI commands with `maverick app <calendar_app_id> cli run calendar --json ...` or `maverick app <calendar_app_id> cli run calendar-reference --json ...`.
+- Discover MCP tools with `loopino app <calendar_app_id> mcp list --json`.
+- Inspect MCP schemas with `loopino app <calendar_app_id> mcp inspect <tool_name> --json`.
+- Invoke MCP tools with `loopino app <calendar_app_id> mcp call <tool_name> ...`.
+- Discover CLI commands with `loopino app <calendar_app_id> cli list --json`.
+- Invoke CLI commands with `loopino app <calendar_app_id> cli run calendar --json ...` or `loopino app <calendar_app_id> cli run calendar-reference --json ...`.
 
 Do not read or write `data/calendar/state.json` directly. Calendar owns its storage and validates through its app surfaces.
 

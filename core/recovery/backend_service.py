@@ -43,7 +43,7 @@ class BackendServiceRestartResult:
 
 def restart_backend_service(
     *,
-    service_name: str = "maverick-core.service",
+    service_name: str = "loopino-core.service",
     health_url: str = "http://127.0.0.1:8014/health",
     process_runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     process_killer: Callable[[int, int], None] = os.kill,

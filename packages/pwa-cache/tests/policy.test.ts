@@ -5,12 +5,12 @@ import {
   clampPrivateAccessLease,
   deriveLocalPersistencePolicy,
   isAgenticControlPlaneResource,
-  type MaverickDataClass,
+  type LoopinoDataClass,
   type ResourceCachePolicy,
 } from "../src";
 import { cacheEntryKey, validatePrincipal, validatedPayloadSize } from "../src/testing";
 
-function policy(dataClass: MaverickDataClass, overrides: Partial<ResourceCachePolicy<unknown>> = {}): ResourceCachePolicy<unknown> {
+function policy(dataClass: LoopinoDataClass, overrides: Partial<ResourceCachePolicy<unknown>> = {}): ResourceCachePolicy<unknown> {
   return {
     dataClass,
     expiryTtlMs: 60_000,
@@ -137,7 +137,7 @@ describe("persistent payload guard", () => {
     expect(() => validatedPayloadSize({ github_token: "secret" })).toThrow(/credential-like/);
     expect(() => validatedPayloadSize({ href: "https://example.test/callback?access_token=secret" })).toThrow(/signed URL|credential/i);
     expect(() => validatedPayloadSize({ href: "https://files.test/a?X-Amz-Signature=secret" })).toThrow(/signed URL/);
-    expect(() => validatedPayloadSize({ href: "blob:https://maverick.test/id" })).toThrow(/object or signed URL/);
+    expect(() => validatedPayloadSize({ href: "blob:https://loopino.test/id" })).toThrow(/object or signed URL/);
     expect(() => validatedPayloadSize({ when: new Date() })).toThrow(/plain objects/);
     expect(() => validatedPayloadSize({ content: "Bearer private-token" })).toThrow(/credential-like/);
   });
@@ -147,8 +147,8 @@ describe("persistent payload guard", () => {
       "https://user:password@example.test/private",
       "access_token=private-token",
       "prefix ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij suffix",
-      "  BLOB:https://maverick.test/object-id  ",
-      "\tblob :https://maverick.test/object-id",
+      "  BLOB:https://loopino.test/object-id  ",
+      "\tblob :https://loopino.test/object-id",
     ]) {
       expect(() => validatedPayloadSize({ value })).toThrow(/credential|object|signed URL/i);
     }

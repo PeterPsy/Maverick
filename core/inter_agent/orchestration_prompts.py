@@ -32,7 +32,7 @@ def planning_prompt(
 ) -> str:
     catalog = _catalog_block(available_agent_types, planner_catalog_page)
     return (
-        "You are the sole orchestrator of a Maverick Agent nodes run. Produce only one JSON object: either a "
+        "You are the sole orchestrator of a Loopino Agent nodes run. Produce only one JSON object: either a "
         "bounded lookup-only catalog_lookup request using advertised cursors/scopes or an agent prefix, or a plan "
         "with summary and tasks. "
         'Each task requires id, label, role, objective, depends_on and may select agent_type_id '

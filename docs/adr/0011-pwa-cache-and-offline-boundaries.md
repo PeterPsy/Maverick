@@ -18,7 +18,7 @@ outbox until their later milestone gates and feature flags are complete.
 
 ## Context
 
-Maverick is online-first. Browser HTTP caching already helps some hashed
+Loopino is online-first. Browser HTTP caching already helps some hashed
 bundles, while the current service worker caches only selected Base Shell
 assets and cannot reopen a navigation offline. App data remains server-owned,
 and existing browser caches are app-specific and lack a shared scope, quota,
@@ -39,7 +39,7 @@ egress decision, confirmation, or mutation.
 | Root service worker, offline shell, connectivity UI, cleanup coordination | Base Shell | One platform shell lifecycle |
 | Record schema, revision, sanitization, TTL, and invalidation | Owning app | No cross-app cache reads |
 | File pin UX and stable Storage references | Storage | Opt-in file availability only |
-| Shared browser primitives | `@maverick/pwa-cache` | Technical scoped stores, quota, LRU, OPFS, cleanup |
+| Shared browser primitives | `@loopino/pwa-cache` | Technical scoped stores, quota, LRU, OPFS, cleanup |
 
 The shared SDK will live at `packages/pwa-cache/` beginning in M3. It will be a
 framework-neutral ESM package built and versioned independently, consumed by
@@ -63,7 +63,7 @@ retain the exact shell fallback corresponding to its build.
 
 ### 3. Local persistence policy v1 derives from canonical classification
 
-The policy revision is `maverick.local-persistence-policy.v1`. It consumes the
+The policy revision is `loopino.local-persistence-policy.v1`. It consumes the
 existing canonical `RuntimeDataClass` value; it does not rename or replace that
 classification.
 
@@ -135,24 +135,24 @@ are not described as persistent offline storage.
 
 | Environment variable | Default | Purpose |
 |---|---:|---|
-| `MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2` | on | Offline shell/static cache; immediate kill switch |
-| `MAVERICK_FEATURE_PWA_DATA_CACHE` | off | Global private read-model gate |
-| `MAVERICK_FEATURE_PWA_APP_CACHE_<APP_ID>` | off | Per-app gate, subordinate to the global gate |
-| `MAVERICK_FEATURE_PWA_STORAGE_OFFLINE_FILES` | off | Storage opt-in file gate |
-| `MAVERICK_FEATURE_PWA_OFFLINE_OUTBOX` | off | Future write gate |
+| `LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2` | on | Offline shell/static cache; immediate kill switch |
+| `LOOPINO_FEATURE_PWA_DATA_CACHE` | off | Global private read-model gate |
+| `LOOPINO_FEATURE_PWA_APP_CACHE_<APP_ID>` | off | Per-app gate, subordinate to the global gate |
+| `LOOPINO_FEATURE_PWA_STORAGE_OFFLINE_FILES` | off | Storage opt-in file gate |
+| `LOOPINO_FEATURE_PWA_OFFLINE_OUTBOX` | off | Future write gate |
 
 Accepted true values are `1`, `true`, `yes`, and `on`; accepted false values
 are `0`, `false`, `no`, and `off`. Invalid values disable the surface. The
 public, `no-store` `/api/pwa/config` response exposes only browser-safe effective
 state. Disabling worker v2 makes clients unregister it and clean only known
-Maverick static caches; it cannot erase unrelated Cache API entries or any
+Loopino static caches; it cannot erase unrelated Cache API entries or any
 future IndexedDB/OPFS data.
 
 ### 7. Product and connectivity contracts are narrow
 
 Approved description:
 
-> Maverick è offline-aware e supporta consultazione e preparazione locale
+> Loopino è offline-aware e supporta consultazione e preparazione locale
 > selettiva; l'esecuzione agentica richiede la rete.
 
 M2 must not use an unqualified “offline capable” claim. One global Offline
@@ -160,7 +160,7 @@ indicator replaces the current-app icon in the top-left sidebar slot. The same
 slot is used in expanded and rail-only layouts; no duplicate main-area banner
 or persistent toast is allowed. The control exposes last successful sync and
 opens local-content management. `navigator.onLine` may report loss, but a
-successful fresh Maverick request is required to restore Online state.
+successful fresh Loopino request is required to restore Online state.
 
 Remote mutations, prompts, models, agents, and tools are not actionable while
 offline. App-specific inline explanations are allowed and do not become a

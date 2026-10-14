@@ -37,7 +37,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -53,8 +53,8 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": "",
-            "HTTP_HOST": "maverick.localhost",
-            "HTTP_ORIGIN": "http://maverick.localhost",
+            "HTTP_HOST": "loopino.localhost",
+            "HTTP_ORIGIN": "http://loopino.localhost",
             "wsgi.url_scheme": "http",
             "wsgi.input": BytesIO(payload),
         }
@@ -75,8 +75,8 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -802,14 +802,14 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         while not any(message.get("type") == "websocket.accept" for message in sent):
             await asyncio.sleep(0)
 
-        bus.publish({"type": "maverick.app.data-changed", "owner_app_id": "sample-app", "resource": "records"})
-        while not any("maverick.app.data-changed" in message.get("text", "") for message in sent):
+        bus.publish({"type": "loopino.app.data-changed", "owner_app_id": "sample-app", "resource": "records"})
+        while not any("loopino.app.data-changed" in message.get("text", "") for message in sent):
             await asyncio.sleep(0)
         await receive_queue.put({"type": "websocket.disconnect"})
         await stream_task
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
-        self.assertEqual(frames, [{"type": "maverick.app.data-changed", "owner_app_id": "sample-app", "resource": "records"}])
+        self.assertEqual(frames, [{"type": "loopino.app.data-changed", "owner_app_id": "sample-app", "resource": "records"}])
 
     async def test_runtime_websocket_exits_when_host_shutdown_begins(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

@@ -124,7 +124,7 @@ class ModelAccessCliSandboxTests(unittest.TestCase):
             with (
                 patch.dict(
                     os.environ,
-                    {"MAVERICK_MODEL_ACCESS_CODEX_HOME": str(source_home)},
+                    {"LOOPINO_MODEL_ACCESS_CODEX_HOME": str(source_home)},
                     clear=False,
                 ),
                 patch.object(cli_sandbox, "_atomic_private_write", side_effect=observed_write),
@@ -198,7 +198,7 @@ class ModelAccessCliSandboxTests(unittest.TestCase):
             with (
                 patch.dict(
                     os.environ,
-                    {"MAVERICK_MODEL_ACCESS_CODEX_HOME": str(source_home)},
+                    {"LOOPINO_MODEL_ACCESS_CODEX_HOME": str(source_home)},
                     clear=False,
                 ),
                 cli_sandbox.codex_home_lock(shared_home),

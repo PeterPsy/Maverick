@@ -9,7 +9,7 @@ from .policy import domain_name, identifier
 
 
 def public_domain(installation_domain):
-    """Operator-attested Maverick hostname, never a browser Host/frame origin."""
+    """Operator-attested Loopino hostname, never a browser Host/frame origin."""
     import ipaddress
     hostname = domain_name(installation_domain)
     try:

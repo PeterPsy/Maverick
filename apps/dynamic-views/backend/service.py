@@ -22,9 +22,9 @@ REFERENCE_MANIFEST = {
 
 def app_events_for_action(action: str) -> list[dict]:
     if action in {"create", "delete"}:
-        return [{"type": "maverick.app.data-changed", "resource": "views"}]
+        return [{"type": "loopino.app.data-changed", "resource": "views"}]
     if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
-        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+        return [{"type": "loopino.app.data-changed", "resource": "view-state"}]
     return []
 
 

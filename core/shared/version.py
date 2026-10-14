@@ -1,4 +1,4 @@
-"""Version helpers for the Maverick repository."""
+"""Version helpers for the Loopino repository."""
 
 from __future__ import annotations
 

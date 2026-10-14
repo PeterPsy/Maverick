@@ -50,9 +50,9 @@ REFERENCE_MANIFEST = {
 
 def app_events_for_action(action: str) -> list[dict]:
     if action in {"generate_document", "convert_to_markdown", "patch_pdf_text", "modify_uploaded_document", "spreadsheet.transform"}:
-        return [{"type": "maverick.app.data-changed", "resource": "documents"}]
+        return [{"type": "loopino.app.data-changed", "resource": "documents"}]
     if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
-        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+        return [{"type": "loopino.app.data-changed", "resource": "view-state"}]
     return []
 
 

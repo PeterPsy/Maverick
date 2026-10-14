@@ -27,7 +27,7 @@ from core.workspaces.models import (
 
 
 WORKSPACE_EXPORT_SCHEMA_VERSION = "2"
-DEFAULT_EXPORT_EXCLUDED_PREFIXES = ("logs/", "runtime/", "tmp/", ".maverick/")
+DEFAULT_EXPORT_EXCLUDED_PREFIXES = ("logs/", "runtime/", "tmp/", ".loopino/")
 DEFAULT_EXPORT_EXCLUDED_SEGMENTS = {"cache", "caches", ".cache", "__pycache__"}
 DEFAULT_EXPORT_EXCLUDED_NAMES = {
     ".env",

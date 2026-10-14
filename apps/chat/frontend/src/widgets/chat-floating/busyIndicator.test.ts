@@ -16,7 +16,7 @@ describe("floating chat busy indicator", () => {
     const source = readFileSync(resolve(currentDir, "../../App.tsx"), "utf8");
 
     expect(source).not.toContain("activeTurnThreadAvailability");
-    expect(source).not.toContain('type: "maverick.chat.thread-availability-changed"');
+    expect(source).not.toContain('type: "loopino.chat.thread-availability-changed"');
   });
 
   it("marks the collapsed launcher busy when its active thread is running", () => {
@@ -29,7 +29,7 @@ describe("floating chat busy indicator", () => {
     expect(launcherSource).toContain("aria-busy={isActiveThreadBusy || undefined}");
     expect(launcherSource).toContain('isActiveThreadBusy ? "is-busy" : ""');
     expect(launcherSource).toContain("isActiveThreadBusy ? <BusyChatGlow /> : null");
-    expect(hookSource).not.toContain('payload.type === "maverick.chat.thread-availability-changed"');
+    expect(hookSource).not.toContain('payload.type === "loopino.chat.thread-availability-changed"');
   });
 
   it("round-trips persisted draft window state", () => {

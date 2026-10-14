@@ -1,4 +1,4 @@
-import { displayFields, displayList, displayRecord, displayStrings } from '@maverick/pwa-cache';
+import { displayFields, displayList, displayRecord, displayStrings } from '@loopino/pwa-cache';
 import type { CalendarEventPayload, CalendarRemoteCalendarPayload } from './types';
 
 export type CalendarReadModel = { events: CalendarEventPayload[]; calendars: CalendarRemoteCalendarPayload[]; has_more: boolean };

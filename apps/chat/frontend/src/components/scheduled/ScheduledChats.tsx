@@ -18,7 +18,7 @@ export default function ScheduledChats({ chatId, createNew = false, onNavigate }
   const creationId = useRef(crypto.randomUUID());
   const deleteDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: "chat" }, "*");
+    window.parent?.postMessage({ type: "loopino.app.ready", app_id: "chat" }, "*");
   }, []);
   useEffect(() => { if (deleting) deleteDialog.current?.showModal(); }, [deleting]);
   useEffect(() => {

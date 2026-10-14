@@ -35,9 +35,9 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -117,9 +117,9 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -160,7 +160,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 "workspace_profile_binding_id": binding.binding_id,
                 "reasoning_effort": "max",
                 "device_use_activation_id": activation["activation_id"],
-                "system_prompt": "Use Maverick app surfaces and the Mac",
+                "system_prompt": "Use Loopino app surfaces and the Mac",
                 "skill_activation_mode": "implicit",
                 "project_id": "mac-project",
             }
@@ -184,7 +184,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             self.assertEqual(session["execution_binding"]["reasoning_effort"], "max")
             self.assertEqual(session["requested_mode"], "full-access")
             self.assertEqual(session["effective_mode"], "full-access")
-            self.assertEqual(session["system_prompt"], "Use Maverick app surfaces and the Mac")
+            self.assertEqual(session["system_prompt"], "Use Loopino app surfaces and the Mac")
             self.assertEqual(session["skill_ids"], [])
             self.assertEqual(session["skill_activation_mode"], "implicit")
             self.assertEqual(session["project_id"], "mac-project")
@@ -219,11 +219,11 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
-                    "MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME": "1",
-                    "MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW": "1",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
+                    "LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME": "1",
+                    "LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW": "1",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
@@ -304,11 +304,11 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
-                    "MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME": "1",
-                    "MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW": "1",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
+                    "LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME": "1",
+                    "LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW": "1",
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)

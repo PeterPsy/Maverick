@@ -69,7 +69,7 @@ describe("nested widget frame launch", () => {
     const launch = validateNestedWidgetLaunch(validPayload(), widget, parentOrigin, contextToken);
     const message = (overrides: Record<string, unknown> = {}, origin = launch.origin, source = frame.contentWindow) => new MessageEvent("message", {
       data: {
-        type: "maverick.app-frame.loaded",
+        type: "loopino.app-frame.loaded",
         owner_app_id: "storage",
         widget_id: "file-preview",
         ...overrides,
@@ -88,7 +88,7 @@ describe("nested widget frame launch", () => {
 
 function validPayload() {
   return {
-    bootstrap_url: "https://storage-widget.example/.well-known/maverick-app-frame-bootstrap",
+    bootstrap_url: "https://storage-widget.example/.well-known/loopino-app-frame-bootstrap",
     bootstrap_transport: "cors",
     expires_in_seconds: 60,
     frontend_url: "https://storage-widget.example/api/apps/widgets/storage/file-preview/frontend/#context=signed-context",

@@ -1,4 +1,4 @@
-import { isExactMaverickParentMessage, startMaverickReferencePointerDrag } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage, startLoopinoReferencePointerDrag } from '@loopino/pwa-cache';
 import {
   STORAGE_FILE_DRAG_DATA_TYPE, STORAGE_FOLDER_DRAG_DATA_TYPE, STORAGE_SELECTION_DRAG_DATA_TYPE,
   STORAGE_DRIVE_FILE_DRAG_DATA_TYPE, STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE,
@@ -51,7 +51,7 @@ export function installStoragePointerDrags(ownerAppId: string): () => void {
     const button = event.target.closest('button');
     if (!row || (button && !button.matches(OPEN_BUTTON_SELECTOR))) return;
     let started = false;
-    cleanup = startMaverickReferencePointerDrag(event, row, () => {
+    cleanup = startLoopinoReferencePointerDrag(event, row, () => {
       const data = new DataTransfer();
       const start = new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: data });
       buildingPayload = true;
@@ -76,16 +76,16 @@ export function installStoragePointerDrags(ownerAppId: string): () => void {
     if (cleanup && !buildingPayload) { event.preventDefault(); event.stopImmediatePropagation(); }
   }
   function onMessage(event: MessageEvent) {
-    if (!isExactMaverickParentMessage(event)) return;
+    if (!isExactLoopinoParentMessage(event)) return;
     const message = event.data;
-    if (message?.type === 'maverick.reference-drag.leave') { leave(); return; }
-    if (!['maverick.reference-drag.over', 'maverick.reference-drag.drop'].includes(message?.type)) return;
+    if (message?.type === 'loopino.reference-drag.leave') { leave(); return; }
+    if (!['loopino.reference-drag.over', 'loopino.reference-drag.drop'].includes(message?.type)) return;
     const { x, y, transfer } = message;
     if (!Number.isFinite(x) || !Number.isFinite(y) || typeof transfer?.type !== 'string' || typeof transfer.data !== 'string') return;
     const data = storagePointerDropData(transfer, ownerAppId);
     const target = document.elementFromPoint(x, y);
     if (!data || !target?.closest('.storage-shell, .storage-sidebar-widget')) { leave(); return; }
-    if (message.type === 'maverick.reference-drag.over') {
+    if (message.type === 'loopino.reference-drag.over') {
       if (hoverTarget !== target) {
         leave();
         target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: data, clientX: x, clientY: y }));

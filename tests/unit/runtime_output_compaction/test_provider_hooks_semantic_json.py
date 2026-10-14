@@ -15,7 +15,7 @@ class ProviderHookSemanticJsonCompactionTest(unittest.TestCase):
         for index in range(8):
             node_id = f"node_prompt_review_{index}"
             body_text = (
-                f"Preferenza prompt review iOS Maverick item {index}: preserve semantic detail. "
+                f"Preferenza prompt review iOS Loopino item {index}: preserve semantic detail. "
                 + ("Verbose body filler. " * 600)
             )
             items.append(
@@ -24,14 +24,14 @@ class ProviderHookSemanticJsonCompactionTest(unittest.TestCase):
                     "id": node_id,
                     "node_id": node_id,
                     "type": "fact",
-                    "title": f"Preferenza prompt review iOS Maverick {index}",
+                    "title": f"Preferenza prompt review iOS Loopino {index}",
                     "summary": f"Prompt review preference summary {index}.",
                     "body_text": body_text,
                     "node": {
                         "id": node_id,
                         "node_id": node_id,
                         "type": "fact",
-                        "title": f"Preferenza prompt review iOS Maverick {index}",
+                        "title": f"Preferenza prompt review iOS Loopino {index}",
                         "summary": f"Prompt review preference summary {index}.",
                         "body_text": body_text,
                     },
@@ -62,7 +62,7 @@ class ProviderHookSemanticJsonCompactionTest(unittest.TestCase):
         memory_json = json.dumps(
             {
                 "status_code": 200,
-                "query": "Preferenza prompt review iOS Maverick",
+                "query": "Preferenza prompt review iOS Loopino",
                 "items": items,
             }
         )
@@ -73,8 +73,8 @@ class ProviderHookSemanticJsonCompactionTest(unittest.TestCase):
                 "tool_name": "Bash",
                 "tool_input": {
                     "command": (
-                        "maverick app memory cli run memory --action context "
-                        "--query 'Preferenza prompt review iOS Maverick' --limit 8 --json"
+                        "loopino app memory cli run memory --action context "
+                        "--query 'Preferenza prompt review iOS Loopino' --limit 8 --json"
                     )
                 },
                 "tool_response": {"stdout": memory_json, "stderr": "", "exit_code": 0},
@@ -91,7 +91,7 @@ class ProviderHookSemanticJsonCompactionTest(unittest.TestCase):
         reason = response["response"]["reason"]
         self.assertIn("[tool output compacted]", reason)
         self.assertIn("semantic json payload", reason)
-        self.assertIn("Preferenza prompt review iOS Maverick 4", reason)
+        self.assertIn("Preferenza prompt review iOS Loopino 4", reason)
         self.assertIn("node_prompt_review_4", reason)
         self.assertIn("body_text_char_count", reason)
         self.assertIn("body_markdown_char_count", reason)

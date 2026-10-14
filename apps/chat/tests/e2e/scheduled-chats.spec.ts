@@ -100,7 +100,7 @@ test("refreshes an open inspector after AI edits and preserves the new skills on
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   state.chats[0].graph.nodes[0].skill_ids = ["ai-skill", "review"];
   state.chats[0].revision++;
-  await page.evaluate(() => window.postMessage({ type: "maverick.app.data-changed", owner_app_id: "chat", resource: "scheduled-chats" }, window.location.origin));
+  await page.evaluate(() => window.postMessage({ type: "loopino.app.data-changed", owner_app_id: "chat", resource: "scheduled-chats" }, window.location.origin));
   await expect(skills).toHaveValue("ai-skill, review");
   await skills.press("End");
   await skills.pressSequentially(", planning");
@@ -123,17 +123,17 @@ test("opens a work conversation from the schedule and returns without losing nav
   await installMocks(page);
   await page.goto("/apps/chat/?app_page=scheduled/schedule-1");
   await expect(page.locator(".scheduled-workspace")).toBeVisible();
-  await page.evaluate(() => window.postMessage({ type: "maverick.app.navigate", app_id: "chat", params: { app_page: "threads/management-chat" } }, window.location.origin));
+  await page.evaluate(() => window.postMessage({ type: "loopino.app.navigate", app_id: "chat", params: { app_page: "threads/management-chat" } }, window.location.origin));
   await expect(page.locator(".scheduled-workspace")).toHaveCount(0);
   await expect(page.locator(".chatapp-composer [role=textbox]")).toBeEditable();
   await expect(page.getByRole("button", { name: "Model: Codex", exact: true })).toBeDisabled();
-  await page.evaluate(() => window.postMessage({ type: "maverick.app.navigate", app_id: "chat", params: { app_page: "scheduled/schedule-1" } }, window.location.origin));
+  await page.evaluate(() => window.postMessage({ type: "loopino.app.navigate", app_id: "chat", params: { app_page: "scheduled/schedule-1" } }, window.location.origin));
   await expect(page.locator(".scheduled-workspace")).toBeVisible();
 });
 
 test("keeps search, pause filters and settings focus usable in light mode", async ({ page }) => {
   await installMocks(page);
-  await page.goto("/apps/chat/?app_page=scheduled&maverick_theme=light");
+  await page.goto("/apps/chat/?app_page=scheduled&loopino_theme=light");
   await page.getByRole("button", { name: "Actions for Daily brief" }).click();
   await page.getByRole("menuitem", { name: "Pause", exact: true }).click();
   await page.getByRole("tab", { name: "Paused", exact: true }).click();
@@ -155,7 +155,7 @@ test("opens task creation directly, cancels to the list and saves to the graph",
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Scheduled tasks", exact: true })).toBeVisible();
-  await page.evaluate(() => window.postMessage({ type: "maverick.app.navigate", app_id: "chat", params: { app_page: "scheduled/create/new" } }, window.location.origin));
+  await page.evaluate(() => window.postMessage({ type: "loopino.app.navigate", app_id: "chat", params: { app_page: "scheduled/create/new" } }, window.location.origin));
   await page.getByLabel("Title", { exact: true }).fill("Task from sidebar");
   await page.getByLabel("What should the agent do?").fill("Review the calendar.");
   await page.getByRole("button", { name: "Create", exact: true }).last().click();
@@ -168,7 +168,7 @@ for (const theme of ["dark", "light"]) {
     const state = await installMocks(page);
     state.chats = Array.from({ length: 18 }, (_, index) => ({ ...fixture(), id: `task-${index}`, title: `Task ${index + 1}`, status: index < 12 ? "active" : "paused" }));
     await page.setViewportSize({ width: 320, height: 700 });
-    await page.route("**/sidebar-test", route => route.fulfill({ contentType: "text/html", body: `<html style="color-scheme:${theme}"><body style="margin:0;background:${theme === "dark" ? "#171719" : "#edf0f4"}"><iframe title="Chat sidebar" src="/apps/chat/widgets/chat-sidebar/index.html?maverick_theme=${theme}" style="width:100vw;height:100vh;border:0"></iframe><script>window.messages=[];window.addEventListener('message',event=>window.messages.push(event.data));</script></body></html>` }));
+    await page.route("**/sidebar-test", route => route.fulfill({ contentType: "text/html", body: `<html style="color-scheme:${theme}"><body style="margin:0;background:${theme === "dark" ? "#171719" : "#edf0f4"}"><iframe title="Chat sidebar" src="/apps/chat/widgets/chat-sidebar/index.html?loopino_theme=${theme}" style="width:100vw;height:100vh;border:0"></iframe><script>window.messages=[];window.addEventListener('message',event=>window.messages.push(event.data));</script></body></html>` }));
     await page.goto("/sidebar-test");
     const sidebar = page.frameLocator('iframe[title="Chat sidebar"]');
     const chats = sidebar.getByRole("region", { name: "Chats", exact: true });
@@ -198,9 +198,9 @@ for (const theme of ["dark", "light"]) {
     await expect(tasks.getByRole("textbox")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await tasks.getByRole("button", { name: "New scheduled task" }).click();
-    await expect.poll(() => page.evaluate(() => (window as unknown as { messages: { type: string; params?: { app_page: string; new_chat?: boolean } }[] }).messages.some(message => message.type === "maverick.widget.open-app" && message.params?.app_page === "scheduled/create/new" && !message.params.new_chat))).toBe(true);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { messages: { type: string; params?: { app_page: string; new_chat?: boolean } }[] }).messages.some(message => message.type === "loopino.widget.open-app" && message.params?.app_page === "scheduled/create/new" && !message.params.new_chat))).toBe(true);
     await tasks.getByRole("button", { name: "Manage scheduled tasks" }).click();
-    await expect.poll(() => page.evaluate(() => (window as unknown as { messages: { type: string; params?: { app_page: string } }[] }).messages.some(message => message.type === "maverick.widget.open-app" && message.params?.app_page === "scheduled"))).toBe(true);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { messages: { type: string; params?: { app_page: string } }[] }).messages.some(message => message.type === "loopino.widget.open-app" && message.params?.app_page === "scheduled"))).toBe(true);
     expect(await tasks.evaluate(element => element.ownerDocument.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.screenshot({ path: `/tmp/scheduled-tasks-sidebar-${theme}.png` });
   });
@@ -226,7 +226,7 @@ for (const width of [1440, 390, 320]) {
     await page.getByRole("button", { name: "Close block details" }).click();
     await page.evaluate(() => {
       const data = new DataTransfer();
-      data.setData("application/x-maverick-scheduled-chat", JSON.stringify({ owner_app_id: "chat", id: "schedule-1", title: "Daily brief" }));
+      data.setData("application/x-loopino-scheduled-chat", JSON.stringify({ owner_app_id: "chat", id: "schedule-1", title: "Daily brief" }));
       document.querySelector(".scheduled-composer")!.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: data }));
     });
     await expect(editor).toContainText("Daily brief");

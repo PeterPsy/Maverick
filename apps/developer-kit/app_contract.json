@@ -3,8 +3,8 @@
   "contract_version": "1.0",
   "name": "Developer Kit",
   "version": "0.1.0",
-  "description": "Official Maverick app SDK developer UI for creating, validating, and managing workspace-local apps.",
-  "publisher": "maverick",
+  "description": "Official Loopino app SDK developer UI for creating, validating, and managing workspace-local apps.",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

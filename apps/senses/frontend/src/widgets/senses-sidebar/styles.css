@@ -17,7 +17,7 @@ body,
 body {
   background: transparent;
   color: var(--senses-text);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
 }
 
 button,

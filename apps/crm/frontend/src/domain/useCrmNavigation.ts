@@ -20,7 +20,7 @@ export function useCrmNavigation() {
     if (isPublicCrm) { location.hash = page; return; }
     const requestId = crypto.randomUUID();
     pending.current.add(requestId);
-    if (!postToShell({ type: 'maverick.app.open-app', app_id: 'crm', params: { app_page: page, crm_navigation_id: requestId } })) {
+    if (!postToShell({ type: 'loopino.app.open-app', app_id: 'crm', params: { app_page: page, crm_navigation_id: requestId } })) {
       pending.current.delete(requestId);
     }
     // Navigation can be superseded before delivery. Never retain an unbounded log.

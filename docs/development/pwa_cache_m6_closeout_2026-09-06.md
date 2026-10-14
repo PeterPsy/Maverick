@@ -61,7 +61,7 @@ del rapporto precedente, né una prova fisica o un drill operativo.
 Usare la [matrice candidate-bound](pwa_cache_website_concurrency_device_matrix_2026-09-06.json)
 come template, conservando lo storico pending. La copia compilabile tramite
 Storage è prevista in
-`storage/generated/development/maverick-pwa-m6-device-evidence.json`, ma non è
+`storage/generated/development/loopino-pwa-m6-device-evidence.json`, ma non è
 ancora pubblicata: vedere il blocco di accesso in fondo a questa scheda.
 Non cambiare `release_id` per riutilizzare risultati di un'altra build.
 
@@ -97,7 +97,7 @@ non riempire il disco del dispositivo o cancellare l'intera origine.
 | `cold-launch` | Primo avvio con rete nel contenitore di test vuoto; login, shell normale, app e letture valide. Verificare worker/precache del manifest e assenza di UI offline o authority da cache. |
 | `warm-launch` | Scaldare le letture delle otto app e il file approvato; chiudere e riaprire lo stesso contenitore. Verificare cache hit eleggibili, lease/expiry e normale percorso server-first per miss o risorse escluse. Non richiedere login o autorizzazioni offline. |
 | `worker-update` | Sul solo host di collaudo seguire il drill A→B del runbook worker: due client, install interrotta, A preservata, ripristino e attivazione B. B deve essere il candidato esatto. Registrare separatamente identità del predecessore; se A e B hanno lo stesso worker/build id non è un test di update. |
-| `worker-recovery` | Sul cache statico posseduto rimuovere/corrompere una sola entry; recovery senza rete deve fallire preservando le altre entry verificate; con rete deve restituire `MAVERICK_SW_RECOVERED` e ripristinare il precache. |
+| `worker-recovery` | Sul cache statico posseduto rimuovere/corrompere una sola entry; recovery senza rete deve fallire preservando le altre entry verificate; con rete deve restituire `LOOPINO_SW_RECOVERED` e ripristinare il precache. |
 | `quota-pressure` | Con fixture sintetiche e limiti concordati esercitare pressione/LRU e percorso di mancata persistenza nel browser reale, per dati e file. La risposta server valida deve restare visibile, l'eviction bounded e la UI normale. Registrare il metodo; non chiamare una semplice navigazione una prova di quota. Se la pressione non è stata esercitata, lasciare pending. |
 | `intermittent-network` | Scaldare, interrompere e ripristinare trasporto durante letture; tree/iframe restano, miss in loading normale, retry bounded/cancellabile. Cambiare dati sintetici A→B durante l'interruzione e verificare recovery anche senza richiesta pendente; Website Studio deve aggiornare la route corrente e quelle già calde. Nessun invio differito o duplicato. |
 | `logout-cleanup` | Con dati/file caldi e una lettura pendente fare logout; UI autenticata ritirata subito, pending cancellati, cleanup durevole completato. Un altro login non vede A; una vecchia risposta tardiva non ripubblica. Un cleanup `pending` non passa. |
@@ -202,11 +202,11 @@ attivo, non soltanto con mock o unit test. Conservare tutti gli orari e gli esit
 3. Provare anche lo stop cohort con una percentuale a zero, quindi il kill switch
    globale dati per il caso multi-app; verificare config e server-first dopo
    ogni restart/reload. Non riabilitare altre cohort per errore.
-4. Disabilitare separatamente `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE`; verificare
+4. Disabilitare separatamente `LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE`; verificare
    fetch/preview server-first del file e che il rollback non richieda la sua
    cancellazione sul server o una pulizia immediata di tutti i byte locali.
 5. Provare il kill switch worker come nel runbook: disabilitare
-   `MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2`, health e load con rete. Unregister
+   `LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2`, health e load con rete. Unregister
    `/sw.js` e rimozione dei soli tre namespace statici posseduti; IndexedDB,
    OPFS e sentinel estranee preservate. Config irraggiungibile non equivale a off.
 6. Nello scope di prova eseguire anche Settings → Clear cache: risultato complete,
@@ -240,7 +240,7 @@ e nessuna riga fisica, cohort o drill è dichiarata passata.
 ### Pubblicazione e sincronizzazione ancora da eseguire
 
 La creazione della copia operativa in
-`storage/generated/development/maverick-pwa-cache-m6-closeout.md` è stata
+`storage/generated/development/loopino-pwa-cache-m6-closeout.md` è stata
 rifiutata dalla superficie ufficiale con `authentication_required`; anche i
 successivi controlli read-only Core e Storage restituiscono lo stesso errore.
 Nessun file Storage è stato creato da questa preparazione e il piano non è

@@ -21,7 +21,7 @@ class HttpRequestBodyTestCase(unittest.TestCase):
             "wsgi.input": BytesIO(b"{}"),
         }
 
-        with patch.dict("os.environ", {"MAVERICK_MAX_JSON_BODY_BYTES": "10"}):
+        with patch.dict("os.environ", {"LOOPINO_MAX_JSON_BODY_BYTES": "10"}):
             with self.assertRaises(HttpRequestError) as raised:
                 read_json_body(environ)
 
@@ -74,7 +74,7 @@ class HttpRequestBodyTestCase(unittest.TestCase):
     def test_cross_origin_unsafe_request_is_forbidden(self) -> None:
         environ = {
             "REQUEST_METHOD": "POST",
-            "HTTP_HOST": "maverick.example",
+            "HTTP_HOST": "loopino.example",
             "HTTP_ORIGIN": "https://evil.example",
         }
 
@@ -87,8 +87,8 @@ class HttpRequestBodyTestCase(unittest.TestCase):
     def test_cookie_authenticated_unsafe_request_requires_same_origin_proof(self) -> None:
         environ = {
             "REQUEST_METHOD": "POST",
-            "HTTP_HOST": "maverick.example",
-            "HTTP_COOKIE": "maverick_session=session-1",
+            "HTTP_HOST": "loopino.example",
+            "HTTP_COOKIE": "loopino_session=session-1",
         }
 
         with self.assertRaises(HttpRequestError) as raised:
@@ -101,8 +101,8 @@ class HttpRequestBodyTestCase(unittest.TestCase):
         enforce_same_origin_for_unsafe_request(
             {
                 "REQUEST_METHOD": "POST",
-                "HTTP_HOST": "maverick.example",
-                "HTTP_ORIGIN": "https://maverick.example",
+                "HTTP_HOST": "loopino.example",
+                "HTTP_ORIGIN": "https://loopino.example",
                 "wsgi.url_scheme": "https",
             }
         )

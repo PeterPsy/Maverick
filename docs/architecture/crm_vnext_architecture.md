@@ -59,7 +59,7 @@ provider record identities. A provider outage must not erase a CRM link.
 ## External source data decision
 
 The user explicitly excluded production Versy data and assets. No D1 export,
-R2 inventory or Versy cutover is required. Preserve the existing Maverick business
+R2 inventory or Versy cutover is required. Preserve the existing Loopino business
 data and connections. The optional adapter remains available for explicitly
 supplied exports; fixtures do not imply migration of any production source.
 
@@ -93,6 +93,6 @@ provider apps own external effects; no Versy production import is needed.
 
 The subsequent [product-alignment decision](crm_product_parity.md) replaces the
 loose visual inspiration with a source-compared sidebar/dashboard and dedicated
-operational screens, while retaining Maverick colors, existing records and
+operational screens, while retaining Loopino colors, existing records and
 provider boundaries. It introduces bounded live-only UI reads, not a migration,
 new cache authority, campaign delivery or a second CRM.

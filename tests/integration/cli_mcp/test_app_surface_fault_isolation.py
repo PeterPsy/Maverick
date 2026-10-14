@@ -42,7 +42,7 @@ class AppSurfaceFaultIsolationTest(SurfaceTestBase):
                 name="Unavailable App",
                 version="1.0.0",
                 description="App source removed after installation.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(),
             ),
         )

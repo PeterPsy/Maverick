@@ -49,7 +49,7 @@ def utcnow() -> datetime:
 
 
 def _codex_executable() -> str:
-    configured = os.environ.get("MAVERICK_CODEX_COMMAND", "").strip()
+    configured = os.environ.get("LOOPINO_CODEX_COMMAND", "").strip()
     if configured:
         return configured
     resolved = shutil.which("codex")
@@ -106,7 +106,7 @@ def _fallback_model_options() -> list[ProviderModelOption]:
         ProviderModelOption(
             model_id=CODEX_DEFAULT_MODEL,
             label=CODEX_DEFAULT_MODEL,
-            description="Default Codex model configured by Maverick when the Codex model catalog cannot be read.",
+            description="Default Codex model configured by Loopino when the Codex model catalog cannot be read.",
             default_reasoning_effort=CODEX_DEFAULT_REASONING_EFFORT,
             supported_reasoning_efforts=_fallback_reasoning_options(),
         )

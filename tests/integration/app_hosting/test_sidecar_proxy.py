@@ -64,7 +64,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
                 query_string="",
                 headers={
                     "authorization": "Bearer app-controlled",
-                    "cookie": "maverick=must-not-cross",
+                    "cookie": "loopino=must-not-cross",
                     "x-test": "safe",
                 },
                 body=b"",
@@ -103,7 +103,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
             health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),
         )
-        sentinel = "MAVERICK_WP0_HOST_ENV_SENTINEL"
+        sentinel = "LOOPINO_WP0_HOST_ENV_SENTINEL"
 
         with tempfile.TemporaryDirectory() as temp, patch.dict(
             os.environ,
@@ -132,7 +132,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
         self.assertNotIn("OPENAI_API_KEY", env)
         self.assertNotIn("/operator-pythonpath", env.get("PYTHONPATH", ""))
         self.assertEqual(env["PATH"], "/usr/local/bin:/usr/bin:/bin")
-        self.assertEqual(env["MAVERICK_WORKSPACE_ID"], "default")
+        self.assertEqual(env["LOOPINO_WORKSPACE_ID"], "default")
 
     def test_sidecar_proxy_starts_process_injects_token_and_blocks_sandbox_routes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -206,7 +206,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
             self.assertIn(b"data: two", response_body)
 
     async def _assert_asgi_sidecar_proxy_streams_request_body_outside_json_limit(self) -> None:
-        previous_limit = os.environ.get("MAVERICK_MAX_JSON_BODY_BYTES")
+        previous_limit = os.environ.get("LOOPINO_MAX_JSON_BODY_BYTES")
         try:
             with tempfile.TemporaryDirectory() as temp:
                 repo_root = self._repo_root(temp)
@@ -218,7 +218,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
                 cookie = await self._login_asgi(app)
                 body_chunks = [b"x" * 17, b"y" * 19, b"z" * 28]
 
-                os.environ["MAVERICK_MAX_JSON_BODY_BYTES"] = "16"
+                os.environ["LOOPINO_MAX_JSON_BODY_BYTES"] = "16"
                 status, body, headers = await self._invoke_asgi(
                     app,
                     path="/api/apps/sidecar-demo/sidecars/opendesign/api/upload",
@@ -233,9 +233,9 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
                 )
         finally:
             if previous_limit is None:
-                os.environ.pop("MAVERICK_MAX_JSON_BODY_BYTES", None)
+                os.environ.pop("LOOPINO_MAX_JSON_BODY_BYTES", None)
             else:
-                os.environ["MAVERICK_MAX_JSON_BODY_BYTES"] = previous_limit
+                os.environ["LOOPINO_MAX_JSON_BODY_BYTES"] = previous_limit
 
         payload = json.loads(body.decode("utf-8"))
         self.assertEqual(status, 200)
@@ -271,7 +271,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
         self.assertTrue(payload["chunked"])
 
     def _repo_root(self, temp_dir: str) -> Path:
-        repo_root = Path(temp_dir) / "maverick"
+        repo_root = Path(temp_dir) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -288,7 +288,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
             name="Sidecar Demo",
             version="0.1.0",
             description="Sidecar proxy integration app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 services=build_app_services(
                     http_sidecars=[
@@ -357,7 +357,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
             method="POST",
             body={
                 "username": "admin",
-                "password": "maverick",
+                "password": "loopino",
             },
         )
         self.assertEqual(status, 200)
@@ -368,7 +368,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
             app,
             path="/api/auth/login",
             method="POST",
-            body_chunks=[json.dumps({"username": "admin", "password": "maverick"}).encode("utf-8")],
+            body_chunks=[json.dumps({"username": "admin", "password": "loopino"}).encode("utf-8")],
             headers={"content-type": "application/json"},
         )
         self.assertEqual(status, 200)

@@ -18,7 +18,7 @@ from core.secrets.target_policy import (
 
 
 APP_SECRET_ACTION = "app.backend"
-APP_SECRET_TARGET_PREFIX = "maverick://app.backend"
+APP_SECRET_TARGET_PREFIX = "loopino://app.backend"
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ def assert_app_backend_targets_deliverable(actions: list[str], target_patterns: 
         raise SecretPolicyError("`*` targets are not allowed on grants that mix `app.backend` with other actions.")
     if any(target == "*" or target.startswith(f"{APP_SECRET_TARGET_PREFIX}/") for target in normalized_targets):
         return
-    raise SecretPolicyError("`app.backend` grants must allow `*` or `maverick://app.backend/*` targets.")
+    raise SecretPolicyError("`app.backend` grants must allow `*` or `loopino://app.backend/*` targets.")
 
 
 def resolve_app_secret_payload(

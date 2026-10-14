@@ -17,16 +17,16 @@ CODEX_MANAGED_SHELL_ENVIRONMENT_NAMES = (
     "TMP",
     "TEMP",
     "CODEX_HOME",
-    "MAVERICK_API_BASE",
-    "MAVERICK_EFFECTIVE_MODE",
-    "MAVERICK_RUNTIME_API_TOKEN",
-    "MAVERICK_RUNTIME_BIN",
-    "MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE",
-    "MAVERICK_RUNTIME_OUTPUT_COMPACTION",
-    "MAVERICK_RUNTIME_ROOT",
-    "MAVERICK_RUNTIME_SESSION_ID",
-    "MAVERICK_WORKSPACE_ID",
-    "MAVERICK_WORKSPACE_ROOT",
+    "LOOPINO_API_BASE",
+    "LOOPINO_EFFECTIVE_MODE",
+    "LOOPINO_RUNTIME_API_TOKEN",
+    "LOOPINO_RUNTIME_BIN",
+    "LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE",
+    "LOOPINO_RUNTIME_OUTPUT_COMPACTION",
+    "LOOPINO_RUNTIME_ROOT",
+    "LOOPINO_RUNTIME_SESSION_ID",
+    "LOOPINO_WORKSPACE_ID",
+    "LOOPINO_WORKSPACE_ROOT",
 )
 CODEX_POST_TOOL_USE_SHELL_MATCHER = "^(Bash|bash|Shell|shell|shell_command|local_shell|exec_command)$"
 
@@ -59,7 +59,7 @@ def managed_shell_environment_policy_lines(
                 ]
             )
         )
-    api_base = str(os.environ.get("MAVERICK_API_BASE") or "http://127.0.0.1:8014").rstrip("/")
+    api_base = str(os.environ.get("LOOPINO_API_BASE") or "http://127.0.0.1:8014").rstrip("/")
     return [
         "[shell_environment_policy]",
         'inherit = "all"',
@@ -70,11 +70,11 @@ def managed_shell_environment_policy_lines(
         "",
         "[shell_environment_policy.set]",
         f"PATH = {_toml_string(path_value)}",
-        f"MAVERICK_RUNTIME_BIN = {_toml_string(str(runtime_bin))}",
-        f"MAVERICK_RUNTIME_ROOT = {_toml_string(str(runtime_root))}",
-        f"MAVERICK_WORKSPACE_ROOT = {_toml_string(str(workspace_root))}",
-        f"MAVERICK_EFFECTIVE_MODE = {_toml_string(execution_mode)}",
-        f"MAVERICK_API_BASE = {_toml_string(api_base)}",
+        f"LOOPINO_RUNTIME_BIN = {_toml_string(str(runtime_bin))}",
+        f"LOOPINO_RUNTIME_ROOT = {_toml_string(str(runtime_root))}",
+        f"LOOPINO_WORKSPACE_ROOT = {_toml_string(str(workspace_root))}",
+        f"LOOPINO_EFFECTIVE_MODE = {_toml_string(execution_mode)}",
+        f"LOOPINO_API_BASE = {_toml_string(api_base)}",
     ]
 
 

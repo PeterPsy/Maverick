@@ -13,7 +13,7 @@ test("collapsed chat launchers preserve their title width", async ({ page }) => 
     height: element.getBoundingClientRect().height,
     flexBasis: getComputedStyle(element).flexBasis,
   }));
-  await page.screenshot({ path: "/tmp/maverick-review-04984238-collapsed-one.png" });
+  await page.screenshot({ path: "/tmp/loopino-review-04984238-collapsed-one.png" });
   expect(geometry.width).toBeGreaterThanOrEqual(150);
 });
 
@@ -35,6 +35,6 @@ test("minimized chat launchers stay clickable below window navigation", async ({
       return { centerClickable: Boolean(hit && element.contains(hit)) };
     }),
   );
-  await page.screenshot({ path: "/tmp/maverick-review-04984238-collapsed-two.png" });
+  await page.screenshot({ path: "/tmp/loopino-review-04984238-collapsed-two.png" });
   expect(geometry.every((item) => item.centerClickable)).toBe(true);
 });

@@ -1,4 +1,4 @@
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatThread } from "../../api/client";
 import {
@@ -444,7 +444,7 @@ export function useChatSidebarState(host?: ChatSidebarHost) {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== "object") {
         return;
       }
       const payload = event.data as {
@@ -455,7 +455,7 @@ export function useChatSidebarState(host?: ChatSidebarHost) {
         type?: string;
       };
       if (
-        (payload.type === "maverick.chat.active-thread-changed" || payload.type === "maverick.widget.data-changed") &&
+        (payload.type === "loopino.chat.active-thread-changed" || payload.type === "loopino.widget.data-changed") &&
         payload.owner_app_id === "chat"
       ) {
         if (payload.active_thread_id && !hostRef.current) {
@@ -465,10 +465,10 @@ export function useChatSidebarState(host?: ChatSidebarHost) {
           void refreshProjects();
         }
       }
-      if (payload.type === "maverick.widget.context-changed" && !hostRef.current) {
+      if (payload.type === "loopino.widget.context-changed" && !hostRef.current) {
         setIsShellMobileLayout(isMobileLayoutContext(payload.context));
       }
-      if (!hostRef.current && payload.type === "maverick.widget.data-changed" && payload.owner_app_id === "chat" && payload.resource === "view-state") {
+      if (!hostRef.current && payload.type === "loopino.widget.data-changed" && payload.owner_app_id === "chat" && payload.resource === "view-state") {
         void refreshViewFilter();
       }
     }

@@ -106,7 +106,7 @@ describe("Sidebar widget mount gate", () => {
     expect(settings).toHaveBeenCalledOnce();
     await act(async () => top.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(top.getAttribute("aria-expanded")).toBe("false");
-    const bottom = container.querySelector<HTMLButtonElement>('button[aria-label="Controlli Maverick"]')!;
+    const bottom = container.querySelector<HTMLButtonElement>('button[aria-label="Controlli Loopino"]')!;
     await act(async () => bottom.focus());
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Light mode"]')!.click());
     expect(container.querySelector('.bs-sidebar__mode-switcher')).toBeNull();
@@ -214,7 +214,7 @@ function app(appId: string): AppRegistryItem {
     logo: null,
     name: appId,
     provides: [],
-    publisher: "maverick",
+    publisher: "loopino",
     requires: [],
     source_access: "none",
     status: "enabled",

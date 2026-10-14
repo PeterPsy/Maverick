@@ -6,7 +6,7 @@ import './installationSetup.css';
 const root = document.getElementById('installation-root')!;
 let view: ReturnType<typeof mountInstallation> | undefined;
 try {
-  const mode = JSON.parse(localStorage.getItem('maverick:base-shell:session') || '{}').themeMode;
+  const mode = JSON.parse(localStorage.getItem('loopino:base-shell:session') || '{}').themeMode;
   if (mode === 'light' || (mode === 'system' && matchMedia('(prefers-color-scheme: light)').matches)) document.documentElement.dataset.theme = 'light';
 } catch { /* Start with the native dark theme. */ }
 if (document.documentElement.dataset.theme === 'light') {
@@ -20,7 +20,7 @@ async function start() {
   } catch (error) {
     if (error instanceof InstallationApiError && error.status === 401) return signIn();
     root.className = 'installation-view';
-    root.innerHTML = '<section class="installation-card"><h2>Administrator access required</h2><p>Sign in with a platform administrator to configure the installation.</p><a href="/">Open Maverick</a></section>';
+    root.innerHTML = '<section class="installation-card"><h2>Administrator access required</h2><p>Sign in with a platform administrator to configure the installation.</p><a href="/">Open Loopino</a></section>';
   }
 }
 function signIn() {

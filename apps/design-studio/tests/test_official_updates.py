@@ -697,7 +697,7 @@ class OfficialUpdateTests(unittest.TestCase):
         projection = json.loads(prepared.stdout)
         launch = json.loads(
             projection["environment"][
-                "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+                "LOOPINO_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
             ]
         )
         self.assertEqual(launch["release"]["version"], "0.16.1")

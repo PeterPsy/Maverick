@@ -1,7 +1,7 @@
 import type { FileCacheOpenResult } from "./fileCacheTypes";
 
 const issued = new WeakMap<object, (signal: AbortSignal) => Promise<FileCacheOpenResult>>();
-const BRAND: unique symbol = Symbol("maverick.file-read-retry");
+const BRAND: unique symbol = Symbol("loopino.file-read-retry");
 export type FileReadRetryExecutor = Readonly<{ [BRAND]: true; identity: string }>;
 
 /** Internal issuance: only PwaFileCache supplies the SDK-owned read implementation. */

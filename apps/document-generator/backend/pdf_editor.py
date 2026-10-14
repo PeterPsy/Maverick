@@ -401,7 +401,7 @@ def _load_pymupdf():
         import fitz  # type: ignore[import-not-found]
     except ModuleNotFoundError as error:
         raise DocumentValidationError(
-            "PyMuPDF is not installed. Install Maverick runtime dependencies with `python3 -m pip install -e .`."
+            "PyMuPDF is not installed. Install Loopino runtime dependencies with `python3 -m pip install -e .`."
         ) from error
     return fitz
 

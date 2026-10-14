@@ -20,7 +20,7 @@ from unittest.mock import patch
 from zipfile import ZipFile
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-MAVERICK_ROOT = next(parent for parent in APP_ROOT.parents if (parent / "core").is_dir())
+LOOPINO_ROOT = next(parent for parent in APP_ROOT.parents if (parent / "core").is_dir())
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
@@ -59,10 +59,10 @@ class FakeGitHubTransport:
             return 201, {"sha": "tree-sha"}
         if method == "POST" and url.endswith("/git/commits"):
             return 201, {"sha": "commit-sha"}
-        if method == "GET" and "/git/ref/heads/maverick%2F" in url:
+        if method == "GET" and "/git/ref/heads/loopino%2F" in url:
             return 404, {}
         if method == "POST" and url.endswith("/git/refs"):
-            return 201, {"ref": "refs/heads/maverick/site/test"}
+            return 201, {"ref": "refs/heads/loopino/site/test"}
         if method == "GET" and "/pulls?" in url:
             return 200, []
         if method == "POST" and url.endswith("/pulls"):
@@ -83,9 +83,9 @@ class ExistingBranchGitHubTransport(FakeGitHubTransport):
             return 201, {"sha": "tree-sha"}
         if method == "POST" and url.endswith("/git/commits"):
             return 201, {"sha": "commit-sha"}
-        if method == "GET" and "/git/ref/heads/maverick%2F" in url:
+        if method == "GET" and "/git/ref/heads/loopino%2F" in url:
             return 200, {"object": {"sha": "previous-branch-sha"}}
-        if method == "PATCH" and "/git/ref/heads/maverick%2F" in url:
+        if method == "PATCH" and "/git/ref/heads/loopino%2F" in url:
             body = request.get("json") if isinstance(request.get("json"), dict) else {}
             if body.get("force") is not False:
                 return 500, {"message": "branch update must not force push"}
@@ -99,7 +99,7 @@ class ExistingBranchGitHubTransport(FakeGitHubTransport):
 
 class ConflictingBranchGitHubTransport(ExistingBranchGitHubTransport):
     def __call__(self, method: str, url: str, request: dict[str, object]) -> tuple[int, object]:
-        if method == "PATCH" and "/git/ref/heads/maverick%2F" in url:
+        if method == "PATCH" and "/git/ref/heads/loopino%2F" in url:
             self.calls.append((method, url, request))
             body = request.get("json") if isinstance(request.get("json"), dict) else {}
             self.seen_patch_body = dict(body)
@@ -612,11 +612,11 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, prepared = handle_action(data_root, {"action": "git_connection_prepare", "repository_url": "example-org/site-web", "base_branch": "main"})
             self.assertEqual(status, 201)
 
-            source_ref = _git_import_source_ref(data_root, prepared["site"], "https://github.com/example-org/site-web.git", "maverick-work")
+            source_ref = _git_import_source_ref(data_root, prepared["site"], "https://github.com/example-org/site-web.git", "loopino-work")
 
             self.assertEqual(source_ref["provider"], "github")
             self.assertEqual(source_ref["connection_id"], prepared["connection"]["id"])
-            self.assertEqual(source_ref["base_branch"], "maverick-work")
+            self.assertEqual(source_ref["base_branch"], "loopino-work")
             self.assertEqual(source_ref["owner"], "example-org")
             self.assertEqual(source_ref["repo"], "site-web")
 
@@ -1590,7 +1590,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertGreaterEqual(len(gateway_manifests), 4)
             gateway_manifest = json.loads(gateway_manifests[0].read_text(encoding="utf-8"))
             self.assertEqual(gateway_manifest["access"], "public_capability")
-            self.assertEqual(gateway_manifest["schema"], "maverick.app.file_gateway.v1")
+            self.assertEqual(gateway_manifest["schema"], "loopino.app.file_gateway.v1")
             self.assertTrue(gateway_manifest["allowed_paths"])
             self.assertIn("expires_at", gateway_manifest)
             self.assertIn("asset_gateway", document["source_map"])
@@ -1650,7 +1650,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                env={**os.environ, "PYTHONPATH": str(MAVERICK_ROOT)},
+                env={**os.environ, "PYTHONPATH": str(LOOPINO_ROOT)},
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             entrypoint_response = json.loads(result.stdout)
@@ -1673,7 +1673,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                env={**os.environ, "PYTHONPATH": str(MAVERICK_ROOT)},
+                env={**os.environ, "PYTHONPATH": str(LOOPINO_ROOT)},
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             entrypoint_response = json.loads(result.stdout)
@@ -1860,7 +1860,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("assets/font.woff2", resolved_paths)
             self.assertIn("assets/hero.mp4", resolved_paths)
             self.assertIn("assets/logo.webp", resolved_paths)
-            self.assertEqual(report["browser_probe"]["event_type"], "maverick.website-studio.preview-report")
+            self.assertEqual(report["browser_probe"]["event_type"], "loopino.website-studio.preview-report")
 
             status, inventory_report_payload = handle_action(data_root, {"action": "preview_report", "preview_id": preview["preview_id"], "include_inventory": True})
             self.assertEqual(status, 201)
@@ -2857,7 +2857,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 capture_output=True,
                 check=True,
                 cwd=APP_ROOT,
-                env={**os.environ, "PYTHONPATH": str(MAVERICK_ROOT)},
+                env={**os.environ, "PYTHONPATH": str(LOOPINO_ROOT)},
             )
 
             parsed = json.loads(result.stdout)
@@ -2893,7 +2893,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("route_id", widget_source)
         self.assertIn("component_id", widget_source)
         self.assertIn("target_selector", widget_source)
-        self.assertIn("maverick.widget.data-changed", widget_source)
+        self.assertIn("loopino.widget.data-changed", widget_source)
         self.assertIn("function buildTree(navigation:", widget_source)
         self.assertNotIn("action: 'site_status'", widget_source)
         self.assertNotIn("action: 'list_changes'", widget_source)
@@ -2927,7 +2927,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("component_id", app_source)
         self.assertIn("target_selector", app_source)
         self.assertIn("data-target-selector", app_source)
-        self.assertIn("maverick.app.selection-changed", app_source)
+        self.assertIn("loopino.app.selection-changed", app_source)
         self.assertIn("resolveSelection", app_source)
         self.assertIn("route && !route.page_id ? undefined : pages[0]", app_source)
         self.assertIn("previewRoute: page?.route || route?.route || nextRoute || '/'", app_source)
@@ -3012,7 +3012,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("website-studio.preview.navigate", runtime_source)
         self.assertIn("website-studio.preview.target", runtime_source)
         self.assertIn("__WEBSITE_STUDIO_PREVIEW_REPORT__", runtime_source)
-        self.assertIn("maverick.website-studio.preview-report", runtime_source)
+        self.assertIn("loopino.website-studio.preview-report", runtime_source)
         self.assertIn("document.fonts.ready", runtime_source)
         self.assertIn("getComputedStyle", runtime_source)
         self.assertIn("website-studio.preview.report", runtime_source)
@@ -3065,7 +3065,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
         api_source = (APP_ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
 
-        self.assertIn("maverick.app.data-changed", app_source)
+        self.assertIn("loopino.app.data-changed", app_source)
         self.assertIn("owner_app_id === 'website-studio'", app_source)
         self.assertIn("previewCacheRef.current.clear()", app_source)
         self.assertIn("resetPreview: resetsPreview", app_source)
@@ -3106,7 +3106,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertEqual(app_events_for_action("maintenance_prune", {"dry_run": "true"}), [])
         self.assertEqual(
             app_events_for_action("maintenance_prune", {"dry_run": False}),
-            [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": "activity"}],
+            [{"type": "loopino.app.data-changed", "owner_app_id": "website-studio", "resource": "activity"}],
         )
 
     def test_frontend_new_site_screen_is_conversation_guide(self) -> None:
@@ -3130,7 +3130,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         sitemap_widget_html = (APP_ROOT / "frontend" / "widgets" / "website-studio-sitemap-sidebar" / "index.html").read_text(encoding="utf-8")
         footer_widget = (APP_ROOT / "frontend" / "public" / "widgets" / "website-studio-sidebar-footer" / "index.html").read_text(encoding="utf-8")
 
-        self.assertIn("--website-studio-bg: var(--maverick-bg)", styles)
+        self.assertIn("--website-studio-bg: var(--loopino-bg)", styles)
         self.assertIn("height: 100dvh", styles)
         self.assertIn("overflow: hidden", styles)
         self.assertIn("connection-guide", app_source)
@@ -3163,7 +3163,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         for forbidden in {"Commit", "Push", "Deploy", "Publish", "Rollback"}:
             self.assertNotIn(f">{forbidden}<", app_source)
         self.assertLess(sitemap_widget.index("website-studio-sitemap-search"), sitemap_widget.index("website-studio-sitemap-select-frame"))
-        self.assertIn("maverick.widget.open-app", sitemap_widget)
+        self.assertIn("loopino.widget.open-app", sitemap_widget)
         self.assertIn("app_page: `${appPageKind}/${id}`", sitemap_widget)
         self.assertIn("TreeProvider", sitemap_widget)
         self.assertIn("TreeView", sitemap_widget)
@@ -3200,8 +3200,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("Preview website", footer_widget)
         self.assertNotIn("open_in_full", footer_widget)
         self.assertNotIn("fullscreen_preview", footer_widget)
-        self.assertIn("maverick.widget.resize", footer_widget)
-        self.assertIn("maverick.shell.sidebar.close", footer_widget)
+        self.assertIn("loopino.widget.resize", footer_widget)
+        self.assertIn("loopino.shell.sidebar.close", footer_widget)
 
     def test_phase2_approval_publish_and_rollback_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3245,7 +3245,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(published["status"], "published")
             self.assertEqual(published["publish_request"]["status"], "published")
             self.assertEqual(published["deployment"]["status"], "published")
-            self.assertEqual(published["deployment"]["mode"], "maverick_managed_static")
+            self.assertEqual(published["deployment"]["mode"], "loopino_managed_static")
 
             status, diff = handle_action(data_root, {"action": "diff", "site_id": site_id})
             self.assertEqual(status, 200)
@@ -3326,7 +3326,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 },
             )
             self.assertEqual(status, 400)
-            self.assertIn("authenticated Maverick user actor", unauthenticated["detail"])
+            self.assertIn("authenticated Loopino user actor", unauthenticated["detail"])
 
             status, unauthorized = handle_action(
                 data_root,
@@ -3380,9 +3380,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 },
             )
             self.assertEqual(status, 200)
-            self.assertEqual(published["deployment"]["mode"], "maverick_managed_static")
+            self.assertEqual(published["deployment"]["mode"], "loopino_managed_static")
             source_ref = published["deployment"]["source_ref"]
-            self.assertEqual(source_ref["provider"], "maverick-managed-static")
+            self.assertEqual(source_ref["provider"], "loopino-managed-static")
             self.assertEqual(source_ref["status"], "artifact_ready")
             self.assertEqual(source_ref["platform_binding_status"], "pending_generic_surface")
             self.assertFalse(source_ref["platform_binding"]["public_binding_ready"])
@@ -3451,7 +3451,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             self.assertEqual(status, 200)
             source_ref = published["deployment"]["source_ref"]
-            self.assertEqual(published["deployment"]["mode"], "maverick_managed_static")
+            self.assertEqual(published["deployment"]["mode"], "loopino_managed_static")
             self.assertEqual(source_ref["public_url"], "https://bound.example.test/")
             self.assertEqual(source_ref["custom_domain"], "bound.example.test")
             self.assertEqual(source_ref["platform_binding_status"], "bound")
@@ -3733,7 +3733,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(source_ref["provider"], "github")
             self.assertEqual(source_ref["status"], "pull_request_open")
             self.assertEqual(source_ref["pull_request_url"], "https://github.com/example-org/site-web/pull/42")
-            self.assertEqual(source_ref["working_branch"], f"maverick/{site_id}/{request_id.replace('_', '-')}")
+            self.assertEqual(source_ref["working_branch"], f"loopino/{site_id}/{request_id.replace('_', '-')}")
             self.assertNotIn("test-github-token", json.dumps(published))
             auth_headers = [call[2]["headers"]["Authorization"] for call in transport.calls]
             self.assertTrue(all(header == "Bearer test-github-token" for header in auth_headers))
@@ -4087,7 +4087,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
     def test_phase3a_runtime_logs_redact_host_paths_and_secrets(self) -> None:
         summary = _bounded_log(
-            "failed at /home/ubuntu/projects/maverick-v3/workspaces/default/data/website-studio/.tmp/runtime_build_x token=abc ghp_123456789012345678901234"
+            "failed at /projects/loopino/workspaces/default/data/website-studio/.tmp/runtime_build_x token=abc ghp_123456789012345678901234"
         )
 
         self.assertNotIn("/home/ubuntu", summary)
@@ -4106,7 +4106,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertTrue(Path(env["HOME"]).is_dir())
             self.assertTrue(Path(env["TMPDIR"]).is_dir())
             self.assertEqual(env["NPM_CONFIG_IGNORE_SCRIPTS"], "true")
-            self.assertNotIn("MAVERICK_SECRET_STORE_KEY", env)
+            self.assertNotIn("LOOPINO_SECRET_STORE_KEY", env)
 
     def test_phase3a_list_changes_redacts_historical_build_logs_on_read(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -4127,7 +4127,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     (
                         "build_redact",
                         site_id,
-                        "Error: /home/ubuntu/projects/maverick-v3/workspaces/default/data/website-studio/.tmp/build token=abc",
+                        "Error: /projects/loopino/workspaces/default/data/website-studio/.tmp/build token=abc",
                     ),
                 )
 

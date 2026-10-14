@@ -14,7 +14,7 @@ from core.installation.validation import record_id
 class InstallationStore:
     def __init__(self, repository_root: Path):
         self.repository_root = repository_root.resolve()
-        self.root = self.repository_root / ".maverick" / "installation"
+        self.root = self.repository_root / ".loopino" / "installation"
 
     @contextmanager
     def locked(self):

@@ -1,14 +1,14 @@
 /** Browser-level warm paint with real isolated app frames and host persistence.
  * Only used with disposable test-host flags; captures closed transport metadata. */
 export async function exerciseAppReadModels(context, baseUrl) {
-  if (process.env.MAVERICK_PWA_SMOKE_APP_READ_MODELS !== '1') {
+  if (process.env.LOOPINO_PWA_SMOKE_APP_READ_MODELS !== '1') {
     throw new Error('App display fixtures require the disposable PWA smoke host.');
   }
   await context.addInitScript(() => {
     window.__pwaDisplayTrace = [];
     const original = MessagePort.prototype.postMessage;
     MessagePort.prototype.postMessage = function (data, ...rest) {
-      if (['maverick.pwa.data-cache.result.v1', 'maverick.pwa.data-cache.network-request.v1'].includes(data?.type)) {
+      if (['loopino.pwa.data-cache.result.v1', 'loopino.pwa.data-cache.network-request.v1'].includes(data?.type)) {
         window.__pwaDisplayTrace.push({ type: data.type, app: data.app_id, conditional: Boolean(data.known_revision), phase: data.phase, status: data.status, source: data.source, error_name: data.error?.name, error_status: data.error?.status });
       }
       return original.call(this, data, ...rest);
@@ -50,7 +50,7 @@ export async function exerciseAppReadModels(context, baseUrl) {
         }
       }
       const stored = await page.evaluate(async () => {
-        const request = indexedDB.open('maverick-pwa-data-v1');
+        const request = indexedDB.open('loopino-pwa-data-v1');
         const database = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = reject; });
         const rows = database.transaction('entries').objectStore('entries').getAll();
         const entries = await new Promise((resolve, reject) => { rows.onsuccess = () => resolve(rows.result); rows.onerror = reject; });

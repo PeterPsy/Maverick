@@ -25,7 +25,7 @@ const headers = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
     const result = await page.evaluate(async () => {
       const state = { origin: window.origin, lazy: window.lazyLoaded };
       for (const [name, action] of Object.entries({
-        cookie: () => document.cookie = 'maverick_session=attacker; Domain=127.0.0.1; Path=/',
+        cookie: () => document.cookie = 'loopino_session=attacker; Domain=127.0.0.1; Path=/',
         storage: () => localStorage.setItem('private', 'data'),
         domain: () => document.domain = '127.0.0.1',
         routing: () => history.pushState({}, '', '/deep/link'),

@@ -1,4 +1,4 @@
-import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility, isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { connectAppEventSocket, loopinoAppIsVisible, observeLoopinoVisibility, isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import {
   AlertTriangle,
   Camera,
@@ -118,7 +118,7 @@ interface SensesNativeStatus {
   workspace_id?: string;
   base_url?: string;
   updated_at?: string;
-  maverick?: {
+  loopino?: {
     status?: string;
     label?: string;
     can_use_senses?: boolean;
@@ -175,7 +175,7 @@ declare global {
     webkit?: {
       messageHandlers?: Record<string, { postMessage: (message: unknown) => void } | undefined>;
     };
-    __maverickSensesNativeStatus?: SensesNativeStatus;
+    __loopinoSensesNativeStatus?: SensesNativeStatus;
   }
 }
 
@@ -585,8 +585,8 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const [appVisible, setAppVisible] = useState(maverickAppIsVisible);
-  useEffect(() => observeMaverickVisibility(setAppVisible), []);
+  const [appVisible, setAppVisible] = useState(loopinoAppIsVisible);
+  useEffect(() => observeLoopinoVisibility(setAppVisible), []);
 
   useEffect(() => {
     if (!pendingNativeCommand || !appVisible) {
@@ -728,12 +728,12 @@ export function App() {
   }, [nativeHost.status?.capture?.busy, nativeHost.status?.updated_at, pendingNativeCommand]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'senses' }, "*");
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'senses' }, "*");
   }, []);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -744,7 +744,7 @@ export function App() {
         type?: string;
         view_state?: Record<string, unknown>;
       };
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'senses')) {
+      if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'senses')) {
         const requestedFilter = viewFilterFromParams(payload.params || {});
         if (hasViewFilterValues(requestedFilter)) {
           applyRemoteViewFilter(requestedFilter);
@@ -759,7 +759,7 @@ export function App() {
   }, [applyRemoteViewFilter, emitCurrentViewState, syncRemoteViewFilter]);
 
   useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string; view_state?: Record<string, unknown> }>((payload) => {
-    if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'senses') {
+    if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'senses') {
       if (!payload.resource || REFRESH_RESOURCES.has(payload.resource)) void refresh({ silent: true });
       if (payload.resource === 'view-state') {
         if (payload.view_state) applyRemoteViewFilter(viewFilterFromParams(payload.view_state));
@@ -873,15 +873,15 @@ export function App() {
 
 function useNativeHost() {
   const [available, setAvailable] = useState(false);
-  const [status, setStatus] = useState<SensesNativeStatus | null>(() => window.__maverickSensesNativeStatus || null);
+  const [status, setStatus] = useState<SensesNativeStatus | null>(() => window.__loopinoSensesNativeStatus || null);
 
   useEffect(() => {
     function refreshAvailability() {
-      setAvailable(hasNativeHost() || window.__maverickSensesNativeStatus?.available === true);
+      setAvailable(hasNativeHost() || window.__loopinoSensesNativeStatus?.available === true);
     }
     function applyStatus(detail: unknown) {
       if (detail && typeof detail === 'object') {
-        window.__maverickSensesNativeStatus = detail as SensesNativeStatus;
+        window.__loopinoSensesNativeStatus = detail as SensesNativeStatus;
         setStatus(detail as SensesNativeStatus);
       }
       refreshAvailability();
@@ -894,28 +894,28 @@ function useNativeHost() {
         return;
       }
       const payload = event.data as { type?: string; status?: unknown; detail?: unknown };
-      if (payload.type !== 'maverick.senses.native-status') {
+      if (payload.type !== 'loopino.senses.native-status') {
         return;
       }
       applyStatus(payload.status ?? payload.detail);
     }
-    window.addEventListener('maverick.senses.native-status', handleStatus);
+    window.addEventListener('loopino.senses.native-status', handleStatus);
     window.addEventListener('message', handleMessage);
     refreshAvailability();
-    if (window.__maverickSensesNativeStatus) {
-      setStatus(window.__maverickSensesNativeStatus);
+    if (window.__loopinoSensesNativeStatus) {
+      setStatus(window.__loopinoSensesNativeStatus);
     }
     if (hasNativeHost()) {
       postNativeCommand('refreshNativeStatus');
     }
     return () => {
-      window.removeEventListener('maverick.senses.native-status', handleStatus);
+      window.removeEventListener('loopino.senses.native-status', handleStatus);
       window.removeEventListener('message', handleMessage);
     };
   }, []);
 
   const send = useCallback((command: NativeCommand, extra: Record<string, unknown> = {}) => {
-    if (!hasNativeHost() && window.__maverickSensesNativeStatus?.available !== true) {
+    if (!hasNativeHost() && window.__loopinoSensesNativeStatus?.available !== true) {
       setAvailable(false);
       return null;
     }
@@ -939,7 +939,7 @@ function postNativeCommand(command: NativeCommand, extra: Record<string, unknown
     location_href: window.location.href,
     request_id: requestId,
     source: 'senses.frontend',
-    type: 'maverick.senses.native-command',
+    type: 'loopino.senses.native-command',
   };
   const directHost = window.webkit?.messageHandlers?.sensesHost;
   if (directHost) {
@@ -959,7 +959,7 @@ function postNativeCommand(command: NativeCommand, extra: Record<string, unknown
 function emitViewStateChanged(viewFilter: ViewFilterState) {
   window.parent?.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'senses',
       selection: { tab: viewFilter.tab, app_page: viewFilter.tab, view_filter: viewFilter },
     },
@@ -967,7 +967,7 @@ function emitViewStateChanged(viewFilter: ViewFilterState) {
   );
   window.parent?.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: 'senses',
       resource: 'view-state',
       view_state: viewFilter,
@@ -1405,9 +1405,9 @@ async function waitForBundleReady(bundleId: string): Promise<SensesCaptureBundle
 
 async function waitForNativeCommand(requestId: string, command: NativeCommand): Promise<SensesNativeStatus> {
   const deadline = Date.now() + NATIVE_COMMAND_FINAL_TIMEOUT_MS;
-  let lastStatus: SensesNativeStatus | null = window.__maverickSensesNativeStatus || null;
+  let lastStatus: SensesNativeStatus | null = window.__loopinoSensesNativeStatus || null;
   while (Date.now() < deadline) {
-    const status = window.__maverickSensesNativeStatus || lastStatus;
+    const status = window.__loopinoSensesNativeStatus || lastStatus;
     if (status) {
       lastStatus = status;
     } else {
@@ -1472,7 +1472,7 @@ async function ensureNativeSensesReady(nativeHost: {
   status: SensesNativeStatus | null;
   send: (command: NativeCommand, extra?: Record<string, unknown>) => string | null;
 }) {
-  if (isNativeSensesReady(window.__maverickSensesNativeStatus || nativeHost.status)) {
+  if (isNativeSensesReady(window.__loopinoSensesNativeStatus || nativeHost.status)) {
     return;
   }
   const requestId = nativeHost.send('refreshNativeStatus');
@@ -1480,9 +1480,9 @@ async function ensureNativeSensesReady(nativeHost: {
     throw new Error('iOS host is unavailable.');
   }
   const deadline = Date.now() + NATIVE_SENSES_READY_TIMEOUT_MS;
-  let lastStatus: SensesNativeStatus | null = window.__maverickSensesNativeStatus || nativeHost.status || null;
+  let lastStatus: SensesNativeStatus | null = window.__loopinoSensesNativeStatus || nativeHost.status || null;
   while (Date.now() < deadline) {
-    lastStatus = window.__maverickSensesNativeStatus || lastStatus;
+    lastStatus = window.__loopinoSensesNativeStatus || lastStatus;
     if (isNativeSensesReady(lastStatus)) {
       return;
     }
@@ -1499,7 +1499,7 @@ async function ensureNativeSensesReady(nativeHost: {
 }
 
 function isNativeSensesReady(status: SensesNativeStatus | null | undefined) {
-  return status?.maverick?.can_use_senses === true;
+  return status?.loopino?.can_use_senses === true;
 }
 
 function supportedRecordingMimeType(): string {
@@ -1565,12 +1565,12 @@ function microphoneRequestErrorMessage(error: unknown, permissionState: Permissi
   const name = domErrorName(error);
   if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
     if (microphoneBlockedByFramePolicy()) {
-      return 'Maverick shell is blocking microphone access for Senses. Hard refresh the full Maverick page, then try again.';
+      return 'Loopino shell is blocking microphone access for Senses. Hard refresh the full Loopino page, then try again.';
     }
     if (permissionState === 'denied') {
-      return 'Microphone permission was denied by the browser. Allow microphone access in browser site settings, then reload Maverick.';
+      return 'Microphone permission was denied by the browser. Allow microphone access in browser site settings, then reload Loopino.';
     }
-    return 'Microphone permission was blocked. Allow microphone access for Maverick, then try again.';
+    return 'Microphone permission was blocked. Allow microphone access for Loopino, then try again.';
   }
   if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
     return 'No microphone device was found by the browser.';
@@ -2140,15 +2140,15 @@ function DebugTab({
       <section className="live-dashboard" aria-label="Live dashboard">
         <StatusTile
           icon={Radio}
-          label="Maverick"
-          value={nativeStatus?.maverick?.label || nativeStatus?.maverick?.status || dependencyStatus}
+          label="Loopino"
+          value={nativeStatus?.loopino?.label || nativeStatus?.loopino?.status || dependencyStatus}
           detail={overview?.actor.authenticated ? overview.actor.workspace_role || 'session' : 'session not verified'}
           tone={dependencyStatus === 'resolved' ? 'good' : 'warn'}
         />
         <StatusTile
           icon={Smartphone}
           label="iOS app"
-          value={nativeAvailable ? nativeStatus?.ios?.app || 'Maverick iOS' : 'Browser/PWA'}
+          value={nativeAvailable ? nativeStatus?.ios?.app || 'Loopino iOS' : 'Browser/PWA'}
           detail={nativeAvailable ? nativeStatus?.ios?.auth_mode || 'web session' : 'host unavailable'}
           tone={nativeAvailable ? 'good' : 'muted'}
         />

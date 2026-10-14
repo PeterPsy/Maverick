@@ -18,7 +18,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
     def test_conservative_manifest_verifies_files_without_claiming_immutable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "index.html").write_text("<main>Maverick</main>", encoding="utf-8")
+            (root / "index.html").write_text("<main>Loopino</main>", encoding="utf-8")
             (root / "assets").mkdir()
             (root / "assets" / "app-semantic-name.js").write_text("export {};", encoding="utf-8")
 
@@ -63,7 +63,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"ok")
             record = _record("index.html", b"ok")
             payload = {
-                "schema": "maverick.frontend-assets.v2",
+                "schema": "loopino.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "immutable": [],
@@ -81,7 +81,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"ok")
             record = _record("index.html", b"ok")
             payload = {
-                "schema": "maverick.frontend-assets.v2",
+                "schema": "loopino.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "immutable": [],
@@ -99,7 +99,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"private")
             record = _record("index.html", b"private")
             payload = {
-                "schema": "maverick.frontend-assets.v2",
+                "schema": "loopino.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "immutable": [],
@@ -117,7 +117,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"shell")
             record = _record("index.html", b"shell")
             payload = {
-                "schema": "maverick.frontend-assets.v2",
+                "schema": "loopino.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "navigation_fallback": "index.html",
@@ -140,7 +140,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             index_record = _record("index.html", b"shell")
             fallback_record = _record("fallback.html", b"alternate")
             payload = {
-                "schema": "maverick.frontend-assets.v2",
+                "schema": "loopino.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "navigation_fallback": "fallback.html",
@@ -164,7 +164,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"shell")
             record = _record("index.html", b"shell")
             payload = {
-                "schema": "maverick.frontend-assets.v2",
+                "schema": "loopino.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "immutable": [],
@@ -189,7 +189,7 @@ def _write_manifest(
     revalidated: list[dict[str, object]] | None = None,
 ) -> None:
     payload = {
-        "schema": "maverick.frontend-assets.v2",
+        "schema": "loopino.frontend-assets.v2",
         "build_id": "a" * 64,
         "entrypoints": entrypoints or ["index.html"],
         "immutable": immutable or [],

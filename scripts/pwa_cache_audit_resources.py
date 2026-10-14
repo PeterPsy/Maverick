@@ -13,7 +13,7 @@ INVENTORY_PATH = Path("docs/product/pwa_cache_resource_inventory.v2.json")
 RUNTIME_RESOURCE_DECLARATIONS_PATH = Path(
     "apps/base-shell/frontend/src/pwaDataCacheResourceDeclarations.v1.json"
 )
-RUNTIME_RESOURCE_SCHEMA = "maverick.pwa-data-cache-runtime-resources.v1"
+RUNTIME_RESOURCE_SCHEMA = "loopino.pwa-data-cache-runtime-resources.v1"
 CANONICAL_DATA_CLASSES = frozenset(get_args(RuntimeDataClass))
 LOCAL_PERSISTENCE_POLICIES = frozenset({"deny", "session", "cache"})
 

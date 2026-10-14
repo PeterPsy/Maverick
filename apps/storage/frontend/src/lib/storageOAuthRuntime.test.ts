@@ -7,8 +7,8 @@ import {
 
 describe('storage OAuth runtime helpers', () => {
   it('builds the mounted Storage OAuth callback URL for the active app id', () => {
-    expect(storageOAuthRedirectUri('storage-fork', 'https://maverick.local/')).toBe(
-      'https://maverick.local/apps/storage-fork/oauth/callback',
+    expect(storageOAuthRedirectUri('storage-fork', 'https://loopino.local/')).toBe(
+      'https://loopino.local/apps/storage-fork/oauth/callback',
     );
   });
 
@@ -17,19 +17,19 @@ describe('storage OAuth runtime helpers', () => {
       storageOAuthCallbackFromLocation(
         '/apps/storage-fork/oauth/callback',
         '?code=auth-code&state=drive-state',
-        'https://maverick.local',
+        'https://loopino.local',
       ),
     ).toEqual({
       appId: 'storage-fork',
       code: 'auth-code',
       error: '',
-      redirectUri: 'https://maverick.local/apps/storage-fork/oauth/callback',
+      redirectUri: 'https://loopino.local/apps/storage-fork/oauth/callback',
       state: 'drive-state',
     });
   });
 
   it('ignores non-callback routes', () => {
-    expect(storageOAuthCallbackFromLocation('/apps/storage/', '?code=auth-code', 'https://maverick.local')).toBeNull();
+    expect(storageOAuthCallbackFromLocation('/apps/storage/', '?code=auth-code', 'https://loopino.local')).toBeNull();
   });
 
   it('keeps OAuth in the installed PWA container on both standard and iOS signals', () => {

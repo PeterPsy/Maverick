@@ -249,7 +249,7 @@ def transcribe_bytes(
 ) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     body_write_started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="loopino-speech-stt-") as temp_dir:
         audio_path = Path(temp_dir) / f"input{extension}"
         audio_path.write_bytes(audio)
         body_stage_seconds += time.monotonic() - body_write_started

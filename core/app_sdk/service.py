@@ -1,4 +1,4 @@
-"""Official Maverick app SDK service."""
+"""Official Loopino app SDK service."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from core.apps.store import AppStore
 
 
 def create_app_source(request: AppSdkCreateRequest, *, start_path: Path | None = None) -> AppSdkCreateResult:
-    """Generate one Maverick app source tree from an SDK template."""
+    """Generate one Loopino app source tree from an SDK template."""
     _validate_app_id(request.app_id)
     app_root = _target_app_root(request, start_path=start_path)
     if app_root.exists() and any(app_root.iterdir()) and not request.overwrite:
@@ -50,7 +50,7 @@ def create_app_source(request: AppSdkCreateRequest, *, start_path: Path | None =
 
 
 def validate_app_source(app_root: str | Path) -> AppSdkValidationResult:
-    """Validate one Maverick app source tree through the canonical contract parser."""
+    """Validate one Loopino app source tree through the canonical contract parser."""
     root = Path(app_root)
     try:
         parsed = parse_app_contract_file(root)

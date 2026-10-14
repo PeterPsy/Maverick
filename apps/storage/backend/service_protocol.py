@@ -90,7 +90,7 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     if resource is None:
         return []
     resources = resource if isinstance(resource, list) else [resource]
-    return [{"type": "maverick.app.data-changed", "resource": item} for item in resources]
+    return [{"type": "loopino.app.data-changed", "resource": item} for item in resources]
 
 def app_events_for_result(action: str, result: dict[str, Any]) -> list[dict[str, Any]]:
     if action == "local_upload_session.chunk":

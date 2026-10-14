@@ -33,8 +33,8 @@ beforeEach(() => {
 
 afterEach(() => {
   state.collaborations = [work];
-  delete (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string })
-    .__MAVERICK_PLATFORM_ORIGIN__;
+  delete (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string })
+    .__LOOPINO_PLATFORM_ORIGIN__;
 });
 
 function navigate(params: Record<string, unknown>) {
@@ -43,7 +43,7 @@ function navigate(params: Record<string, unknown>) {
     new MessageEvent("message", {
       origin: window.location.origin,
       source: window,
-      data: { type: "maverick.app.navigate", app_id: "marta-ops", params },
+      data: { type: "loopino.app.navigate", app_id: "marta-ops", params },
     }),
   );
 }
@@ -170,8 +170,8 @@ it("focuses idea capture for a sidebar create request", () => {
 
 it("uses the shell sidebar as navigation while keeping standalone section controls", () => {
   (
-    window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }
-  ).__MAVERICK_PLATFORM_ORIGIN__ = window.location.origin;
+    window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string }
+  ).__LOOPINO_PLATFORM_ORIGIN__ = window.location.origin;
   render(<App />);
   expect(screen.queryByRole("navigation", { name: "Sezioni" })).toBeNull();
   navigate({ app_page: "contacts" });
@@ -215,7 +215,7 @@ it("preserves the contact draft while opening and closing a related task", async
 it("opens a sidebar create request once even when navigation is repeated", () => {
   render(<App />);
   const request = {
-    type: "maverick.app.navigate",
+    type: "loopino.app.navigate",
     app_id: "marta-ops",
     params: {
       app_page: "contacts",
@@ -243,7 +243,7 @@ it("saves the foreground task when two create requests open stacked drawers", as
       window,
       new MessageEvent("message", {
         data: {
-          type: "maverick.app.navigate",
+          type: "loopino.app.navigate",
           app_id: "marta-ops",
           params: { new_task: true, new_task_request_id: title },
         },
@@ -276,7 +276,7 @@ it("validates a Storage picker return through the backend", async () => {
     window,
     new MessageEvent("message", {
       data: {
-        type: "maverick.app.navigate",
+        type: "loopino.app.navigate",
         app_id: "marta-ops",
         params: {
           picker_mode: "workspace-file",

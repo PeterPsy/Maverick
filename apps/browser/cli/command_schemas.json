@@ -44,7 +44,7 @@
           },
           "url": {
             "type": "string",
-            "description": "Policy preflight URL or acceptance smoke target URL. Defaults to MAVERICK_BROWSER_ACCEPTANCE_URL or https://example.com/ for acceptance.smoke."
+            "description": "Policy preflight URL or acceptance smoke target URL. Defaults to LOOPINO_BROWSER_ACCEPTANCE_URL or https://example.com/ for acceptance.smoke."
           },
           "app_id": {
             "type": "string",
@@ -59,13 +59,13 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 65535,
-            "description": "Allowlisted hostmachine admin dev target port for dev.smoke. Defaults to MAVERICK_BROWSER_DEV_SMOKE_PORT or 8000."
+            "description": "Allowlisted hostmachine admin dev target port for dev.smoke. Defaults to LOOPINO_BROWSER_DEV_SMOKE_PORT or 8000."
           },
           "mode": {
             "type": "string",
             "enum": [
               "read_only",
-              "maverick_dev_inspector"
+              "loopino_dev_inspector"
             ],
             "default": "read_only"
           },

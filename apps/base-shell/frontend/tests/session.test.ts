@@ -105,7 +105,7 @@ describe("base-shell session", () => {
     writeShellSession(shellSession());
 
     expect(setItem).toHaveBeenCalledWith(
-      "maverick:base-shell:session",
+      "loopino:base-shell:session",
       JSON.stringify({
         activeAppId: "chat",
         floatingChatMode: "overlay",

@@ -7,7 +7,7 @@ export interface CalendarPreferences {
   bufferMinutes: number;
   workDays: number[];
 }
-const KEY = "maverick.calendar.preferences";
+const KEY = "loopino.calendar.preferences";
 export function readPreferences(): CalendarPreferences {
   const defaults: CalendarPreferences = {
     locale: (navigator.language || "en-US").startsWith("it") ? "it-IT" : "en-US",
@@ -169,8 +169,8 @@ const it: Record<string, string> = {
   "End date is exclusive": "La data finale è esclusiva",
   Connect: "Connetti",
   Connecting: "Connessione...",
-  "Local reminders are saved in Maverick notifications, even when Calendar is closed.":
-    "I promemoria locali vengono conservati nelle notifiche Maverick, anche con Calendar chiuso.",
+  "Local reminders are saved in Loopino notifications, even when Calendar is closed.":
+    "I promemoria locali vengono conservati nelle notifiche Loopino, anche con Calendar chiuso.",
   "Overlapping events": "Eventi sovrapposti",
   "Event title": "Titolo evento",
   "Event description": "Descrizione evento",
@@ -207,7 +207,7 @@ const it: Record<string, string> = {
   "Enter a valid email address": "Inserisci un indirizzo email valido",
   "Participant already added": "Partecipante già aggiunto",
   "Google invitees require email addresses. Responses are shown as received from Google.": "Gli invitati Google richiedono un indirizzo email. Le risposte sono quelle ricevute da Google.",
-  "Local participants are notes; Maverick does not send invitations.": "I partecipanti locali sono annotazioni; Maverick non invia inviti.",
+  "Local participants are notes; Loopino does not send invitations.": "I partecipanti locali sono annotazioni; Loopino non invia inviti.",
   "Custom recurrence": "Ricorrenza personalizzata",
   "Repeating event": "Evento ricorrente",
   "occurrences": "occorrenze",

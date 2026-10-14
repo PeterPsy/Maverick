@@ -15,7 +15,7 @@ from core.runtime.tool_result_classification import (
 
 
 _DISCOVERY_TOKEN_KEY = secrets.token_bytes(32)
-_DISCOVERY_TOKEN_DOMAIN = b"maverick.runtime-tool-discovery.v1\0"
+_DISCOVERY_TOKEN_DOMAIN = b"loopino.runtime-tool-discovery.v1\0"
 
 
 def issue_discovery_token(

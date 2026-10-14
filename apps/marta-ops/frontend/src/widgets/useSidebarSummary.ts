@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { connectAppEventSocket } from "@maverick/pwa-cache";
+import { connectAppEventSocket } from "@loopino/pwa-cache";
 import { callBackend } from "../api";
 import { todayIso } from "../format";
 
@@ -50,7 +50,7 @@ export function useSidebarSummary(appId: string) {
     }>(
       (message) => {
         if (
-          message.type === "maverick.app.data-changed" &&
+          message.type === "loopino.app.data-changed" &&
           message.owner_app_id === appId &&
           message.resource === "state"
         )

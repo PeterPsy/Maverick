@@ -25,7 +25,7 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         config = replace(
             make_installer_config(
                 repo_root,
-                hostname="maverick.example.test",
+                hostname="loopino.example.test",
                 local_only=False,
             ),
             hosted_sidecars=True,
@@ -41,22 +41,22 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         ):
             nginx = render_install_plan(config)[config.nginx_conf_path]
 
-        self.assertIn("server_name *.sidecars.maverick.example.test;", nginx)
+        self.assertIn("server_name *.sidecars.loopino.example.test;", nginx)
         self.assertIn("location ^~ /.well-known/acme-challenge/", nginx)
-        self.assertNotIn("$maverick_browser_origin_cert_host", nginx)
+        self.assertNotIn("$loopino_browser_origin_cert_host", nginx)
 
     def test_rendered_nginx_loads_only_validated_exact_host_certificates(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = replace(
             make_installer_config(
                 repo_root,
-                hostname="maverick.example.test",
+                hostname="loopino.example.test",
                 local_only=False,
             ),
             hosted_sidecars=True,
             browser_origin_tls_mode="managed_exact",
-            browser_origin_tls_root="/var/lib/maverick/browser-origin-tls",
-            browser_origin_acme_webroot="/var/lib/maverick/browser-origin-acme",
+            browser_origin_tls_root="/projects/loopino/data/browser-origin-tls",
+            browser_origin_acme_webroot="/projects/loopino/data/browser-origin-acme",
         )
 
         rendered = render_install_plan(config, force_https_nginx=True)
@@ -65,22 +65,22 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         manifest = json.loads(rendered[config.output_root / "install-manifest.json"])
 
         self.assertIn("location ^~ /.well-known/acme-challenge/", nginx)
-        self.assertIn("root /var/lib/maverick/browser-origin-acme;", nginx)
-        self.assertIn("map $ssl_server_name $maverick_browser_origin_cert_host", nginx)
+        self.assertIn("root /projects/loopino/data/browser-origin-acme;", nginx)
+        self.assertIn("map $ssl_server_name $loopino_browser_origin_cert_host", nginx)
         self.assertIn(
-            "~^(?<reserved_browser_origin>(?:af|sc)-[a-f0-9]{24}\\.sidecars\\.maverick\\.example\\.test)$",
+            "~^(?<reserved_browser_origin>(?:af|sc)-[a-f0-9]{24}\\.sidecars\\.loopino\\.example\\.test)$",
             nginx,
         )
         self.assertIn(
-            "ssl_certificate /var/lib/maverick/browser-origin-tls/served/hosts/"
-            "$maverick_browser_origin_cert_host/current/fullchain.pem;",
+            "ssl_certificate /projects/loopino/data/browser-origin-tls/served/hosts/"
+            "$loopino_browser_origin_cert_host/current/fullchain.pem;",
             nginx,
         )
         self.assertIn("proxy_hide_header X-Frame-Options;", nginx)
-        self.assertNotIn("maverick.example.test-sidecars/fullchain.pem", nginx)
-        self.assertIn("MAVERICK_BROWSER_ORIGIN_TLS_MODE=managed_exact", environment)
+        self.assertNotIn("loopino.example.test-sidecars/fullchain.pem", nginx)
+        self.assertIn("LOOPINO_BROWSER_ORIGIN_TLS_MODE=managed_exact", environment)
         self.assertIn(
-            "MAVERICK_BROWSER_ORIGIN_TLS_ROOT=/var/lib/maverick/browser-origin-tls",
+            "LOOPINO_BROWSER_ORIGIN_TLS_ROOT=/projects/loopino/data/browser-origin-tls",
             environment,
         )
         self.assertEqual(manifest["browser_origin_tls_mode"], "managed_exact")
@@ -90,7 +90,7 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         config = replace(
             make_installer_config(
                 repo_root,
-                hostname="maverick.example.test",
+                hostname="loopino.example.test",
                 local_only=False,
             ),
             hosted_sidecars=True,
@@ -106,11 +106,11 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
 
     def test_skip_tls_requires_both_published_probe_names(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        with tempfile.TemporaryDirectory(prefix="maverick-managed-tls-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="loopino-managed-tls-") as temp_dir:
             config = replace(
                 make_installer_config(
                     repo_root,
-                    hostname="maverick.example.test",
+                    hostname="loopino.example.test",
                     local_only=False,
                 ),
                 hosted_sidecars=True,
@@ -129,7 +129,7 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         config = replace(
             make_installer_config(
                 repo_root,
-                hostname="maverick.example.test",
+                hostname="loopino.example.test",
                 local_only=False,
             ),
             hosted_sidecars=True,
@@ -145,22 +145,22 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         self.assertEqual(bootstrap[:4], ["runuser", "--user", "ubuntu", "--"])
         self.assertIn("core.shared.browser_origin_tls", bootstrap)
         self.assertIn(
-            "sc-000000000000000000000000.sidecars.maverick.example.test",
+            "sc-000000000000000000000000.sidecars.loopino.example.test",
             bootstrap,
         )
         self.assertIn(
-            "af-000000000000000000000000.sidecars.maverick.example.test",
+            "af-000000000000000000000000.sidecars.loopino.example.test",
             bootstrap,
         )
 
     def test_tls_request_bootstraps_managed_probes_before_final_nginx_reload(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        with tempfile.TemporaryDirectory(prefix="maverick-managed-tls-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="loopino-managed-tls-") as temp_dir:
             root = Path(temp_dir)
             config = replace(
                 make_installer_config(
                     repo_root,
-                    hostname="maverick.example.test",
+                    hostname="loopino.example.test",
                     local_only=False,
                 ),
                 hosted_sidecars=True,
@@ -168,8 +168,8 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
                 browser_origin_tls_root=str(root / "tls"),
                 browser_origin_acme_webroot=str(root / "acme-sidecars"),
                 acme_root=root / "acme-main",
-                live_nginx_conf_path=root / "sites-available" / "maverick.conf",
-                live_nginx_enabled_path=root / "sites-enabled" / "maverick.conf",
+                live_nginx_conf_path=root / "sites-available" / "loopino.conf",
+                live_nginx_enabled_path=root / "sites-enabled" / "loopino.conf",
             )
             commands: list[list[str]] = []
 

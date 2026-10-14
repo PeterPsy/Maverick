@@ -233,8 +233,8 @@ function defaultTargetDraft(kind: 'json' | 'mongo', persistence: PersistenceStat
   return {
     kind,
     json_root: active.json_root || 'data/control-plane/json',
-    mongodb_uri: active.mongo_uri || 'mongodb://127.0.0.1:27017/maverick',
-    mongodb_database: active.mongo_database || 'maverick',
+    mongodb_uri: active.mongo_uri || 'mongodb://127.0.0.1:27017/loopino',
+    mongodb_database: active.mongo_database || 'loopino',
     mongodb_username: active.mongo_username || '',
     mongodb_password_ref: active.mongo_password_ref || '',
   };
@@ -245,7 +245,7 @@ function normalizedTargetPayload(draft: MigrationTargetDraft): MigrationTargetPa
     kind: draft.kind,
     json_root: draft.json_root.trim() || 'data/control-plane/json',
     mongodb_uri: draft.mongodb_uri.trim(),
-    mongodb_database: draft.mongodb_database.trim() || 'maverick',
+    mongodb_database: draft.mongodb_database.trim() || 'loopino',
     mongodb_username: draft.mongodb_username?.trim() || undefined,
     mongodb_password_ref: draft.mongodb_password_ref?.trim() || undefined,
   };

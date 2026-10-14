@@ -1,4 +1,4 @@
-import { readAppCacheModel, type AppReadModelOptions } from '@maverick/pwa-cache';
+import { readAppCacheModel, type AppReadModelOptions } from '@loopino/pwa-cache';
 import { sanitizeCrmReadModel } from './pwaReadModel';
 import { isPublicCrm } from './public/context';
 import { readPublicDisplay } from './public/readDisplay';

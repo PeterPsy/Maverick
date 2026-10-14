@@ -4,7 +4,7 @@
 
 | Surface | Contract entry | Verification |
 | --- | --- | --- |
-| Frontend | `entrypoints.frontend` | `maverick app <id> frontend build --json` |
+| Frontend | `entrypoints.frontend` | `loopino app <id> frontend build --json` |
 | Backend | `entrypoints.backend` | mounted backend smoke action |
 | CLI | `entrypoints.cli` | scoped CLI list and inspect |
 | MCP | `entrypoints.mcp` | scoped MCP list and inspect |

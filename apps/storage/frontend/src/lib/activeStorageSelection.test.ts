@@ -20,13 +20,13 @@ describe('active storage selection messages', () => {
 
     expect(notifyActiveStorageFolderSelection(folder, {
       currentWindow: {},
-      origin: 'https://maverick.local',
+      origin: 'https://loopino.local',
       parentWindow,
     })).toBe(true);
 
     const [message] = parentWindow.postMessage.mock.calls[0];
     expect(message).toEqual({
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'storage',
       selection: {
         provider: 'google_drive',

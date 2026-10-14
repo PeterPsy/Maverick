@@ -17,7 +17,7 @@ ROOT_TEST_DEFAULT_LINE_LIMIT = 500
 # further growth while new files remain subject to the default limit.
 ROOT_TEST_LINE_BUDGETS = {
     "tests/contracts/app_contract/test_services.py": 590,
-    "tests/e2e/install/test_install_maverick.py": 560,
+    "tests/e2e/install/test_install_loopino.py": 560,
     "tests/e2e/websocket/test_runtime_events.py": 869,
     "tests/integration/app_hosting/test_app_frame_browser_origin.py": 941,
     "tests/integration/app_hosting/test_sidecar_browser_origin.py": 582,
@@ -101,7 +101,7 @@ class RepositoryConventionsTestCase(unittest.TestCase):
 
     def test_installer_script_is_executable_and_uses_supported_python(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
-        script_path = repo_root / "scripts" / "install_maverick.py"
+        script_path = repo_root / "scripts" / "install_loopino.py"
         content = script_path.read_text(encoding="utf-8")
 
         self.assertTrue(script_path.stat().st_mode & 0o111)
@@ -116,9 +116,9 @@ class RepositoryConventionsTestCase(unittest.TestCase):
 
         self.assertIn('--install-env "${ROOT_DIR}/.env"', bootstrap_script)
         self.assertIn('--install-env "${ROOT_DIR}/.env"', run_script)
-        self.assertIn('PYTHON_BIN="${MAVERICK_PYTHON:-}"', run_script)
-        self.assertIn('elif [[ -f "${ROOT_DIR}/.env.maverick" ]]', run_script)
-        self.assertIn("MAVERICK_ADMIN_USERNAME is required.", run_script)
+        self.assertIn('PYTHON_BIN="${LOOPINO_PYTHON:-}"', run_script)
+        self.assertIn('elif [[ -f "${ROOT_DIR}/.env.loopino" ]]', run_script)
+        self.assertIn("LOOPINO_ADMIN_USERNAME is required.", run_script)
 
     def test_workspace_hygiene_reporter_is_documented_and_machine_readable(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
@@ -145,7 +145,7 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         payload = json.loads(inventory_path.read_text(encoding="utf-8"))
 
         self.assertEqual(payload["schema_version"], "1")
-        self.assertEqual(payload["root"]["python"]["name"], "maverick")
+        self.assertEqual(payload["root"]["python"]["name"], "loopino")
         self.assertIn("uvicorn[standard]>=0.30", payload["root"]["python"]["runtime_dependencies"])
         self.assertTrue(payload["apps"])
         self.assertTrue(all("package_name" in item for item in payload["apps"]))

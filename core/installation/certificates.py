@@ -9,6 +9,7 @@ from core.installation.errors import InstallationError
 from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 from core.shared.browser_origin_tls_backoff import issuance_retry_at, record_issuance_failure, clear_issuance_backoff
+from core.shared.installation_material import certbot_root, certbot_directory_arguments, dns_credentials_root
 from scripts.deploy.refresh_cloudflare_dns_credentials import refresh_credentials
 
 CA = "https://acme-v02.api.letsencrypt.org/directory"
@@ -18,9 +19,10 @@ def certificate_names(host: str) -> dict:
     return {"main": host, "apps": host + "-sidecars-wildcard"}
 
 
-def certificate_paths(names: dict) -> dict:
-    return {kind: {"cert_name": name, "fullchain": f"/etc/letsencrypt/live/{name}/fullchain.pem",
-                   "private_key": f"/etc/letsencrypt/live/{name}/privkey.pem"} for kind, name in names.items()}
+def certificate_paths(names: dict, *, repository_root: Path) -> dict:
+    live = certbot_root(repository_root) / "config/live"
+    return {kind: {"cert_name": name, "fullchain": str(live / name / "fullchain.pem"),
+                   "private_key": str(live / name / "privkey.pem")} for kind, name in names.items()}
 
 
 def prepare_certificates(service, job: dict, plan: dict, private: Path, *, runner=subprocess.run) -> dict:
@@ -28,7 +30,7 @@ def prepare_certificates(service, job: dict, plan: dict, private: Path, *, runne
     if retry and retry > datetime.now(timezone.utc):
         return {"waiting": True, "retry_at": retry.isoformat()}
     root = service.store.repository_root
-    credentials = Path("/etc/letsencrypt/maverick") / ("installation-" + job["job_id"] + ".ini")
+    credentials = dns_credentials_root(root) / ("installation-" + job["job_id"] + ".ini")
     reference = plan["dns_secret_ref"]
     def resolve():
         return resolve_secret_for_runtime(service.secret_store, secret_ref=reference,
@@ -41,13 +43,13 @@ def prepare_certificates(service, job: dict, plan: dict, private: Path, *, runne
         str(root / "scripts/deploy/refresh_cloudflare_dns_credentials.py"),
         "--secret-ref", reference, "--credentials", str(credentials)])
     reload_hook = shlex.join([str(root / ".venv/bin/python"), str(root / "scripts/deploy/reload_nginx.py")])
-    paths = certificate_paths(certificate_names(plan["hostname"]))
+    paths = certificate_paths(certificate_names(plan["hostname"]), repository_root=root)
     for kind, identifier in [("main", plan["hostname"]), ("apps", "*.sidecars." + plan["hostname"])]:
         command = ["/usr/bin/certbot", "certonly", "--non-interactive", "--agree-tos",
             "--register-unsafely-without-email", "--keep-until-expiring", "--no-directory-hooks",
             "--cert-name", paths[kind]["cert_name"], "--dns-cloudflare",
             "--dns-cloudflare-credentials", str(credentials), "--dns-cloudflare-propagation-seconds", "60",
-            "--pre-hook", hook, "--deploy-hook", reload_hook, "-d", identifier]
+            "--pre-hook", hook, "--deploy-hook", reload_hook, "-d", identifier] + certbot_directory_arguments(root)
         result = runner(command, capture_output=True, text=True, timeout=300)
         if result.returncode:
             error = subprocess.CalledProcessError(result.returncode, ["certbot"],
@@ -60,7 +62,7 @@ def prepare_certificates(service, job: dict, plan: dict, private: Path, *, runne
             result = runner(["/usr/bin/certbot", "renew", "--dry-run", "--non-interactive",
                 "--no-random-sleep-on-renew", "--no-directory-hooks", "--cert-name", paths[kind]["cert_name"],
                 "--dns-cloudflare", "--dns-cloudflare-credentials", str(credentials), "--pre-hook", hook,
-                "--deploy-hook", reload_hook, "--run-deploy-hooks"], capture_output=True, text=True, timeout=300)
+                "--deploy-hook", reload_hook, "--run-deploy-hooks"] + certbot_directory_arguments(root), capture_output=True, text=True, timeout=300)
             if result.returncode:
                 raise InstallationError("renewal_verification_failed", status=502)
             verified.touch(mode=0o600)

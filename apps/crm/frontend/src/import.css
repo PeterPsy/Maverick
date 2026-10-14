@@ -19,25 +19,25 @@
 .import-panel label {
   display: grid;
   gap: 0.4rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.82rem;
 }
 
 .import-panel select,
 .import-panel textarea {
   width: 100%;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.65rem;
   outline: none;
 }
 
 .import-panel select:focus-visible,
 .import-panel textarea:focus-visible {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 .import-actions {
@@ -47,13 +47,13 @@
 }
 
 .import-actions button[name="commit"] {
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
+  background: var(--loopino-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .import-actions button[name="preview"] {
-  border: 1px solid var(--maverick-border);
-  background: var(--maverick-surface);
+  border: 1px solid var(--loopino-border);
+  background: var(--loopino-surface);
 }
 
 .import-preview {
@@ -61,14 +61,14 @@
   gap: 0.45rem;
   margin: 0 1rem 1rem;
   padding: 0.75rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  box-shadow: var(--maverick-inner-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .import-preview span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.82rem;
 }
 
@@ -76,6 +76,6 @@
   max-height: 12rem;
   margin: 0;
   overflow: auto;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }

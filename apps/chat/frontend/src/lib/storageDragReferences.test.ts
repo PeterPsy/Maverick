@@ -26,7 +26,7 @@ class FakeDataTransfer {
 function storageSelectionTransfer() {
   const dataTransfer = new FakeDataTransfer();
   dataTransfer.setData(
-    "application/x-maverick-storage-selection",
+    "application/x-loopino-storage-selection",
     JSON.stringify({
       owner_app_id: "storage",
       files: [
@@ -117,7 +117,7 @@ describe("Storage drag reference parsing", () => {
     });
     driveFolderParams.set("drive_breadcrumbs", JSON.stringify(driveBreadcrumbs));
     dataTransfer.setData(
-      "application/x-maverick-storage-drive-file",
+      "application/x-loopino-storage-drive-file",
       JSON.stringify({
         connection_id: "drive_conn_1",
         display_path: "/My Drive/Reports/summary.pdf",
@@ -130,7 +130,7 @@ describe("Storage drag reference parsing", () => {
       }),
     );
     dataTransfer.setData(
-      "application/x-maverick-storage-drive-folder",
+      "application/x-loopino-storage-drive-folder",
       JSON.stringify({
         connection_id: "drive_conn_1",
         display_path: "/My Drive/Reports",
@@ -181,7 +181,7 @@ describe("Storage drag reference parsing", () => {
   it("converts Checklist drag payloads into chat mention items", () => {
     const dataTransfer = new FakeDataTransfer();
     dataTransfer.setData(
-      "application/x-maverick-checklist",
+      "application/x-loopino-checklist",
       JSON.stringify({
         checked_count: 2,
         checklist_id: "check_123",
@@ -219,7 +219,7 @@ describe("Storage drag reference parsing", () => {
   it("converts Mail thread drag payloads into chat mention items", () => {
     const dataTransfer = new FakeDataTransfer();
     dataTransfer.setData(
-      "application/x-maverick-mail-thread",
+      "application/x-loopino-mail-thread",
       JSON.stringify({
         connection_id: "mail_connection_gmail_person_example_com",
         deep_link: "/app/mail?thread=email_thread_gmail_person_example_com_thread_1",
@@ -257,7 +257,7 @@ describe("Storage drag reference parsing", () => {
   it("accepts Chat thread payloads through the shared app-reference drop path", () => {
     const dataTransfer = new FakeDataTransfer();
     dataTransfer.setData(
-      "application/x-maverick-chat-thread",
+      "application/x-loopino-chat-thread",
       JSON.stringify({
         owner_app_id: "chat",
         thread_id: "thread-1",
@@ -278,7 +278,7 @@ describe("Storage drag reference parsing", () => {
   it("rejects malformed Storage drag payloads", () => {
     const malformed = new FakeDataTransfer();
     malformed.setData(
-      "application/x-maverick-storage-file",
+      "application/x-loopino-storage-file",
       JSON.stringify({
         file_id: "file_123",
         name: "report.md",
@@ -294,7 +294,7 @@ describe("Storage drag reference parsing", () => {
 
     const malformedDrive = new FakeDataTransfer();
     malformedDrive.setData(
-      "application/x-maverick-storage-drive-file",
+      "application/x-loopino-storage-drive-file",
       JSON.stringify({
         connection_id: "drive_conn_1",
         display_path: "/../secret",
@@ -311,7 +311,7 @@ describe("Storage drag reference parsing", () => {
 
     const malformedChecklist = new FakeDataTransfer();
     malformedChecklist.setData(
-      "application/x-maverick-checklist",
+      "application/x-loopino-checklist",
       JSON.stringify({
         checked_count: 2,
         checklist_id: "check_123",
@@ -327,7 +327,7 @@ describe("Storage drag reference parsing", () => {
 
     const malformedMailThread = new FakeDataTransfer();
     malformedMailThread.setData(
-      "application/x-maverick-mail-thread",
+      "application/x-loopino-mail-thread",
       JSON.stringify({
         deep_link: "/app/mail?thread=other",
         owner_app_id: "mail",

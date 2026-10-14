@@ -93,7 +93,7 @@ def start_oauth(
     """Start Google Calendar OAuth and persist a short-lived pending state."""
     _require_provider(body)
     if any(item.get("external_refs", {}).get("managed_by") == "platform" for item in read_state(data_root)["connections"]):
-        raise CalendarOAuthError("platform_account_managed", "Manage Google permissions and accounts from Maverick Connected accounts.")
+        raise CalendarOAuthError("platform_account_managed", "Manage Google permissions and accounts from Loopino Connected accounts.")
     client_id = _required_app_secret(
         app_secrets,
         app_secret_errors,
@@ -268,7 +268,7 @@ def disconnect_connection(
     state = read_state(data_root)
     connection = _connection_by_id(state, connection_id)
     if connection.get("external_refs", {}).get("managed_by") == "platform":
-        raise CalendarOAuthError("platform_account_managed", "Disconnect Google or disable Calendar from Maverick Connected accounts.")
+        raise CalendarOAuthError("platform_account_managed", "Disconnect Google or disable Calendar from Loopino Connected accounts.")
     if connection["provider"] != GOOGLE_PROVIDER:
         raise CalendarOAuthError("unsupported_provider", "Calendar disconnect currently supports provider `google` only.")
     if connection["status"] == "connected":

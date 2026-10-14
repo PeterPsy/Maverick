@@ -1,10 +1,10 @@
-export type MaverickDragReference = {
+export type LoopinoDragReference = {
   label: string;
   transfer: { type: string; data: string };
 };
 
 function referenceDragHostOrigin(): string | null {
-  const origin = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+  const origin = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__;
   if (window.parent === window || typeof origin !== 'string') return null;
   try {
     return /^https?:\/\//u.test(origin) && new URL(origin).origin === origin ? origin : null;
@@ -12,22 +12,22 @@ function referenceDragHostOrigin(): string | null {
 }
 
 /** App-owned payloads travel through the shell while pointer capture preserves cancellation. */
-export function startMaverickReferencePointerDrag(
+export function startLoopinoReferencePointerDrag(
   down: Pick<PointerEvent, 'button' | 'pointerType' | 'pointerId' | 'clientX' | 'clientY'>,
   row: HTMLElement,
-  createReference: () => MaverickDragReference | null,
+  createReference: () => LoopinoDragReference | null,
   onDraggingChange: (dragging: boolean) => void,
 ): (() => void) | null {
   const origin = referenceDragHostOrigin();
   if (!origin || down.button !== 0 || down.pointerType === 'touch') return null;
   const dragId = crypto.randomUUID();
-  let reference: MaverickDragReference | null = null;
+  let reference: LoopinoDragReference | null = null;
   let dragging = false;
   let finished = false;
   let suppressClick = false;
   let clickTimer: ReturnType<typeof setTimeout> | undefined;
   const post = (type: string, point?: { clientX: number; clientY: number }) => window.parent.postMessage({
-    type: `maverick.reference-drag.${type}`, drag_id: dragId,
+    type: `loopino.reference-drag.${type}`, drag_id: dragId,
     ...(point ? { x: point.clientX, y: point.clientY, viewport_width: window.innerWidth, viewport_height: window.innerHeight } : {}),
     ...(type === 'start' && reference ? { label: reference.label.slice(0, 512), transfer: reference.transfer } : {}),
   }, origin);
@@ -74,7 +74,7 @@ export function startMaverickReferencePointerDrag(
   function key(event: KeyboardEvent) { if (event.key === 'Escape') { event.preventDefault(); finish(); } }
   function onHostMessage(event: MessageEvent) {
     if (event.source === window.parent && event.origin === origin
-      && event.data?.type === 'maverick.reference-drag.finished' && event.data.drag_id === dragId) finish();
+      && event.data?.type === 'loopino.reference-drag.finished' && event.data.drag_id === dragId) finish();
   }
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);

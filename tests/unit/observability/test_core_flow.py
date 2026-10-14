@@ -82,7 +82,7 @@ class TestCoreFlowObservability(ObservabilityTestBase):
             name="Audit App",
             version="1.0.0",
             description="Audit app",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(capabilities=build_app_capabilities()),
         )
         write_app_contract_file(app_root, parsed)

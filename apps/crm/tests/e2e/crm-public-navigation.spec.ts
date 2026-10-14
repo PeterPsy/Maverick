@@ -23,7 +23,7 @@ async function mountPublicCrm(page: Page) {
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
 }
 
-test('public CRM uses Maverick sidebar chrome without an app rail and persists its theme', async ({ page }, testInfo) => {
+test('public CRM uses Loopino sidebar chrome without an app rail and persists its theme', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mountPublicCrm(page);
 
@@ -47,7 +47,7 @@ test('public CRM uses Maverick sidebar chrome without an app rail and persists i
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(navigation.getByRole('button', { name: 'Light mode' })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.locator('body').evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgb(247, 248, 251)');
-  expect(await page.evaluate(() => localStorage.getItem('maverick:crm-public:theme'))).toBe('light');
+  expect(await page.evaluate(() => localStorage.getItem('loopino:crm-public:theme'))).toBe('light');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.getByRole('button', { name: 'Light mode' })).toHaveAttribute('aria-pressed', 'true');
@@ -57,7 +57,7 @@ test('public CRM uses Maverick sidebar chrome without an app rail and persists i
   const menu = page.getByRole('button', { name: 'Open navigation' });
   await expect(mobileHeader).toBeVisible();
   await expect(menu).toBeVisible();
-  await expect(mobileHeader.getByAltText('Maverick')).toBeVisible();
+  await expect(mobileHeader.getByAltText('Loopino')).toBeVisible();
   await expect(mobileHeader.getByRole('button', { name: 'App switching unavailable' })).toBeDisabled();
   await expect(mobileHeader.getByRole('button', { name: 'Create unavailable' })).toBeDisabled();
   await expect(mobileHeader.getByRole('button', { name: 'Chat unavailable' })).toBeDisabled();

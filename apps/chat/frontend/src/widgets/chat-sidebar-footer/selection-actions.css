@@ -13,7 +13,7 @@
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
   box-shadow: var(--chat-sidebar-inner-edge);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.76rem;
   font-weight: 400;
   letter-spacing: 0;
@@ -29,7 +29,7 @@
 .bs-chat-sidebar-footer__new-chat.is-delete {
   border-color: var(--chat-sidebar-danger-border);
   background: var(--chat-sidebar-danger-surface);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .bs-chat-sidebar-footer__new-chat:hover:not(:disabled),
@@ -103,7 +103,7 @@
   background: var(--chat-sidebar-composer-surface);
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   box-shadow: var(--chat-sidebar-inner-edge);
   font-size: 0.72rem;
   font-weight: 400;
@@ -120,7 +120,7 @@
 
 .bs-chat-sidebar-footer__confirm-button:hover:not(:disabled),
 .bs-chat-sidebar-footer__confirm-button:focus-visible {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.16);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.16);
   background: var(--chat-sidebar-soft-surface-hover);
   outline: none;
 }
@@ -128,7 +128,7 @@
 .bs-chat-sidebar-footer__confirm-button.is-danger {
   border-color: var(--chat-sidebar-danger-border);
   background: var(--chat-sidebar-danger-surface);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .bs-chat-sidebar-footer__confirm-button.is-danger:hover:not(:disabled),

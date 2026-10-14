@@ -57,7 +57,7 @@
 .checklist-loading-skeleton__task-block,
 .checklist-plan-skeleton__icon,
 .checklist-plan-skeleton__pill {
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .checklist-loading-skeleton__line::after,
@@ -114,7 +114,7 @@
 .checklist-loading-skeleton__button {
   width: 5.3rem;
   height: 2.15rem;
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
 }
 
 .checklist-loading-skeleton__counter {
@@ -149,7 +149,7 @@
 .checklist-loading-skeleton__task-block {
   width: 100%;
   height: clamp(7rem, 20vh, 11rem);
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
 }
 
 .checklist-loading-skeleton__detail-board {
@@ -168,7 +168,7 @@
 .checklist-plan-skeleton__card {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 0.5rem;
   background: var(--card);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);

@@ -13,7 +13,7 @@ export const DEFAULT_SHELL_THEME_STATE: ShellThemeState = {
   effective: "dark",
   mode: DEFAULT_SHELL_THEME_MODE,
 };
-export const SHELL_SESSION_STORAGE_KEY = "maverick:base-shell:session";
+export const SHELL_SESSION_STORAGE_KEY = "loopino:base-shell:session";
 
 const LIGHT_SCHEME_QUERY = "(prefers-color-scheme: light)";
 
@@ -62,7 +62,7 @@ export function readInitialShellThemeMode(): ShellThemeMode {
 
 export function applyShellThemeToDocument(theme: ShellThemeState, documentRef: Document = document): void {
   const root = documentRef.documentElement;
-  root.dataset.maverickTheme = theme.effective;
+  root.dataset.loopinoTheme = theme.effective;
   root.dataset.theme = theme.effective;
   root.style.colorScheme = theme.color_scheme;
 }
@@ -77,9 +77,9 @@ export function applyInitialShellTheme(): ShellThemeState {
 
 export function shellThemeSearchParams(theme: ShellThemeState): Record<string, string> {
   return {
-    maverick_color_scheme: theme.color_scheme,
-    maverick_theme: theme.effective,
-    maverick_theme_mode: theme.mode,
+    loopino_color_scheme: theme.color_scheme,
+    loopino_theme: theme.effective,
+    loopino_theme_mode: theme.mode,
   };
 }
 
@@ -92,7 +92,7 @@ export function urlWithShellThemeSearchParams(frontendMount: string, theme: Shel
 
 export function shellThemeMessage(theme: ShellThemeState) {
   return {
-    type: "maverick.shell.theme-changed",
+    type: "loopino.shell.theme-changed",
     theme,
   };
 }

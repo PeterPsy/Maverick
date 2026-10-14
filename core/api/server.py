@@ -1,4 +1,4 @@
-"""Small WSGI servers for the hosted Maverick core and rescue surfaces."""
+"""Small WSGI servers for the hosted Loopino core and rescue surfaces."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def run_rescue_server(*, host: str, port: int) -> None:
 
 
 def main() -> None:
-    """Run the selected Maverick HTTP host."""
+    """Run the selected Loopino HTTP host."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--service", choices=("core", "rescue"), default="core")
     parser.add_argument("--host", default="127.0.0.1")

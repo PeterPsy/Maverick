@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { registerMaverickAppHibernation, type MaverickResumeParams } from '@maverick/pwa-cache';
+import { registerLoopinoAppHibernation, type LoopinoResumeParams } from '@loopino/pwa-cache';
 
 type Snapshot<T> = { view: T; scroll: number; files: number; folders: number };
 
@@ -7,7 +7,7 @@ export function useStorageHibernation<T>(options: {
   appId: string; ready: boolean; visible: boolean; fileCount: number; folderCount: number;
   hasMoreFiles: boolean; hasMoreFolders: boolean;
   capture: () => T | null;
-  restore: (state: T, navigation: MaverickResumeParams) => Promise<void>;
+  restore: (state: T, navigation: LoopinoResumeParams) => Promise<void>;
   loadMoreFiles: () => Promise<void>; loadMoreFolders: () => Promise<void>;
 }) {
   const current = useRef(options);
@@ -20,7 +20,7 @@ export function useStorageHibernation<T>(options: {
   }
   const [attempt, setAttempt] = useState(0);
   const [pending, setPending] = useState<{
-    state: Snapshot<T>; navigation: MaverickResumeParams;
+    state: Snapshot<T>; navigation: LoopinoResumeParams;
     resolve: () => void; reject: (error: unknown) => void;
     stage: 'view' | 'files' | 'folders' | 'scroll'; previousCount?: number;
   } | null>(null);
@@ -34,7 +34,7 @@ export function useStorageHibernation<T>(options: {
       pendingRef.current?.reject(new DOMException('Storage view disposed', 'AbortError'));
     };
   }, []);
-  useEffect(() => registerMaverickAppHibernation({
+  useEffect(() => registerLoopinoAppHibernation({
     appId: options.appId,
     capture: () => {
       const value = current.current;

@@ -27,7 +27,7 @@ export function notifyActiveDocSelection(pageId: string, options: NotifyOptions 
   const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'docs-studio',
       selection: { page_id: normalizedPageId }
     },
@@ -37,7 +37,7 @@ export function notifyActiveDocSelection(pageId: string, options: NotifyOptions 
 }
 
 export function docPageIdFromSelectionMessage(message: ActiveDocSelectionMessage): string {
-  if (message.type !== 'maverick.app.selection-changed' || message.owner_app_id !== 'docs-studio') {
+  if (message.type !== 'loopino.app.selection-changed' || message.owner_app_id !== 'docs-studio') {
     return '';
   }
   const selection = message.selection;

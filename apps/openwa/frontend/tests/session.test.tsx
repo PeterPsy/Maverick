@@ -5,9 +5,9 @@ import { operation } from "../src/api";
 import { SessionPanel } from "../src/SessionPanel";
 
 vi.mock("../src/api", async (original) => ({ ...await original(), operation: vi.fn() }));
-vi.mock("@maverick/pwa-cache", () => ({
-  maverickAppIsVisible: () => true,
-  observeMaverickVisibility: (listener: (visible: boolean) => void) => { listener(true); return () => {}; },
+vi.mock("@loopino/pwa-cache", () => ({
+  loopinoAppIsVisible: () => true,
+  observeLoopinoVisibility: (listener: (visible: boolean) => void) => { listener(true); return () => {}; },
 }));
 const session = { id: "one", name: "Phone", status: "qr_ready", engineLoaded: true };
 let container: HTMLDivElement;

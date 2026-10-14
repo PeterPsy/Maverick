@@ -19,7 +19,7 @@ describe("System-browser Google landing", () => {
 
   it("removes fragment authority before rendering and launches only once in StrictMode", async () => {
     const state = "s".repeat(43), handoff = "h".repeat(64);
-    window.location.href = `https://maverick.example/?google_handoff=1#${state}.${handoff}`;
+    window.location.href = `https://loopino.example/?google_handoff=1#${state}.${handoff}`;
     const replace = vi.spyOn(window.location, "replace").mockImplementation(() => {});
     const module = await import("../src/components/GoogleBrowserHandoff");
     expect(window.location.hash).toBe("");
@@ -31,16 +31,16 @@ describe("System-browser Google landing", () => {
   });
 
   it("shows an expired handoff after reload instead of claiming that Google connected", async () => {
-    window.location.href = "https://maverick.example/?google_handoff=1";
+    window.location.href = "https://loopino.example/?google_handoff=1";
     const module = await import("../src/components/GoogleBrowserHandoff");
     await act(async () => root.render(<module.GoogleBrowserHandoff />));
-    expect(container.textContent).toContain("Return to Maverick and try again");
+    expect(container.textContent).toContain("Return to Loopino and try again");
     expect(container.textContent).not.toContain("Google connected");
     expect(googlePost).not.toHaveBeenCalled();
   });
 
   it("explains cancelled consent without opening Google again", async () => {
-    window.location.href = "https://maverick.example/?google_handoff_done=1&google_error=google_consent_cancelled";
+    window.location.href = "https://loopino.example/?google_handoff_done=1&google_error=google_consent_cancelled";
     const module = await import("../src/components/GoogleBrowserHandoff");
     await act(async () => root.render(<module.GoogleBrowserHandoff />));
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("cancelled");

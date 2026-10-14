@@ -3,7 +3,7 @@
   "contract_version": "1.0",
   "name": "Mail",
   "version": "0.2.0",
-  "description": "Maverick Mail app with inbox, thread, draft, Storage-backed attachment, CLI, MCP, and reference surfaces backed by app-owned SQLite storage.",
+  "description": "Loopino Mail app with inbox, thread, draft, Storage-backed attachment, CLI, MCP, and reference surfaces backed by app-owned SQLite storage.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
   "provides": [

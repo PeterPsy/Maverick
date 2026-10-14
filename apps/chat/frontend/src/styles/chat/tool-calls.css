@@ -44,7 +44,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: rgba(var(--maverick-contrast-rgb), 0.52);
+  color: rgba(var(--loopino-contrast-rgb), 0.52);
   cursor: pointer;
   font: inherit;
   font-weight: 400;
@@ -52,7 +52,7 @@
 }
 
 .chatapp-tool-inline__toggle:hover {
-  color: rgba(var(--maverick-contrast-rgb), 0.66);
+  color: rgba(var(--loopino-contrast-rgb), 0.66);
 }
 
 .chatapp-tool-inline__chevron {
@@ -61,7 +61,7 @@
   justify-content: center;
   width: 0.95rem;
   height: 0.95rem;
-  color: rgba(var(--maverick-contrast-rgb), 0.44);
+  color: rgba(var(--loopino-contrast-rgb), 0.44);
   transition:
     transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
     color 220ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -78,7 +78,7 @@
   width: 0.95rem;
   height: 0.95rem;
   flex: 0 0 auto;
-  color: rgba(var(--maverick-contrast-rgb), 0.68);
+  color: rgba(var(--loopino-contrast-rgb), 0.68);
 }
 
 .chatapp-tool-inline__activity-icon .material-symbols-rounded {
@@ -102,7 +102,7 @@
 .chatapp-tool-inline__time {
   flex: 0 0 auto;
   margin-left: auto;
-  color: rgba(var(--maverick-contrast-rgb), 0.34);
+  color: rgba(var(--loopino-contrast-rgb), 0.34);
   font-size: 0.68rem;
   line-height: 1;
   white-space: nowrap;
@@ -143,7 +143,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   margin: 0.32rem 0 0.5rem;
   overflow: hidden;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.12);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.12);
   border-radius: var(--chatapp-glass-radius);
   background: var(--chatapp-glass-surface);
   box-shadow: var(--chatapp-tool-call-panel-shadow);
@@ -156,7 +156,7 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 0.9rem 0.75rem;
-  border-bottom: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  border-bottom: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
 }
 
 .chatapp-tool-call-panel__header-copy {
@@ -176,23 +176,23 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   cursor: pointer;
 }
 
 .chatapp-tool-call-panel__close:hover {
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
 }
 
 .chatapp-tool-call-panel__close:focus-visible {
-  outline: 2px solid var(--maverick-focus);
+  outline: 2px solid var(--loopino-focus);
   outline-offset: 2px;
 }
 
 .chatapp-tool-call-panel__eyebrow {
   margin: 0;
-  color: rgba(var(--maverick-contrast-rgb), 0.5);
+  color: rgba(var(--loopino-contrast-rgb), 0.5);
   font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0.08em;
@@ -201,7 +201,7 @@
 
 .chatapp-tool-call-panel__title {
   margin: 0;
-  color: rgba(var(--maverick-contrast-rgb), 0.92);
+  color: rgba(var(--loopino-contrast-rgb), 0.92);
   font-size: 1rem;
   font-weight: 650;
   line-height: 1.25;
@@ -220,10 +220,10 @@
   justify-content: center;
   min-height: 1.35rem;
   padding: 0.12rem 0.46rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
   border-radius: 999px;
-  background: rgba(var(--maverick-contrast-rgb), 0.026);
-  color: rgba(var(--maverick-contrast-rgb), 0.52);
+  background: rgba(var(--loopino-contrast-rgb), 0.026);
+  color: rgba(var(--loopino-contrast-rgb), 0.52);
   font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0;
@@ -245,7 +245,7 @@
 
 .chatapp-tool-call-panel__section-title {
   margin: 0;
-  color: rgba(var(--maverick-contrast-rgb), 0.62);
+  color: rgba(var(--loopino-contrast-rgb), 0.62);
   font-size: 0.75rem;
   font-weight: 400;
   letter-spacing: 0.05em;
@@ -259,7 +259,7 @@
 .chatapp-tool-call-panel__text,
 .chatapp-tool-call-panel__list-item p {
   margin: 0;
-  color: rgba(var(--maverick-contrast-rgb), 0.82);
+  color: rgba(var(--loopino-contrast-rgb), 0.82);
   font-size: 0.85rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -269,9 +269,9 @@
   margin: 0;
   padding: 0.65rem 0.75rem;
   border-radius: 0.8rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.03);
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
-  color: rgba(var(--maverick-contrast-rgb), 0.86);
+  background: rgba(var(--loopino-contrast-rgb), 0.03);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
+  color: rgba(var(--loopino-contrast-rgb), 0.86);
   font-size: 0.78rem;
   line-height: 1.45;
   overflow: auto;
@@ -280,9 +280,9 @@
 }
 
 .chatapp-tool-call-panel__pre.is-error {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.08);
-  background: var(--maverick-control-inset-surface);
-  color: rgba(var(--maverick-contrast-rgb), 0.82);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.08);
+  background: var(--loopino-control-inset-surface);
+  color: rgba(var(--loopino-contrast-rgb), 0.82);
 }
 
 .chatapp-tool-call-panel__list {
@@ -295,8 +295,8 @@
   gap: 0.18rem;
   padding: 0.75rem 0.8rem;
   border-radius: 0.8rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.03);
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  background: rgba(var(--loopino-contrast-rgb), 0.03);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
 }
 
 @keyframes chatapp-tool-call-panel-enter {
@@ -313,7 +313,7 @@
 
 .chatapp-tool-call-panel__list-item strong,
 .chatapp-tool-call-panel__list-item a {
-  color: rgba(var(--maverick-contrast-rgb), 0.9);
+  color: rgba(var(--loopino-contrast-rgb), 0.9);
   font-size: 0.82rem;
   overflow-wrap: anywhere;
 }
@@ -344,7 +344,7 @@
 }
 
 .chatapp-tool-confirmation__heading strong {
-  color: rgba(var(--maverick-contrast-rgb), 0.92);
+  color: rgba(var(--loopino-contrast-rgb), 0.92);
   font-size: 0.86rem;
 }
 
@@ -352,7 +352,7 @@
 .chatapp-tool-confirmation__receipt,
 .chatapp-tool-confirmation__error {
   margin: 0;
-  color: rgba(var(--maverick-contrast-rgb), 0.62);
+  color: rgba(var(--loopino-contrast-rgb), 0.62);
   font-size: 0.74rem;
   line-height: 1.4;
 }
@@ -363,9 +363,9 @@
   gap: 1px;
   overflow: hidden;
   margin: 0;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
   border-radius: 0.7rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.06);
+  background: rgba(var(--loopino-contrast-rgb), 0.06);
 }
 
 .chatapp-tool-confirmation__facts > div {
@@ -373,11 +373,11 @@
   min-width: 0;
   gap: 0.12rem;
   padding: 0.5rem 0.58rem;
-  background: var(--maverick-popover-surface-strong);
+  background: var(--loopino-popover-surface-strong);
 }
 
 .chatapp-tool-confirmation__facts dt {
-  color: rgba(var(--maverick-contrast-rgb), 0.48);
+  color: rgba(var(--loopino-contrast-rgb), 0.48);
   font-size: 0.62rem;
   text-transform: uppercase;
 }
@@ -385,8 +385,8 @@
 .chatapp-tool-confirmation__facts dd {
   overflow: hidden;
   margin: 0;
-  color: rgba(var(--maverick-contrast-rgb), 0.84);
-  font-family: var(--maverick-mono-font, ui-monospace, monospace);
+  color: rgba(var(--loopino-contrast-rgb), 0.84);
+  font-family: var(--loopino-mono-font, ui-monospace, monospace);
   font-size: 0.68rem;
   text-overflow: ellipsis;
 }
@@ -406,13 +406,13 @@
   border: 1px solid rgba(45, 212, 191, 0.24);
   border-radius: 999px;
   background: rgba(20, 184, 166, 0.1);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   cursor: pointer;
 }
 
 .chatapp-tool-confirmation__actions button.is-deny {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.1);
-  background: rgba(var(--maverick-contrast-rgb), 0.04);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.1);
+  background: rgba(var(--loopino-contrast-rgb), 0.04);
 }
 
 .chatapp-tool-confirmation__actions button:disabled {
@@ -447,32 +447,32 @@
   gap: 0.12rem;
   min-width: 7rem;
   padding: 0.55rem 0.65rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
   border-radius: 0.7rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.03);
+  background: rgba(var(--loopino-contrast-rgb), 0.03);
 }
 
 .chatapp-runtime-step-panel__metrics dt {
-  color: rgba(var(--maverick-contrast-rgb), 0.5);
+  color: rgba(var(--loopino-contrast-rgb), 0.5);
   font-size: 0.68rem;
   text-transform: uppercase;
 }
 
 .chatapp-runtime-step-panel__metrics dd {
   margin: 0;
-  color: rgba(var(--maverick-contrast-rgb), 0.88);
+  color: rgba(var(--loopino-contrast-rgb), 0.88);
   font-size: 0.82rem;
 }
 
 .chatapp-runtime-step-panel__technical {
-  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  border-top: 1px solid rgba(var(--loopino-contrast-rgb), 0.06);
   padding-top: 0.6rem;
 }
 
 .chatapp-runtime-step-panel__technical summary {
   width: max-content;
   max-width: 100%;
-  color: rgba(var(--maverick-contrast-rgb), 0.56);
+  color: rgba(var(--loopino-contrast-rgb), 0.56);
   cursor: pointer;
   font-size: 0.75rem;
   user-select: none;
@@ -496,10 +496,10 @@
   gap: 0.55rem;
   max-width: min(100%, 560px);
   padding: 0.65rem 0.85rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.08);
   border-radius: 999px;
-  background: rgba(var(--maverick-contrast-rgb), 0.04);
-  color: rgba(var(--maverick-contrast-rgb), 0.84);
+  background: rgba(var(--loopino-contrast-rgb), 0.04);
+  color: rgba(var(--loopino-contrast-rgb), 0.84);
 }
 
 .chatapp-tool-inline-message__button {
@@ -528,7 +528,7 @@
 }
 
 .chatapp-tool-inline-message__copy small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
   text-transform: uppercase;
 }
@@ -539,8 +539,8 @@
   margin: 0;
   padding: 0.75rem;
   border-radius: 12px;
-  background: var(--maverick-control-inset-surface);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-control-inset-surface);
+  color: var(--loopino-text-muted);
 }
 
 .chatapp-tool-inline {
@@ -550,7 +550,7 @@
   display: grid;
   width: min(100%, 54rem);
   padding: 0.82rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.055);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.055);
   border-radius: var(--chatapp-cell-radius);
   box-shadow: var(--chatapp-tool-inline-shadow);
 }
@@ -567,12 +567,12 @@
 }
 
 .chatapp-tool-inline__toggle {
-  color: rgba(var(--maverick-contrast-rgb), 0.58);
+  color: rgba(var(--loopino-contrast-rgb), 0.58);
 }
 
 .chatapp-tool-inline__toggle:hover,
 .chatapp-tool-inline__toggle:focus-visible {
-  color: rgba(var(--maverick-contrast-rgb), 0.82);
+  color: rgba(var(--loopino-contrast-rgb), 0.82);
 }
 
 .chatapp-tool-inline__body-inner {
@@ -580,15 +580,15 @@
 }
 
 .chatapp-tool-call-panel {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.08);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.08);
   border-radius: 0.95rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.025);
+  background: rgba(var(--loopino-contrast-rgb), 0.025);
   box-shadow: var(--chatapp-tool-call-panel-shadow);
   backdrop-filter: none;
 }
 
 .chatapp-tool-call-panel__header {
-  border-bottom-color: rgba(var(--maverick-contrast-rgb), 0.055);
+  border-bottom-color: rgba(var(--loopino-contrast-rgb), 0.055);
 }
 
 .chatapp-tool-call-panel__header-copy {
@@ -596,21 +596,21 @@
 }
 
 .chatapp-tool-call-panel__eyebrow {
-  color: rgba(var(--maverick-contrast-rgb), 0.42);
+  color: rgba(var(--loopino-contrast-rgb), 0.42);
   font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0.03em;
 }
 
 .chatapp-tool-call-panel__title {
-  color: rgba(var(--maverick-contrast-rgb), 0.86);
+  color: rgba(var(--loopino-contrast-rgb), 0.86);
   font-size: 0.92rem;
   font-weight: 560;
   line-height: 1.28;
 }
 
 .chatapp-tool-call-panel__section-title {
-  color: rgba(var(--maverick-contrast-rgb), 0.48);
+  color: rgba(var(--loopino-contrast-rgb), 0.48);
   font-size: 0.72rem;
   font-weight: 560;
   letter-spacing: 0;
@@ -621,7 +621,7 @@
 .chatapp-tool-call-panel__list-item,
 .chatapp-tool-inline-message,
 .chatapp-tool-inline-message__detail {
-  border-color: rgba(var(--maverick-contrast-rgb), 0.065);
+  border-color: rgba(var(--loopino-contrast-rgb), 0.065);
   border-radius: 0.85rem;
-  background: var(--maverick-control-inset-surface-muted);
+  background: var(--loopino-control-inset-surface-muted);
 }

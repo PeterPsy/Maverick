@@ -1,6 +1,6 @@
 # Core overview
 
-> **Read this first.** Maverick is a clean rebuild: the core is the platform host, while apps own product behavior and workspace data.
+> **Read this first.** Loopino is a clean rebuild: the core is the platform host, while apps own product behavior and workspace data.
 
 ## At a glance
 
@@ -24,7 +24,7 @@ Choose the implementation that is easiest to read, test, delete, and align with 
 
 ## Operating model
 
-Maverick works best when every change starts by asking which layer owns the behavior. Core changes should improve platform capability for every app. App changes should improve one product surface without teaching the core about that product.
+Loopino works best when every change starts by asking which layer owns the behavior. Core changes should improve platform capability for every app. App changes should improve one product surface without teaching the core about that product.
 
 ### Ownership questions
 

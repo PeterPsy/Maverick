@@ -94,8 +94,8 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(app_events_for_action("drive_list_children"), [])
         self.assertEqual(app_events_for_action("drive_search"), [])
         self.assertEqual(app_events_for_action("drive_sync"), [
-            {"type": "maverick.app.data-changed", "resource": "files"},
-            {"type": "maverick.app.data-changed", "resource": "drive-connections"},
+            {"type": "loopino.app.data-changed", "resource": "files"},
+            {"type": "loopino.app.data-changed", "resource": "drive-connections"},
         ])
 
     def test_list_roots_normalizes_my_drive_shared_with_me_and_shared_drives(self) -> None:
@@ -1376,7 +1376,7 @@ class GoogleDriveProviderTest(unittest.TestCase):
             "method": "GET",
             "query": {"stable_storage_file_id": "file_drive_1", "source_version": "8"},
             "headers": {},
-            "stream_response_protocol": "maverick.backend.stream.v1",
+            "stream_response_protocol": "loopino.backend.stream.v1",
         }
         stdout = CapturingStdout()
 

@@ -2,7 +2,7 @@ import {
   LOCAL_PERSISTENCE_POLICY_REVISION,
   type AccessLease,
   type LocalPersistencePolicy,
-  type MaverickDataClass,
+  type LoopinoDataClass,
   type ResourceCachePolicy,
 } from "./types";
 
@@ -93,7 +93,7 @@ export function isAgenticControlPlaneResource(
 }
 
 export function hasValidAccessLease(
-  dataClass: MaverickDataClass,
+  dataClass: LoopinoDataClass,
   lease: AccessLease | undefined,
   now: number,
 ): boolean {

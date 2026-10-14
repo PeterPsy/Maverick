@@ -4,13 +4,13 @@ import {
   PWA_CACHE_OPERATIONS_REQUEST,
   PWA_CACHE_OPERATIONS_RESULT,
   createPwaCacheMetricsCollector,
-} from "@maverick/pwa-cache";
-import { setMaverickFrameOrigin } from "./iframePolicy";
+} from "@loopino/pwa-cache";
+import { setLoopinoFrameOrigin } from "./iframePolicy";
 import { PwaCacheOperationsBroker } from "./pwaCacheOperationsBroker";
 
 const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-default", workspaceId: "default" });
 const settingsWindow = {} as Window;
-const settingsOrigin = "https://af-settings.sidecars.maverick.test";
+const settingsOrigin = "https://af-settings.sidecars.loopino.test";
 const settingsFrame = { contentWindow: settingsWindow, dataset: {} } as unknown as HTMLIFrameElement;
 
 function requestEvent(
@@ -45,17 +45,17 @@ function nextMessage(port: MessagePort): Promise<Record<string, unknown>> {
 describe("Base Shell PWA cache operations broker", () => {
   beforeEach(() => {
     const shellWindow = new EventTarget() as EventTarget & Window;
-    Object.assign(shellWindow, { location: { origin: "https://maverick.test" }, top: shellWindow });
+    Object.assign(shellWindow, { location: { origin: "https://loopino.test" }, top: shellWindow });
     vi.stubGlobal("window", shellWindow);
-    setMaverickFrameOrigin(settingsFrame, settingsOrigin, "settings", FRAME_SCOPE);
+    setLoopinoFrameOrigin(settingsFrame, settingsOrigin, "settings", FRAME_SCOPE);
     vi.unstubAllGlobals();
   });
 
   afterEach(() => {
     const shellWindow = new EventTarget() as EventTarget & Window;
-    Object.assign(shellWindow, { location: { origin: "https://maverick.test" }, top: shellWindow });
+    Object.assign(shellWindow, { location: { origin: "https://loopino.test" }, top: shellWindow });
     vi.stubGlobal("window", shellWindow);
-    setMaverickFrameOrigin(settingsFrame, null, "settings", FRAME_SCOPE);
+    setLoopinoFrameOrigin(settingsFrame, null, "settings", FRAME_SCOPE);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

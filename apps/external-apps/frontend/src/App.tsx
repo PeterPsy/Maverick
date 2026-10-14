@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { appId, callBackend, label, type Detail, type Plan, type Publication } from './api';
 import { PublicationDetail } from './PublicationDetail';
 import { PrepareForm } from './PrepareForm';
@@ -43,16 +43,16 @@ export function App({ sourceAppId, sourceAppName }: { sourceAppId?: string; sour
   }, [selected, query, filter, refreshKey, sourceAppId]);
 
   useEffect(() => {
-    window.parent.postMessage({ type: 'maverick.app.ready', app_id: appId }, '*');
+    window.parent.postMessage({ type: 'loopino.app.ready', app_id: appId }, '*');
     function message(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data) return;
+      if (!isExactLoopinoParentMessage(event) || !event.data) return;
       const data = event.data;
-      if (data.type === 'maverick.app.data-changed' && data.owner_app_id === appId) refresh();
-      if (data.type === 'maverick.shell.theme-changed' || data.type === 'maverick.app.navigate') {
+      if (data.type === 'loopino.app.data-changed' && data.owner_app_id === appId) refresh();
+      if (data.type === 'loopino.shell.theme-changed' || data.type === 'loopino.app.navigate') {
         const theme = data.theme?.effective;
         if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
       }
-      if (data.type === 'maverick.app.navigate' && (!data.app_id || data.app_id === appId)) {
+      if (data.type === 'loopino.app.navigate' && (!data.app_id || data.app_id === appId)) {
         ++epoch.current; setDetail(undefined); setItems([]); setError(''); setNotice(''); setShowPrepare(false); setBusy(false); setQuery(''); setFilter('');
         setSelected(typeof data.params?.external_app_id === 'string' ? data.params.external_app_id : ''); refresh();
       }
@@ -87,10 +87,10 @@ export function App({ sourceAppId, sourceAppName }: { sourceAppId?: string; sour
   }
 
   return <main className="app-shell">
-    <header className="topbar"><div><p className="eyebrow">{sourceAppName || 'Maverick'}</p><h1>{sourceAppId ? 'Superfici esterne' : 'External Apps'}</h1><p className="muted">Pubblicazioni statiche, release immutabili.</p></div><div className="actions"><button className="secondary" onClick={refresh} disabled={busy}>Aggiorna</button><button onClick={() => setShowPrepare(v => !v)} disabled={!configured || !providerMatches || busy}>Prepara pubblicazione</button></div></header>
+    <header className="topbar"><div><p className="eyebrow">{sourceAppName || 'Loopino'}</p><h1>{sourceAppId ? 'Superfici esterne' : 'External Apps'}</h1><p className="muted">Pubblicazioni statiche, release immutabili.</p></div><div className="actions"><button className="secondary" onClick={refresh} disabled={busy}>Aggiorna</button><button onClick={() => setShowPrepare(v => !v)} disabled={!configured || !providerMatches || busy}>Prepara pubblicazione</button></div></header>
     {error && <p className="error" role="alert">{error}</p>}
     {notice && <p className="notice" role="status">{notice}</p>}
-    {!configured && !sourceAppId && <form className="setup" onSubmit={e => { e.preventDefault(); mutate({ action: 'deployment.configure', installation_domain: domain }); }}><h2>Configurazione richiesta</h2><p>Usa il dominio di questa installazione Maverick: le pubblicazioni saranno su &lt;app&gt;.apps.&lt;dominio&gt;. DNS e servizio HTTPS vanno predisposti dall’operatore.</p><label>Dominio di Maverick<input required value={domain} onChange={e => setDomain(e.target.value)} placeholder="maverick.example.com" /></label><button disabled={busy}>Salva dominio</button></form>}
+    {!configured && !sourceAppId && <form className="setup" onSubmit={e => { e.preventDefault(); mutate({ action: 'deployment.configure', installation_domain: domain }); }}><h2>Configurazione richiesta</h2><p>Usa il dominio di questa installazione Loopino: le pubblicazioni saranno su &lt;app&gt;.apps.&lt;dominio&gt;. DNS e servizio HTTPS vanno predisposti dall’operatore.</p><label>Dominio di Loopino<input required value={domain} onChange={e => setDomain(e.target.value)} placeholder="loopino.example.com" /></label><button disabled={busy}>Salva dominio</button></form>}
     {!configured && sourceAppId && <p className="notice">Hosting pubblico non configurato: è necessario l’intervento dell’amministratore dell’installazione.</p>}
     {sourceAppId && !loading && !providerMatches && <p className="notice">Questa app non ha un exporter statico selezionato per la pubblicazione. Nessuna UI o API privata viene resa pubblica.</p>}
     <div className="toolbar"><label className="search">Cerca<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Nome pubblicazione" /></label><label>Stato<select value={filter} onChange={e => setFilter(e.target.value)}><option value="">Tutte le non archiviate</option>{['draft', 'published', 'suspended', 'archived'].map(s => <option key={s} value={s}>{label(s)}</option>)}</select></label></div>

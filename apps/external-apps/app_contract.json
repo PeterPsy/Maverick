@@ -4,7 +4,7 @@
   "name": "External Apps",
   "version": "0.1.0",
   "description": "Publish immutable static Website Studio releases on an isolated public origin.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

@@ -38,7 +38,7 @@ class AntigravityCliLaunchTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertEqual(self.spec.env_overrides["HOME"], str(self.root / "runtime/antigravity-home"))
         self.assertNotEqual(self.spec.env_overrides["HOME"], str(Path.home()))
         self.assertNotIn("GEMINI_API_KEY", self.spec.env_overrides)
-        self.assertNotIn("MAVERICK_PROVIDER_SECRET", self.spec.env_overrides)
+        self.assertNotIn("LOOPINO_PROVIDER_SECRET", self.spec.env_overrides)
         settings_path = (
             Path(self.spec.env_overrides["HOME"])
             / ".gemini/antigravity-cli/settings.json"
@@ -50,8 +50,8 @@ class AntigravityCliLaunchTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
                 "enableTerminalSandbox": True,
                 "permissions": {
                     "allow": [
-                        "command(maverick)",
-                        "unsandboxed(maverick)",
+                        "command(loopino)",
+                        "unsandboxed(loopino)",
                     ],
                 },
                 "toolPermission": "proceed-in-sandbox",
@@ -68,9 +68,9 @@ class AntigravityCliLaunchTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
             [workspace, str(self.root / "runtime")],
         )
         self.assertTrue(
-            (self.root / "runtime/bin/maverick").is_file()
+            (self.root / "runtime/bin/loopino").is_file()
         )
-        self.assertIn("MAVERICK_RUNTIME_API_TOKEN", self.spec.env_overrides)
+        self.assertIn("LOOPINO_RUNTIME_API_TOKEN", self.spec.env_overrides)
         self.assertTrue(
             self.spec.env_overrides["PATH"].startswith(
                 str(self.root / "runtime/bin")
@@ -137,7 +137,7 @@ class AntigravityCliLaunchTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertEqual(spec.readable_roots, ["/"])
         self.assertEqual(spec.writable_roots, ["/"])
         self.assertEqual(
-            spec.env_overrides["MAVERICK_EFFECTIVE_MODE"],
+            spec.env_overrides["LOOPINO_EFFECTIVE_MODE"],
             "full-access",
         )
 

@@ -98,7 +98,7 @@ def eligible(item):
     if item["novelty"] != "new":
         return False
     if item["kind"] == "improvement":
-        return (item["scope"] == "maverick" and item["problem_kind"] != "none"
+        return (item["scope"] == "loopino" and item["problem_kind"] != "none"
                 and bool(item["generalization"].strip()) and bool(item["verification"].strip()))
     if item["scope"] != "knowledge" or not item["durable"] or item["memory_type"] in {"none", "development"} or item["confirmation"] != "confirmed":
         return False

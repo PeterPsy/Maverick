@@ -17,8 +17,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -59,7 +59,7 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
   background: rgba(12, 12, 14, 0.58);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   padding: 0 0.72rem;
@@ -67,24 +67,24 @@ button {
 
 .memory-sidebar-search-frame svg {
   flex: none;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .memory-sidebar-search {
   width: 100%;
   min-width: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .memory-sidebar-search::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .memory-sidebar-search-frame:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 @media (max-width: 979px) {
@@ -125,7 +125,7 @@ button {
 .memory-sidebar-custom-view,
 .memory-sidebar-row {
   border-radius: 22px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .memory-sidebar-custom-view {
@@ -133,7 +133,7 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.6rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   background: rgba(255, 255, 255, 0.055);
   padding: 0.72rem 0.78rem;
 }
@@ -146,7 +146,7 @@ button {
 
 .memory-sidebar-custom-view strong {
   overflow: hidden;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.8rem;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -154,16 +154,16 @@ button {
 }
 
 .memory-sidebar-custom-view small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .memory-sidebar-custom-view button {
   min-height: 2rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0 0.66rem;
   font-size: 0.72rem;
 }
@@ -184,15 +184,15 @@ button {
 
 .memory-sidebar-row:hover,
 .memory-sidebar-row.is-active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .memory-sidebar-row:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .memory-sidebar-row.is-active {
-  background: var(--maverick-surface-active);
+  background: var(--loopino-surface-active);
 }
 
 .memory-sidebar-row:active {
@@ -206,7 +206,7 @@ button {
   width: 2rem;
   height: 2rem;
   border-radius: 15px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .memory-sidebar-row__icon i {
@@ -219,7 +219,7 @@ button {
 }
 
 .memory-sidebar-row.is-active .memory-sidebar-row__icon {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .memory-sidebar-row__copy {
@@ -240,13 +240,13 @@ button {
 }
 
 .memory-sidebar-row__copy span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .memory-sidebar-empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -263,7 +263,7 @@ button {
   gap: 0.65rem;
   min-height: 3.05rem;
   border-radius: 22px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.58rem 0.7rem;
 }
 
@@ -332,10 +332,10 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
   background: rgba(12, 12, 14, 0.58);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0 0.82rem;
   font-size: 0.76rem;
   font-weight: 400;
@@ -357,7 +357,7 @@ button {
 
 .memory-sidebar-footer-button:hover,
 .memory-sidebar-footer-button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 

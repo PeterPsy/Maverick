@@ -97,7 +97,7 @@ function isForbiddenKey(key: string): boolean {
 
 function containsCredentialUrl(value: string): boolean {
   try {
-    const url = new URL(value, "https://maverick.invalid/");
+    const url = new URL(value, "https://loopino.invalid/");
     if (url.username || url.password) {
       return true;
     }

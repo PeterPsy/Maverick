@@ -10,7 +10,7 @@ from typing import Any, Mapping
 from urllib.parse import urlencode
 
 
-_PROTOCOL = "maverick.app-sidecar.v1"
+_PROTOCOL = "loopino.app-sidecar.v1"
 _MAX_BROKER_ENVELOPE_OVERHEAD = 64 * 1024
 
 

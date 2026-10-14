@@ -21,7 +21,7 @@ class AppEventPublicationTestCase(unittest.TestCase):
         result = {
             "app_events": [
                 {
-                    "type": "maverick.app.data-changed",
+                    "type": "loopino.app.data-changed",
                     "owner_app_id": "other-app",
                     "resource": "records",
                 }
@@ -40,7 +40,7 @@ class AppEventPublicationTestCase(unittest.TestCase):
             bus.events,
             [
                 {
-                    "type": "maverick.app.data-changed",
+                    "type": "loopino.app.data-changed",
                     "workspace_id": "default",
                     "owner_app_id": "records",
                     "resource": "records",
@@ -53,10 +53,10 @@ class AppEventPublicationTestCase(unittest.TestCase):
         bus = FakeAppEventBus()
         result = {
             "app_events": [
-                {"type": "maverick.app.frontend-changed", "resource": "records"},
-                {"type": "maverick.widget.data-changed", "resource": "records"},
-                {"type": "maverick.app.data-changed", "resource": "other"},
-                {"type": "maverick.app.data-changed"},
+                {"type": "loopino.app.frontend-changed", "resource": "records"},
+                {"type": "loopino.widget.data-changed", "resource": "records"},
+                {"type": "loopino.app.data-changed", "resource": "other"},
+                {"type": "loopino.app.data-changed"},
                 "not-an-event",
             ]
         }
@@ -75,7 +75,7 @@ class AppEventPublicationTestCase(unittest.TestCase):
 
     def test_publisher_can_remove_app_events_from_backend_response_payload(self) -> None:
         bus = FakeAppEventBus()
-        result = {"app_events": [{"type": "maverick.app.data-changed", "resource": "view-state"}]}
+        result = {"app_events": [{"type": "loopino.app.data-changed", "resource": "view-state"}]}
 
         publish_declared_app_events(
             bus,

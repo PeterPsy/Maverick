@@ -1,4 +1,4 @@
-import { isStandaloneWebApp } from '@maverick/pwa-cache';
+import { isStandaloneWebApp } from '@loopino/pwa-cache';
 
 export type ExternalUrlDisposition = "new-window" | "same-window";
 
@@ -64,8 +64,8 @@ export async function openExternalUrl(
 
 function nativeExternalUrlOpener(): ExternalUrlEffects["nativeOpen"] {
   const native = (window as unknown as {
-    webkit?: { messageHandlers?: { maverickExternalURL?: { postMessage(value: unknown): Promise<unknown> } } };
-  }).webkit?.messageHandlers?.maverickExternalURL;
+    webkit?: { messageHandlers?: { loopinoExternalURL?: { postMessage(value: unknown): Promise<unknown> } } };
+  }).webkit?.messageHandlers?.loopinoExternalURL;
   if (!native) return undefined;
   return async (url) => {
     if (await native.postMessage({ url }) !== true) {

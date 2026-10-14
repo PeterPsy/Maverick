@@ -1,4 +1,4 @@
-"""Tests for the official Maverick App SDK."""
+"""Tests for the official Loopino App SDK."""
 
 from __future__ import annotations
 
@@ -33,13 +33,13 @@ from tests.support.markers import slow_test_class
 
 
 @slow_test_class("slow app-sdk integration suite; run with scripts/test_suite.py --level slow")
-class MaverickAppSdkTestCase(unittest.TestCase):
+class LoopinoAppSdkTestCase(unittest.TestCase):
     """Verify SDK app generation, validation, registration, installation, and helpers."""
 
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         repo_root.mkdir()
         source_repo = Path(__file__).resolve().parents[3]
         os.symlink(source_repo / "core", repo_root / "core", target_is_directory=True)
@@ -263,7 +263,7 @@ class MaverickAppSdkTestCase(unittest.TestCase):
                 app_id="sdk-platform",
                 template_id="minimal",
                 target_kind="platform",
-                publisher="maverick",
+                publisher="loopino",
             ),
             start_path=repo_root,
         )
@@ -293,7 +293,7 @@ class MaverickAppSdkTestCase(unittest.TestCase):
                 app_id="sdk-collision",
                 template_id="minimal",
                 target_kind="platform",
-                publisher="maverick",
+                publisher="loopino",
             ),
             start_path=repo_root,
         )
@@ -613,7 +613,7 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         self.assertEqual(docs_exit_code, 0)
         self.assertEqual(templates_exit_code, 0)
         self.assertEqual(docs_payload["format"], "markdown")
-        self.assertIn("Maverick App SDK", docs_payload["content"])
+        self.assertIn("Loopino App SDK", docs_payload["content"])
         self.assertIn("minimal", templates_payload["templates"])
 
     def test_cli_wrapper_packages_workspace_app_by_app_id_to_generated_storage(self) -> None:
@@ -816,9 +816,9 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         self.assertEqual(status, "200 OK")
         self.assertEqual(payload["workspace_id"], "docs-workspace")
         self.assertEqual(payload["format"], "markdown")
-        self.assertIn("Maverick App SDK", payload["content"])
-        self.assertIn("maverick core cli run core.app-sdk.create", payload["content"])
-        self.assertNotIn("maverick app " + "create", payload["content"])
+        self.assertIn("Loopino App SDK", payload["content"])
+        self.assertIn("loopino core cli run core.app-sdk.create", payload["content"])
+        self.assertNotIn("loopino app " + "create", payload["content"])
         self.assertNotIn("docs/app-sdk", payload["content"])
 
     def test_runtime_api_token_carries_mode_and_expires(self) -> None:

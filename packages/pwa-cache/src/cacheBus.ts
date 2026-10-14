@@ -6,7 +6,7 @@ export type CacheBusMessage =
 
 type CacheBusListener = (message: CacheBusMessage) => void;
 
-const CHANNEL_NAME = "maverick-pwa-cache-v1";
+const CHANNEL_NAME = "loopino-pwa-cache-v1";
 
 export class CacheBus {
   private readonly channel: BroadcastChannel | null;
@@ -61,7 +61,7 @@ export async function withCrossClientLock<T>(
   operation: () => Promise<T>,
   options: { mode?: "exclusive" | "shared"; nativeOnly?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
-  const name = `maverick-pwa-cache:${stableHash(key)}`;
+  const name = `loopino-pwa-cache:${stableHash(key)}`;
   const locks = nativeCrossClientLocksAvailable()
     ? (globalThis.navigator as Navigator & { locks: LockManager }).locks
     : null;

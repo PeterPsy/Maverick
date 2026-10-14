@@ -1,6 +1,6 @@
-# Maverick Core
+# Loopino Core
 
-This tree is the package root of the Maverick core.
+This tree is the package root of the Loopino core.
 
 The target architecture is defined in:
 
@@ -28,5 +28,5 @@ health for admission, continuation, request/catalog construction, API, Chat,
 and Settings. Agentic profiles directly declare capabilities and reasoning;
 there is no independent issuance, expiry, renewal, or source-byte guard.
 Browser inputs and projections never carry classification or credential
-authority. Exact Codex, Maverick Agents, and `plain_hosted_chat` retain separate
+authority. Exact Codex, Loopino Agents, and `plain_hosted_chat` retain separate
 execution-family contracts.

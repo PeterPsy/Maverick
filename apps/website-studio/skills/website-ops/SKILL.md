@@ -7,7 +7,7 @@ description: Operate Website Studio projects and guide users who ask to connect,
 
 Use this skill when working on websites managed by the `website-studio` app.
 
-Website Studio is the authenticated operating layer inside Maverick. It is not the public website and it is not a reason to scan workspace files directly.
+Website Studio is the authenticated operating layer inside Loopino. It is not the public website and it is not a reason to scan workspace files directly.
 
 Also use this skill when the user asks in chat to connect, import, add, or link a website/site/repository to Website Studio, including requests such as "voglio connettere un sito", "collega un sito", "importa il sito", "ho uno ZIP su Drive", or "connetti una repo GitHub".
 

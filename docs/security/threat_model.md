@@ -4,20 +4,20 @@ Date: 2026-04-23; agentic journal/recovery amendment 2026-08-27
 
 ## Purpose
 
-This document gives a compact threat model for Maverick as an experimental, self-hostable, workspace-isolated AI operating environment.
+This document gives a compact threat model for Loopino as an experimental, self-hostable, workspace-isolated AI operating environment.
 
 It is not a substitute for deeper internal security review notes.
 
 Use this document to understand:
 
-- what Maverick is trying to protect
+- what Loopino is trying to protect
 - where the trust boundaries are
 - which attackers are relevant
 - what is intentionally not promised yet
 
 ## Security Position
 
-Maverick is not production-ready.
+Loopino is not production-ready.
 
 The system is designed around stronger boundaries than a single-user personal assistant, especially for non-default workspaces, but the implementation still has open security hardening work.
 
@@ -94,7 +94,7 @@ Compromise of the core is catastrophic, so the architecture should minimize path
 
 ### Local host
 
-The local host, filesystem, service manager, and operator account remain outside Maverick's internal policy model.
+The local host, filesystem, service manager, and operator account remain outside Loopino's internal policy model.
 
 Local administrator compromise is considered out of scope for product-level isolation promises.
 
@@ -358,7 +358,7 @@ resolved paths outside that root fail closed before provider dispatch. Runtime
 hosted materialization also retains the lexical workspace catalog path and
 rejects every symlink component before its descriptor-confined read. Runtime
 paths are not included in public API or transcript event payloads. In
-`explicit` mode Maverick also neutralizes Codex `$skill-id` mention syntax in
+`explicit` mode Loopino also neutralizes Codex `$skill-id` mention syntax in
 the provider-only text copy, while retaining the user's original text in the
 turn and transcript. Structured, validated skill items are therefore the only
 activation authority. An inter-agent participant snapshot is an allowlist, not
@@ -451,7 +451,7 @@ participant snapshot are committed under that lock, preventing a newly claimed
 task from escaping cancellation. Runtime turn queueing is guarded by the same
 status-and-generation transition: if pause wins, no turn is persisted or sent;
 if queueing wins, interrupt observes and cancels that turn and its hidden session.
-Same-turn message admission uses the same runtime-session `turn_submit` authorization as ordinary turn queueing. It requires a workspace-scoped client message id, a currently active Maverick turn, a persisted provider-acceptance correlation, and an adapter capability declaration before provider input is sent. The client never supplies a provider thread or turn id. Steer-or-queue decisions are serialized per session and refuse to overtake already queued turns. Admission state is persisted before crossing the provider boundary; explicit rejection releases it for safe next-turn queueing, while transport uncertainty remains terminal so browser retries cannot duplicate an input that may already have reached the provider.
+Same-turn message admission uses the same runtime-session `turn_submit` authorization as ordinary turn queueing. It requires a workspace-scoped client message id, a currently active Loopino turn, a persisted provider-acceptance correlation, and an adapter capability declaration before provider input is sent. The client never supplies a provider thread or turn id. Steer-or-queue decisions are serialized per session and refuse to overtake already queued turns. Admission state is persisted before crossing the provider boundary; explicit rejection releases it for safe next-turn queueing, while transport uncertainty remains terminal so browser retries cannot duplicate an input that may already have reached the provider.
 
 ### Workspace escape
 
@@ -499,7 +499,7 @@ app/backend sandboxing remains a production blocker.
 
 Secrets leak through files, logs, runtime state, generated files, or outbound actions.
 
-Current mitigations require apps to persist only references or grant ids, keep raw values in AES-GCM Core Secrets envelopes, use action-scoped grants for app use, reject mixed-action wildcard target grants, require explicit targets for non-internal actions, validate structured HTTP/HTTPS targets or the `maverick://app.backend/*` platform delivery target family, strip query strings from audit targets, allowlist and bound audit request context, redact HTTP responses and audit payloads, fail closed with audit/event records when declared app-entrypoint grants are denied or missing, limit CLI/MCP delivery to command/tool descriptor `required_secrets`, ignore expired and non-deliverable grants during delivery selection, audit app-owned secret write create/rotate/grant operations, require admin authority for secret-mutating runtime CLI calls, and treat resolved values as ephemeral runtime input. Residual risk remains until the production secret backend, external key management, CSRF hardening, and app/runtime sandboxing blockers are closed.
+Current mitigations require apps to persist only references or grant ids, keep raw values in AES-GCM Core Secrets envelopes, use action-scoped grants for app use, reject mixed-action wildcard target grants, require explicit targets for non-internal actions, validate structured HTTP/HTTPS targets or the `loopino://app.backend/*` platform delivery target family, strip query strings from audit targets, allowlist and bound audit request context, redact HTTP responses and audit payloads, fail closed with audit/event records when declared app-entrypoint grants are denied or missing, limit CLI/MCP delivery to command/tool descriptor `required_secrets`, ignore expired and non-deliverable grants during delivery selection, audit app-owned secret write create/rotate/grant operations, require admin authority for secret-mutating runtime CLI calls, and treat resolved values as ephemeral runtime input. Residual risk remains until the production secret backend, external key management, CSRF hardening, and app/runtime sandboxing blockers are closed.
 
 Agentic model requests add a second mandatory boundary: credential resolution
 occurs only at execution time, and neither raw credentials nor credential

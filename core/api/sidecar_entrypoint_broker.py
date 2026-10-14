@@ -33,7 +33,7 @@ from core.shared.entrypoints import (
 )
 
 
-_PROTOCOL = "maverick.app-sidecar.v1"
+_PROTOCOL = "loopino.app-sidecar.v1"
 _MAX_ENVELOPE_OVERHEAD = 64 * 1024
 _ALLOWED_REQUEST_FIELDS = {
     "capability",
@@ -132,7 +132,7 @@ class AppSidecarEntrypointBroker:
                 or target.binding.app_id != first.binding.app_id
             ):
                 raise ValueError("One entrypoint broker cannot span app or workspace scopes.")
-        self._temporary_root = Path(tempfile.mkdtemp(prefix="maverick-entrypoint-sidecar-"))
+        self._temporary_root = Path(tempfile.mkdtemp(prefix="loopino-entrypoint-sidecar-"))
         os.chmod(self._temporary_root, 0o700)
         socket_path = self._temporary_root / "broker.sock"
         server = _BrokerUnixServer(str(socket_path), _BrokerRequestHandler)

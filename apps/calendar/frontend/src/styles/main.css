@@ -48,10 +48,10 @@
   --border: var(--calendar-border);
   --input: var(--calendar-border-strong);
   --ring: rgba(255, 255, 255, 0.32);
-  --radius: var(--maverick-card-radius);
+  --radius: var(--loopino-card-radius);
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
 }
 
 * {
@@ -87,7 +87,7 @@ button {
 }
 
 .calendar-app {
-  --calendar-shell-top-offset: var(--maverick-shell-mobile-content-top-offset, 0px);
+  --calendar-shell-top-offset: var(--loopino-shell-mobile-content-top-offset, 0px);
   width: min(100%, 1440px);
   height: 100dvh;
   min-height: 0;
@@ -106,7 +106,7 @@ button {
 
 .calendar-error {
   border: 1px solid rgba(255, 179, 191, 0.24);
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 179, 191, 0.1);
   box-shadow: var(--calendar-shadow);
   color: var(--calendar-danger);
@@ -148,7 +148,7 @@ button {
 .calendar-board .rounded-sm,
 .calendar-board .rounded-md,
 .calendar-board .rounded-lg {
-  border-radius: min(var(--maverick-control-radius), 18px);
+  border-radius: min(var(--loopino-control-radius), 18px);
 }
 
 [role='dialog'],
@@ -303,7 +303,7 @@ button {
 .calendar-event-overlay__panel {
   width: min(100%, 560px);
   border: 1px solid var(--calendar-border-strong);
-  border-radius: var(--maverick-card-radius);
+  border-radius: var(--loopino-card-radius);
   background: rgba(12, 12, 14, 0.86);
   box-shadow: var(--calendar-shadow), 0 24px 90px rgba(0, 0, 0, 0.5);
   padding: clamp(16px, 2.6vw, 24px);
@@ -437,7 +437,7 @@ button {
   }
 
   .calendar-event-overlay__panel {
-    border-radius: min(var(--maverick-card-radius), 18px);
+    border-radius: min(var(--loopino-card-radius), 18px);
   }
 }
 

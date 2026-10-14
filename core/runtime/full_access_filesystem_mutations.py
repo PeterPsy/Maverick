@@ -53,7 +53,7 @@ class FullAccessFilesystemMutationMixin:
                 mode="w",
                 encoding="utf-8",
                 dir=path.parent,
-                prefix=".maverick-write-",
+                prefix=".loopino-write-",
                 delete=False,
             ) as handle:
                 temporary = Path(handle.name)

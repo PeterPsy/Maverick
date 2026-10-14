@@ -44,7 +44,7 @@ class _DirectoryScan:
             if entry is None:
                 return captured, self.position, True
             self.position += 1
-            if not entry.name.startswith('.maverick-storage-write-'):
+            if not entry.name.startswith('.loopino-storage-write-'):
                 captured.append((path / entry.name, entry.stat(follow_symlinks=False)))
         return captured, self.position, False
 

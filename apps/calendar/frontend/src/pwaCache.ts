@@ -1,4 +1,4 @@
-import { readAppCacheModel, readAppCachePages } from '@maverick/pwa-cache';
+import { readAppCacheModel, readAppCachePages } from '@loopino/pwa-cache';
 import { sanitizeCalendarReadModel, type CalendarReadModel } from './pwaReadModel';
 import type { CalendarEvent } from './types';
 

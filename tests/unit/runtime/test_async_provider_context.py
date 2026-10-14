@@ -36,7 +36,7 @@ class AsyncProviderContextTest(unittest.TestCase):
     def setUp(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repository_root = Path(temp_dir.name) / "maverick"
+        repository_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repository_root / name).mkdir(parents=True, exist_ok=True)
         (repository_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -60,10 +60,10 @@ class AsyncProviderContextTest(unittest.TestCase):
             start_path=self.state.repository_root,
         )
         original_input = "Come sta andando?"
-        provider_input = f"{original_input}\n\n[Maverick governed orchestration read]\nRun is active."
+        provider_input = f"{original_input}\n\n[Loopino governed orchestration read]\nRun is active."
 
         with (
-            patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "Procede bene."}, clear=False),
+            patch.dict("os.environ", {"LOOPINO_HOSTED_TEXT_FAKE_RESPONSE": "Procede bene."}, clear=False),
             patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
             patch(
                 "core.runtime.turn_submission_service_runtime.generalist_orchestration_input_text",
@@ -117,10 +117,10 @@ class AsyncProviderContextTest(unittest.TestCase):
             "codex",
         )
         original_input = "Aggiornami sulla board."
-        provider_input = f"{original_input}\n\n[Maverick governed orchestration read]\nRun is active."
+        provider_input = f"{original_input}\n\n[Loopino governed orchestration read]\nRun is active."
 
         with (
-            patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "Board aggiornata."}, clear=False),
+            patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "Board aggiornata."}, clear=False),
             patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
             patch("core.runtime.turn_submission_service_runtime._wait_for_session_prewarm"),
             patch("core.runtime.turn_submission_service_runtime._build_launch_spec_for_execution", return_value=None),

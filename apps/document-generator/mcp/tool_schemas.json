@@ -1,6 +1,6 @@
 {
   "tools": {
-    "maverick_document_generator": {
+    "loopino_document_generator": {
       "effect_class": "mutating",
       "effect_class_by_argument": {
         "argument_name": "action",

@@ -30,7 +30,7 @@ test("the Storage broker handshake reaches a parent on a distinct browser origin
   }).outputText;
   const childServer = createServer();
   const shellServer = createServer();
-  const profile = mkdtempSync(resolve(tmpdir(), "maverick-broker-browser-"));
+  const profile = mkdtempSync(resolve(tmpdir(), "loopino-broker-browser-"));
   context.after(() => rmSync(profile, { force: true, recursive: true }));
 
   try {
@@ -83,13 +83,13 @@ function shellDocument(childOrigin) {
   const frame = document.querySelector("#storage-frame");
   window.addEventListener("message", (event) => {
     if (event.source !== frame.contentWindow || event.origin !== childOrigin) return;
-    if (event.data?.type === "maverick.storage.file-cache.open.v1" && event.ports.length === 1) {
+    if (event.data?.type === "loopino.storage.file-cache.open.v1" && event.ports.length === 1) {
       const port = event.ports[0];
       document.body.dataset.childOrigin = event.origin;
       port.postMessage({
         app_id: "storage",
         request_id: event.data.request_id,
-        type: "maverick.storage.file-cache.accepted.v1",
+        type: "loopino.storage.file-cache.accepted.v1",
       });
       port.postMessage({
         app_id: "storage",
@@ -97,11 +97,11 @@ function shellDocument(childOrigin) {
         request_id: event.data.request_id,
         source: "cache",
         status: "ok",
-        type: "maverick.storage.file-cache.result.v1",
+        type: "loopino.storage.file-cache.result.v1",
       });
       return;
     }
-    if (event.data?.type === "maverick.test.file-cache-complete") {
+    if (event.data?.type === "loopino.test.file-cache-complete") {
       document.body.dataset.result = event.data.ok === true ? "pass" : "fail";
       document.body.dataset.source = String(event.data.source || "none");
     }
@@ -113,7 +113,7 @@ function shellDocument(childOrigin) {
 function childDocument(shellOrigin) {
   return `<!doctype html>
 <html><head><script>
-  Object.defineProperty(window, "__MAVERICK_PLATFORM_ORIGIN__", {
+  Object.defineProperty(window, "__LOOPINO_PLATFORM_ORIGIN__", {
     configurable: false,
     value: ${JSON.stringify(shellOrigin)},
   });
@@ -126,7 +126,7 @@ function childDocument(shellOrigin) {
   window.parent.postMessage({
     ok: (await result?.blob.text()) === "cached",
     source: result?.source || "none",
-    type: "maverick.test.file-cache-complete",
+    type: "loopino.test.file-cache-complete",
   }, ${JSON.stringify(shellOrigin)});
 </script></body></html>`;
 }

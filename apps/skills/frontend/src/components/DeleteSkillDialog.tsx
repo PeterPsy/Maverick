@@ -23,7 +23,7 @@ export function DeleteSkillDialog({ skillName, deleting, onCancel, onConfirm }: 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={() => !deleting && onCancel()}>
       <section
-        className="maverick-modal delete-skill-dialog"
+        className="loopino-modal delete-skill-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-skill-title"

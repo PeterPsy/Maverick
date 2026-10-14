@@ -91,7 +91,7 @@ def run(origin):
                 callback = "/api/auth/google/callback?" + urlencode({"error": "access_denied", "state": flow_state})
                 status, headers, _ = request(callback)
                 check(status == 303 and headers.get("location") == "/?google_error=google_consent_cancelled",
-                      "Consent cancellation consumes the flow and returns to Maverick")
+                      "Consent cancellation consumes the flow and returns to Loopino")
                 status, headers, _ = request(callback)
                 check(status == 303 and headers.get("location") == "/?google_error=google_flow_invalid",
                       "A consumed OAuth flow cannot be replayed")
@@ -127,7 +127,7 @@ def run(origin):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--origin", required=True, help="Exact deployed Maverick origin")
+    parser.add_argument("--origin", required=True, help="Exact deployed Loopino origin")
     arguments = parser.parse_args()
     try:
         run(arguments.origin)

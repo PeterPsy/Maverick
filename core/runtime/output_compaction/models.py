@@ -32,7 +32,7 @@ class ToolOutputCompactionPolicy:
     @classmethod
     def from_environment(cls) -> "ToolOutputCompactionPolicy":
         """Build the policy from runtime environment flags."""
-        raw_enabled = os.environ.get("MAVERICK_RUNTIME_OUTPUT_COMPACTION", "1").strip().lower()
+        raw_enabled = os.environ.get("LOOPINO_RUNTIME_OUTPUT_COMPACTION", "1").strip().lower()
         enabled = raw_enabled not in {"0", "false", "no", "off", "disabled"}
         return cls(enabled=enabled)
 

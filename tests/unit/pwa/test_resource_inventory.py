@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.apps.builtin_apps import discover_builtin_apps
+
 import json
 from pathlib import Path
 from typing import get_args
@@ -43,8 +45,8 @@ class PwaResourceInventoryTests(unittest.TestCase):
     def test_inventory_is_versioned_complete_and_bounded(self) -> None:
         payload = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
 
-        self.assertEqual(payload["schema"], "maverick.pwa-cache-resource-inventory.v2")
-        self.assertEqual(payload["policy_revision"], "maverick.local-persistence-policy.v2")
+        self.assertEqual(payload["schema"], "loopino.pwa-cache-resource-inventory.v2")
+        self.assertEqual(payload["policy_revision"], "loopino.local-persistence-policy.v2")
         self.assertIs(payload["resource_schema_revision_required"], True)
         self.assertEqual(
             payload["private_app_origin_boundary"],
@@ -97,8 +99,8 @@ class PwaResourceInventoryTests(unittest.TestCase):
             if app_id != "core-control-plane"
         }
         built_in_apps = {
-            path.parent.name
-            for path in (ROOT / "apps").glob("*/app_contract.json")
+            spec.app_id
+            for spec in discover_builtin_apps(start_path=ROOT)
         }
 
         self.assertEqual(built_in_apps - inventoried, set())

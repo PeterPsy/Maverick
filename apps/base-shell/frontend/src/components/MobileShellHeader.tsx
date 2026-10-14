@@ -83,7 +83,7 @@ export function MobileShellHeader({
         title="Nuova chat"
         type="button"
       >
-        <img alt="Maverick" className="bs-mobile-shell-header__logo" src={logoSrc} />
+        <img alt="Loopino" className="bs-mobile-shell-header__logo" src={logoSrc} />
       </button>
       <div className="bs-mobile-shell-header__actions">
         {showMobileChatAction ? (

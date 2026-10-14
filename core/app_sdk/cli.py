@@ -1,4 +1,4 @@
-"""Command-line wrapper for Maverick platform CLI and MCP surfaces."""
+"""Command-line wrapper for Loopino platform CLI and MCP surfaces."""
 
 from __future__ import annotations
 
@@ -39,11 +39,11 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the Maverick CLI wrapper."""
+    """Run the Loopino CLI wrapper."""
     raw_args = list(argv if argv is not None else sys.argv[1:])
     repository_root, args = _extract_repository_root(raw_args)
     if not args:
-        _die("usage: maverick [--repository-root PATH] {apps|core|app|sdk} ...")
+        _die("usage: loopino [--repository-root PATH] {apps|core|app|sdk} ...")
     if _wants_help(args):
         print(_help_text(args))
         return 0
@@ -101,11 +101,11 @@ def _should_retry_with_host_bootstrap(args: list[str], *, state) -> bool:
 
 
 def _running_in_runtime_session() -> bool:
-    runtime_root = str(os.environ.get("MAVERICK_RUNTIME_ROOT") or "").strip()
-    token = str(os.environ.get("MAVERICK_RUNTIME_API_TOKEN") or "").strip()
+    runtime_root = str(os.environ.get("LOOPINO_RUNTIME_ROOT") or "").strip()
+    token = str(os.environ.get("LOOPINO_RUNTIME_API_TOKEN") or "").strip()
     if not runtime_root or not token:
         return False
-    shim = Path(runtime_root) / "bin" / "maverick"
+    shim = Path(runtime_root) / "bin" / "loopino"
     try:
         resolved_shim = shim.resolve(strict=True)
     except OSError:
@@ -151,10 +151,10 @@ def run_cli_json(
     trusted_context: CliInvocationContext | None = None,
     orchestration_resume: OrchestrationResume | None = None,
 ) -> dict[str, Any]:
-    """Run one Maverick CLI command and return the JSON payload without printing."""
+    """Run one Loopino CLI command and return the JSON payload without printing."""
     repository_root_arg, args = _extract_repository_root(list(argv))
     if not args:
-        _die("usage: maverick [--repository-root PATH] {apps|core|app} ...")
+        _die("usage: loopino [--repository-root PATH] {apps|core|app} ...")
     if _wants_help(args):
         return {"help": _help_text(args)}
     if repository_root is None and repository_root_arg is not None:
@@ -176,14 +176,14 @@ def run_cli_json(
     elif domain == "sdk":
         result = _run_sdk_domain(args[1:], state=state, trusted_context=trusted_context)
     else:
-        _die(f"unknown Maverick command domain: {domain}")
+        _die(f"unknown Loopino command domain: {domain}")
     return result
 
 
 def _run_apps(tokens: list[str], *, state, trusted_context: CliInvocationContext | None = None) -> dict[str, Any]:
     options, remaining = _split_wrapper_options(tokens)
     if remaining != ["list"]:
-        _die("usage: maverick apps list --json")
+        _die("usage: loopino apps list --json")
     workspace_id = _workspace_id(options, state.repository_root, trusted_context=trusted_context)
     context = _cli_context(options, workspace_id, trusted_context=trusted_context)
     apps = []
@@ -240,7 +240,7 @@ def _run_apps(tokens: list[str], *, state, trusted_context: CliInvocationContext
 def _run_sdk_domain(tokens: list[str], *, state, trusted_context: CliInvocationContext | None = None) -> dict[str, Any]:
     options, remaining = _split_wrapper_options(tokens)
     if len(remaining) != 1 or remaining[0] not in SDK_DOMAIN_ACTIONS:
-        _die("usage: maverick sdk {templates|docs} --json")
+        _die("usage: loopino sdk {templates|docs} --json")
     workspace_id = _workspace_id(options, state.repository_root, trusted_context=trusted_context)
     action = remaining[0]
     if action == "templates":
@@ -256,7 +256,7 @@ def _run_core(
     orchestration_resume: OrchestrationResume | None = None,
 ) -> dict[str, Any]:
     if len(tokens) < 2:
-        _die("usage: maverick core {cli|mcp} {list|inspect|run|call} ...")
+        _die("usage: loopino core {cli|mcp} {list|inspect|run|call} ...")
     surface, operation = tokens[0], tokens[1]
     options, remaining = _split_wrapper_options(tokens[2:])
     workspace_id = _workspace_id(options, state.repository_root, trusted_context=trusted_context)
@@ -285,7 +285,7 @@ def _run_core(
 
 def _run_app(tokens: list[str], *, state, trusted_context: CliInvocationContext | None = None) -> dict[str, Any]:
     if not tokens:
-        _die("usage: maverick app <app_id> {cli|mcp|frontend} ...")
+        _die("usage: loopino app <app_id> {cli|mcp|frontend} ...")
     if len(tokens) >= 3 and tokens[1] == "frontend":
         app_id, _surface, operation = tokens[0], tokens[1], tokens[2]
         options, remaining = _split_wrapper_options(tokens[3:])
@@ -300,7 +300,7 @@ def _run_app(tokens: list[str], *, state, trusted_context: CliInvocationContext 
             trusted_context=trusted_context,
         )
     if len(tokens) < 3:
-        _die("usage: maverick app <app_id> {cli|mcp|frontend} ...")
+        _die("usage: loopino app <app_id> {cli|mcp|frontend} ...")
     app_id, surface, operation = tokens[0], tokens[1], tokens[2]
     options, remaining = _split_wrapper_options(tokens[3:])
     workspace_id = _workspace_id(options, state.repository_root, trusted_context=trusted_context)
@@ -322,7 +322,7 @@ def _run_app_frontend(
     trusted_context: CliInvocationContext | None = None,
 ) -> dict[str, Any]:
     if operation != "build" or tokens:
-        _die(f"usage: maverick app {app_id} frontend build --json")
+        _die(f"usage: loopino app {app_id} frontend build --json")
     return run_core_cli_command(
         command_id=f"app.{app_id}.frontend.build",
         context=_cli_context(options, workspace_id, trusted_context=trusted_context, default_caller_kind="operator", default_effective_mode="full-access"),

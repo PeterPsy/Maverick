@@ -123,7 +123,7 @@ class ProviderTests(unittest.TestCase):
             self.assertFalse(provider_hook.recover(payload)['ok'])
             ensure.assert_not_called()
 
-    def test_supervisor_never_inherits_maverick_or_provider_credentials(self):
+    def test_supervisor_never_inherits_loopino_or_provider_credentials(self):
         with patch.object(provider_service.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='')) as run:
             provider_service._run(['pid', provider_service.NAME])
         environment = run.call_args.kwargs['env']

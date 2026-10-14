@@ -1,18 +1,18 @@
 # SDK overview
 
-The Maverick App SDK creates valid app source trees and moves workspace-local apps through the official lifecycle. It does not bypass the core.
+The Loopino App SDK creates valid app source trees and moves workspace-local apps through the official lifecycle. It does not bypass the core.
 
 ## Canonical flow
 
 ```bash
-maverick sdk templates
-maverick sdk docs
-maverick core cli run core.app-sdk.create --app-id my-app --template-id data-app --json
-maverick core cli run core.app-sdk.validate --app-id my-app --workspace default --json
-maverick core cli run core.app-sdk.register-local --app-id my-app --workspace default --json
-maverick core cli run core.app-sdk.install-local --app-id my-app --workspace default --json
-maverick core cli run core.app-sdk.status --app-id my-app --workspace default --json
-maverick core cli run core.app-sdk.package --app-id my-app --workspace default --json
+loopino sdk templates
+loopino sdk docs
+loopino core cli run core.app-sdk.create --app-id my-app --template-id data-app --json
+loopino core cli run core.app-sdk.validate --app-id my-app --workspace default --json
+loopino core cli run core.app-sdk.register-local --app-id my-app --workspace default --json
+loopino core cli run core.app-sdk.install-local --app-id my-app --workspace default --json
+loopino core cli run core.app-sdk.status --app-id my-app --workspace default --json
+loopino core cli run core.app-sdk.package --app-id my-app --workspace default --json
 ```
 
 ## What the SDK enforces

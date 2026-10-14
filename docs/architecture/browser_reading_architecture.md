@@ -9,14 +9,14 @@ Chrome Manifest V3 companion. Its fixed observation adapter reuses Browser's
 rendered DOM reader. Platform workflows belong to `apps/platform-connectors`; Browser owns technical
 transport and fixed observation adapters. Core remains app-agnostic. No commercial scraping, proxy, browser relay or speech service is
 required. Browser's isolated Playwright Lab remains available for public research
-and authorized Maverick development inspection.
+and authorized Loopino development inspection.
 
 The extension's user flow centers on a dedicated agent tab. Open agent tab
 focuses the remembered agent tab even after sharing stops, or reuses an empty
 extension-owned start page before creating one. A
 second explicit toolbar invocation on that tab grants Chrome tab-capture access;
 it can then connect without choosing an initial platform or profile. It asks for
-optional HTTPS website access plus Maverick; 0.6.0 also declares the required
+optional HTTPS website access plus Loopino; 0.6.0 also declares the required
 Chrome debugger permission for real input.
 The authenticated Browser UI records that approved platform list when creating
 the backend lease. Only user connector actions can set it; subsequent heartbeats
@@ -26,15 +26,15 @@ An empty public URL is accepted only for a dedicated agent connection. Read/medi
 operations require navigation first; tabs and navigation/collection work while empty.
 Platform home pages are approved content routes. Sharing a profile never binds
 navigation to that profile.
-The official Maverick address is preconfigured in Companion; other installations
+The official Loopino address is preconfigured in Companion; other installations
 can change Connection settings. The popup sends the selected tab and destination
 to the worker within its button gesture. The worker synchronously requests optional
 permissions for HTTPS websites and the selected bridge,
-Maverick origin and isolated app-frame namespace, then completes setup even if
+Loopino origin and isolated app-frame namespace, then completes setup even if
 Chrome closes the popup during the native consent dialog. Concurrent requests are
 deduplicated; denial never starts sharing. It then opens the stable
 `/app/browser?connector=1` shell route. Companion defaults to reusing the most
-recent Maverick shell tab at the exact chosen origin in the same Chrome profile,
+recent Loopino shell tab at the exact chosen origin in the same Chrome profile,
 with a fresh document for the new binding. It rechecks the candidate before
 navigation, excludes the source tab, private/API routes and other origins. The
 user's Connect action can move an existing Chat or other app tab to Browser. The popup
@@ -51,7 +51,7 @@ selectors and arbitrary caller scripts are never exposed to agent tools.
 
 The connector window must remain open. A 30-second extension alarm wakes its
 poller when possible; alarms do not wake a sleeping computer and cannot guarantee
-uninterrupted execution. Maverick document reloads resume the lease in the same app origin. Closing either tab,
+uninterrupted execution. Loopino document reloads resume the lease in the same app origin. Closing either tab,
 revoking sharing or leaving approved platform routes stops capture. Late connector
 submissions cannot renew expired connections or complete expired operations.
 
@@ -74,11 +74,11 @@ The copied connector address uses the stable platform shell route, never an
 expiring isolated-frame host. A fresh Chrome profile signs in normally; the
 shell obtains its own authenticated Browser frame. Desktop-app cookies are not
 transferred to Chrome. The selected Chrome workspace owns the connection.
-Native `maverick.app.navigate` parameters enable Connect controls in that frame.
+Native `loopino.app.navigate` parameters enable Connect controls in that frame.
 Companion binds the connector tab and probes only app identity across its frames.
 Exactly one Core-generated Browser frame with the chosen platform origin is
 required; commands then require that frame's exact origin, frame id and document
-id. The selected shell tab can navigate between Maverick apps while retaining its
+id. The selected shell tab can navigate between Loopino apps while retaining its
 bound Browser document. Removing the launch parameter `connector=1` is also
 allowed. That parameter enables setup UI; authority comes from the selected
 tab, exact Browser origin/frame/document and sharing generation. Other shell
@@ -135,10 +135,10 @@ stopped ones. Rows and action buttons retain DOM identity across heartbeats.
 Reads are serialized, concurrent invalidations
 coalesce into one trailing read, hidden documents and shell-hidden frames pause
 and failures back off. The frontend consumes authenticated parent
-`maverick.app.visibility-changed` events and refreshes immediately on return;
+`loopino.app.visibility-changed` events and refreshes immediately on return;
 data invalidations cannot restart reads while hidden. An inline HTML head script
 applies initial shell theme parameters before the first paint, independently of
-bundle loading; `maverick.shell.theme-changed` events update the effective theme.
+bundle loading; `loopino.shell.theme-changed` events update the effective theme.
 Visible views refresh at 3 seconds for pending operations, 10 seconds for active
 Chrome connections and 30 seconds when idle. Chrome transport
 continues its independent heartbeat while management is hidden, renewing its
@@ -180,23 +180,23 @@ document and public hashed ZIP, light first paint while the bundle is held pendi
 initial/live themes, unattached-window guidance, late bridge readiness and
 hidden-frame polling. A production-manifest Chrome popup fixture uses only
 `activeTab` to identify the selected platform, with no pre-granted host access,
-and covers Chrome/Maverick page rejection, an empty agent-tab launch, the six exact
+and covers Chrome/Loopino page rejection, an empty agent-tab launch, the six exact
 optional platform host groups and invalid connector guidance.
 The real Chromium/MV3 Companion fixture uses Core's actual immutable identity
 and message relay plus the native iframe sandbox/CSP, with Connectors, empty-tab
 connection, cross-platform navigation/capture and scope revocation. This fixture
-starts with no Maverick cookies, downloads the archive before login and compares
+starts with no Loopino cookies, downloads the archive before login and compares
 it with the built package. The user then signs in through the shell, bootstraps
 an isolated-origin Strict cookie and attaches Companion to the exact Browser
 document. Direct platform app documents and unbootstrapped private frames are
-rejected. Authenticated Maverick
+rejected. Authenticated Loopino
 inspection verified desktop/mobile hosting, a public-page read with automatic
 cleanup, sidebar suppression and the native globe in the rail and App Store.
 Review corrections were additionally checked on the mounted app: the isolated
 connector document returned 200, initial light parameters applied, and switching
 to Settings stopped Browser requests for an observed interval over 40 seconds.
 After the fresh-profile correction and backend restart, an anonymous download
-on `maverick.loopino.ai` returned 200 with ZIP MIME type and immutable cache
+on `loopino.giuntitrail.com` returned 200 with ZIP MIME type and immutable cache
 headers; its bytes matched the generated package. Authenticated inspection of
 `/app/browser?connector=1` verified the stable copied address, setup instructions
 and visible Connect controls in the mounted isolated Browser frame.
@@ -215,7 +215,7 @@ returned 200 and matched the generated 0.5.0 archive byte for byte.
 The Companion fixture does not establish access to a real authenticated profile.
 The 0.5.2 correction adds actor-owned stop diagnostics, migration from both earlier
 schemas, exact-origin Browser-tab reuse and a regression for a hung authentication
-renewal. The Chromium fixture verifies reuse without another Maverick window,
+renewal. The Chromium fixture verifies reuse without another Loopino window,
 removal of the connector launch parameter and command delivery while the selected
 shell navigates to Chat and hides its retained Browser document. Native mounted
 inspection confirmed that the Browser rail action removes the launch parameter,
@@ -226,7 +226,7 @@ probe stayed queued and was cancelled without revoking the human's connection.
 Those failed live probes are not successful page observations. The final release
 still needs a fresh human connection before live platform access can be confirmed.
 The 0.5.3 setup removes copy/paste on the official installation, owns consent in
-the service worker and reuses Maverick even when another app is visible. A real
+the service worker and reuses Loopino even when another app is visible. A real
 human-owned 0.5.2 connection completed a tabs probe on its empty agent tab, confirming
 live transport; no real authenticated platform content was requested. The separate
 Xvfb Chromium `--permissions` fixture uses the unmodified production manifest,
@@ -314,7 +314,7 @@ than treating older read-only connections as interactive. The bundled agent guid
 describes discovery, refs, polling and consequential actions. Updating an existing
 workspace copy requires the Skills app. The initial 2026-10-12 update was blocked
 by `authentication_required`; after authentication recovered, the update and
-readback succeeded with enablement and Maverick origin preserved.
+readback succeeded with enablement and Loopino origin preserved.
 
 ## Reload and idle recovery (Companion 0.6.1)
 
@@ -346,7 +346,7 @@ a resumed Chrome document; a sleeping computer cannot execute browser commands.
 After the exact selected Browser document authorizes initial sharing, Companion
 moves polling, heartbeats, progress, command execution and cached completion delivery
 to the extension worker. Its existing offscreen capture document wakes it every
-three seconds; a 30-second alarm is fallback. Closing/navigating the Maverick setup
+three seconds; a 30-second alarm is fallback. Closing/navigating the Loopino setup
 tab preserves the same sharing and backend lease and does not open another tab.
 Chrome must remain running with the source Agent tab open; users may continue
 from the native macOS app. Pre-0.7 installed extensions keep their existing bridge.
@@ -445,7 +445,7 @@ untrusted evidence, distinct from the agent's interpretation.
 
 `browser_session_create` opts into Core's `platform_browser_sessions` app
 capability and `platform_browser_session` MCP execution metadata. Core issues a
-distinct four-hour `maverick_session` for the trusted runtime owner, current
+distinct four-hour `loopino_session` for the trusted runtime owner, current
 workspace and configured platform origin. A digest of active human login session
 IDs binds delegation to the user's current login generation. Only the private
 entrypoint payload and broker receive the opaque cookie. The public result
@@ -456,7 +456,7 @@ Delegated policy permits the exact platform origin and Core-generated app-frame
 hosts; sandbox agents receive no general loopback exemption. The broker enforces
 user/workspace ownership on every session action. Other agents of that same
 actor and workspace can use the context. Interactive actions still require
-`maverick_dev_inspector` and a permitted active page and target URL.
+`loopino_dev_inspector` and a permitted active page and target URL.
 
 HTTP session resolution and isolated app-frame validation recheck human login
 generation, active user, active workspace and originating runtime. Delegated
@@ -492,9 +492,9 @@ Exact descriptor/execution audits must be refreshed after executable changes.
 Only records for reviewed changed apps are updated; unrelated app digests remain
 unchanged.
 
-Authenticated development inspection uses the named `maverick.localhost` platform
+Authenticated development inspection uses the named `loopino.localhost` platform
 host on the existing allowlisted ports 8000 and 8014, including Core-generated
-`af-<24 hex>.sidecars.maverick.localhost` app frames. Only these exact labels inherit
+`af-<24 hex>.sidecars.loopino.localhost` app frames. Only these exact labels inherit
 the named host/port permission. All require the existing administrator inspector
 authority; other localhost hosts, sidecar labels and ports remain denied. Core and
 the Node proxy enforce the same target grammar. A proxy CONNECT to an allowlisted
@@ -509,7 +509,7 @@ connections work. Public HTTPS and other private destinations retain their check
   reviewed as a connection reference; its unrestricted agent server is not enabled.
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper), MIT, and
   [whisper.cpp](https://github.com/ggml-org/whisper.cpp), MIT: existing local
-  Maverick Speech engines. Browser does not introduce a remote speech provider.
+  Loopino Speech engines. Browser does not introduce a remote speech provider.
 - [Chrome tabCapture](https://developer.chrome.com/docs/extensions/reference/api/tabCapture),
   [offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen),
   [tabs](https://developer.chrome.com/docs/extensions/reference/api/tabs) and
@@ -517,7 +517,7 @@ connections work. Public HTTPS and other private destinations retain their check
   platform APIs used by the app-owned adapter; this introduces no third-party relay.
 
 Instaloader and mcp-chrome were evaluated as alternatives but are not dependencies.
-The shipped companion is Maverick source, with pinned frontend dependencies.
+The shipped companion is Loopino source, with pinned frontend dependencies.
 
 ## Acceptance and evidence
 
@@ -624,7 +624,7 @@ checks, and both UI suites and the production-manifest popup fixture. Real Chrom
 completed trusted inputs, lost-completion delivery without form replay, lease
 replacement, video frames, audio (29,621 bytes), Storage evidence, cancellation and
 Connectors collection/export workflows. The dedicated background fixture closed
-Maverick, performed snapshot/type/click, kept the same lease connected for more than
+Loopino, performed snapshot/type/click, kept the same lease connected for more than
 125 seconds, reused a repeated Connect without opening a tab, and verified both
 Disconnect and source closure clear capture, local authority and the backend lease.
 The current workspace Browser guide was updated and read back through Skills.

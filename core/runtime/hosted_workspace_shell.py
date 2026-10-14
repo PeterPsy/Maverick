@@ -320,7 +320,7 @@ def _build_bwrap_command(
         "--unshare-ipc",
         "--unshare-uts",
         "--hostname",
-        "maverick-workspace",
+        "loopino-workspace",
         "--tmpfs",
         "/",
     ]

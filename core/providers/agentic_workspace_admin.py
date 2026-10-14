@@ -27,7 +27,7 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    LOOPINO_FEATURE_AGENTIC_PROFILES,
     feature_enabled,
 )
 from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
@@ -45,7 +45,7 @@ def configure_workspace_agentic_default(
     now: datetime | None = None,
 ) -> WorkspaceAgenticProfileBinding:
     """Select a Codex provider/model directly for a workspace."""
-    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+    if not feature_enabled(LOOPINO_FEATURE_AGENTIC_PROFILES):
         raise AgenticProfileError("agentic_profiles_disabled")
     if provider_id != "codex":
         raise AgenticProfileError("agentic_profile_definition_must_be_published")
@@ -138,7 +138,7 @@ def save_workspace_agentic_binding(
     workspace_store: object | None = None,
 ) -> WorkspaceAgenticProfileBinding:
     """Create or replace one direct workspace provider/model configuration."""
-    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+    if not feature_enabled(LOOPINO_FEATURE_AGENTIC_PROFILES):
         raise AgenticProfileError("agentic_profiles_disabled")
     timestamp = now or datetime.now(tz=UTC)
     definition = store.get_agentic_profile_definition(definition_id)

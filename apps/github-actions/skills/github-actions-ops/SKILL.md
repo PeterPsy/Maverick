@@ -1,6 +1,6 @@
 ---
 name: github-actions-ops
-description: Use the `github-actions` Maverick app to dispatch GitHub Actions workflows and inspect run status/logs through a GitHub App installation.
+description: Use the `github-actions` Loopino app to dispatch GitHub Actions workflows and inspect run status/logs through a GitHub App installation.
 ---
 
 # GitHub Actions Operations
@@ -11,7 +11,7 @@ private data, and do not ask users to paste GitHub App secrets in chat.
 Default CameraAccess install run:
 
 ```bash
-maverick app github-actions cli run github-actions --json --arguments-json '{"action":"dispatch_and_wait","timeout_seconds":900}'
+loopino app github-actions cli run github-actions --json --arguments-json '{"action":"dispatch_and_wait","timeout_seconds":900}'
 ```
 
 Useful actions:

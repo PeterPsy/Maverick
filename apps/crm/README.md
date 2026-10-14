@@ -1,12 +1,12 @@
 # CRM
 
-Native, generic Maverick CRM, version 0.7.1 / schema 8. One app (`crm`), one interface (`crm.records`), and one workspace-owned database: relationships, sales, conversations, follow-ups, campaign planning, expenses, intelligence, typed custom objects, import/export, and approvable agent workflows.
+Native, generic Loopino CRM, version 0.7.1 / schema 8. One app (`crm`), one interface (`crm.records`), and one workspace-owned database: relationships, sales, conversations, follow-ups, campaign planning, expenses, intelligence, typed custom objects, import/export, and approvable agent workflows.
 
 The implementation is native Python/SQLite and React/Vite. External CRM projects informed the domain and UX direction; no Cloudflare, Vinext, Ably, external authentication, industry-specific branding, owners, or seed data are bundled. CRM behavior stays app-owned; the core validates, registers, mounts, and invokes declared contract surfaces. See [the vNext decision](../../docs/architecture/crm_vnext_architecture.md) for source provenance, compatibility, and release boundaries.
 
 ## Repository Model
 
-This is a forkable platform app source tree versioned under the installation-level Maverick `apps/crm/` directory.
+This is a forkable platform app source tree versioned under the installation-level Loopino `apps/crm/` directory.
 
 Track app source, tests, contract files, and intentional frontend build artifacts here. Do not track workspace data such as `data/crm/crm.sqlite`, generated caches, `node_modules/`, or Python bytecode.
 
@@ -26,7 +26,7 @@ CRM data lives only under the workspace app data root:
 
 ```text
 data/crm/
-  .maverick-app.json
+  .loopino-app.json
   crm.sqlite
   view_state.json
   backups/schema-<previous>-before-<next>-<unique-id>.sqlite
@@ -58,14 +58,14 @@ Included:
 - Active records cannot link to archived parent accounts, contacts, or deals. Archived records may preserve historical links to archived parents during CRM export imports.
 - Dense operational UI with a first-class Leads entry point and live count, plus Records, Pipeline, and Reports views, shell/widget navigation handling, SQL-backed records table pagination/sort/filter with stable opaque cursors and batched computed fields, shared record side panel, lead conversion, record tag/archive/delete actions, bulk tag/archive, saved view controls, timeline display, audit event display with entity/action/date filters, linked-item display/manual linking/unlinking, custom field display, enrichment proposal creation, account brief generation, next-action suggestions, dedupe review, a compact agent deck embedded above the Pipeline board, persisted search filter rendering, custom view rendering with referenced-record hydration, create chooser and create/edit composer forms, and import preview before commit.
 - Health checks covering schema metadata, SQLite integrity, FTS coverage, orphan CRM references, active children linked to archived parents, view state validity, export/archive-import consistency, orphan custom field values, workflow proposal action validity, external reference malformation/unresolved status, and exportability.
-- One compact `crm-sidebar` widget in Base-shell: Maverick header, primary views, live active-record counts and expandable Workspace tools. The CRM canvas has no duplicate sidebar or mobile drawer; the shell owns mobile opening/closing.
-- The standalone public CRM keeps the same navigation language without exposing shell-only authority: on mobile it mirrors the Maverick header, leaves app switching/create/chat visibly disabled, and keeps only the theme control in the open drawer footer.
+- One compact `crm-sidebar` widget in Base-shell: Loopino header, primary views, live active-record counts and expandable Workspace tools. The CRM canvas has no duplicate sidebar or mobile drawer; the shell owns mobile opening/closing.
+- The standalone public CRM keeps the same navigation language without exposing shell-only authority: on mobile it mirrors the Loopino header, leaves app switching/create/chat visibly disabled, and keeps only the theme control in the open drawer footer.
 
 The `crm.records_table` backend action is intentionally app-owned UI infrastructure for the Records view. `crm.operations_feed` follows the same pattern for the Pipeline agent deck, aggregating open tasks, workflow proposal lifecycle buckets, and recent relevant audit events into UI-ready sections without exposing a separate Operations page. These helpers are covered by service tests and listed in the operations manifest, but they are not declared as new MCP/CLI capabilities because they do not yet need to be agent-facing public surfaces. Saved views, custom-field definition administration, and direct automation-rule execution follow the same governance split: they remain backend/CLI actions for the frontend and operators, while MCP exposes the smaller stable agent-facing surface declared in `app_contract.json` and `mcp/tool_schemas.json`, including the standard view-state tools required by the CRM view surface.
 
 ## vNext operational workspace
 
-- **Dashboard:** reference-aligned shell-widget sidebar and full-width canvas with search bar, brief archive selector, joined financial KPIs, full-width value/margin pipeline chart, next tasks, recent people/threads and active deals. Maverick theme colors only; no seeded business data.
+- **Dashboard:** reference-aligned shell-widget sidebar and full-width canvas with search bar, brief archive selector, joined financial KPIs, full-width value/margin pipeline chart, next tasks, recent people/threads and active deals. Loopino theme colors only; no seeded business data.
 - **Tasks:** local-time Today / 1–7 days / 8–30 days / undated queues, category or priority groups, completion/reopening and contextual inspector.
 - **Leads / People / Companies / Deals:** a dedicated lead list with a live active-record count, plus person table, company cards and deal table with inline stage movement, value and margin. Non-modal right inspectors retain the originating list. Advanced Records, Kanban/Pipeline, reports and import remain under Workspace tools; established record deep links are retained.
 - **Threads:** To reply / Waiting / Completed queues with explicit state transitions. Native threads link participants, tasks, deals and provider references through the existing validated relationship graph.
@@ -97,7 +97,7 @@ See [CRM product alignment](../../docs/architecture/crm_product_parity.md) for t
 Every non-campaign record has **Connected work**:
 
 - **Mail:** search and connect real threads/messages/drafts/attachments; prepare a new message or reply, optionally with verified Storage attachments. Approve and execute to create a draft, then open Mail to review and explicitly send. CRM does not send mail or run campaigns.
-- **Calendar:** create native Maverick meetings with timezone-aware times, attendees, CRM context and provider idempotency keys. External Google invitations are not implicitly created. Existing linked provider events can be resolved and refreshed.
+- **Calendar:** create native Loopino meetings with timezone-aware times, attendees, CRM context and provider idempotency keys. External Google invitations are not implicitly created. Existing linked provider events can be resolved and refreshed.
 - **Storage:** search/link documents and audio; create a Markdown document, optionally prefilled with the CRM meeting brief. Storage owns paths and file writes.
 - **Checklist:** connect a real checklist, propose a task in an existing section, and propose status changes. The task remains canonical in Checklist, not an editable duplicate CRM task.
 - **Speech:** transcribe an explicitly linked local Storage audio file using the selected provider's configured engine. The resulting text is a separate note proposal requiring review, approval and application. No transcript can authorize subsequent actions.
@@ -156,10 +156,10 @@ Deferred intentionally:
 ## SDK Flow
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-root apps/crm --json
-maverick app crm frontend build --json
-maverick app crm cli list --json
-maverick app crm mcp list --json
+loopino core cli run core.app-sdk.validate --app-root apps/crm --json
+loopino app crm frontend build --json
+loopino app crm cli list --json
+loopino app crm mcp list --json
 ```
 
 ## Contract Notes

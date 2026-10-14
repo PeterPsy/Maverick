@@ -41,7 +41,7 @@ settings keep the ordinary padded layout.
 No new settings database or generic configuration-schema framework is introduced.
 Public URL and TLS policy remain in `external_apps_v1.md`.
 
-Widgets may emit `maverick.widget.ready` with their owner and widget ids after
+Widgets may emit `loopino.widget.ready` with their owner and widget ids after
 installing the context listener. The shell replies only to the exact registered
 iframe/source/origin and sends current context/theme; readiness grants no new
 capability. General widgets use their own backend and existing settings models.

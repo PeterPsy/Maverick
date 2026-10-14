@@ -23,8 +23,8 @@ type RuntimeThreadSourceOptions = {
   restFallbackDelayMs?: number;
 };
 
-const CHANNEL_NAME = "maverick.chat.runtime-thread-source.v1";
-const TAB_ID_STORAGE_KEY = "maverick.chat.runtime-thread-tab-id";
+const CHANNEL_NAME = "loopino.chat.runtime-thread-source.v1";
+const TAB_ID_STORAGE_KEY = "loopino.chat.runtime-thread-tab-id";
 const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 10000;
 const DEFAULT_LEADER_ELECTION_DELAY_MS = 80;

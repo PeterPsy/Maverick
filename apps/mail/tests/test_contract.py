@@ -7,8 +7,8 @@ from pathlib import Path
 import sys
 import unittest
 
-MAVERICK_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
-sys.path.insert(0, str(MAVERICK_ROOT))
+LOOPINO_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
+sys.path.insert(0, str(LOOPINO_ROOT))
 
 from core.apps.contracts import parse_app_contract_file
 from core.apps.surface_descriptors import app_cli_command_secret_selectors, app_mcp_tool_secret_selectors

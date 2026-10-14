@@ -1,4 +1,4 @@
-export const DEVICE_USE_REQUEST = "maverick.device-use.request.v1";
+export const DEVICE_USE_REQUEST = "loopino.device-use.request.v1";
 
 export type DeviceUseMode = "off" | "full";
 export type DeviceUsePermission = "screen" | "accessibility" | "input";
@@ -82,7 +82,7 @@ export function requestNativeDeviceUse(
   action: "status" | "start" | "stop" | "permission",
   options: NativeDeviceUseOptions = {},
 ): Promise<NativeDeviceUseSnapshot> {
-  const origin = (window as unknown as { __MAVERICK_PLATFORM_ORIGIN__?: string }).__MAVERICK_PLATFORM_ORIGIN__;
+  const origin = (window as unknown as { __LOOPINO_PLATFORM_ORIGIN__?: string }).__LOOPINO_PLATFORM_ORIGIN__;
   if (!origin || window.parent === window) {
     return Promise.resolve(unavailableSnapshot);
   }

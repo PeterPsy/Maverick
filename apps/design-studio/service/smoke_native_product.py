@@ -61,10 +61,10 @@ from opendesign_client import (  # noqa: E402
 from opendesign_launcher import build_native_launch  # noqa: E402
 
 
-API_AGENT_ID = "installed-maverick-api"
+API_AGENT_ID = "installed-loopino-api"
 CLI_AGENT_ID = "installed-codex-cli"
-API_MODEL_ID = "maverick/model/exact"
-BETA_API_MODEL_ID = "maverick/model/beta"
+API_MODEL_ID = "loopino/model/exact"
+BETA_API_MODEL_ID = "loopino/model/beta"
 CLI_MODEL_ID = "gpt-e2e"
 BETA_CLI_MODEL_ID = "gpt-beta"
 STREAM_MARKER = "native-e2e-stream"
@@ -1217,10 +1217,10 @@ def _running_profiled_official(
 ) -> Iterator[OfficialApiClient]:
     port = _unused_port()
     token = secrets.token_urlsafe(32)
-    old_socket = os.environ.get("MAVERICK_MODEL_ACCESS_SOCKET")
-    old_token = os.environ.get("MAVERICK_MODEL_ACCESS_TOKEN")
-    os.environ["MAVERICK_MODEL_ACCESS_SOCKET"] = "/model-access/broker.sock"
-    os.environ["MAVERICK_MODEL_ACCESS_TOKEN"] = model_access_token
+    old_socket = os.environ.get("LOOPINO_MODEL_ACCESS_SOCKET")
+    old_token = os.environ.get("LOOPINO_MODEL_ACCESS_TOKEN")
+    os.environ["LOOPINO_MODEL_ACCESS_SOCKET"] = "/model-access/broker.sock"
+    os.environ["LOOPINO_MODEL_ACCESS_TOKEN"] = model_access_token
     try:
         command, environment, cwd = build_native_launch(
             release=installation.release,
@@ -1232,8 +1232,8 @@ def _running_profiled_official(
             model_profile_path=SANDBOX_PROFILE_PATH,
         )
     finally:
-        _restore_env("MAVERICK_MODEL_ACCESS_SOCKET", old_socket)
-        _restore_env("MAVERICK_MODEL_ACCESS_TOKEN", old_token)
+        _restore_env("LOOPINO_MODEL_ACCESS_SOCKET", old_socket)
+        _restore_env("LOOPINO_MODEL_ACCESS_TOKEN", old_token)
     command, environment, cwd = _sandboxed_native_launch(
         command,
         environment=environment,

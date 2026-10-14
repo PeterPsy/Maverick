@@ -53,7 +53,7 @@ class IdleRuntimeBudgetTests(unittest.TestCase):
 
     def process(self, session):
         process = subprocess.Popen(['bash', '-c', "exec -a 'codex app-server --listen stdio://' sleep 30"],
-            env={**os.environ, 'MAVERICK_RUNTIME_SESSION_ID': session, 'MAVERICK_RUNTIME_ENGINE_ID': 'codex'})
+            env={**os.environ, 'LOOPINO_RUNTIME_SESSION_ID': session, 'LOOPINO_RUNTIME_ENGINE_ID': 'codex'})
         def close():
             if process.poll() is None:
                 process.kill()

@@ -33,7 +33,7 @@ describe("Sidebar mobile layout contract", () => {
     const responsiveStyles = readStyle("responsive.css");
     const mobileDetailsRule = responsiveStyles.match(/\.bs-sidebar__details \{[\s\S]*?\n  \}/)?.[0] ?? "";
 
-    expect(mobileDetailsRule).toContain("background: var(--maverick-bg);");
+    expect(mobileDetailsRule).toContain("background: var(--loopino-bg);");
     expect(mobileDetailsRule).not.toContain("rgb(12, 12, 14)");
   });
 
@@ -73,7 +73,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain("margin-left: var(--bs-shell-desktop-rail-space);");
     expect(layoutStyles).toContain(".bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-workspace-view-shell");
     expect(layoutStyles).toContain("margin-left: var(--bs-shell-desktop-fixed-sidebar-space);");
-    expect(panelsStyles).not.toContain("calc(var(--maverick-sidebar-width) + 2rem)");
+    expect(panelsStyles).not.toContain("calc(var(--loopino-sidebar-width) + 2rem)");
     expect(sidebarStyles).toContain("left: var(--bs-sidebar-desktop-rail-left, 1rem);");
     expect(railLayoutRule).toContain("max-height: calc(100dvh - 4rem);");
     expect(railLayoutRule).not.toContain("min(38rem");
@@ -176,7 +176,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain("--bs-mobile-shell-header-height: 2.75rem;");
     expect(layoutStyles).toContain("var(--bs-mobile-shell-status-bar-height) +");
     expect(statusBarRule).toContain("height: var(--bs-mobile-shell-status-bar-height);");
-    expect(statusBarRule).toContain("background: var(--maverick-mobile-safe-area-fade);");
+    expect(statusBarRule).toContain("background: var(--loopino-mobile-safe-area-fade);");
     expect(headerRule).toContain("top: var(--bs-mobile-shell-status-bar-height);");
     expect(headerRule).toContain("z-index: 46;");
     expect(headerRule).toContain("border: 0;");
@@ -190,7 +190,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain(".bs-mobile-pinned-apps__button.is-active .bs-mobile-pinned-apps__logo.bs-app-logo");
     expect(layoutStyles).toContain(".bs-mobile-pinned-apps__button.is-active .bs-mobile-pinned-apps__name");
     expect(layoutStyles).toContain("background: transparent;");
-    expect(layoutStyles).toContain("border-color: rgba(var(--maverick-contrast-rgb), 0.88);");
+    expect(layoutStyles).toContain("border-color: rgba(var(--loopino-contrast-rgb), 0.88);");
     expect(mobileAppGridRule).toContain("padding-top: calc(var(--bs-mobile-shell-content-top-offset) + 2rem);");
   });
 

@@ -262,7 +262,7 @@ def assert_app_backend_targets_match_consumers(
     if not consumer_targets:
         raise SecretPolicyError(f"App `{app_id}` has no declared consumers for secret logical name `{normalized_logical_name}`.")
     for pattern in normalize_target_patterns_or_wildcard(target_patterns):
-        if pattern in {"*", "maverick://app.backend/*"}:
+        if pattern in {"*", "loopino://app.backend/*"}:
             continue
         _assert_resource_target_matches_grant_scope(
             app_id=app_id,
@@ -459,7 +459,7 @@ def _resource_scope_from_target(pattern: str, *, resource_types: list[str]) -> t
     if not resource_types:
         return None
     parsed = urlsplit(pattern)
-    if parsed.scheme.lower() != "maverick" or (parsed.hostname or "").lower() != "app.backend":
+    if parsed.scheme.lower() != "loopino" or (parsed.hostname or "").lower() != "app.backend":
         return None
     segments = [segment for segment in parsed.path.split("/") if segment]
     if len(segments) < 3:

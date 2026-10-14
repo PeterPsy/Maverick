@@ -50,15 +50,15 @@ function VaultSidebarFooterWidget() {
       }
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string; widget_id?: string };
       if (payload.owner_app_id !== appId || payload.widget_id !== WIDGET_ID) {
-        if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === appId && payload.resource === 'view-state') {
+        if (payload.type === 'loopino.widget.data-changed' && payload.owner_app_id === appId && payload.resource === 'view-state') {
           setTab(readVaultViewState().tab);
         }
         return;
       }
-      if (payload.type === 'maverick.widget.primary-action.query') {
+      if (payload.type === 'loopino.widget.primary-action.query') {
         postPrimaryActionState(appId, primaryActionFor(readVaultViewState().tab).label);
       }
-      if (payload.type === 'maverick.widget.primary-action.invoke') {
+      if (payload.type === 'loopino.widget.primary-action.invoke') {
         runPrimaryAction(appId, readVaultViewState().tab);
       }
     }
@@ -128,7 +128,7 @@ function VaultSidebarFooterWidget() {
       writeVaultViewState({ ...readVaultViewState(), credentialPanel: '', metricFilter: null, selectedSecretId: '', tab: 'credentials' });
       notifyVaultDataChanged();
       notifyVaultViewStateChanged();
-      window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: appId, params: { tab: 'credentials' } }, "*");
+      window.parent?.postMessage({ type: 'loopino.widget.open-app', app_id: appId, params: { tab: 'credentials' } }, "*");
     }
     setImportFailures(failures);
     setImportStatus(`Imported ${created} of ${rowsToCreate.length} selected secrets.`);
@@ -269,7 +269,7 @@ function runPrimaryAction(_appId: string, _tab: Tab) {
   writeVaultViewState({ ...currentState, credentialPanel: 'new', metricFilter: null, selectedSecretId: '' });
   notifyVaultViewStateChanged();
   writeVaultActionRequest('new-credential');
-  window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, "*");
+  window.parent?.postMessage({ type: 'loopino.shell.sidebar.open' }, "*");
 }
 
 function primaryActionFor(_tab: Tab): { label: string; params: Record<string, string> } {
@@ -279,7 +279,7 @@ function primaryActionFor(_tab: Tab): { label: string; params: Record<string, st
 function postPrimaryActionState(appId: string, label: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.primary-action.state',
+      type: 'loopino.widget.primary-action.state',
       owner_app_id: appId,
       widget_id: WIDGET_ID,
       available: true,

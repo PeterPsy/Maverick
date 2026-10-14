@@ -12,10 +12,10 @@
   min-width: 0;
   min-height: 32rem;
   overflow: hidden;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
+  box-shadow: var(--loopino-glass-edge);
   backdrop-filter: blur(26px);
   isolation: isolate;
   padding: 18px;
@@ -27,14 +27,14 @@
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  background: var(--maverick-glass-highlight);
+  background: var(--loopino-glass-highlight);
   opacity: 0.7;
   pointer-events: none;
   content: "";
 }
 
 .bento-card:hover {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.045);
 }
 
@@ -64,7 +64,7 @@
   align-items: center;
   gap: 0.46rem;
   min-width: 0;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.76rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -72,7 +72,7 @@
 
 .bento-card-topline strong {
   overflow: hidden;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   text-overflow: ellipsis;
   white-space: nowrap;

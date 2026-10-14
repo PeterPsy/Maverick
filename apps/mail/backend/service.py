@@ -421,7 +421,7 @@ def app_events_for_action(action: str, result: dict[str, object] | None = None) 
 
 
 def _data_changed_event(resource: str) -> dict[str, object]:
-    return {"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": resource}
+    return {"type": "loopino.app.data-changed", "owner_app_id": "mail", "resource": resource}
 
 
 def _attachment_saved_to_storage(result: dict[str, object] | None) -> bool:

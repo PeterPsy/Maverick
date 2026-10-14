@@ -14,9 +14,9 @@ body {
   min-width: 320px;
   overflow: hidden;
   scrollbar-width: none;
-  background: var(--maverick-bg);
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  background: var(--loopino-bg);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 body::-webkit-scrollbar {
@@ -46,7 +46,7 @@ label {
   display: grid;
   gap: 0.38rem;
   min-width: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   font-weight: 400;
 }
@@ -97,7 +97,7 @@ h3 {
   min-height: 0;
   margin: 0 auto;
   overflow: hidden;
-  background: var(--maverick-bg);
+  background: var(--loopino-bg);
 }
 
 .primary-action,
@@ -116,16 +116,16 @@ h3 {
 }
 
 .primary-action {
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
+  background: var(--loopino-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .secondary-action,
 .danger-action,
 .icon-action {
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.08);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .icon-action {
@@ -134,7 +134,7 @@ h3 {
 }
 
 .danger-action {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .primary-action:hover,
@@ -166,12 +166,12 @@ h3 {
     inset: 0 0 auto;
     z-index: 20;
     height: calc(
-      var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +
+      var(--loopino-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +
       2.15rem
     );
     background: linear-gradient(
       180deg,
-      var(--maverick-bg) 0%,
+      var(--loopino-bg) 0%,
       rgba(7, 7, 8, 0.86) 34%,
       rgba(7, 7, 8, 0) 100%
     );

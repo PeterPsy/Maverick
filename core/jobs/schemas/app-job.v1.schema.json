@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:maverick:schema:app-job:v1",
-  "title": "Maverick durable app job",
+  "$id": "urn:loopino:schema:app-job:v1",
+  "title": "Loopino durable app job",
   "type": "object",
   "additionalProperties": false,
   "required": [

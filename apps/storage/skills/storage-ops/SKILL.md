@@ -1,6 +1,6 @@
 ---
 name: storage-ops
-description: "Use the Storage app to inspect workspace uploaded files, generated artifacts, and connected Google Drive files through official Maverick app surfaces."
+description: "Use the Storage app to inspect workspace uploaded files, generated artifacts, and connected Google Drive files through official Loopino app surfaces."
 ---
 
 # Storage Ops
@@ -12,7 +12,7 @@ Storage derives its inventory from:
 - `storage/uploaded/`
 - `storage/generated/`
 
-Prefer official Storage MCP, CLI, or backend actions instead of walking these folders directly when operating inside Maverick.
+Prefer official Storage MCP, CLI, or backend actions instead of walking these folders directly when operating inside Loopino.
 
 For Google Drive, Storage is the gateway. Do not ask Memory for Google tokens, do not treat Drive as a local filesystem, and do not use `workspace_relative_path` for Drive files.
 
@@ -47,7 +47,7 @@ Common actions:
 For binary files already produced on the local filesystem by a trusted CLI workflow, prefer the CLI-only local upload wrapper:
 
 ```bash
-maverick app storage cli run storage --arguments-json '{
+loopino app storage cli run storage --arguments-json '{
   "action": "upload_local_file",
   "source_path": "/path/to/workspace/runtime/output.pdf",
   "workspace_relative_path": "storage/generated/pdf-edits/output.pdf",
@@ -61,7 +61,7 @@ Do not expose `source_path` through MCP, frontend, or browser-facing flows. In s
 For a large text document, page until Storage says the read is finished:
 
 ```bash
-maverick app storage mcp call storage_read_text --json \
+loopino app storage mcp call storage_read_text --json \
   --workspace-relative-path storage/generated/report.md --offset 0
 ```
 
@@ -91,21 +91,21 @@ When a user asks about Drive content, keep the loop selective:
 2. If fresh Drive evidence is needed, list or search Drive through Storage:
 
 ```bash
-maverick app storage mcp call storage_drive_search --json --connection-id <drive_connection_id> --query "<search terms>" --limit 10
-maverick app storage mcp call storage_drive_list_children --json --connection-id <drive_connection_id> --parent-drive-file-id <drive_folder_id>
+loopino app storage mcp call storage_drive_search --json --connection-id <drive_connection_id> --query "<search terms>" --limit 10
+loopino app storage mcp call storage_drive_list_children --json --connection-id <drive_connection_id> --parent-drive-file-id <drive_folder_id>
 ```
 
 3. For one selected candidate file, prepare Memory ingestion:
 
 ```bash
-maverick app storage mcp call storage_drive_index --json --connection-id <drive_connection_id> --drive-file-id <drive_file_id>
+loopino app storage mcp call storage_drive_index --json --connection-id <drive_connection_id> --drive-file-id <drive_file_id>
 ```
 
 4. Pass the returned `memory_source`, `preview_text`, `preview_truncated`, and `source_version` unchanged to Memory `memory_ingest_storage_source`.
 5. After Memory ingest succeeds, acknowledge the handoff in Storage:
 
 ```bash
-maverick app storage mcp call storage_drive_mark_indexed --json --stable-storage-file-id <stable_storage_file_id> --source-version <source_version> --memory-node-id <node_id> --memory-external-ref-id <external_ref_id> --memory-source-version-id <source_version_id>
+loopino app storage mcp call storage_drive_mark_indexed --json --stable-storage-file-id <stable_storage_file_id> --source-version <source_version> --memory-node-id <node_id> --memory-external-ref-id <external_ref_id> --memory-source-version-id <source_version_id>
 ```
 
 Only call `drive_mark_indexed` after Memory returns success. Without that acknowledgement, later `drive_sync` cannot reliably emit Memory staleness for the file.

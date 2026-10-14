@@ -2,7 +2,7 @@ import { nativeCrossClientLocksAvailable, withCrossClientLock } from "./cacheBus
 import { combinedSignal } from "./fileCacheNetwork";
 import type { FileCacheFilter } from "./fileCacheTypes";
 
-const CHANNEL_NAME = "maverick-pwa-file-cache-writers-v1";
+const CHANNEL_NAME = "loopino-pwa-file-cache-writers-v1";
 const WRITER_DRAIN_LOCK = "file-cache:active-writers";
 
 type ActiveWrite = {

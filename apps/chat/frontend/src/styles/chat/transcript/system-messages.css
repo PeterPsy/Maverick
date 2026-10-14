@@ -67,6 +67,6 @@
 
 .chatapp-system-update__action:hover,
 .chatapp-system-update__action:focus-visible {
-  background: rgba(var(--maverick-contrast-rgb), 0.07);
+  background: rgba(var(--loopino-contrast-rgb), 0.07);
   outline: none;
 }

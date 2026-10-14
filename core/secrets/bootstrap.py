@@ -23,7 +23,7 @@ def bootstrap_secret_store_root(
 ) -> Path:
     """Return the local filesystem root for pre-adapter core secrets."""
     env = environment if environment is not None else os.environ
-    configured = env.get("MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT", "").strip() or DEFAULT_BOOTSTRAP_SECRET_STORE_ROOT
+    configured = env.get("LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT", "").strip() or DEFAULT_BOOTSTRAP_SECRET_STORE_ROOT
     root = Path(configured)
     if root.is_absolute():
         return root

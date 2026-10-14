@@ -120,7 +120,7 @@ def plain_hosted_request_cancellation(
                     "cancellation": cancellation,
                     "stop": monitor_stop,
                 },
-                name=f"maverick-hosted-cancel-{turn_id}",
+                name=f"loopino-hosted-cancel-{turn_id}",
                 daemon=True,
             )
             monitor.start()

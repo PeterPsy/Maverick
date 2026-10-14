@@ -32,10 +32,10 @@ class StoppedBackendTests(unittest.TestCase):
                 result = SimpleNamespace(stdout=f'MainPID={main}\nControlPID={control}\nActiveState={active}\nSubState={sub}\nKillMode={kill}\n')
                 with patch('core.usage.startup_maintenance.subprocess.run', return_value=result):
                     if allowed:
-                        self.assertEqual(require_stopped_backend('maverick-core.service')['MainPID'], '0')
+                        self.assertEqual(require_stopped_backend('loopino-core.service')['MainPID'], '0')
                     else:
                         with self.assertRaisesRegex(RuntimeError, 'drained control group'):
-                            require_stopped_backend('maverick-core.service')
+                            require_stopped_backend('loopino-core.service')
 
 
 @unittest.skipIf(sqlite3.sqlite_version_info < (3, 51, 3), 'Requires the verified WAL-safe runtime')
@@ -45,15 +45,15 @@ class StartupMaintenanceTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.receipt = self.root / USAGE_ROOT / 'maintenance/cutover.json'
-        environment = patch.dict(os.environ, {'MAVERICK_USAGE_STORE': 'document', 'MAVERICK_CONTROL_STORE': 'json',
-            'MAVERICK_JSON_CONTROL_STORE_ROOT': str(self.root / 'json')})
+        environment = patch.dict(os.environ, {'LOOPINO_USAGE_STORE': 'document', 'LOOPINO_CONTROL_STORE': 'json',
+            'LOOPINO_JSON_CONTROL_STORE_ROOT': str(self.root / 'json')})
         environment.start()
         self.addCleanup(environment.stop)
         self.collections = build_control_plane_collections(ControlStoreSettings.from_environment(repository_root=self.root)).usage
         self.document = build_usage_store(self.root, self.collections)
         self.state = SimpleNamespace(usage_store=self.document, runtime_store=_RuntimeStore(_session('root')), provider_registry=None)
         self.ingest('one', 100)
-        os.environ['MAVERICK_USAGE_STORE'] = 'sqlite'
+        os.environ['LOOPINO_USAGE_STORE'] = 'sqlite'
         stopped = patch('core.usage.startup_maintenance.require_stopped_backend', return_value={'MainPID': '0', 'KillMode': 'control-group'})
         stopped.start()
         self.addCleanup(stopped.stop)
@@ -71,7 +71,7 @@ class StartupMaintenanceTests(unittest.TestCase):
         self.assertEqual(self.state.usage_store.list_samples(), before)
         self.ingest('two', 200)
         usage_migration(self.root, {'phase': 'rollback'})
-        os.environ['MAVERICK_USAGE_STORE'] = 'document'
+        os.environ['LOOPINO_USAGE_STORE'] = 'document'
         with patch('core.usage.startup_maintenance.usage_migration') as migrate:
             self.assertEqual(run_startup_cutover(self.root, self.receipt), result)
             migrate.assert_not_called()
@@ -108,11 +108,11 @@ class StartupMaintenanceTests(unittest.TestCase):
         self.assertEqual(active_adapter(self.root / USAGE_ROOT), 'document')
 
     def test_refuses_unrelated_active_migration_and_missing_target_configuration(self):
-        os.environ['MAVERICK_USAGE_STORE'] = 'document'
-        with self.assertRaisesRegex(RuntimeError, 'Configure MAVERICK_USAGE_STORE'):
+        os.environ['LOOPINO_USAGE_STORE'] = 'document'
+        with self.assertRaisesRegex(RuntimeError, 'Configure LOOPINO_USAGE_STORE'):
             run_startup_cutover(self.root, self.receipt)
         self.assertFalse(self.receipt.exists())
-        os.environ['MAVERICK_USAGE_STORE'] = 'sqlite'
+        os.environ['LOOPINO_USAGE_STORE'] = 'sqlite'
         run_startup_cutover(self.root, self.receipt)
         with self.assertRaisesRegex(RuntimeError, 'Another Usage migration'):
             run_startup_cutover(self.root, self.receipt.with_name('unrelated.json'))

@@ -2,13 +2,13 @@
 
 Date: 2026-07-08
 
-Maverick startup optimization uses opt-in instrumentation so normal local runs
+Loopino startup optimization uses opt-in instrumentation so normal local runs
 do not emit extra performance logs.
 
 ## Core Logs
 
-Set `MAVERICK_STARTUP_PERF_LOGS=1` before starting the ASGI host to emit
-structured `startup.performance` records through the `maverick.startup` logger.
+Set `LOOPINO_STARTUP_PERF_LOGS=1` before starting the ASGI host to emit
+structured `startup.performance` records through the `loopino.startup` logger.
 
 Current server-side timings cover:
 
@@ -22,8 +22,8 @@ HTTP or WebSocket response contracts.
 
 ## Browser Markers
 
-The base shell records startup markers in `window.__maverickStartupMetrics`.
-Set `localStorage["maverick.startupMetrics"] = "1"` or append
+The base shell records startup markers in `window.__loopinoStartupMetrics`.
+Set `localStorage["loopino.startupMetrics"] = "1"` or append
 `?startup_metrics=1` to mirror those entries to `console.debug`.
 
 Current browser markers cover:
@@ -63,7 +63,7 @@ asset convention.
 Run against an existing authenticated host:
 
 ```bash
-MAVERICK_STARTUP_USERNAME=<username> MAVERICK_STARTUP_PASSWORD=<password> \
+LOOPINO_STARTUP_USERNAME=<username> LOOPINO_STARTUP_PASSWORD=<password> \
   python3 scripts/startup_browser_baseline.py --base-url http://127.0.0.1:8014 --runs 5 --warm-reloads 2 --json
 ```
 

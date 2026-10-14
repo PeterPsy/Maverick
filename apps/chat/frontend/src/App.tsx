@@ -1,6 +1,6 @@
 import type { ActiveAppContext } from "./lib/activeAppContext";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
+import { isExactLoopinoParentMessage } from "@loopino/pwa-cache";
 import type { ChatThread } from "./api/client";
 import { ChatSurface } from "./components/ChatSurface";
 import type { ChatSurfaceProps } from "./components/ChatSurface";
@@ -78,7 +78,7 @@ function ChatAppRoutes(props: Parameters<typeof ServerChatApp>[0] = {}) {
   const [route, setRoute] = useState<ShellRouteParams>({});
   useEffect(() => {
     function navigate(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || event.data?.type !== "maverick.app.navigate"
+      if (!isExactLoopinoParentMessage(event) || event.data?.type !== "loopino.app.navigate"
         || event.data.app_id && event.data.app_id !== "chat" || event.data.navigation_scope) return;
       const next = event.data.params?.app_page;
       setPage(typeof next === "string" ? next : "");

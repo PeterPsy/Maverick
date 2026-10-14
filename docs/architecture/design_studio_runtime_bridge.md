@@ -5,7 +5,7 @@ Status: Historical (superseded 2026-08-28)
 Superseded by
 [`design_studio_native_opendesign_architecture.md`](design_studio_native_opendesign_architecture.md).
 This document records the retired customized runtime-bridge direction only.
-The translator, patched OpenDesign UI, Maverick-owned runtime sessions, and
+The translator, patched OpenDesign UI, Loopino-owned runtime sessions, and
 Design Studio-specific global Chat composer described below have been deleted
 and must not be reintroduced.
 
@@ -18,19 +18,19 @@ Decision: option B, a generic core runtime stream with an app-owned OpenDesign t
 ## Scope
 
 This ADR freezes how the OpenDesign 0.16.1 UI delegates agent work to the
-Maverick runtime. OpenDesign remains the product domain and identifier space for
+Loopino runtime. OpenDesign remains the product domain and identifier space for
 projects, conversations, runs, project files, and terminal result packages.
-Maverick remains authoritative for workspace identity, actor authorization,
+Loopino remains authoritative for workspace identity, actor authorization,
 runtime sessions and turns, providers, credentials, budgets, interrupt, audit,
 and recovery.
 
-The bridge must never give OpenDesign a provider key, Maverick cookie,
+The bridge must never give OpenDesign a provider key, Loopino cookie,
 bootstrap secret, operator home, provider runtime directory, arbitrary host
 path, or reusable runtime token. It must not write OpenDesign SQLite directly.
 The correlation record described here is transport metadata, not a second
 writable project or run catalog.
 
-The floating Maverick Chat is the only composer for this integration. The
+The floating Loopino Chat is the only composer for this integration. The
 native OpenDesign Chat pane is removed from the verified web export, but
 OpenDesign remains authoritative for conversations, messages, runs, files and
 terminal result packages.
@@ -38,7 +38,7 @@ terminal result packages.
 ## Decision
 
 The mandatory A-ACP-first spike proved that upstream ACP is a capable transport,
-but not a safe Maverick ownership boundary at the pinned release. Option A is
+but not a safe Loopino ownership boundary at the pinned release. Option A is
 therefore rejected and option B is selected automatically, as required by the
 approved algorithm.
 
@@ -61,7 +61,7 @@ metadata-only binding keyed by OpenDesign project and conversation:
 
 ```text
 OpenDesign project + conversation
-  -> one canonical Maverick runtime session/thread
+  -> one canonical Loopino runtime session/thread
      -> one correlation and runtime turn per submitted message
 ```
 
@@ -95,7 +95,7 @@ not used.
 
 The fixture is deliberately not a runtime implementation. It contains no model
 or tool loop and is never selected by the app. It speaks enough ACP to expose
-what the exact upstream process supplies to a custom `maverick` profile.
+what the exact upstream process supplies to a custom `loopino` profile.
 
 ### Executed proof
 
@@ -112,13 +112,13 @@ Observed behavior:
 |---|---|---|
 | UI 0.16.1 creates a real run | pass | Production page title was `Open Design`; browser-origin `POST /api/runs` returned `202`. |
 | SSE before terminal | pass | The fixture marker arrived while status was `running`. |
-| Correct project file | pass | `maverick-spike.html` appeared through the project files API. |
-| Full five-ID correlation | fail | `session/new` contained only `cwd` and `mcpServers`; no OD run, Maverick session, or turn identity reached the peer. |
+| Correct project file | pass | `loopino-spike.html` appeared through the project files API. |
+| Full five-ID correlation | fail | `session/new` contained only `cwd` and `mcpServers`; no OD run, Loopino session, or turn identity reached the peer. |
 | Bidirectional idempotent cancel | pass | Two HTTP cancels returned success; ACP received one `session/cancel`; terminal package was canceled. |
 | Timeout | pass | A silent prompt reached failed under the ACP stage timeout and produced a failed result package. |
-| Backend restart | fail | No secure durable OD-run to Maverick-session/turn record can be established because those identifiers never meet at the ACP boundary. |
+| Backend restart | fail | No secure durable OD-run to Loopino-session/turn record can be established because those identifiers never meet at the ACP boundary. |
 | No provider key | pass | Every peer trace had an empty sensitive-variable-name list; values were never recorded. |
-| Actor attribution | fail | ACP initialize/new/prompt carry neither Maverick actor identity nor an explicit app-owned actor assertion. |
+| Actor attribution | fail | ACP initialize/new/prompt carry neither Loopino actor identity nor an explicit app-owned actor assertion. |
 | Terminal packages | pass | Success, failure, timeout-failure, and cancel packages matched their terminal state. |
 | Resume | fail | A second conversation turn used `session/new`, not `session/load`. |
 | Run-scoped capability | fail | Local profiles receive static environment only; upstream run trace variables are hard-coded to agent id `amr`. |
@@ -126,7 +126,7 @@ Observed behavior:
 The upstream source explains the failures:
 
 - a local profile always inherits another registered adapter's build and stream
-  behavior; it cannot declare an independent `maverick` protocol;
+  behavior; it cannot declare an independent `loopino` protocol;
 - inheriting Kimi supplies ACP but not `resumesSessionViaAcpLoad`;
 - ACP `session/new` has `cwd` and optional MCP servers, not a run identity or
   capability descriptor;
@@ -170,8 +170,8 @@ Submission returns:
 {
   "request_id": "request correlation id",
   "stream_id": "durable generic stream id",
-  "runtime_session_id": "Maverick runtime session id",
-  "turn_id": "Maverick turn id",
+  "runtime_session_id": "Loopino runtime session id",
+  "turn_id": "Loopino turn id",
   "status": "submitted"
 }
 ```
@@ -193,7 +193,7 @@ Submission returns:
 Required core operations are `submit`, `read_after_sequence`, `interrupt`,
 `inspect`, and `recover`. Reads and interrupts require the same workspace and
 source-app ownership as submission. Events are appended durably and
-monotonically before delivery. The event payload is a generic Maverick runtime
+monotonically before delivery. The event payload is a generic Loopino runtime
 payload; the core never produces an OpenDesign event.
 
 ### App-owned mapping
@@ -206,10 +206,10 @@ generation:
   "workspace_id": "default",
   "od_project_id": "upstream project id",
   "od_run_id": "upstream protocol run id",
-  "runtime_session_id": "Maverick session id",
-  "turn_id": "Maverick turn id",
+  "runtime_session_id": "Loopino session id",
+  "turn_id": "Loopino turn id",
   "stream_id": "generic stream id",
-  "actor_id": "authenticated Maverick actor id",
+  "actor_id": "authenticated Loopino actor id",
   "last_sequence": 17,
   "status": "running",
   "terminal_package_written": false
@@ -225,7 +225,7 @@ the active workspace binding before runtime submission.
 
 The initial mapping is:
 
-| Maverick event | OpenDesign protocol output |
+| Loopino event | OpenDesign protocol output |
 |---|---|
 | `runtime.turn.queued` | queued run status |
 | `runtime.turn.started` | running status |
@@ -236,7 +236,7 @@ The initial mapping is:
 | `runtime.turn.cancelled` | canceled terminal event and result package |
 
 Only the Design Studio translator knows this table. File events carry validated
-project-relative names. Project bytes are written by the Maverick runtime into
+project-relative names. Project bytes are written by the Loopino runtime into
 the approved OpenDesign project root and observed through OpenDesign's file API;
 neither core nor the translator accepts a browser-provided host path.
 
@@ -314,7 +314,7 @@ for bounded cleanup. Recovery never invents a successful terminal state.
 - Interrupt and cleanup require the same source-app ownership and their own
   declared permissions.
 - OpenDesign is told that the run is app-owned and receives only a display-safe
-  attribution projection. It receives no Maverick actor credential.
+  attribution projection. It receives no Loopino actor credential.
 - Runtime provider, budget, secret delivery, tool policy, and audit remain
   entirely core-owned.
 
@@ -344,14 +344,14 @@ are mutually exclusive.
   the existing package.
 - Sidecar unavailable: runtime operation is not silently redirected to host
   loopback or another workspace.
-- Core unavailable: the sidecar cannot start or resume a Maverick-owned run on
+- Core unavailable: the sidecar cannot start or resume a Loopino-owned run on
   its own.
 
 ## Security invariants
 
 - The sidecar sandbox receives no runtime broker socket under option B.
 - The browser receives no runtime stream capability, sidecar token, path, or
-  Maverick cookie.
+  Loopino cookie.
 - The app bridge is reached only through authenticated core hosting surfaces.
 - Audit contains IDs, event types, status, timing, and redaction-safe error
   codes; it excludes prompt bodies, SSE text, tickets, cookies, and secrets.

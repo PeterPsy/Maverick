@@ -1,8 +1,8 @@
 import { CredentialPanel, Tab } from './vaultTypes';
 import { tabFromValue } from './vaultUtils';
 
-export const VAULT_VIEW_STATE_KEY = 'maverick.vault.viewState';
-export const VAULT_ACTION_REQUEST_KEY = 'maverick.vault.actionRequest';
+export const VAULT_VIEW_STATE_KEY = 'loopino.vault.viewState';
+export const VAULT_ACTION_REQUEST_KEY = 'loopino.vault.actionRequest';
 
 export type VaultMetricFilter = 'active-grants' | 'review-events' | null;
 
@@ -47,7 +47,7 @@ export function writeVaultViewState(next: VaultViewState) {
 export function notifyVaultViewStateChanged() {
   window.parent?.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: 'vault',
       resource: 'view-state'
     },
@@ -58,7 +58,7 @@ export function notifyVaultViewStateChanged() {
 export function notifyVaultDataChanged() {
   window.parent?.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: 'vault',
       resource: 'state'
     },
@@ -77,7 +77,7 @@ export function writeVaultActionRequest(action: VaultActionRequest['action']) {
   window.localStorage.setItem(VAULT_ACTION_REQUEST_KEY, JSON.stringify(request));
   window.parent?.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: 'vault',
       resource: 'action-request'
     },

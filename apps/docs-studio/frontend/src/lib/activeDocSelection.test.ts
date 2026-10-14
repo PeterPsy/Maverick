@@ -7,25 +7,25 @@ describe('active doc selection', () => {
 
     const didNotify = notifyActiveDocSelection('  core-overview  ', {
       currentWindow: {},
-      origin: 'http://maverick.local',
+      origin: 'http://loopino.local',
       parentWindow: { postMessage }
     });
 
     expect(didNotify).toBe(true);
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'maverick.app.selection-changed',
+        type: 'loopino.app.selection-changed',
         owner_app_id: 'docs-studio',
         selection: { page_id: 'core-overview' }
       },
-      'http://maverick.local'
+      'http://loopino.local'
     );
   });
 
   it('reads selected page ids from app selection messages', () => {
     expect(
       docPageIdFromSelectionMessage({
-        type: 'maverick.app.selection-changed',
+        type: 'loopino.app.selection-changed',
         owner_app_id: 'docs-studio',
         selection: { page_id: 'provider-credentials' }
       })

@@ -4,7 +4,7 @@
   "name": "Settings",
   "version": "0.1.0",
   "description": "Admin-only platform settings app for provider/runtime settings, users, workspace access, app visibility, and persistence.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

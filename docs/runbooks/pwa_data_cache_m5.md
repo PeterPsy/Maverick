@@ -14,7 +14,7 @@ machine-readable runtime subset in
 `apps/base-shell/frontend/src/pwaDataCacheResourceDeclarations.v1.json`; the
 operational audit requires an exact bidirectional match for every row carrying
 a runtime schema revision. Shared store, lifecycle, retry, quota, and cleanup
-mechanics remain owned by `@maverick/pwa-cache` and are operated with
+mechanics remain owned by `@loopino/pwa-cache` and are operated with
 `docs/runbooks/pwa_data_cache_m3.md`.
 
 ## Parent-mediated boundary
@@ -29,8 +29,8 @@ authenticated shell-session generation, and may open a private
 2. the registered workspace/session generation and the current broker scope;
 3. the registered owner app id and requested mounted app id;
 4. a fixed app/resource declaration and exact resource schema revision;
-5. the global `MAVERICK_FEATURE_PWA_DATA_CACHE` gate; and
-6. the matching `MAVERICK_FEATURE_PWA_APP_CACHE_<APP_ID>` gate.
+5. the global `LOOPINO_FEATURE_PWA_DATA_CACHE` gate; and
+6. the matching `LOOPINO_FEATURE_PWA_APP_CACHE_<APP_ID>` gate.
 
 The app never receives a shell IndexedDB handle, cache principal, access lease,
 or policy capability. The shell asks the accepted frame to perform the
@@ -41,7 +41,7 @@ and an app-specific closed display sanitizer before storage. A missing or
 disabled broker falls back to the same validated server read; only its fixed
 idempotent HTTP request may retry, never the arbitrary app loader.
 
-`maverick.app.data-changed` is accepted only from the shell or an exact app or
+`loopino.app.data-changed` is accepted only from the shell or an exact app or
 widget frame whose registered owner matches the declared owner app. Resource
 aliases (including Storage `files`, `drive-connections`, and `view-state`) are
 mapped only after that owner check. Logout and user/workspace transition use
@@ -165,11 +165,11 @@ conditional growth and shrink.
 Effective enablement requires both flags:
 
 ```text
-MAVERICK_FEATURE_PWA_DATA_CACHE=1
-MAVERICK_FEATURE_PWA_APP_CACHE_WEBSITE_STUDIO=1
-MAVERICK_FEATURE_PWA_APP_CACHE_STORAGE=1
-MAVERICK_FEATURE_PWA_APP_CACHE_APP_STORE=1
-MAVERICK_FEATURE_PWA_APP_CACHE_FITNESS_COACH=1
+LOOPINO_FEATURE_PWA_DATA_CACHE=1
+LOOPINO_FEATURE_PWA_APP_CACHE_WEBSITE_STUDIO=1
+LOOPINO_FEATURE_PWA_APP_CACHE_STORAGE=1
+LOOPINO_FEATURE_PWA_APP_CACHE_APP_STORE=1
+LOOPINO_FEATURE_PWA_APP_CACHE_FITNESS_COACH=1
 ```
 
 M6 additionally permits deterministic workspace/user narrowing with
@@ -221,13 +221,13 @@ python3 scripts/audit_pwa_cache.py
 ```
 
 Also run the focused backend tests for all app validator contracts and use the
-official `maverick app <app-id> frontend build --json` command for every changed
+official `loopino app <app-id> frontend build --json` command for every changed
 frontend before a mounted acceptance pass.
 
 ## Rollback
 
 Disable the affected per-app flag first. Disable
-`MAVERICK_FEATURE_PWA_DATA_CACHE` to stop every structured adapter. Reload or
+`LOOPINO_FEATURE_PWA_DATA_CACHE` to stop every structured adapter. Reload or
 restart the shell/backend as required by the deployment environment. A disabled
 adapter performs its ordinary server-first read; it does not show a cache
 status or alternate UI. Existing entries remain inaccessible and may be

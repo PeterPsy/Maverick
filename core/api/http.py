@@ -127,7 +127,7 @@ def read_request_body_bytes(environ: dict, *, max_bytes: int | None = None) -> b
 
 def max_json_body_bytes() -> int:
     """Return the configured JSON/HTTP body size limit."""
-    configured = os.environ.get("MAVERICK_MAX_JSON_BODY_BYTES")
+    configured = os.environ.get("LOOPINO_MAX_JSON_BODY_BYTES")
     if not configured:
         return DEFAULT_MAX_JSON_BODY_BYTES
     try:

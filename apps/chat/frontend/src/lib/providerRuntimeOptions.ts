@@ -17,7 +17,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
   const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
       (profile) =>
         profile.selectable === true &&
-        (profile.execution_family === "native_agent" || profile.execution_family === "maverick_agent") &&
+        (profile.execution_family === "native_agent" || profile.execution_family === "loopino_agent") &&
         (!profile.runtime_status || profile.runtime_status === "complete") &&
         nativeProfileRuntimeReady(payload, profile) &&
         profile.containment_status !== "NO-GO" &&
@@ -125,7 +125,7 @@ function nativeProfileRuntimeReady(payload: ProviderPayload, profile: AgenticPro
 
 function decorateExecutionFamily(
   provider: ProviderItem,
-  familyId: "native_agent" | "maverick_agent",
+  familyId: "native_agent" | "loopino_agent",
   catalog: Map<string, { label: string; description: string; index: number }>,
 ): ProviderItem {
   const family = catalog.get(familyId);

@@ -258,7 +258,7 @@ def _fetch_catalog(
 ) -> object:
     headers = {
         "Accept": "application/json",
-        "User-Agent": "Maverick-Agentic/1",
+        "User-Agent": "Loopino-Agentic/1",
     }
     if credential is not None:
         headers["x-goog-api-key"] = credential.reveal()

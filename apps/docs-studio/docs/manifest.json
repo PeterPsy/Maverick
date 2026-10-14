@@ -9,14 +9,14 @@
           "id": "core-overview",
           "title": "Core overview",
           "icon": "core",
-          "summary": "A compact map of what the Maverick core owns and what belongs to apps.",
+          "summary": "A compact map of what the Loopino core owns and what belongs to apps.",
           "source_path": "pages/start-here/core-overview.md"
         },
         {
           "id": "development-workflow",
           "title": "Development workflow",
           "icon": "agreement",
-          "summary": "The working agreement for making safe, reviewable changes in Maverick.",
+          "summary": "The working agreement for making safe, reviewable changes in Loopino.",
           "source_path": "pages/start-here/development-workflow.md"
         },
         {
@@ -64,7 +64,7 @@
           "id": "core-control-plane",
           "title": "Control plane versus data plane",
           "icon": "workspace",
-          "summary": "How Maverick separates global control, workspace governance, and app-owned data.",
+          "summary": "How Loopino separates global control, workspace governance, and app-owned data.",
           "source_path": "pages/core-architecture/core-control-plane.md"
         },
         {
@@ -111,7 +111,7 @@
           "id": "contract-essentials",
           "title": "Contract essentials",
           "icon": "contract",
-          "summary": "The app contract is the executable promise between an app and the Maverick host.",
+          "summary": "The app contract is the executable promise between an app and the Loopino host.",
           "source_path": "pages/app-contracts/contract-essentials.md"
         },
         {

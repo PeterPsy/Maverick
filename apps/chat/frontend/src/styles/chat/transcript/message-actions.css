@@ -4,7 +4,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: rgba(var(--maverick-contrast-rgb), 0.76);
+  color: rgba(var(--loopino-contrast-rgb), 0.76);
   cursor: pointer;
   font: inherit;
   font-size: 0.76rem;
@@ -13,7 +13,7 @@
 
 .chatapp-message-action:hover {
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .chatapp-message-action--icon {
@@ -50,7 +50,7 @@
 }
 
 .chatapp-message-action--copy.is-copied {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   opacity: 1;
   pointer-events: auto;
 }
@@ -66,7 +66,7 @@
 }
 
 .chatapp-message-action--speech.is-speaking {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   opacity: 1;
   pointer-events: auto;
 }
@@ -84,7 +84,7 @@
 }
 
 .chatapp-message-action--speech.is-disabled {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   cursor: not-allowed;
   opacity: 1;
   pointer-events: auto;

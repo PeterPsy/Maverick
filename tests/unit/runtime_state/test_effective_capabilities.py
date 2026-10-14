@@ -137,8 +137,8 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         with patch.dict(
             "os.environ",
             {
-                "MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION": "0",
-                "MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE": "0",
+                "LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION": "0",
+                "LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE": "0",
             },
             clear=False,
         ):

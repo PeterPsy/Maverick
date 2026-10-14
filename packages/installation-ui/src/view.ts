@@ -14,8 +14,8 @@ export function mountInstallation(root: HTMLElement) {
   const requests = new Set<AbortController>();
   root.classList.add('installation-view');
   root.innerHTML = `<div data-installation-overview><p role="status">Loading installation…</p></div><div data-installation-message role="status" aria-live="polite"></div>
-    <form class="installation-card" data-installation-form><p class="installation-eyebrow">Address & connection</p><h2>Give Maverick a home</h2><p class="installation-muted">Use a domain you own. Maverick connects DNS, secures the address and checks its apps.</p>
-    <label class="installation-field">Public address<input data-settings-controlled name="address" placeholder="maverick.example.com" required autocomplete="url" spellcheck="false"></label>
+    <form class="installation-card" data-installation-form><p class="installation-eyebrow">Address & connection</p><h2>Give Loopino a home</h2><p class="installation-muted">Use a domain you own. Loopino connects DNS, secures the address and checks its apps.</p>
+    <label class="installation-field">Public address<input data-settings-controlled name="address" placeholder="loopino.example.com" required autocomplete="url" spellcheck="false"></label>
     <div class="installation-columns"><label class="installation-field">DNS provider<select data-settings-controlled name="dns_provider"><option value="cloudflare">Cloudflare · automatic</option><option value="manual">Another provider · guided</option></select></label>
     <label class="installation-field">Vault connection<select data-settings-controlled name="dns_secret_ref" aria-label="Vault connection"><option value="">Choose a connection</option></select></label></div>
     <details data-installation-credential><summary>Add a Cloudflare connection</summary><p class="installation-muted">Create a token with Zone · DNS · Edit and Zone · Zone · Read, restricted to your domain. The token is saved in Vault.</p><a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer">Create a token ↗</a>

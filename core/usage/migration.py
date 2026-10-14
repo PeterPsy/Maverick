@@ -74,7 +74,7 @@ def cutover(repository_root: Path, collections, migration_id: str) -> dict:
             marker = json.loads((root / 'store.json').read_text())
             if marker.get('migration_id') != migration_id:
                 raise RuntimeError('Another Usage migration is already active.')
-            return {'status': 'already_active', 'adapter': 'sqlite', 'required_environment': {'MAVERICK_USAGE_STORE': 'sqlite'}}
+            return {'status': 'already_active', 'adapter': 'sqlite', 'required_environment': {'LOOPINO_USAGE_STORE': 'sqlite'}}
         validate_database(store, expected_digest=manifest['canonical_digest'])
         if digest(document_snapshot(collections)) != manifest['source_digest']:
             raise RuntimeError('Usage source changed after prepare; drain producers and prepare again.')
@@ -93,7 +93,7 @@ def cutover(repository_root: Path, collections, migration_id: str) -> dict:
                 raise RuntimeError('Usage cutover requires WAL support.')
         atomic_json(root / 'store.json', {'schema': 1, 'adapter': 'sqlite', 'migration_id': migration_id})
         return {'status': 'cutover', 'adapter': 'sqlite', 'restart_required': True,
-            'required_environment': {'MAVERICK_USAGE_STORE': 'sqlite'}}
+            'required_environment': {'LOOPINO_USAGE_STORE': 'sqlite'}}
 
 
 def backup(repository_root: Path) -> dict:
@@ -133,7 +133,7 @@ def rollback(repository_root: Path, collections) -> dict:
     with usage_fence(root, exclusive=True):
         if active_adapter(root) == 'document':
             _retire_after_rollback(root)
-            return {'status': 'already_rolled_back', 'required_environment': {'MAVERICK_USAGE_STORE': 'document'}}
+            return {'status': 'already_rolled_back', 'required_environment': {'LOOPINO_USAGE_STORE': 'document'}}
         folder = _backup_folder(root)
         store = UsageSqliteStore(root / 'usage.sqlite')
         store.backup(folder / 'usage.sqlite')
@@ -146,7 +146,7 @@ def rollback(repository_root: Path, collections) -> dict:
             'retire_to': str(folder.relative_to(root) / 'retired.sqlite')})
         _retire_after_rollback(root)
         return {'status': 'rolled_back', 'backup': str(folder.relative_to(repository_root)),
-            'restart_required': True, 'required_environment': {'MAVERICK_USAGE_STORE': 'document'}, **verification}
+            'restart_required': True, 'required_environment': {'LOOPINO_USAGE_STORE': 'document'}, **verification}
 
 
 def _retire_after_rollback(root: Path) -> None:

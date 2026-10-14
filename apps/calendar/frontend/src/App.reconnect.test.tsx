@@ -49,7 +49,7 @@ describe('Calendar event recovery', () => {
       expect(readCalendarWindow).toHaveBeenCalledOnce();
       await act(async () => {
         Socket.instances[1].onopen?.();
-        Socket.instances[1].onmessage?.({ data: JSON.stringify({ type: 'maverick.app.data-changed', owner_app_id: 'calendar', resource: 'events' }) });
+        Socket.instances[1].onmessage?.({ data: JSON.stringify({ type: 'loopino.app.data-changed', owner_app_id: 'calendar', resource: 'events' }) });
         vi.advanceTimersByTime(120);
       });
       expect(readCalendarWindow).toHaveBeenCalledTimes(2);
@@ -83,7 +83,7 @@ describe('Calendar event recovery', () => {
       await act(async () => { root.render(<App />); });
       Socket.instances[0].onopen?.();
       await act(async () => {
-        Socket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'maverick.app.data-changed', owner_app_id: 'calendar', resource: 'events' }) });
+        Socket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'loopino.app.data-changed', owner_app_id: 'calendar', resource: 'events' }) });
         hidden = true;
         document.dispatchEvent(new Event('visibilitychange'));
       });

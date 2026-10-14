@@ -15,7 +15,7 @@ import '../../../../storage/frontend/src/styles/main.css';
 const params = new URLSearchParams(location.search);
 const mode = params.get('mode') || 'file';
 const targetRole = params.get('target_role') === 'generated' ? 'generated' : 'uploaded';
-Object.defineProperty(window, '__MAVERICK_PLATFORM_ORIGIN__', { value: params.get('shell_origin') });
+Object.defineProperty(window, '__LOOPINO_PLATFORM_ORIGIN__', { value: params.get('shell_origin') });
 installStoragePointerDrags('storage');
 const file: StorageFile = {
   id: 'file-fixture', file_id: 'file-fixture', path_id: 'file-fixture', name: 'Synthetic document.txt',

@@ -32,7 +32,7 @@ describe("parent PWA cache operations protocol", () => {
   it("reads aggregate diagnostics through an accepted exact parent channel", async () => {
     const parentWindow = {
       postMessage(message: unknown, origin: string, ports: Transferable[]) {
-        expect(origin).toBe("https://maverick.test");
+        expect(origin).toBe("https://loopino.test");
         expect(message).toMatchObject({ action: "diagnostics", type: PWA_CACHE_OPERATIONS_REQUEST });
         const request = message as { request_id: string };
         const port = ports[0] as MessagePort;
@@ -48,7 +48,7 @@ describe("parent PWA cache operations protocol", () => {
     };
 
     await expect(requestParentPwaCacheDashboard({
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow,
     })).resolves.toMatchObject({ diagnostics: { cacheBytes: 10 } });
   });
@@ -71,7 +71,7 @@ describe("parent PWA cache operations protocol", () => {
     };
 
     await expect(clearParentPwaCache({
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow,
     })).resolves.toMatchObject({ cleanup: { removed: 2 }, dashboard: { diagnostics: { cacheBytes: 10 } } });
   });
@@ -80,7 +80,7 @@ describe("parent PWA cache operations protocol", () => {
     vi.useFakeTimers();
     const pending = requestParentPwaCacheDashboard({
       acceptanceTimeoutMs: 10,
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow: { postMessage() {} },
     });
     await vi.advanceTimersByTimeAsync(10);

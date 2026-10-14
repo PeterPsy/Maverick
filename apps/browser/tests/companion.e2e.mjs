@@ -33,9 +33,9 @@ try {
   server.stderr.on("data",chunk=>process.stderr.write(chunk));
   const lines=createInterface({input:server.stdout});
   const info=await Promise.race([new Promise(resolve=>lines.once("line",line=>resolve(JSON.parse(line)))),new Promise((_,reject)=>setTimeout(()=>reject(new Error("fixture_server_timeout")),30000))]);
-  const origin=`http://maverick.localhost:${info.port}`;
+  const origin=`http://loopino.localhost:${info.port}`;
   const transport=`http://127.0.0.1:${info.port}`;
-  const frameOrigin=`http://af-0123456789abcdef01234567.sidecars.maverick.localhost:${info.port}`;
+  const frameOrigin=`http://af-0123456789abcdef01234567.sidecars.loopino.localhost:${info.port}`;
   // Node's fetch rewrites Host; send the exact virtual host to the local fixture.
   const fixtureFetch=(url,options={})=>new Promise((resolve,reject)=>{
     const req=request(url.replace(origin,transport).replace(frameOrigin,transport),{method:options.method || "GET",headers:{...options.headers,Host:new URL(url).host,
@@ -52,7 +52,7 @@ try {
   const manifest=JSON.parse(readFileSync(path.join(extension,"manifest.json")));
   if(!realConsent)manifest.host_permissions=["https://*/*","http://*.localhost/*","http://localhost/*","http://127.0.0.1/*"];
   writeFileSync(path.join(extension,"manifest.json"),JSON.stringify(manifest));
-  execFileSync("espeak-ng",["-w",path.join(temporary,"voice.wav"),"Maverick browser reads video and records audio locally."]);
+  execFileSync("espeak-ng",["-w",path.join(temporary,"voice.wav"),"Loopino browser reads video and records audio locally."]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc=size=320x180:rate=12","-i",path.join(temporary,"voice.wav"),"-t","5","-vf","format=yuv420p","-af","apad","-c:v","libx264","-threads","1","-c:a","aac","-movflags","+faststart",path.join(temporary,"video.mp4")]);
   execFileSync("ffmpeg",["-hide_banner","-loglevel","error","-f","lavfi","-i","testsrc2=size=320x180:rate=12","-t","3","-c:v","libx264","-threads","1","-movflags","+faststart",path.join(temporary,"ended.mp4")]);
   const media=readFileSync(path.join(temporary,"video.mp4"));
@@ -60,13 +60,13 @@ try {
   context=await chromium.launchPersistentContext(path.join(temporary,"profile"),{headless:!realConsent,channel:"chromium",ignoreDefaultArgs:["--mute-audio"],viewport:{width:1000,height:800},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,"--enable-unsafe-extension-debugging","--autoplay-policy=no-user-gesture-required","--window-size=1100,740","--window-position=0,0"]});
   assert.equal((await fixtureFetch(`${origin}/apps/browser/?connector=1`)).status,403);
   assert.equal((await fixtureFetch(`${frameOrigin}/apps/browser/?connector=1`)).status,401);
-  assert.equal((await context.cookies()).length,0,"Chrome starts without any Maverick or iframe session");
+  assert.equal((await context.cookies()).length,0,"Chrome starts without any Loopino or iframe session");
   const setup=await context.newPage(); await setup.goto(`${origin}/__test/download`);
   const connectorAddress=`${origin}/app/browser?connector=1`;
   const downloadPromise=setup.waitForEvent("download");
   await setup.getByRole("link",{name:"Download Companion"}).click();
   const download=await downloadPromise;assert.equal(await download.failure(),null);
-  assert(readFileSync(await download.path()).equals(readFileSync(path.join(root,"frontend/package/maverick-browser-companion.zip"))));
+  assert(readFileSync(await download.path()).equals(readFileSync(path.join(root,"frontend/package/loopino-browser-companion.zip"))));
   await setup.close();
   await context.route("https://www.instagram.com/**",route=>{
     if(route.request().url().includes("fixture-media.mp4"))return route.fulfill({contentType:"video/mp4",body:media});
@@ -82,12 +82,12 @@ try {
   await popupEvaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
   if(realConsent) {
     await new Promise(resolve=>setTimeout(resolve,1200));
-    execFileSync('python3',[path.join(root,'tests/consent-dialog.py'),'Maverick agent tab']);
+    execFileSync('python3',[path.join(root,'tests/consent-dialog.py'),'Loopino agent tab']);
     await new Promise(resolve=>setTimeout(resolve,300));
-    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','x11grab','-video_size','1366x768','-i',process.env.DISPLAY,'-frames:v','1','-y',path.join(tmpdir(),'maverick-consent.png')]);
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','x11grab','-video_size','1366x768','-i',process.env.DISPLAY,'-frames:v','1','-y',path.join(tmpdir(),'loopino-consent.png')]);
     await popup.close();
-    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','x11grab','-video_size','1366x768','-i',process.env.DISPLAY,'-frames:v','1','-y',path.join(tmpdir(),'maverick-consent-after-close.png')]);
-    execFileSync('python3',[path.join(root,'tests/consent-dialog.py'),'Maverick agent tab','allow']);
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','x11grab','-video_size','1366x768','-i',process.env.DISPLAY,'-frames:v','1','-y',path.join(tmpdir(),'loopino-consent-after-close.png')]);
+    execFileSync('python3',[path.join(root,'tests/consent-dialog.py'),'Loopino agent tab','allow']);
     await wait(()=>worker.evaluate(()=>chrome.permissions.contains({origins:['https://*/*']})),10000).catch(async error=>{
       console.error(JSON.stringify({phase:'consent-failed',permissions:await worker.evaluate(()=>chrome.permissions.getAll())}));throw error;
     });
@@ -96,7 +96,7 @@ try {
   await wait(async()=>{
     const page=context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));if(page)return page;
     const status=await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"");
-    if(status && !["Connecting in Maverick", "Allow Chrome access"].some(prefix=>status.startsWith(prefix)))throw new Error(`share_failed: ${status}`);
+    if(status && !["Connecting in Loopino", "Allow Chrome access"].some(prefix=>status.startsWith(prefix)))throw new Error(`share_failed: ${status}`);
     return context.pages().find(page=>page.url().startsWith(`${origin}/app/browser`));
   }).catch(async error=>{
     console.error(JSON.stringify({phase:"sharing",popup_status:await popupEvaluate("document.querySelector('#status').textContent").catch(()=>"closed"),worker_state:await worker.evaluate(async()=>({contexts:await chrome.runtime.getContexts({}),binding:await chrome.storage.session.get("binding")}))}));
@@ -143,8 +143,8 @@ try {
   const second=await run("video.frame",{time_seconds:3});
   assert(first.time_seconds>=0.45 && first.time_seconds<0.9,`First captured time: ${first.time_seconds}`);
   assert(second.time_seconds>=2.95 && second.time_seconds<3.4,`Second captured time: ${second.time_seconds}`);
-  writeFileSync(path.join(tmpdir(),"maverick-browser-frame-1.jpg"),Buffer.from(first.base64,"base64"));
-  writeFileSync(path.join(tmpdir(),"maverick-browser-frame-2.jpg"),Buffer.from(second.base64,"base64"));
+  writeFileSync(path.join(tmpdir(),"loopino-browser-frame-1.jpg"),Buffer.from(first.base64,"base64"));
+  writeFileSync(path.join(tmpdir(),"loopino-browser-frame-2.jpg"),Buffer.from(second.base64,"base64"));
   assert(first.base64 !== second.base64,"Different video seeks must produce different captured frames.");
   // Exercise the actual DOM adapter and video workflow on ended media in a
   // separate Chromium page, independent of the shared tab's live audio clock.
@@ -169,7 +169,7 @@ try {
   const analyzed=await run("video.analyze",{frame_count:3,max_seconds:4,include_audio:true,save_evidence:true});
   assert.equal(analyzed.frames.length,3);assert(analyzed.frames.every(f=>f.storage?.file_id && !f.base64));assert(analyzed.audio.storage?.file_id);assert(analyzed.audio.size_bytes>5000);assert.equal(analyzed.transcription.status,"unavailable");
   const capturedAudio=await fixtureFetch(`${origin}/__test/media?operation_id=${analyzed.operation_id}`);assert(capturedAudio.ok);
-  writeFileSync(path.join(tmpdir(),"maverick-browser-captured.webm"),Buffer.from(await capturedAudio.arrayBuffer()));
+  writeFileSync(path.join(tmpdir(),"loopino-browser-captured.webm"),Buffer.from(await capturedAudio.arrayBuffer()));
   const cancelled=await api({action:"video.analyze",session_id:connection.session_id,frame_count:1,max_seconds:4,include_audio:true,save_evidence:false});
   await wait(()=>worker.evaluate(async()=>{const status=await chrome.runtime.sendMessage({target:"offscreen",action:"status"});return status?.recording;}));
   await api({action:"operation.cancel",operation_id:cancelled.operation_id});
@@ -185,7 +185,7 @@ try {
   // Native frontend at desktop and mobile sizes; no horizontal overflow.
   for(const viewport of [{width:1280,height:800},{width:390,height:844}]) {
     await connectorWindow.setViewportSize(viewport);assert(await connector.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-    await connectorWindow.screenshot({path:path.join(tmpdir(),`maverick-browser-ui-${viewport.width}.png`)});
+    await connectorWindow.screenshot({path:path.join(tmpdir(),`loopino-browser-ui-${viewport.width}.png`)});
   }
   // Exercise the agent-owned MCP surface through real Chrome/queue/Storage boundaries.
   const mcp=async(tool_name,arguments_={})=>{
@@ -244,7 +244,7 @@ try {
   const agentPopup=await openActionPopup(browser,extensionId,agent.url());
   assert.equal(await agentPopup.evaluate("document.querySelector('#share').textContent"),"Connect agent tab");
   assert.equal(await agentPopup.evaluate("document.querySelector('#reuse').checked"),true);
-  // The existing Maverick instance can be on another native app when reconnecting.
+  // The existing Loopino instance can be on another native app when reconnecting.
   await connectorWindow.evaluate(()=>history.replaceState({},"","/app/chat"));
   const reused=connectorWindow.waitForEvent('framenavigated',{predicate:frame=>frame === connectorWindow.mainFrame()});
   await agentPopup.evaluate(`document.querySelector('#connector').value=${JSON.stringify(connectorAddress)};document.querySelector('#share').click();true`);
@@ -264,7 +264,7 @@ try {
   await agentWindow.evaluate(frameOrigin=>{
     history.pushState({},"","/app/chat");
     const frame=document.querySelector('iframe');frame.style.display='none';
-    frame.contentWindow.postMessage({type:'maverick.app.visibility-changed',app_id:'browser',visible:false},frameOrigin);
+    frame.contentWindow.postMessage({type:'loopino.app.visibility-changed',app_id:'browser',visible:false},frameOrigin);
   },frameOrigin);
   assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,"");
   await run('navigate',{url:'https://x.com/home/'},agentConnection);
@@ -272,11 +272,11 @@ try {
   await agentWindow.evaluate(frameOrigin=>{
     history.pushState({},"","/app/browser");
     const frame=document.querySelector('iframe');frame.style.display='';
-    frame.contentWindow.postMessage({type:'maverick.app.visibility-changed',app_id:'browser',visible:true},frameOrigin);
+    frame.contentWindow.postMessage({type:'loopino.app.visibility-changed',app_id:'browser',visible:true},frameOrigin);
   },frameOrigin);
   const agentShot=await run('screenshot',{},agentConnection);
   assert(Buffer.from(agentShot.base64,'base64').subarray(0,3).equals(Buffer.from([255,216,255])));
-  writeFileSync(path.join(tmpdir(),'maverick-agent-x-screenshot.jpg'),Buffer.from(agentShot.base64,'base64'));
+  writeFileSync(path.join(tmpdir(),'loopino-agent-x-screenshot.jpg'),Buffer.from(agentShot.base64,'base64'));
   await run('navigate',{url:'https://www.instagram.com/'},agentConnection);
   assert((await run('content.read',{},agentConnection)).text.includes('Bio visibile'));
   // Opening from another ordinary Chrome tab focuses the existing agent source.
@@ -339,7 +339,7 @@ try {
   agentFrame=await wait(()=>agentWindow.frames().find(frame=>frame.url().startsWith(`${frameOrigin}/apps/browser/`)));
   await agentFrame.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Connected'));
   agentConnection=await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.status === 'connected'));
-  assert.equal(agentConnection.session_id,retainedSessionId,'A live lease survives a Maverick reload');
+  assert.equal(agentConnection.session_id,retainedSessionId,'A live lease survives a Loopino reload');
   const expired=await fixtureFetch(`${origin}/__test/browser/expire`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:retainedSessionId})});
   assert(expired.ok);
   await worker.evaluate(async()=>{const {binding}=await chrome.storage.session.get('binding');await chrome.tabs.sendMessage(binding.connectorTabId,{target:'connector',action:'wake'},{documentId:binding.connectorDocumentId});});
@@ -351,7 +351,7 @@ try {
     const a=await run('video.frame',{time_seconds:0.5},agentConnection),b=await run('video.frame',{time_seconds:3},agentConnection);
     assert.notEqual(a.base64,b.base64,'Agent-tab capture must reflect the presented seek, not a stale captured frame.');
     assert(Math.abs(a.width/a.height-16/9)<0.02,'Video crops must retain their source aspect ratio when tab capture letterboxes the viewport.');
-    writeFileSync(path.join(tmpdir(),'maverick-agent-video-frame.jpg'),Buffer.from(a.base64,'base64'));
+    writeFileSync(path.join(tmpdir(),'loopino-agent-video-frame.jpg'),Buffer.from(a.base64,'base64'));
     const agentVideo=await run('video.analyze',{frame_count:2,max_seconds:2,include_audio:true,save_evidence:false},agentConnection);
     assert.equal(agentVideo.frames.length,2);assert(agentVideo.audio.size_bytes>1000);
   }
@@ -363,8 +363,8 @@ try {
   assert.equal((await run('tabs',{},agentConnection)).tabs[0].url,'https://www.instagram.com/');
   const afterClose=(await api({action:'companion.overview'})).connections.find(c=>c.session_id === backgroundSessionId);
   assert.equal(afterClose.status,'connected');
-  assert.equal(context.pages().length,beforeClose-1,'Closing setup must not open another Maverick tab');
-  console.log(JSON.stringify({phase:'maverick-tab-closed',background_commands:true,same_lease:true,no_reopened_tabs:true}));
+  assert.equal(context.pages().length,beforeClose-1,'Closing setup must not open another Loopino tab');
+  console.log(JSON.stringify({phase:'loopino-tab-closed',background_commands:true,same_lease:true,no_reopened_tabs:true}));
   await agent.goto('http://unapproved-fixture.test/');
   await wait(async()=> (await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id)?.status === 'revoked');
   const stopped=(await api({action:'companion.overview'})).connections.find(c=>c.session_id === agentConnection.session_id);

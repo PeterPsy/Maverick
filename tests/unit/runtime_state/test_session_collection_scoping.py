@@ -39,7 +39,7 @@ class RuntimeSessionCollectionScopingTest(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        root = Path(temp_dir.name) / "maverick"
+        root = Path(temp_dir.name) / "loopino"
         for name in ("apps", "core", "workspaces"):
             (root / name).mkdir(parents=True)
         (root / "AGENTS.md").write_text("", encoding="utf-8")

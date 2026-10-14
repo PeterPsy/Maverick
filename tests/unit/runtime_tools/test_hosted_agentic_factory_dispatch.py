@@ -38,7 +38,7 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
         session_runtime_root.mkdir(parents=True)
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(
@@ -127,7 +127,7 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
         harness = HostedAgenticHarness(self, filesystem_list=True)
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(
@@ -144,7 +144,7 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
             now=NOW,
         )
         production_adapter = state.provider_registry.get_agentic_runtime_adapter(
-            "maverick-tool-loop"
+            "loopino-tool-loop"
         )
         # Use the request builder selected by platform_state, not the harness
         # classifier called out by the P4 review.  Input classification comes
@@ -206,7 +206,7 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
         )
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(
@@ -274,7 +274,7 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
         self.assertEqual(app_source.classification.data_class, "public")
 
         production_adapter = state.provider_registry.get_agentic_runtime_adapter(
-            "maverick-tool-loop"
+            "loopino-tool-loop"
         )
         harness.request_builder = production_adapter.loop.request_builder
         client = DeterministicFakeAgenticClient()
@@ -321,7 +321,7 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
         runtime_root.mkdir(parents=True)
         with patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             state = bootstrap_platform_state(

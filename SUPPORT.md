@@ -1,6 +1,6 @@
 # Support
 
-Maverick is experimental.
+Loopino is experimental.
 
 ## Community Support
 

@@ -19,7 +19,7 @@ const records = [...bodies].map(([url, body]) => ({
 
 test("precache installation is atomic and keeps the previous build after interruption", async () => {
   const harness = workerHarness();
-  await harness.caches.open("maverick-static-v2:previous");
+  await harness.caches.open("loopino-static-v2:previous");
   harness.fetchImpl = async (input) => {
     const path = requestPath(input);
     if (path === "/favicon.ico") throw new Error("network interrupted");
@@ -27,7 +27,7 @@ test("precache installation is atomic and keeps the previous build after interru
   };
 
   await assert.rejects(harness.internals.installPrecache(), /network interrupted/);
-  assert.ok((await harness.caches.keys()).includes("maverick-static-v2:previous"));
+  assert.ok((await harness.caches.keys()).includes("loopino-static-v2:previous"));
   assert.ok(!(await harness.caches.keys()).includes(harness.internals.STATIC_CACHE_NAME));
 
   harness.fetchImpl = async (input) => responseFor(requestPath(input));
@@ -42,7 +42,7 @@ test("an update waits behind the active worker until the shell explicitly accept
 
   await harness.dispatchExtendable("install");
   assert.equal(harness.skipWaitingCalls, 0);
-  await harness.dispatchExtendable("message", { data: { type: "MAVERICK_SKIP_WAITING" } });
+  await harness.dispatchExtendable("message", { data: { type: "LOOPINO_SKIP_WAITING" } });
   assert.equal(harness.skipWaitingCalls, 1);
 });
 
@@ -127,17 +127,17 @@ test("recovery preserves verified entries when a missing entry cannot be fetched
   assert.equal(await cache.match("/favicon.ico"), undefined);
 });
 
-test("kill switch removes only known Maverick static caches and unregisters", async () => {
+test("kill switch removes only known Loopino static caches and unregisters", async () => {
   const harness = workerHarness();
   await Promise.all([
     harness.caches.open(harness.internals.STATIC_CACHE_NAME),
-    harness.caches.open("maverick-static-v2:old"),
-    harness.caches.open("maverick-base-shell-v3"),
-    harness.caches.open("maverick-app-static-v2"),
+    harness.caches.open("loopino-static-v2:old"),
+    harness.caches.open("loopino-base-shell-v3"),
+    harness.caches.open("loopino-app-static-v2"),
     harness.caches.open("another-app-cache"),
   ]);
 
-  await harness.dispatchExtendable("message", { data: { type: "MAVERICK_DISABLE" } });
+  await harness.dispatchExtendable("message", { data: { type: "LOOPINO_DISABLE" } });
 
   assert.deepEqual(await harness.caches.keys(), ["another-app-cache"]);
   assert.equal(harness.unregisterCalls, 1);
@@ -172,9 +172,9 @@ test("activation cleans obsolete shell and app-static caches without touching un
   const harness = workerHarness();
   await Promise.all([
     harness.caches.open(harness.internals.STATIC_CACHE_NAME),
-    harness.caches.open("maverick-static-v2:old"),
-    harness.caches.open("maverick-base-shell-v3"),
-    harness.caches.open("maverick-app-static-v2"),
+    harness.caches.open("loopino-static-v2:old"),
+    harness.caches.open("loopino-base-shell-v3"),
+    harness.caches.open("loopino-app-static-v2"),
     harness.caches.open("unrelated-cache"),
   ]);
 
@@ -192,7 +192,7 @@ test("worker observability emits only closed redaction-safe metric names", async
   await harness.internals.cacheFirstVerifiedShellAsset(fakeRequest(record.url), record);
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const metrics = harness.clientMessages.filter((message) => message.type === "MAVERICK_PWA_METRIC");
+  const metrics = harness.clientMessages.filter((message) => message.type === "LOOPINO_PWA_METRIC");
   assert.ok(metrics.some((message) => message.metric === "pwa_sw_install"));
   assert.ok(metrics.some((message) => message.metric === "pwa_static_cache_hit"));
   for (const message of metrics) {
@@ -200,7 +200,7 @@ test("worker observability emits only closed redaction-safe metric names", async
     assert.doesNotMatch(JSON.stringify(message), /index-testhash|https?:|favicon|build/i);
   }
   assert.equal(
-    harness.clientMessagesByClient.filter((messages) => messages.some((message) => message.type === "MAVERICK_PWA_METRIC")).length,
+    harness.clientMessagesByClient.filter((messages) => messages.some((message) => message.type === "LOOPINO_PWA_METRIC")).length,
     1,
     "one worker event must be delivered to exactly one metrics collector",
   );
@@ -231,7 +231,7 @@ function workerHarness({ activeWorker = null, clientCount = 1 } = {}) {
         }));
       },
     },
-    location: { origin: "https://maverick.test" },
+    location: { origin: "https://loopino.test" },
     registration: {
       active: activeWorker,
       async unregister() { harness.unregisterCalls += 1; return true; },
@@ -240,11 +240,11 @@ function workerHarness({ activeWorker = null, clientCount = 1 } = {}) {
   };
   let source = readFileSync(resolve(import.meta.dirname, "../frontend/public/sw.js"), "utf8");
   source = source
-    .replaceAll("__MAVERICK_BUILD_ID__", "test-build")
-    .replaceAll("__MAVERICK_PRECACHE_MANIFEST__", JSON.stringify(records))
-    .replaceAll("__MAVERICK_IMMUTABLE_ASSETS__", JSON.stringify([records[2]]))
-    .replaceAll("__MAVERICK_NAVIGATION_FALLBACK_URL__", JSON.stringify("/"));
-  source += `\nself.__MAVERICK_SW_INTERNALS__ = {
+    .replaceAll("__LOOPINO_BUILD_ID__", "test-build")
+    .replaceAll("__LOOPINO_PRECACHE_MANIFEST__", JSON.stringify(records))
+    .replaceAll("__LOOPINO_IMMUTABLE_ASSETS__", JSON.stringify([records[2]]))
+    .replaceAll("__LOOPINO_NAVIGATION_FALLBACK_URL__", JSON.stringify("/"));
+  source += `\nself.__LOOPINO_SW_INTERNALS__ = {
     BUILD_ID,
     STATIC_CACHE_NAME,
     cacheFirstVerifiedShellAsset,
@@ -276,7 +276,7 @@ function workerHarness({ activeWorker = null, clientCount = 1 } = {}) {
     self,
     setTimeout,
   });
-  harness.internals = self.__MAVERICK_SW_INTERNALS__;
+  harness.internals = self.__LOOPINO_SW_INTERNALS__;
   harness.dispatchExtendable = async (type, values = {}) => {
     let pending = Promise.resolve();
     const event = {
@@ -326,13 +326,13 @@ function fakeRequest(path, mode = "cors", accept = "", headers = {}) {
     headers: new Headers({ ...headers, ...(accept ? { Accept: accept } : {}) }),
     method: "GET",
     mode,
-    url: `https://maverick.test${path}`,
+    url: `https://loopino.test${path}`,
   };
 }
 
 function requestPath(input) {
   const value = typeof input === "string" ? input : input.url;
-  return new URL(value, "https://maverick.test").pathname;
+  return new URL(value, "https://loopino.test").pathname;
 }
 
 function responseFor(path) {

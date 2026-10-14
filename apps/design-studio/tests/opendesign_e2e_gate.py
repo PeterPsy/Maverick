@@ -135,7 +135,7 @@ def _commands(profile: str, requested_installation: Path | None) -> list[tuple[l
 def _installation(requested: Path | None) -> Path:
     if requested is not None:
         return requested.resolve()
-    configured = os.environ.get("MAVERICK_OPENDESIGN_INSTALLATION", "").strip()
+    configured = os.environ.get("LOOPINO_OPENDESIGN_INSTALLATION", "").strip()
     if configured:
         return Path(configured).resolve()
     release = load_official_release()
@@ -150,7 +150,7 @@ def _installation(requested: Path | None) -> Path:
 
 
 def _opencode_runtime() -> Path:
-    configured = os.environ.get("MAVERICK_OPENCODE_RUNTIME", "").strip()
+    configured = os.environ.get("LOOPINO_OPENCODE_RUNTIME", "").strip()
     if configured:
         return Path(configured).resolve()
     store = platform_artifact_store_root(REPOSITORY_ROOT)
@@ -158,7 +158,7 @@ def _opencode_runtime() -> Path:
     if not runtime.is_dir():
         raise SystemExit(
             "The verified OpenCode adapter runtime is missing; upgrade/reinstall Design Studio "
-            "or set MAVERICK_OPENCODE_RUNTIME."
+            "or set LOOPINO_OPENCODE_RUNTIME."
         )
     return runtime
 

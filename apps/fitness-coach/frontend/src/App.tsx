@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, Ref, SyntheticEvent as ReactSyntheticEvent } from 'react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import {
   ArrowDown,
   Check,
@@ -209,15 +209,15 @@ export function App() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: Record<string, unknown>; app_page?: string };
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'fitness-coach') {
+      if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'fitness-coach') {
         const resource = String(payload.resource || '');
         if (resource !== 'view-state') {
           refresh().catch((error: Error) => setNotice(error.message));
         }
       }
-      if (payload.type === 'maverick.app.navigate') {
+      if (payload.type === 'loopino.app.navigate') {
         navigationRevisionRef.current += 1;
         const params = payload.params || {};
         const appPage = String(params.app_page || payload.app_page || '');
@@ -255,7 +255,7 @@ export function App() {
     window.addEventListener('message', handleMessage);
     // Register the navigation listener before announcing readiness so the
     // Shell can safely deliver first-mount picker results in its reply.
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'fitness-coach' }, '*');
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'fitness-coach' }, '*');
     return () => window.removeEventListener('message', handleMessage);
   }, [refresh]);
 
@@ -268,7 +268,7 @@ export function App() {
     }
     window.parent?.postMessage(
       {
-        type: 'maverick.app.selection-changed',
+        type: 'loopino.app.selection-changed',
         owner_app_id: 'fitness-coach',
         selection: { workout_id: selectedWorkout.id, app_page: `workouts/${selectedWorkout.id}`, setup_tab: setupTab }
       },

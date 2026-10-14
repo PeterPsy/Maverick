@@ -11,7 +11,7 @@ class BackgroundGrantTests(unittest.TestCase):
     def setUp(self):
         self.now = 100.0
         self.store = AppBackgroundGrantStore(clock=lambda: self.now)
-        self.binding = SidecarBrowserBinding("actor", "workspace", "demo", "frame", "af-demo.test", "https://af-demo.test", "https://maverick.test", "generation", "login", "/apps/demo/", True, "", platform_session_id="login")
+        self.binding = SidecarBrowserBinding("actor", "workspace", "demo", "frame", "af-demo.test", "https://af-demo.test", "https://loopino.test", "generation", "login", "/apps/demo/", True, "", platform_session_id="login")
         self.origin = "chrome-extension://" + "a" * 32
 
     def test_only_exact_extension_and_host_can_use_a_grant(self):

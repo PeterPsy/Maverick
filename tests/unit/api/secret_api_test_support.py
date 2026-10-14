@@ -34,11 +34,11 @@ class SecretApiTestSupport(unittest.TestCase):
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": "",
-            "HTTP_HOST": "maverick.test",
+            "HTTP_HOST": "loopino.test",
             "wsgi.input": BytesIO(payload),
         }
         if method not in {"GET", "HEAD", "OPTIONS"}:
-            environ["HTTP_ORIGIN"] = "http://maverick.test"
+            environ["HTTP_ORIGIN"] = "http://loopino.test"
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
         headers: dict[str, str] = {}
@@ -50,7 +50,7 @@ class SecretApiTestSupport(unittest.TestCase):
         body_bytes = b"".join(app(environ, start_response))
         return int(headers["__status__"].split()[0]), json.loads(body_bytes.decode("utf-8")), headers
 
-    def login(self, app: PlatformHost, *, username: str = "admin", password: str = "maverick") -> str:
+    def login(self, app: PlatformHost, *, username: str = "admin", password: str = "loopino") -> str:
         status, _payload, headers = self.invoke(
             app,
             path="/api/auth/login",
@@ -65,9 +65,9 @@ class SecretApiTestSupport(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
             clear=False,
         ):

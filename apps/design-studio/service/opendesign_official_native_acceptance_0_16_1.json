@@ -10,11 +10,11 @@
   "kind": "official_opendesign_native_acceptance",
   "notes": [
     "The registry client verified the official OCI index, platform manifest, config, every layer, and upstream attestation by pinned digest.",
-    "The native root and public application surfaces were served by the unmodified official OCI command with both external Maverick bridges disabled."
+    "The native root and public application surfaces were served by the unmodified official OCI command with both external Loopino bridges disabled."
   ],
   "proof": {
     "completed_at": "2026-08-28T14:27:50.681615+00:00",
-    "maverick_runtime_session_created": false,
+    "loopino_runtime_session_created": false,
     "native_root_title": "Open Design",
     "native_static_assets": true,
     "status": "passed",

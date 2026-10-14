@@ -114,7 +114,7 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         resource = "view-state"
     if not resource:
         return []
-    return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": resource}]
+    return [{"type": "loopino.app.data-changed", "owner_app_id": APP_ID, "resource": resource}]
 
 
 def canonical_action(action: str) -> str:

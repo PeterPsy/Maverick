@@ -21,12 +21,12 @@ describe("execution family taxonomy", () => {
   it("shows only CLI and API families that have selectable models", () => {
     expect(orderedExecutionFamilies([])).toEqual([]);
     expect(orderedExecutionFamilies([
-      provider({ execution_family: "maverick_agent" }),
+      provider({ execution_family: "loopino_agent" }),
       provider({ provider_id: "codex", execution_family: "native_agent" }),
     ]).map((family) => family.label)).toEqual(["CLI models", "API models"]);
     expect(EXECUTION_FAMILY_CATALOG.map((family) => family.family_id)).toEqual([
       "native_agent",
-      "maverick_agent",
+      "loopino_agent",
     ]);
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { connectAppEventSocket, maverickAppIsVisible } from "@maverick/pwa-cache";
+import { connectAppEventSocket, loopinoAppIsVisible } from "@loopino/pwa-cache";
 import type { Chat, Session, Status } from "./api";
 import { Conversation } from "./Conversation";
 import { Icon } from "./Icons";
@@ -17,8 +17,8 @@ export function Workspace({ status, sessions, selected, online, revision, onSele
   const session = sessions.find((item) => item.id === selected);
   const resources = useResources(session, tab, page, online, revision);
   useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((event) => {
-    if (event.type === "maverick.app.data-changed" && event.owner_app_id === "openwa"
-      && event.resource === "messages" && maverickAppIsVisible()) void resources.refresh();
+    if (event.type === "loopino.app.data-changed" && event.owner_app_id === "openwa"
+      && event.resource === "messages" && loopinoAppIsVisible()) void resources.refresh();
   }, resources.refresh), [resources.refresh]);
   return <div className={"workspace " + (chat ? "chat-open" : "")}>
     <SessionSidebar sessions={sessions} selected={selected} connection={status.connection} online={online}

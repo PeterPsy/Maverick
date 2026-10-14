@@ -1,13 +1,13 @@
-import { maverickFrontendAssets } from "../../scripts/vite-frontend-assets.mjs";
-import { maverickIsolatedFrameAssetUrls } from "../../scripts/vite-isolated-frame-assets.mjs";
+import { loopinoFrontendAssets } from "../../scripts/vite-frontend-assets.mjs";
+import { loopinoIsolatedFrameAssetUrls } from "../../scripts/vite-isolated-frame-assets.mjs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [
     react(),
-    maverickIsolatedFrameAssetUrls(),
-    maverickFrontendAssets(),
+    loopinoIsolatedFrameAssetUrls(),
+    loopinoFrontendAssets(),
   ],
   base: "/apps/openwa/",
   root: "frontend",

@@ -1,11 +1,11 @@
-# Maverick App SDK Packaging Guide
+# Loopino App SDK Packaging Guide
 
 Date: 2026-04-21
 
 Package a valid app source tree with:
 
 ```bash
-scripts/maverick core cli run core.app-sdk.package --app-id my-app --workspace default --json
+scripts/loopino core cli run core.app-sdk.package --app-id my-app --workspace default --json
 ```
 
 Packaging validates the app contract first.

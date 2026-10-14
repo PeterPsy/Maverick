@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
-import { clampPrivateAccessLease } from "@maverick/pwa-cache";
+import { clampPrivateAccessLease } from "@loopino/pwa-cache";
 import type { AppRegistryItem } from "./api";
-import type { MaverickFrameScope } from "./iframePolicy";
+import type { LoopinoFrameScope } from "./iframePolicy";
 import { PwaCacheOperationsBroker } from "./pwaCacheOperationsBroker";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
 import { shellPwaMetrics, shellPwaQuotaAdapter } from "./pwaCacheRuntime";
@@ -18,7 +18,7 @@ export function usePwaDataCacheBrokerHost({
   principal,
 }: {
   appRegistry: readonly AppRegistryItem[];
-  frameScope: MaverickFrameScope | null;
+  frameScope: LoopinoFrameScope | null;
   principal: AuthenticatedCachePrincipal | null;
 }): void {
   const enabledAppIdsRef = useRef<ReadonlySet<string>>(new Set());

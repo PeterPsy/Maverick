@@ -207,7 +207,7 @@ class GatewayTests(unittest.TestCase):
                     runpy.run_path(str(app / entrypoint), run_name='__main__')
                 result = emit.call_args.args[0]
                 if code == 'IDEMPOTENCY_OUTCOME_UNKNOWN':
-                    self.assertEqual(result['app_events'], [{'type': 'maverick.app.data-changed', 'resource': 'notifications'}])
+                    self.assertEqual(result['app_events'], [{'type': 'loopino.app.data-changed', 'resource': 'notifications'}])
                 else:
                     self.assertNotIn('app_events', result)
 

@@ -1,9 +1,9 @@
 ---
 name: skills-ops
-description: Use the Maverick Skills app to create, inspect, discover, install, update, or delete workspace-owned runtime skills.
+description: Use the Loopino Skills app to create, inspect, discover, install, update, or delete workspace-owned runtime skills.
 ---
 
-Use this skill when a task requires managing workspace-owned runtime skills in Maverick.
+Use this skill when a task requires managing workspace-owned runtime skills in Loopino.
 
 Rules:
 

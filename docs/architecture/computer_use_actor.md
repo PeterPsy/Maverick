@@ -285,7 +285,7 @@ could not connect to the host systemd bus from the migrated root. After
 verifying the exact service cgroup, process identity/ownership and
 `Restart=always` configuration, the authorized restart sent SIGTERM to the
 existing main process. The host respawned it: PID 1798170 changed to 1970477,
-`/health` returned HTTP 200 with `status=ok` and `service=maverick-core`, and
+`/health` returned HTTP 200 with `status=ok` and `service=loopino-core`, and
 the authenticated official CLI resumed successfully. Backend restart/health
 verification is complete; saved-setting and native UI acceptance remain
 pending PC use reactivation.
@@ -294,7 +294,7 @@ Raw temporary measurement SHA-256: `cb5f9f8fd7b25431d1ea1734e49a899109371a5d74fe
 
 ## Physical acceptance on 2026-10-11
 
-The user reactivated PC use with Maverick Mac maximized and Calculator open on
+The user reactivated PC use with Loopino Mac maximized and Calculator open on
 another desktop, then required access to background windows across desktops.
 The saved selection was Luna Low with no recovery model. Initial Calculator
 observations failed before input (`MC-TOOL-30` / `MC-PEEKABOO-27`), so those
@@ -313,8 +313,8 @@ ScreenCaptureKit discovery, preventing an exact observation on another Space.
 A read-only capture using ScreenCaptureKit's desktop-independent-window filter
 returned the real Calculator pixels without activation or a desktop transition.
 
-Native changes are maintained in `giuntiocram/maverick-glasses-ios`, branch
-`maverick-integration`: `c0870a6` adds all-desktop discovery, exact independent
+Native changes are maintained in `giuntiocram/loopino-glasses-ios`, branch
+`loopino-integration`: `c0870a6` adds all-desktop discovery, exact independent
 window capture, truthful active-desktop metadata and deeper detailed AX reads;
 `c29542b` separates raw-buffer and delivered-JPEG OCR acceptance; `d490045`
 updates the signed test reporter for the additional acceptance case. Window
@@ -375,7 +375,7 @@ completed Calculator `1 + 2 = 3` with explicit target guidance and a fresh final
 observation. Two earlier `17 × 23` tasks failed: native evidence shows that the
 operator selected incorrect digit targets, so these runs do not establish general
 target-selection reliability. No model configuration was changed by these checks.
-The Mac companion browser reached the actual Maverick Settings URL but showed
+The Mac companion browser reached the actual Loopino Settings URL but showed
 the unauthenticated login page. Live Settings save/reload and desktop/mobile
 visual acceptance still require an authenticated companion session.
 
@@ -388,8 +388,8 @@ requests; ordinary direct app requests remain denied. A live authenticated Luna
 history path. It used a read-only mock native callback, so physical Mac acceptance
 is recorded separately after backend activation.
 
-Physical Settings verification used the authenticated `MaverickMac` work surface
-(`com.giuntiocram.maverick.mac`), rather than the unauthenticated companion page.
+Physical Settings verification used the authenticated `LoopinoMac` work surface
+(`com.giuntiocram.loopino.mac`), rather than the unauthenticated companion page.
 The UI saved Luna `medium` (labelled Mid), preserved it across an official frontend
 reload, then saved and visually verified the original Luna `low` selection.
 Immediate post-input captures preceded the selection/save updates; later same-app
@@ -405,7 +405,7 @@ was classified `pixels_only` with no matching Accessibility window. These checks
 do not establish unrestricted native-app reliability or a measured latency gain.
 
 After the next reconnection on 2026-10-10, the restarted backend's operator
-completed live Settings tasks on the authenticated `MaverickMac` surface. Fresh
+completed live Settings tasks on the authenticated `LoopinoMac` surface. Fresh
 observations verified Luna `low`, a temporary save to `medium`, persistence of
 `medium` after the official Settings build/reload, and restoration of `low` with
 visible save confirmation. A second official build/reload and a read-only task
@@ -517,7 +517,7 @@ evaluation is explicit and is not part of the deterministic unit suite.
 
 Core commit `375b5748` passed 117 focused runtime/provider/API tests. Native
 commit `a7239f4` passed 277 Swift tests and all 17 signed physical-host cases in
-workflow `38140046407`, then installed and opened MaverickMac 0.3.4 (65).
+workflow `38140046407`, then installed and opened LoopinoMac 0.3.4 (65).
 The requested Calculator's exact pixel capture and local text, including `=`,
 were verified on its active desktop. This run did not request off-desktop
 acceptance and must not be counted as an off-desktop input test.
@@ -539,7 +539,7 @@ under `storage/generated/pc-use-benchmark/2026-10-11-pixel-plan-{notes.md,audit.
 
 ## Reconnected physical planned-task evaluation (2026-10-11)
 
-Fresh observations and the running app's Info.plist confirmed MaverickMac
+Fresh observations and the running app's Info.plist confirmed LoopinoMac
 0.3.4 (65). Luna low completed the actual Calculator window 46765's
 `19×37 = 703` in 25.691 seconds, then three identical structured tasks containing
 `17×23 = 391` and `27×14 = 378` in 57.979, 53.408 and 44.774 seconds
@@ -572,7 +572,7 @@ checks and prevent a matching button label from verifying the display. Schema
 tests ensure combined `text`/`role` expectations are rejected consistently by
 the published contract and validator.
 
-MaverickMac's bounded detailed AX projection now puts popup, combo and editable
+LoopinoMac's bounded detailed AX projection now puts popup, combo and editable
 controls before ordinary actions and container groups. Compact projection still
 prioritizes display values. Oversized records are skipped whole without hiding
 later targets of the same role. Truncated detailed metadata keeps its incomplete
@@ -583,7 +583,7 @@ Core commit `d7b2b9d0` passed all 123 focused runtime/provider/API tests. Native
 commits `30d3088` and `590cf97` passed 43 Python build/install tests, 279 Swift
 tests and 17 signed physical-host cases (zero failures) in managed workflow
 `38146675380`. The workflow requested exact Calculator pixel/OCR acceptance,
-then verified MaverickMac 0.3.4 (66) installed and running at the existing path.
+then verified LoopinoMac 0.3.4 (66) installed and running at the existing path.
 It did not request off-desktop acceptance.
 
 After the backend restart, the process changed from 2015733 to 2041044 and
@@ -635,18 +635,18 @@ Text input advances a structured step only after the resulting value is observed
 pending or uncertain effects permit same-tab reads without replaying the input.
 Older executors without focus/value evidence cannot perform these text steps.
 
-The implementation is independent Maverick code. Its investigation baseline is
+The implementation is independent Loopino code. Its investigation baseline is
 the official ChatGPT macOS 26.1007.30912 (20156) distribution, whose packaged
 Computer Use and Browser components were inspected statically using REA 6.4.0.
 This establishes packaged APIs and relationships, not native decompilation,
 account-specific availability, or measured performance parity.
 
-The final native revision `ef03cb1` is integrated on `maverick-integration`.
+The final native revision `ef03cb1` is integrated on `loopino-integration`.
 [Actions run 38290031187](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/38290031187)
 built, tested, signed, installed and launched Mac
 0.4.0 (70). Core revisions `e01fb62c` and `c6d98501` passed all 132 Device Use
 tests. The backend activation replaced PID 2456307 with 2553318 and returned
 HTTP 200 with `status=ok`; the inaccessible systemd bus was handled by a normal
-SIGTERM to the exact verified `maverick-core.service` process, whose host unit
+SIGTERM to the exact verified `loopino-core.service` process, whose host unit
 has `Restart=always`. No ChatGPT account session or performance comparison was
 performed.

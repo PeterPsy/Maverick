@@ -1,11 +1,11 @@
-# Cloudflare DNS-01 for standalone Maverick installations
+# Cloudflare DNS-01 for standalone Loopino installations
 
 This is installation-owned infrastructure. Each installation uses its own DNS
-account, Vault credential and certificate. No shared Maverick DNS or TLS service
+account, Vault credential and certificate. No shared Loopino DNS or TLS service
 is involved. Installation UI work is separate from this operational transition.
 
-The main origin `maverick.example.com` needs its existing HTTPS certificate. App
-frames and sidecars need `*.sidecars.maverick.example.com`; `*.example.com` cannot
+The main origin `loopino.example.com` needs its existing HTTPS certificate. App
+frames and sidecars need `*.sidecars.loopino.example.com`; `*.example.com` cannot
 cover these deeper hosts. The Cloudflare DNS wildcard may resolve multiple
 levels, but that does not change TLS wildcard matching rules. Session-specific
 `af-` and `sc-` origins and their isolation remain intact.
@@ -22,8 +22,8 @@ canonical Core Secrets platform-delivery resolver. It does not bootstrap the
 backend or deliver the token through a workspace app grant. It only emits
 metadata; dependency exception messages and tracebacks are withheld.
 
-The consumer projects the token to `/etc/letsencrypt/maverick/cloudflare.ini`
-(root-owned, mode 0600, parent 0700), outside the repository. Certbot receives
+The consumer projects the token to `/projects/loopino/installation/tls/credentials/cloudflare.ini`
+(root-owned, mode 0600, parent 0700), inside the ignored installation-owned TLS directory. Certbot receives
 the path rather than the token in command arguments. A lineage pre-hook refreshes
 the projection on renewal, so Vault rotation takes effect automatically. A
 failed refresh removes the old projection: Certbot's behavior of continuing
@@ -66,7 +66,7 @@ restarts the backend once and then removes it.
 
 ## Host scheduling
 
-Render `scripts/deploy/systemd/maverick-wildcard-tls.service` and `.timer` with
+Render `scripts/deploy/systemd/loopino-wildcard-tls.service` and `.timer` with
 the installation root, public hostname, ACME notification email, Nginx path,
 first eligible UTC attempt and host-visible restart-marker path. The service
 also checks renewal of the existing main-origin certificate. Existing renewal
@@ -75,17 +75,17 @@ jobs for other domains are preserved.
 For a migrated installation, the host service needs its installation
 `RootDirectory`, `MountAPIVFS=yes`, and `RootDirectoryStartOnly=yes`. The
 `ExecStart` processes run inside the installation, while `ExecStartPost` uses
-the host's systemd to restart `maverick-core.service`. Render the marker using
+the host's systemd to restart `loopino-core.service`. Render the marker using
 the host-visible installation root in this case.
 
 Enable the host-owned timer. This production timer is deliberately independent
 of agent turns; it is part of the requested unattended TLS maintenance.
 
-- Status: `systemctl status maverick-wildcard-tls.timer maverick-wildcard-tls.service`.
-- Stop: `systemctl disable --now maverick-wildcard-tls.timer`.
-- Interrupt an in-progress maintenance run: `systemctl stop maverick-wildcard-tls.service`.
-- Credential-free job status: `/var/lib/maverick/wildcard-maintenance/status.json`.
-- Manual check: start `maverick-wildcard-tls.service`; it honors the persisted deadline.
+- Status: `systemctl status loopino-wildcard-tls.timer loopino-wildcard-tls.service`.
+- Stop: `systemctl disable --now loopino-wildcard-tls.timer`.
+- Interrupt an in-progress maintenance run: `systemctl stop loopino-wildcard-tls.service`.
+- Credential-free job status: `/projects/loopino/data/wildcard-maintenance/status.json`.
+- Manual check: start `loopino-wildcard-tls.service`; it honors the persisted deadline.
 
 The timer checks every fifteen minutes. Valid certificates are retained without
 new orders. A rate-limit recovery does not mean a production certificate has

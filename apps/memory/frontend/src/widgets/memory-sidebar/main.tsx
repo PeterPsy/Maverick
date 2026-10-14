@@ -54,7 +54,7 @@ function useShellMobileLayout() {
 function openNodeInShell(nodeId: string, appId: string) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: appId,
       params: {
         app_page: `nodes/${encodeURIComponent(nodeId)}`,
@@ -64,7 +64,7 @@ function openNodeInShell(nodeId: string, appId: string) {
     "*",
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: "maverick.shell.sidebar.close" }, "*");
+    window.parent?.postMessage({ type: "loopino.shell.sidebar.close" }, "*");
   }
 }
 
@@ -201,7 +201,7 @@ function MemorySidebarWidget() {
         setSelectedNodeId(activeNodeId);
         return;
       }
-      if (payload.type !== "maverick.widget.data-changed" || payload.owner_app_id !== appId) {
+      if (payload.type !== "loopino.widget.data-changed" || payload.owner_app_id !== appId) {
         return;
       }
       if (payload.resource === "view-state") {

@@ -9,7 +9,7 @@ import subprocess
 import time
 
 from core.runtime.hosted_process_termination import terminate_hosted_process
-from core.runtime.runtime_cli_wrapper import write_runtime_maverick_wrapper
+from core.runtime.runtime_cli_wrapper import write_runtime_loopino_wrapper
 from core.runtime.runtime_paths import RuntimePathResolver
 from core.runtime.tool_errors import RuntimeToolError
 
@@ -26,7 +26,7 @@ def full_access_process_environment(
     environment = dict(os.environ)
     session_root = workspace_root / "runtime" / "sessions" / session_id
     session_bin = session_root / "bin"
-    write_runtime_maverick_wrapper(session_bin / "maverick")
+    write_runtime_loopino_wrapper(session_bin / "loopino")
     inherited_path = environment.get("PATH", "/usr/local/bin:/usr/bin:/bin")
     path_entries = dict.fromkeys(
         (
@@ -38,20 +38,20 @@ def full_access_process_environment(
     environment.update(
         {
             "PATH": os.pathsep.join(entry for entry in path_entries if entry),
-            "MAVERICK_EFFECTIVE_MODE": "full-access",
-            "MAVERICK_RUNTIME_BIN": str(session_bin),
-            "MAVERICK_RUNTIME_ROOT": str(session_root),
-            "MAVERICK_RUNTIME_SESSION_ID": session_id,
-            "MAVERICK_RUNTIME_ENGINE_ID": "maverick-hosted-tool-process",
-            "MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE": "provider_compact",
-            "MAVERICK_WORKSPACE_ID": workspace_id,
-            "MAVERICK_WORKSPACE_ROOT": str(workspace_root),
+            "LOOPINO_EFFECTIVE_MODE": "full-access",
+            "LOOPINO_RUNTIME_BIN": str(session_bin),
+            "LOOPINO_RUNTIME_ROOT": str(session_root),
+            "LOOPINO_RUNTIME_SESSION_ID": session_id,
+            "LOOPINO_RUNTIME_ENGINE_ID": "loopino-hosted-tool-process",
+            "LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE": "provider_compact",
+            "LOOPINO_WORKSPACE_ID": workspace_id,
+            "LOOPINO_WORKSPACE_ROOT": str(workspace_root),
         }
     )
     if runtime_api_token:
-        environment["MAVERICK_RUNTIME_API_TOKEN"] = runtime_api_token
+        environment["LOOPINO_RUNTIME_API_TOKEN"] = runtime_api_token
     else:
-        environment.pop("MAVERICK_RUNTIME_API_TOKEN", None)
+        environment.pop("LOOPINO_RUNTIME_API_TOKEN", None)
     return environment
 
 

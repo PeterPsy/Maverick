@@ -1,4 +1,4 @@
-import { isExactMaverickParentMessage } from "./dataCacheBrokerProtocol";
+import { isExactLoopinoParentMessage } from "./dataCacheBrokerProtocol";
 
 export class RetryVisibilityMonitor {
   private clientVisible = true;
@@ -27,7 +27,7 @@ export class RetryVisibilityMonitor {
     this.started = true;
     window.addEventListener("online", this.onHint);
     window.addEventListener("focus", this.onHint);
-    window.addEventListener("message", this.handleMaverickVisibility);
+    window.addEventListener("message", this.handleLoopinoVisibility);
     globalThis.document?.addEventListener("visibilitychange", this.handleDocumentVisibility);
   }
 
@@ -35,7 +35,7 @@ export class RetryVisibilityMonitor {
     if (this.started && typeof window !== "undefined") {
       window.removeEventListener("online", this.onHint);
       window.removeEventListener("focus", this.onHint);
-      window.removeEventListener("message", this.handleMaverickVisibility);
+      window.removeEventListener("message", this.handleLoopinoVisibility);
       globalThis.document?.removeEventListener("visibilitychange", this.handleDocumentVisibility);
     }
     this.started = false;
@@ -47,12 +47,12 @@ export class RetryVisibilityMonitor {
     }
   };
 
-  private readonly handleMaverickVisibility = (event: MessageEvent<unknown>) => {
-    if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") {
+  private readonly handleLoopinoVisibility = (event: MessageEvent<unknown>) => {
+    if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== "object") {
       return;
     }
     const payload = event.data as { type?: unknown; visible?: unknown };
-    if (payload.type === "maverick.app.visibility-changed" && typeof payload.visible === "boolean") {
+    if (payload.type === "loopino.app.visibility-changed" && typeof payload.visible === "boolean") {
       this.setClientVisibility(payload.visible);
     }
   };

@@ -1,4 +1,4 @@
-import { requestParentExternalUrl } from '@maverick/pwa-cache';
+import { requestParentExternalUrl } from '@loopino/pwa-cache';
 import type { MouseEvent } from 'react';
 
 export function openExternalLink(event: MouseEvent<HTMLAnchorElement>, url: string) {

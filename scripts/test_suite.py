@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Maverick tests by architectural layer, area, app, or changed paths."""
+"""Run Loopino tests by architectural layer, area, app, or changed paths."""
 
 from __future__ import annotations
 
@@ -233,7 +233,7 @@ def run_app_test_dirs(directories: list[str], *, level: str, jobs: int) -> int:
 
 
 def run_app_full_only_tests(directories: list[str], *, jobs: int) -> int:
-    return run_app_test_dirs_with_env(directories, level="full", jobs=jobs, extra_env={"MAVERICK_TEST_FULL_ONLY": "1"})
+    return run_app_test_dirs_with_env(directories, level="full", jobs=jobs, extra_env={"LOOPINO_TEST_FULL_ONLY": "1"})
 
 
 def run_app_test_dirs_with_env(directories: list[str], *, level: str, jobs: int, extra_env: dict[str, str]) -> int:
@@ -263,7 +263,7 @@ def run_app_test_dirs_with_env(directories: list[str], *, level: str, jobs: int,
             label = futures[future]
             returncode, elapsed, output = future.result()
             results.append((label, returncode, elapsed, output))
-            print(f"$ {label}  # MAVERICK_TEST_LEVEL={level}", flush=True)
+            print(f"$ {label}  # LOOPINO_TEST_LEVEL={level}", flush=True)
             if output:
                 print(output, end="" if output.endswith("\n") else "\n", flush=True)
             print(f"completed in {elapsed:.2f}s with exit code {returncode}", flush=True)
@@ -393,17 +393,17 @@ def _run_subprocess(
     extra_env: dict[str, str],
 ) -> tuple[subprocess.CompletedProcess[str], float]:
     env = os.environ.copy()
-    env.setdefault("MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS", "1")
-    env.setdefault("MAVERICK_ADMIN_USERNAME", "admin")
-    env.setdefault("MAVERICK_ADMIN_PASSWORD", "maverick")
-    env.setdefault("MAVERICK_RUNTIME_API_SECRET", "maverick-test-runtime-api-secret")
-    env.setdefault("MAVERICK_SECRET_STORE_KEY", "maverick-test-secret-store-key")
-    env["MAVERICK_TEST_LEVEL"] = level
+    env.setdefault("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS", "1")
+    env.setdefault("LOOPINO_ADMIN_USERNAME", "admin")
+    env.setdefault("LOOPINO_ADMIN_PASSWORD", "loopino")
+    env.setdefault("LOOPINO_RUNTIME_API_SECRET", "loopino-test-runtime-api-secret")
+    env.setdefault("LOOPINO_SECRET_STORE_KEY", "loopino-test-secret-store-key")
+    env["LOOPINO_TEST_LEVEL"] = level
     env.update(extra_env)
 
     started = time.monotonic()
     if not capture_output:
-        print(f"$ {' '.join(command)}  # MAVERICK_TEST_LEVEL={level}", flush=True)
+        print(f"$ {' '.join(command)}  # LOOPINO_TEST_LEVEL={level}", flush=True)
     completed = subprocess.run(command, cwd=REPO_ROOT, env=env, text=True, capture_output=capture_output)
     elapsed = time.monotonic() - started
     return completed, elapsed

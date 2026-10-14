@@ -21,10 +21,10 @@ class WorkspaceBootstrapTestCase(unittest.TestCase):
     """Verify canonical path helpers and workspace layout creation."""
 
     def make_temp_repo_root(self) -> Path:
-        """Create a minimal Maverick-shaped repository root for isolated tests."""
+        """Create a minimal Loopino-shaped repository root for isolated tests."""
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         (repo_root / "core").mkdir(parents=True)
         (repo_root / "apps").mkdir()
         (repo_root / "workspaces").mkdir()
@@ -145,7 +145,7 @@ class WorkspaceBootstrapTestCase(unittest.TestCase):
         legacy_home.mkdir(parents=True)
         (legacy_home / "config.json").write_text("{}", encoding="utf-8")
 
-        with patch.dict("os.environ", {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"}, clear=False):
+        with patch.dict("os.environ", {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"}, clear=False):
             bootstrap_platform_state(start_path=repo_root)
 
         self.assertFalse(legacy_home.exists())
@@ -153,7 +153,7 @@ class WorkspaceBootstrapTestCase(unittest.TestCase):
     def test_platform_bootstrap_does_not_run_recovery_unless_requested(self) -> None:
         repo_root = self.make_temp_repo_root()
 
-        with patch.dict("os.environ", {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"}, clear=False), patch(
+        with patch.dict("os.environ", {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"}, clear=False), patch(
             "core.api.platform_state.recover_interrupted_runtime_turns_after_backend_restart"
         ) as recover:
             bootstrap_platform_state(start_path=repo_root)

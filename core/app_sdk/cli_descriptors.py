@@ -1,4 +1,4 @@
-"""CLI and MCP descriptor helpers for the Maverick SDK CLI."""
+"""CLI and MCP descriptor helpers for the Loopino SDK CLI."""
 
 from __future__ import annotations
 

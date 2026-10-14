@@ -1,4 +1,4 @@
-import { observeMaverickVisibility } from '@maverick/pwa-cache';
+import { observeLoopinoVisibility } from '@loopino/pwa-cache';
 import { requestOpenDesignBootstrapStatus, SidecarLaunchError } from './api';
 import type { SidecarLaunch } from './types';
 
@@ -48,7 +48,7 @@ export function observeBootstrapConfirmation(appId: string, launch: SidecarLaunc
   }
   if (signal.aborted) return stop;
   signal.addEventListener('abort', stop, { once: true });
-  stopVisibility = observeMaverickVisibility(visible => {
+  stopVisibility = observeLoopinoVisibility(visible => {
     if (visible) void poll();
     else suspend();
   });

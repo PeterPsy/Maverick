@@ -4,9 +4,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useVisiblePolling } from "../src/useVisiblePolling";
 
 const visibility = vi.hoisted(() => ({ visible: true, listener: (_visible: boolean) => {} }));
-vi.mock("@maverick/pwa-cache", () => ({
-  maverickAppIsVisible: () => visibility.visible,
-  observeMaverickVisibility: (listener: (visible: boolean) => void) => {
+vi.mock("@loopino/pwa-cache", () => ({
+  loopinoAppIsVisible: () => visibility.visible,
+  observeLoopinoVisibility: (listener: (visible: boolean) => void) => {
     visibility.listener = listener;
     listener(visibility.visible);
     return () => {};

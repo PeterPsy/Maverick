@@ -42,7 +42,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
-            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
+            ticket=ticket, protocol_version="loopino.device-use.v1", executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="full", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
@@ -61,7 +61,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
                 session_id="runtime",
                 device_use_binding=self.binding,
                 execution_binding=SimpleNamespace(model_id="gpt-5.6-sol"),
-                system_prompt="Use the official Maverick app surfaces.",
+                system_prompt="Use the official Loopino app surfaces.",
                 skill_activation_mode="implicit",
             ),
             launch_spec=SimpleNamespace(working_directory="/workspace", execution_mode="full-access"),
@@ -77,7 +77,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             "mcp_servers": {}, "features": {"code_mode_host": True, "code_mode": False},
         })
         self.assertEqual(params["cwd"], "/workspace")
-        self.assertIn("Use the official Maverick app surfaces.", params["developerInstructions"])
+        self.assertIn("Use the official Loopino app surfaces.", params["developerInstructions"])
         self.assertIn("additional capability", params["developerInstructions"])
         self.assertNotIn("baseInstructions", params)
 

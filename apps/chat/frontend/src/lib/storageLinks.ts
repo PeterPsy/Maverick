@@ -1,6 +1,6 @@
 const STORAGE_PATH_PATTERN = /(?:^|\/)(storage\/(?:generated|uploaded)\/.+)$/;
 const STORAGE_LINE_SUFFIX_PATTERN = /(\.[A-Za-z0-9]{1,12})(?::\d+){1,2}$/;
-const URL_PARSE_BASE = "https://maverick.local";
+const URL_PARSE_BASE = "https://loopino.local";
 
 export type StorageLinkTarget =
   | {

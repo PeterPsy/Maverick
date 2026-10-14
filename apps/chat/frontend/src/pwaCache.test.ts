@@ -4,7 +4,7 @@ import { displayMessageEvents, displayThread, readChatDisplay } from './pwaCache
 import { firstPersistedRuntimeEventId } from './lib/runtimeEvents';
 import { eventsToMessages } from './lib/transcript';
 const mocks = vi.hoisted(() => ({ read: vi.fn() }));
-vi.mock('@maverick/pwa-cache', async (original) => ({ ...await original<object>(), readAppCacheModel: mocks.read }));
+vi.mock('@loopino/pwa-cache', async (original) => ({ ...await original<object>(), readAppCacheModel: mocks.read }));
 describe('approved Chat persistence', () => {
   it('preserves the original Full binding in a cached thread without live readiness or credentials', () => {
     const model = sanitizeChatReadModel({ kind: 'threads', data: { threads: [{

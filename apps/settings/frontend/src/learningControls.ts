@@ -13,11 +13,11 @@ export function learningControlsHtml(state: LearningView, models: ProviderModelO
     <input type="checkbox" role="switch" name="${key}" ${c[key] ? 'checked' : ''} ${disabled}><span class="learning-toggle-track" aria-hidden="true"></span></label>`;
   const number = (key: keyof LearningSettings, label: string, min: number, max: number, hint: string) => `<label>${label}<input type="number" name="${key}" min="${min}" max="${max}" value="${c[key]}" required ${disabled}><small>${hint}</small></label>`;
   return `<form id="learning-settings" class="settings-card learning-controls" aria-busy="${state.saving}">
-    <div class="learning-section-heading"><div><h3>Automatic learning</h3><p>Learn lasting knowledge and new Maverick improvements from completed work.</p></div><span class="settings-pill">One analysis at a time</span></div>
+    <div class="learning-section-heading"><div><h3>Automatic learning</h3><p>Learn lasting knowledge and new Loopino improvements from completed work.</p></div><span class="settings-pill">One analysis at a time</span></div>
     ${toggle('enabled', 'Enable learning', 'Review conversations after a quiet period. Unfinished work stays under observation.')}
     <div class="learning-channel-grid">
       ${toggle('memory_enabled', 'Memory', 'Keep sourced discoveries, people, events and lasting knowledge.', 'neurology')}
-      ${toggle('improvements_enabled', 'Improvements', 'Find general limits of Maverick; skip work already requested or underway.', 'lightbulb')}
+      ${toggle('improvements_enabled', 'Improvements', 'Find general limits of Loopino; skip work already requested or underway.', 'lightbulb')}
     </div>
     <div class="learning-form-grid" id="learning-memory-options" ${c.memory_enabled ? '' : 'hidden'}>
       <label>Save to<select name="memory_provider" ${disabled}><option value="">Choose a Memory provider</option>${dependency?.candidates.map((p) => `<option value="${e(p.app_id)}" ${p.app_id === selected ? 'selected' : ''}>${e(p.name)}</option>`).join('') || ''}</select><small id="learning-provider-hint">${selected ? 'Facts and their chat evidence are saved to this app.' : 'Choose a provider to check existing knowledge and save facts.'}</small></label>

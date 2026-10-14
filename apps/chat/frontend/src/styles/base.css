@@ -1,4 +1,4 @@
-@import "./maverickBrandTokens.css";
+@import "./loopinoBrandTokens.css";
 
 @font-face {
   font-family: "Material Symbols Rounded";
@@ -9,12 +9,12 @@
 }
 
 :root,
-:root[data-maverick-theme="dark"],
+:root[data-loopino-theme="dark"],
 :root[data-theme="dark"] {
-  font-family: var(--maverick-font-family-base);
+  font-family: var(--loopino-font-family-base);
   color-scheme: dark;
-  --maverick-color-scheme: dark;
-  --maverick-contrast-rgb: 255, 255, 255;
+  --loopino-color-scheme: dark;
+  --loopino-contrast-rgb: 255, 255, 255;
   --chatapp-glass-radius: 34px;
   --chatapp-cell-radius: 22px;
   --chatapp-control-radius: 18px;
@@ -33,7 +33,7 @@
   --chatapp-chat-top-fade:
     linear-gradient(
       180deg,
-      var(--maverick-bg) 0%,
+      var(--loopino-bg) 0%,
       rgba(7, 7, 8, 0.86) 34%,
       rgba(7, 7, 8, 0) 100%
     );
@@ -42,9 +42,9 @@
     0 24px 80px rgba(0, 0, 0, 0.36);
   --chatapp-human-message-shadow:
     var(--chatapp-inner-edge),
-    var(--maverick-card-shadow);
+    var(--loopino-card-shadow);
   --chatapp-human-message-meta: rgba(10, 10, 11, 0.48);
-  --chatapp-human-message-meta-hover: var(--maverick-text-on-accent);
+  --chatapp-human-message-meta-hover: var(--loopino-text-on-accent);
   --chatapp-human-reference-chip-border: rgba(10, 10, 11, 0.08);
   --chatapp-human-reference-chip-bg: rgba(10, 10, 11, 0.055);
   --chatapp-human-reference-chip-text: rgba(10, 10, 11, 0.86);
@@ -52,12 +52,12 @@
   --chatapp-agent-message-shadow:
     var(--chatapp-inner-edge),
     0 14px 44px rgba(0, 0, 0, 0.2);
-  --chatapp-structured-message-shadow: var(--maverick-lifted-card-shadow);
-  --chatapp-structured-widget-shadow: var(--maverick-lifted-card-shadow-soft);
+  --chatapp-structured-message-shadow: var(--loopino-lifted-card-shadow);
+  --chatapp-structured-widget-shadow: var(--loopino-lifted-card-shadow-soft);
   --chatapp-tool-inline-shadow:
     var(--chatapp-inner-edge),
     0 14px 44px rgba(0, 0, 0, 0.2);
-  --chatapp-tool-call-panel-shadow: inset 0 1px 0 rgba(var(--maverick-contrast-rgb), 0.04);
+  --chatapp-tool-call-panel-shadow: inset 0 1px 0 rgba(var(--loopino-contrast-rgb), 0.04);
   --chatapp-full-access-chip-border: rgba(251, 146, 60, 0.34);
   --chatapp-full-access-chip-glow: rgba(251, 146, 60, 0.26);
   --chatapp-full-access-chip-bg: rgba(251, 113, 133, 0.12);
@@ -65,73 +65,73 @@
   --chatapp-usage-backdrop: rgba(0, 0, 0, 0.82);
   --chatapp-diff-card-shadow:
     var(--chatapp-inner-edge),
-    var(--maverick-panel-card-shadow);
-  --maverick-bg: var(--chatapp-glass-shell);
-  --maverick-bg-strong: var(--chatapp-glass-surface);
-  --maverick-surface: var(--chatapp-glass-surface);
-  --maverick-surface-soft: var(--chatapp-soft-surface);
-  --maverick-surface-hover: var(--chatapp-soft-surface-hover);
-  --maverick-border: var(--chatapp-soft-border);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.64);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-strong: #ffffff;
-  --maverick-accent-muted: rgba(255, 255, 255, 0.72);
-  --maverick-accent-soft: rgba(255, 255, 255, 0.12);
-  --maverick-accent-hover: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #4ade80;
-  --maverick-warning: #f59e0b;
-  --maverick-danger: #ff4d8d;
-  --maverick-focus: rgba(255, 255, 255, 0.32);
-  --maverick-shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.22);
-  --maverick-shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.34);
-  --maverick-popover-surface: rgba(0, 0, 0, 0.92);
-  --maverick-popover-surface-strong: rgba(0, 0, 0, 0.9);
-  --maverick-popover-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
-  --maverick-overlay-panel-surface: rgba(18, 18, 18, 0.82);
-  --maverick-overlay-panel-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
-  --maverick-control-overlay-surface: rgba(18, 18, 18, 0.3);
-  --maverick-control-inset-surface: rgba(0, 0, 0, 0.22);
-  --maverick-control-inset-surface-strong: rgba(0, 0, 0, 0.26);
-  --maverick-control-inset-surface-muted: rgba(0, 0, 0, 0.2);
-  --maverick-code-block-surface: rgba(0, 0, 0, 0.28);
-  --maverick-code-block-surface-strong: rgba(0, 0, 0, 0.25);
-  --maverick-card-shadow: 0 14px 44px rgba(0, 0, 0, 0.2);
-  --maverick-panel-card-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
-  --maverick-lifted-card-shadow: 0 18px 58px rgba(0, 0, 0, 0.24);
-  --maverick-lifted-card-shadow-soft: 0 18px 58px rgba(0, 0, 0, 0.22);
-  --maverick-tool-panel-shadow: 0 14px 36px rgba(0, 0, 0, 0.36);
-  --maverick-floating-control-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
-  --maverick-runtime-control-surface: rgba(11, 14, 23, 0.88);
-  --maverick-runtime-control-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
-  --maverick-runtime-control-shadow-focus: 0 16px 38px rgba(0, 0, 0, 0.28);
-  --maverick-runtime-chip-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
-  --maverick-rename-input-surface: rgba(0, 0, 0, 0.22);
-  --maverick-select-option-bg: #171717;
-  --maverick-selection-bg: #2b79ff;
-  --maverick-selection-text: #ffffff;
+    var(--loopino-panel-card-shadow);
+  --loopino-bg: var(--chatapp-glass-shell);
+  --loopino-bg-strong: var(--chatapp-glass-surface);
+  --loopino-surface: var(--chatapp-glass-surface);
+  --loopino-surface-soft: var(--chatapp-soft-surface);
+  --loopino-surface-hover: var(--chatapp-soft-surface-hover);
+  --loopino-border: var(--chatapp-soft-border);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.64);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-accent-strong: #ffffff;
+  --loopino-accent-muted: rgba(255, 255, 255, 0.72);
+  --loopino-accent-soft: rgba(255, 255, 255, 0.12);
+  --loopino-accent-hover: rgba(255, 255, 255, 0.18);
+  --loopino-text-on-accent: #0a0a0b;
+  --loopino-success: #4ade80;
+  --loopino-warning: #f59e0b;
+  --loopino-danger: #ff4d8d;
+  --loopino-focus: rgba(255, 255, 255, 0.32);
+  --loopino-shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.22);
+  --loopino-shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.34);
+  --loopino-popover-surface: rgba(0, 0, 0, 0.92);
+  --loopino-popover-surface-strong: rgba(0, 0, 0, 0.9);
+  --loopino-popover-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  --loopino-overlay-panel-surface: rgba(18, 18, 18, 0.82);
+  --loopino-overlay-panel-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+  --loopino-control-overlay-surface: rgba(18, 18, 18, 0.3);
+  --loopino-control-inset-surface: rgba(0, 0, 0, 0.22);
+  --loopino-control-inset-surface-strong: rgba(0, 0, 0, 0.26);
+  --loopino-control-inset-surface-muted: rgba(0, 0, 0, 0.2);
+  --loopino-code-block-surface: rgba(0, 0, 0, 0.28);
+  --loopino-code-block-surface-strong: rgba(0, 0, 0, 0.25);
+  --loopino-card-shadow: 0 14px 44px rgba(0, 0, 0, 0.2);
+  --loopino-panel-card-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+  --loopino-lifted-card-shadow: 0 18px 58px rgba(0, 0, 0, 0.24);
+  --loopino-lifted-card-shadow-soft: 0 18px 58px rgba(0, 0, 0, 0.22);
+  --loopino-tool-panel-shadow: 0 14px 36px rgba(0, 0, 0, 0.36);
+  --loopino-floating-control-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  --loopino-runtime-control-surface: rgba(11, 14, 23, 0.88);
+  --loopino-runtime-control-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+  --loopino-runtime-control-shadow-focus: 0 16px 38px rgba(0, 0, 0, 0.28);
+  --loopino-runtime-chip-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  --loopino-rename-input-surface: rgba(0, 0, 0, 0.22);
+  --loopino-select-option-bg: #171717;
+  --loopino-selection-bg: #2b79ff;
+  --loopino-selection-text: #ffffff;
 }
 
-:root[data-maverick-theme="light"],
+:root[data-loopino-theme="light"],
 :root[data-theme="light"] {
   color-scheme: light;
-  --maverick-color-scheme: light;
-  --maverick-contrast-rgb: 15, 23, 42;
+  --loopino-color-scheme: light;
+  --loopino-contrast-rgb: 15, 23, 42;
   --chatapp-glass-shell: #f7f8fb;
   --chatapp-glass-surface: rgba(255, 255, 255, 0.72);
   --chatapp-solid-surface: #ffffff;
-  --chatapp-soft-border: rgba(var(--maverick-contrast-rgb), 0.1);
-  --chatapp-soft-surface: rgba(var(--maverick-contrast-rgb), 0.055);
-  --chatapp-soft-surface-hover: rgba(var(--maverick-contrast-rgb), 0.085);
-  --chatapp-soft-surface-active: rgba(var(--maverick-contrast-rgb), 0.12);
-  --chatapp-inner-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  --chatapp-glass-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  --chatapp-soft-border: rgba(var(--loopino-contrast-rgb), 0.1);
+  --chatapp-soft-surface: rgba(var(--loopino-contrast-rgb), 0.055);
+  --chatapp-soft-surface-hover: rgba(var(--loopino-contrast-rgb), 0.085);
+  --chatapp-soft-surface-active: rgba(var(--loopino-contrast-rgb), 0.12);
+  --chatapp-inner-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --chatapp-glass-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
   --chatapp-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 36%),
-    linear-gradient(315deg, rgba(var(--maverick-contrast-rgb), 0.035), transparent 42%);
+    linear-gradient(315deg, rgba(var(--loopino-contrast-rgb), 0.035), transparent 42%);
   --chatapp-chat-top-fade: none;
   --chatapp-composer-shadow:
     var(--chatapp-glass-edge),
@@ -154,53 +154,53 @@
   --chatapp-full-access-chip-text: #9a3412;
   --chatapp-usage-backdrop: rgba(0, 0, 0, 0.55);
   --chatapp-diff-card-shadow: none;
-  --maverick-bg: var(--chatapp-glass-shell);
-  --maverick-bg-strong: var(--chatapp-glass-surface);
-  --maverick-surface: var(--chatapp-glass-surface);
-  --maverick-surface-soft: var(--chatapp-soft-surface);
-  --maverick-surface-hover: var(--chatapp-soft-surface-hover);
-  --maverick-border: var(--chatapp-soft-border);
-  --maverick-border-strong: rgba(var(--maverick-contrast-rgb), 0.16);
-  --maverick-text: #111827;
-  --maverick-text-muted: rgba(17, 24, 39, 0.66);
-  --maverick-text-soft: rgba(17, 24, 39, 0.42);
-  --maverick-accent: #111827;
-  --maverick-accent-strong: #0f172a;
-  --maverick-accent-muted: rgba(17, 24, 39, 0.72);
-  --maverick-accent-soft: rgba(15, 23, 42, 0.1);
-  --maverick-accent-hover: rgba(15, 23, 42, 0.14);
-  --maverick-text-on-accent: #ffffff;
-  --maverick-success: #15803d;
-  --maverick-warning: #b45309;
-  --maverick-danger: #be123c;
-  --maverick-focus: rgba(15, 23, 42, 0.28);
-  --maverick-shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.12);
-  --maverick-shadow-strong: 0 22px 60px rgba(15, 23, 42, 0.18);
-  --maverick-popover-surface: rgba(255, 255, 255, 0.94);
-  --maverick-popover-surface-strong: rgba(255, 255, 255, 0.96);
-  --maverick-popover-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
-  --maverick-overlay-panel-surface: rgba(255, 255, 255, 0.82);
-  --maverick-overlay-panel-shadow: 0 20px 48px rgba(15, 23, 42, 0.16);
-  --maverick-control-overlay-surface: rgba(15, 23, 42, 0.055);
-  --maverick-control-inset-surface: rgba(15, 23, 42, 0.055);
-  --maverick-control-inset-surface-strong: rgba(15, 23, 42, 0.075);
-  --maverick-control-inset-surface-muted: rgba(15, 23, 42, 0.05);
-  --maverick-code-block-surface: rgba(15, 23, 42, 0.065);
-  --maverick-code-block-surface-strong: rgba(15, 23, 42, 0.06);
-  --maverick-card-shadow: 0 14px 44px rgba(15, 23, 42, 0.11);
-  --maverick-panel-card-shadow: 0 16px 48px rgba(15, 23, 42, 0.12);
-  --maverick-lifted-card-shadow: 0 18px 58px rgba(15, 23, 42, 0.13);
-  --maverick-lifted-card-shadow-soft: 0 18px 58px rgba(15, 23, 42, 0.11);
-  --maverick-tool-panel-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
-  --maverick-floating-control-shadow: 0 10px 26px rgba(15, 23, 42, 0.13);
-  --maverick-runtime-control-surface: rgba(255, 255, 255, 0.88);
-  --maverick-runtime-control-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
-  --maverick-runtime-control-shadow-focus: 0 16px 38px rgba(15, 23, 42, 0.15);
-  --maverick-runtime-chip-shadow: 0 14px 34px rgba(15, 23, 42, 0.1);
-  --maverick-rename-input-surface: rgba(15, 23, 42, 0.055);
-  --maverick-select-option-bg: #ffffff;
-  --maverick-selection-bg: #0f172a;
-  --maverick-selection-text: #ffffff;
+  --loopino-bg: var(--chatapp-glass-shell);
+  --loopino-bg-strong: var(--chatapp-glass-surface);
+  --loopino-surface: var(--chatapp-glass-surface);
+  --loopino-surface-soft: var(--chatapp-soft-surface);
+  --loopino-surface-hover: var(--chatapp-soft-surface-hover);
+  --loopino-border: var(--chatapp-soft-border);
+  --loopino-border-strong: rgba(var(--loopino-contrast-rgb), 0.16);
+  --loopino-text: #111827;
+  --loopino-text-muted: rgba(17, 24, 39, 0.66);
+  --loopino-text-soft: rgba(17, 24, 39, 0.42);
+  --loopino-accent: #111827;
+  --loopino-accent-strong: #0f172a;
+  --loopino-accent-muted: rgba(17, 24, 39, 0.72);
+  --loopino-accent-soft: rgba(15, 23, 42, 0.1);
+  --loopino-accent-hover: rgba(15, 23, 42, 0.14);
+  --loopino-text-on-accent: #ffffff;
+  --loopino-success: #15803d;
+  --loopino-warning: #b45309;
+  --loopino-danger: #be123c;
+  --loopino-focus: rgba(15, 23, 42, 0.28);
+  --loopino-shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.12);
+  --loopino-shadow-strong: 0 22px 60px rgba(15, 23, 42, 0.18);
+  --loopino-popover-surface: rgba(255, 255, 255, 0.94);
+  --loopino-popover-surface-strong: rgba(255, 255, 255, 0.96);
+  --loopino-popover-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+  --loopino-overlay-panel-surface: rgba(255, 255, 255, 0.82);
+  --loopino-overlay-panel-shadow: 0 20px 48px rgba(15, 23, 42, 0.16);
+  --loopino-control-overlay-surface: rgba(15, 23, 42, 0.055);
+  --loopino-control-inset-surface: rgba(15, 23, 42, 0.055);
+  --loopino-control-inset-surface-strong: rgba(15, 23, 42, 0.075);
+  --loopino-control-inset-surface-muted: rgba(15, 23, 42, 0.05);
+  --loopino-code-block-surface: rgba(15, 23, 42, 0.065);
+  --loopino-code-block-surface-strong: rgba(15, 23, 42, 0.06);
+  --loopino-card-shadow: 0 14px 44px rgba(15, 23, 42, 0.11);
+  --loopino-panel-card-shadow: 0 16px 48px rgba(15, 23, 42, 0.12);
+  --loopino-lifted-card-shadow: 0 18px 58px rgba(15, 23, 42, 0.13);
+  --loopino-lifted-card-shadow-soft: 0 18px 58px rgba(15, 23, 42, 0.11);
+  --loopino-tool-panel-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+  --loopino-floating-control-shadow: 0 10px 26px rgba(15, 23, 42, 0.13);
+  --loopino-runtime-control-surface: rgba(255, 255, 255, 0.88);
+  --loopino-runtime-control-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
+  --loopino-runtime-control-shadow-focus: 0 16px 38px rgba(15, 23, 42, 0.15);
+  --loopino-runtime-chip-shadow: 0 14px 34px rgba(15, 23, 42, 0.1);
+  --loopino-rename-input-surface: rgba(15, 23, 42, 0.055);
+  --loopino-select-option-bg: #ffffff;
+  --loopino-selection-bg: #0f172a;
+  --loopino-selection-text: #ffffff;
 }
 
 * {
@@ -217,8 +217,8 @@ body,
 
 body {
   margin: 0;
-  background: var(--maverick-bg);
-  color: var(--maverick-text);
+  background: var(--loopino-bg);
+  color: var(--loopino-text);
   overflow: hidden;
 }
 
@@ -230,18 +230,18 @@ select {
 }
 
 select {
-  color-scheme: var(--maverick-color-scheme);
+  color-scheme: var(--loopino-color-scheme);
 }
 
 select option,
 select optgroup {
-  background: var(--maverick-select-option-bg);
-  color: var(--maverick-text);
+  background: var(--loopino-select-option-bg);
+  color: var(--loopino-text);
 }
 
 select option:checked {
-  background: var(--maverick-selection-bg);
-  color: var(--maverick-selection-text);
+  background: var(--loopino-selection-bg);
+  color: var(--loopino-selection-text);
 }
 
 button {

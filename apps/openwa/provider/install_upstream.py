@@ -1,4 +1,4 @@
-"""Reproduce the pinned provider build without copying unrelated Maverick apps."""
+"""Reproduce the pinned provider build without copying unrelated Loopino apps."""
 from pathlib import Path
 import json
 import os

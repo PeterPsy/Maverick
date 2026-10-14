@@ -10,7 +10,7 @@ const PRIMARY_ACTION_LABEL = 'New workout';
 function postPrimaryActionState(available: boolean) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.primary-action.state',
+      type: 'loopino.widget.primary-action.state',
       owner_app_id: APP_ID,
       widget_id: WIDGET_ID,
       available,
@@ -22,7 +22,7 @@ function postPrimaryActionState(available: boolean) {
 }
 
 function openApp(params: Record<string, unknown>) {
-  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: APP_ID, params }, "*");
+  window.parent?.postMessage({ type: 'loopino.widget.open-app', app_id: APP_ID, params }, "*");
 }
 
 function Footer() {
@@ -37,10 +37,10 @@ function Footer() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { owner_app_id?: string; type?: string; widget_id?: string };
       if (payload.owner_app_id !== APP_ID || payload.widget_id !== WIDGET_ID) return;
-      if (payload.type === 'maverick.widget.primary-action.query') {
+      if (payload.type === 'loopino.widget.primary-action.query') {
         postPrimaryActionState(!busy);
       }
-      if (payload.type === 'maverick.widget.primary-action.invoke' && !busy) {
+      if (payload.type === 'loopino.widget.primary-action.invoke' && !busy) {
         newWorkout();
       }
     }

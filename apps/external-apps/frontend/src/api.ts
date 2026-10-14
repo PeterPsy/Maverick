@@ -1,10 +1,10 @@
-import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
+import { readLoopinoAppFrameContext } from '@loopino/pwa-cache';
 
 export type Release = { release_id: string; digest: string; source_revision?: string; size_bytes?: number; file_count?: number; format: string };
 export type Plan = { id: string; app_id: string; kind: string; status: string; hostname: string; source_revision: string; plan_digest: string; expires: number; release?: Release; approved_by?: string; error_code?: string; risk_summary: string; will_replace_release_id?: string };
 export type Publication = { id: string; name: string; source_id: string; provider_id: string; managed_url: string; status: string; last_error_code: string; health: { status: string; checked_at?: number }; binding: { generation: number; current?: Release; previous?: Release; enabled: boolean; archived: boolean } };
 export type Detail = { app: Publication; plans: Plan[]; releases: Release[]; history: { created: number; action: string; actor: string; detail: string }[] };
-export const appId = readMaverickAppFrameContext()?.appId || /^\/apps\/([^/]+)/.exec(window.location.pathname)?.[1] || 'external-apps';
+export const appId = readLoopinoAppFrameContext()?.appId || /^\/apps\/([^/]+)/.exec(window.location.pathname)?.[1] || 'external-apps';
 
 export async function callBackend<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/apps/${encodeURIComponent(appId)}/backend`, {

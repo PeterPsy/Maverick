@@ -38,10 +38,10 @@ class ModelAccessConfiguration:
 
     @classmethod
     def from_environment(cls) -> "ModelAccessConfiguration":
-        if os.environ.get("MAVERICK_MODEL_ACCESS_STATE") != "available":
+        if os.environ.get("LOOPINO_MODEL_ACCESS_STATE") != "available":
             raise ModelAccessClientError("model access is unavailable")
-        socket_path = Path(os.environ.get("MAVERICK_MODEL_ACCESS_SOCKET", ""))
-        token = os.environ.get("MAVERICK_MODEL_ACCESS_TOKEN", "")
+        socket_path = Path(os.environ.get("LOOPINO_MODEL_ACCESS_SOCKET", ""))
+        token = os.environ.get("LOOPINO_MODEL_ACCESS_TOKEN", "")
         if socket_path != EXPECTED_SOCKET or not token or "\x00" in token:
             raise ModelAccessClientError("model access capability is invalid")
         return cls(socket_path=socket_path, token=token)
@@ -76,7 +76,7 @@ class ModelAccessClient:
         return connection, response
 
     def catalog(self) -> dict[str, object]:
-        connection, response = self.open("GET", "/maverick/v1/catalog", timeout=5)
+        connection, response = self.open("GET", "/loopino/v1/catalog", timeout=5)
         try:
             body = response.read(MAX_CATALOG_BYTES + 1)
         finally:

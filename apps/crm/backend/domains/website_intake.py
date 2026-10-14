@@ -43,7 +43,7 @@ SERVICE_LABELS = {
     "ai-audit": "AI audit e operations",
     "custom-development": "Sviluppo e automazione custom",
     "social-automation": "Social Automation",
-    "maverick": "Maverick",
+    "loopino": "Loopino",
     "training": "Training e adozione",
     "other": "Area da definire insieme",
 }
@@ -116,14 +116,14 @@ def ingest_website_intake(db, payload: dict[str, Any]) -> dict[str, Any]:
     sender = payload.get("_mail_sender")
     if sender is not None and not callable(sender):
         raise ValidationError("`_mail_sender` must be callable when provided.")
-    maverick_command = _maverick_command(payload)
+    loopino_command = _loopino_command(payload)
     mail_sender: MailSender = (
         sender
         if callable(sender)
-        else lambda provider, mail_payload: _send_mail_with_maverick(
+        else lambda provider, mail_payload: _send_mail_with_loopino(
             provider,
             mail_payload,
-            maverick_command=maverick_command,
+            loopino_command=loopino_command,
         )
     )
 
@@ -285,14 +285,14 @@ def _fail_outbox_item(db, outbox: dict[str, Any], message: str, *, increment_att
     return _outbox_by_id(db, str(outbox["id"]))
 
 
-def _send_mail_with_maverick(provider_app_id: str, payload: dict[str, Any], *, maverick_command: str | None = None) -> dict[str, Any]:
-    command = maverick_command or _maverick_command({})
+def _send_mail_with_loopino(provider_app_id: str, payload: dict[str, Any], *, loopino_command: str | None = None) -> dict[str, Any]:
+    command = loopino_command or _loopino_command({})
     preview_payload = {
         key: value
         for key, value in payload.items()
         if key not in {"confirm", "confirmation_token"}
     }
-    preview = _run_maverick_mail_action(provider_app_id, "mail_send", preview_payload, command)
+    preview = _run_loopino_mail_action(provider_app_id, "mail_send", preview_payload, command)
     draft = preview.get("draft") if isinstance(preview.get("draft"), dict) else {}
     preview_result = preview.get("result") if isinstance(preview.get("result"), dict) else {}
     draft_id = _text(draft.get("id"))
@@ -302,17 +302,17 @@ def _send_mail_with_maverick(provider_app_id: str, payload: dict[str, Any], *, m
     connection_id = _text(payload.get("connection_id"))
     if connection_id:
         approved_payload["connection_id"] = connection_id
-    return _run_maverick_mail_action(provider_app_id, "mail_send_approved", approved_payload, command)
+    return _run_loopino_mail_action(provider_app_id, "mail_send_approved", approved_payload, command)
 
 
-def _run_maverick_mail_action(
+def _run_loopino_mail_action(
     provider_app_id: str,
     action: str,
     payload: dict[str, Any],
-    maverick_command: str,
+    loopino_command: str,
 ) -> dict[str, Any]:
     args = [
-        maverick_command,
+        loopino_command,
         "app",
         provider_app_id,
         "mcp",
@@ -340,21 +340,21 @@ def _run_maverick_mail_action(
     return result
 
 
-def _maverick_command(payload: dict[str, Any]) -> str:
-    explicit = _text(payload.get("_maverick_command") or payload.get("maverick_command"))
+def _loopino_command(payload: dict[str, Any]) -> str:
+    explicit = _text(payload.get("_loopino_command") or payload.get("loopino_command"))
     if explicit:
         return explicit
-    configured = _text(os.environ.get("MAVERICK_COMMAND"))
+    configured = _text(os.environ.get("LOOPINO_COMMAND"))
     if configured:
         return configured
-    found = shutil.which("maverick")
+    found = shutil.which("loopino")
     if found:
         return found
     for parent in Path(__file__).resolve().parents:
-        candidate = parent / "scripts" / "maverick"
+        candidate = parent / "scripts" / "loopino"
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
-    return "maverick"
+    return "loopino"
 
 
 def _link_mail_result(db, lead: dict[str, Any], message: dict[str, Any], provider_app_id: str, outbox: dict[str, Any]) -> None:
@@ -559,7 +559,7 @@ def _selected_provider_app_id(payload: dict[str, Any], alias: str) -> str:
         return provider
     try:
         completed = subprocess.run(
-            [_maverick_command(payload), "core", "cli", "run", "app.crm.dependencies", "--json"],
+            [_loopino_command(payload), "core", "cli", "run", "app.crm.dependencies", "--json"],
             text=True,
             capture_output=True,
             timeout=15,

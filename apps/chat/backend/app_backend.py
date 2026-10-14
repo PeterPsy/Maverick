@@ -67,13 +67,13 @@ def main() -> None:
             mutating_action = action.startswith("learning.") and action not in {"learning.read", "learning.analysis_admit"} and body.get("command") != "inspect"
             envelope = {"status_code": 200}
             if (changed or mutating_action) and not result.get("ignored"):
-                envelope["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
+                envelope["app_events"] = [{"type": "loopino.app.data-changed", "resource": "learning"}]
             if projects_changed:
-                envelope.setdefault("app_events", []).append({"type": "maverick.app.data-changed", "resource": "projects"})
+                envelope.setdefault("app_events", []).append({"type": "loopino.app.data-changed", "resource": "projects"})
             if scheduled_changed:
                 envelope.setdefault("app_events", []).extend([
-                    {"type": "maverick.app.data-changed", "resource": "scheduled-chats"},
-                    {"type": "maverick.app.data-changed", "resource": "notifications"},
+                    {"type": "loopino.app.data-changed", "resource": "scheduled-chats"},
+                    {"type": "loopino.app.data-changed", "resource": "notifications"},
                 ])
             for key in ("background_generation_requests", "background_generation_cancel_requests", "dependency_backend_requests", "runtime_session_requests", "runtime_turn_interrupt_requests"):
                 if key in result:

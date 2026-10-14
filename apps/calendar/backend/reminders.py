@@ -130,7 +130,7 @@ def reminder_tick(data_root, *, now=None):
     update_json_state(data_root, REMINDER_FILE, update, _default())
     if result.pop("changed", False):
         result["app_events"] = [
-            {"type": "maverick.app.data-changed", "resource": "notifications"}
+            {"type": "loopino.app.data-changed", "resource": "notifications"}
         ]
     return result
 

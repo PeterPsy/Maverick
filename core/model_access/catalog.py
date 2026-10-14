@@ -71,7 +71,7 @@ def build_model_access_catalog(state, scope: ModelAccessScope) -> ModelAccessCat
 
 def resolve_codex_executable() -> Path | None:
     """Resolve a non-writable standalone Codex binary, never an operator shell shim."""
-    configured = os.environ.get("MAVERICK_MODEL_ACCESS_CODEX_BIN", "").strip()
+    configured = os.environ.get("LOOPINO_MODEL_ACCESS_CODEX_BIN", "").strip()
     candidates: list[Path] = [Path(configured).expanduser()] if configured else []
     launch = shutil.which("codex")
     if launch:
@@ -107,7 +107,7 @@ def resolve_codex_executable() -> Path | None:
 
 def resolve_codex_source_home() -> Path:
     """Return the operator-owned Codex auth home, excluding runtime-session homes."""
-    configured = os.environ.get("MAVERICK_MODEL_ACCESS_CODEX_HOME", "").strip()
+    configured = os.environ.get("LOOPINO_MODEL_ACCESS_CODEX_HOME", "").strip()
     return Path(configured).expanduser() if configured else Path.home() / ".codex"
 
 

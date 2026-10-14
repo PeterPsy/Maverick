@@ -23,7 +23,7 @@ class AppBackgroundIntegrationTests(SidecarBrowserOriginTestSupport, unittest.Te
             root = self._repo_root(Path(directory))
             state = frame_fixtures.AppFrameBrowserOriginIntegrationTests._state_with_frontend(root, include_backend=True)
             app = PlatformAsgiHost(state)
-            platform_host = "maverick.localhost:8000"
+            platform_host = "loopino.localhost:8000"
             platform_origin = "http://" + platform_host
             cookie = await self._login(app, host=platform_host)
             frame = await self._bootstrap_app_frame(app, app_id="frame-demo", launch_path="/apps/frame-demo/", platform_host=platform_host, platform_origin=platform_origin, platform_cookie=cookie)
@@ -46,7 +46,7 @@ class AppBackgroundIntegrationTests(SidecarBrowserOriginTestSupport, unittest.Te
                     self.assertEqual(result["workspace_id"], "default")
                     self.assertNotIn("authorization", result["headers"])
                     self.assertNotIn("set-cookie", headers)
-            foreign, _, _ = await self._invoke(app, host="af-" + "0" * 24 + ".sidecars.maverick.localhost:8000", path=REQUEST_PATH, method="POST", body=b'{"action":"read"}', headers=request_headers)
+            foreign, _, _ = await self._invoke(app, host="af-" + "0" * 24 + ".sidecars.loopino.localhost:8000", path=REQUEST_PATH, method="POST", body=b'{"action":"read"}', headers=request_headers)
             self.assertEqual(foreign, 403)
             status, body, _ = await self._invoke(app, host=frame["host"], path=GRANT_PATH, method="POST", body=issue_body, headers=issue_headers)
             self.assertEqual(status, 201, body)

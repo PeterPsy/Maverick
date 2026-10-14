@@ -121,7 +121,7 @@ export function storageFolderTargetMatchesLocalView(
 }
 
 export function storageTargetFromWidgetContext(message: WidgetContextMessage): StorageNavigationTarget | null {
-  if (message.type !== 'maverick.widget.context-changed') {
+  if (message.type !== 'loopino.widget.context-changed') {
     return null;
   }
   const payload = message.context?.content?.payload;

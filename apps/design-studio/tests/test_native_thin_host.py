@@ -55,11 +55,11 @@ class NativeThinHostTests(unittest.TestCase):
                 "entrypoint": "hooks/sidecar_prepare.py",
                 "timeout_seconds": 30,
                 "environment_keys": [
-                    "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+                    "LOOPINO_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
                 ],
             },
         )
-        self.assertEqual(sidecar["env"]["MAVERICK_OPENDESIGN_DATA_DIR"], "${app.data_dir}")
+        self.assertEqual(sidecar["env"]["LOOPINO_OPENDESIGN_DATA_DIR"], "${app.data_dir}")
         self.assertNotIn("root_filesystem", sidecar)
         self.assertGreaterEqual(sidecar["process_policy"]["limits"]["memory_bytes"], 32 * 1024**3)
         self.assertEqual(
@@ -108,7 +108,7 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(env["OD_DATA_DIR"], str(data))
         self.assertEqual(env["OD_SANDBOX_MODE"], "1")
         self.assertNotIn("NODE_OPTIONS", env)
-        self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)
+        self.assertNotIn("LOOPINO_RUNTIME_API_TOKEN", env)
         self.assertFalse(any("patch" in part.lower() or "overlay" in part.lower() for part in command))
 
     def test_launcher_exposes_only_a_technical_model_capability_to_open_design(self) -> None:
@@ -134,8 +134,8 @@ class NativeThinHostTests(unittest.TestCase):
             with patch.dict(
                 "os.environ",
                 {
-                    "MAVERICK_MODEL_ACCESS_SOCKET": "/model-access/broker.sock",
-                    "MAVERICK_MODEL_ACCESS_TOKEN": "scoped-technical-capability",
+                    "LOOPINO_MODEL_ACCESS_SOCKET": "/model-access/broker.sock",
+                    "LOOPINO_MODEL_ACCESS_TOKEN": "scoped-technical-capability",
                 },
             ):
                 _command, env, _cwd = build_native_launch(
@@ -153,20 +153,20 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(env["OD_CODEX_DISABLE_PLUGINS"], "1")
         self.assertEqual(env["OD_CODEX_SANDBOX"], "danger-full-access")
         self.assertEqual(env["PATH"].split(":", 1)[0], "/app/service")
-        self.assertFalse(any(part.startswith("/maverick/") for part in env["PATH"].split(":")))
-        codex_wrapper = SERVICE_ROOT / "maverick-codex"
-        opencode_wrapper = SERVICE_ROOT / "maverick-opencode"
+        self.assertFalse(any(part.startswith("/loopino/") for part in env["PATH"].split(":")))
+        codex_wrapper = SERVICE_ROOT / "loopino-codex"
+        opencode_wrapper = SERVICE_ROOT / "loopino-opencode"
         self.assertTrue(codex_wrapper.stat().st_mode & 0o111)
         self.assertTrue(opencode_wrapper.stat().st_mode & 0o111)
         for wrapper in (codex_wrapper, opencode_wrapper):
             source = wrapper.read_text(encoding="utf-8")
             self.assertTrue(source.startswith("#!/usr/bin/python3\n"))
-            self.assertNotIn("/maverick/python", source)
-            self.assertNotIn("/maverick/app", source)
+            self.assertNotIn("/loopino/python", source)
+            self.assertNotIn("/loopino/app", source)
         self.assertIn(SANDBOX_BINARY_PATH.as_posix(), opencode_wrapper.read_text())
         self.assertNotIn("OPENAI_API_KEY", env)
-        self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)
-        self.assertNotIn("MAVERICK_API_BASE", env)
+        self.assertNotIn("LOOPINO_RUNTIME_API_TOKEN", env)
+        self.assertNotIn("LOOPINO_API_BASE", env)
         self.assertFalse(any("memory" in value.lower() or "persona" in value.lower() for value in env.values()))
 
     def test_host_status_reporter_publishes_real_model_and_lifecycle_state_in_place(self) -> None:
@@ -334,7 +334,7 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertNotIn("callDesignStudioBackend", source)
         self.assertNotIn("openSettingsMessage", source)
         self.assertNotIn("openToolsMessage", source)
-        self.assertNotIn("maverick.opendesign.navigate", source)
+        self.assertNotIn("loopino.opendesign.navigate", source)
 
 
 if __name__ == "__main__":

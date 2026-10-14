@@ -1,6 +1,6 @@
 # Roadmap
 
-Maverick is pre-release software. This roadmap is intentionally conservative and security-first.
+Loopino is pre-release software. This roadmap is intentionally conservative and security-first.
 
 ## Done
 
@@ -23,7 +23,7 @@ Maverick is pre-release software. This roadmap is intentionally conservative and
 - Add public docs index, glossary, and app developer tutorial.
 - Add stronger dependency audit, SBOM generation, and release checks.
 - Add browser smoke tests for core shell and mounted apps.
-- Add public app surfaces for selected apps. Today all apps are internal-only and require an authenticated Maverick user.
+- Add public app surfaces for selected apps. Today all apps are internal-only and require an authenticated Loopino user.
 - Add more granular user permissions beyond workspace-level access, including per-surface or per-app authorization where needed.
 - Add additional AI provider adapters, including API-key model providers, Claude Code, and local open-source model runtimes.
 
@@ -45,4 +45,4 @@ Maverick is pre-release software. This roadmap is intentionally conservative and
 
 - Treating obsolete app internals as supported platform APIs.
 - Treating app internals as core platform APIs.
-- Marketing Maverick as production-ready before the security roadmap is complete.
+- Marketing Loopino as production-ready before the security roadmap is complete.

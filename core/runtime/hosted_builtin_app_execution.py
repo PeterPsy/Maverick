@@ -138,7 +138,7 @@ def hosted_builtin_app_execution_digest(
     if not files:
         raise RuntimeToolError("hosted_app_execution_closure_invalid")
     digest = hashlib.sha256()
-    digest.update(b"maverick.hosted-builtin-app-execution.v1\x00")
+    digest.update(b"loopino.hosted-builtin-app-execution.v1\x00")
     digest.update(app_id.encode("utf-8"))
     digest.update(b"\x00")
     digest.update(surface.encode("ascii"))

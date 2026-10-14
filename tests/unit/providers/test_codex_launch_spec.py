@@ -15,7 +15,7 @@ _SELECTED = {
     'test_codex_skill_prepare_removes_stale_manifest_targets',
     'test_codex_skill_prepare_reuses_current_manifest',
     'test_codex_post_tool_use_hook_trust_identity_is_stable',
-    'test_workspace_maverick_wrapper_exits_nonzero_for_error_status_payload',
+    'test_workspace_loopino_wrapper_exits_nonzero_for_error_status_payload',
 }
 
 

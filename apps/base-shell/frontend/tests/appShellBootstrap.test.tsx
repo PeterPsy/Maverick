@@ -3,8 +3,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSafeRequestRetryExecutor } from "@maverick/pwa-cache";
-import { MaverickHttpError } from "../src/api";
+import { createSafeRequestRetryExecutor } from "@loopino/pwa-cache";
+import { LoopinoHttpError } from "../src/api";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
 import { revokeShellAuthorization, shellCacheLifecycle, shellRetryCoordinator } from "../src/pwaCacheRuntime";
@@ -440,7 +440,7 @@ describe("AppShell bootstrap", () => {
   });
 
   it("treats terminal HTTP responses as normal outcomes instead of retry waits", async () => {
-    api.getSession.mockRejectedValueOnce(new MaverickHttpError("/api/session", new Response("forbidden", { status: 403 })));
+    api.getSession.mockRejectedValueOnce(new LoopinoHttpError("/api/session", new Response("forbidden", { status: 403 })));
 
     await act(async () => {
       root.render(<AppShell />);
@@ -454,7 +454,7 @@ describe("AppShell bootstrap", () => {
   });
 
   it.each([500, 408])("retains recovery state after startup HTTP %i and recovers on foreground", async (status) => {
-    api.getSession.mockRejectedValueOnce(new MaverickHttpError("/api/session", new Response(null, { status })));
+    api.getSession.mockRejectedValueOnce(new LoopinoHttpError("/api/session", new Response(null, { status })));
     await renderShell();
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
     await act(async () => { window.dispatchEvent(new Event("focus")); });
@@ -465,7 +465,7 @@ describe("AppShell bootstrap", () => {
     api.getSession.mockResolvedValueOnce({ authenticated: false });
     await renderShell();
     expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
-    await act(async () => { window.dispatchEvent(new Event("maverick.session-changed")); });
+    await act(async () => { window.dispatchEvent(new Event("loopino.session-changed")); });
     expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
   });
 
@@ -493,7 +493,7 @@ describe("AppShell bootstrap", () => {
     hidden.mockReturnValue(false);
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));
     await act(async () => window.dispatchEvent(new Event("pageshow")));
-    await act(async () => window.dispatchEvent(new Event("maverick.session-changed")));
+    await act(async () => window.dispatchEvent(new Event("loopino.session-changed")));
     expect(container.querySelector("[data-testid='mounted-app-frame']")).toBe(frame);
     expect(frame.dataset.fixtureDraft).toBe("Unsent mobile message");
     expect(dataCacheBrokerHost.frameScope).toBe(scope);
@@ -616,7 +616,7 @@ describe("AppShell bootstrap", () => {
     await renderShell();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ authenticated: false })));
     api.listPinnedApps.mockRejectedValueOnce(
-      new MaverickHttpError("/api/apps/app-store/backend", new Response(null, { status })),
+      new LoopinoHttpError("/api/apps/app-store/backend", new Response(null, { status })),
     );
     await act(async () => dispatchPinnedAppsChanged());
 
@@ -633,7 +633,7 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
 
     api.getSession.mockRejectedValueOnce(
-      new MaverickHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
+      new LoopinoHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
     );
     await act(async () => {
       container.querySelector<HTMLButtonElement>("[data-testid='switch-workspace']")?.click();
@@ -825,7 +825,7 @@ describe("AppShell bootstrap", () => {
       expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
 
       api.getSession.mockRejectedValueOnce(
-        new MaverickHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
+        new LoopinoHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
       );
       await act(async () => {
         container.querySelector<HTMLButtonElement>("[data-testid='retry-authenticated-bootstrap']")?.click();
@@ -873,7 +873,7 @@ function jsonResponse(value: unknown): Response {
 
 function dispatchShellLogout() {
   window.dispatchEvent(new MessageEvent("message", {
-    data: { type: "maverick.shell.logout" },
+    data: { type: "loopino.shell.logout" },
     origin: window.location.origin,
     source: window,
   }));
@@ -881,7 +881,7 @@ function dispatchShellLogout() {
 
 function dispatchPinnedAppsChanged() {
   window.dispatchEvent(new MessageEvent("message", {
-    data: { type: "maverick.app.data-changed", owner_app_id: "app-store", resource: "pinned-apps" },
+    data: { type: "loopino.app.data-changed", owner_app_id: "app-store", resource: "pinned-apps" },
     origin: window.location.origin,
     source: window,
   }));
@@ -917,7 +917,7 @@ function app(appId: string): AppRegistryItem {
     logo: null,
     name: appId,
     provides: [],
-    publisher: "maverick",
+    publisher: "loopino",
     requires: [],
     source_access: "none",
     status: "enabled",

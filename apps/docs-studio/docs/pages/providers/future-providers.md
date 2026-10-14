@@ -1,6 +1,6 @@
 # Claude Code, Antigravity CLI, OSS, and API-key models
 
-Maverick should be able to support multiple provider families without changing app contracts or workspace data layout.
+Loopino should be able to support multiple provider families without changing app contracts or workspace data layout.
 
 ## Runtime-style examples
 

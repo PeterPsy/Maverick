@@ -30,7 +30,7 @@ class ContractAndSurfacesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             write_app_contract_file(root, build_parsed_app_contract(app_id='demo', name='Demo', version='1.0.0',
-                description='Demo', publisher='maverick', contract=build_app_contract(installation=declaration)))
+                description='Demo', publisher='loopino', contract=build_app_contract(installation=declaration)))
             self.assertEqual(parse_app_contract_file(root).contract.installation, declaration)
         for path in ['/api/apps/other/callback', '/api/apps/{app_id}/%2e%2e/secrets', '/api/apps/{app_id}/%5csecrets']:
             with self.subTest(path=path), self.assertRaises(AppContractValidationError):

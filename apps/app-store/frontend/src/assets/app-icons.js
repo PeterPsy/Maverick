@@ -19,7 +19,7 @@
     "mail": "mail",
     "marta-ops": "view_kanban",
     "gmail-app": "mail",
-    "maverick-monitor": "monitoring",
+    "loopino-monitor": "monitoring",
     "memory": "neurology",
     "skills": "school",
     "senses": "sensors",
@@ -35,8 +35,8 @@
   }
 
   function presentation(app = {}, installation = null) {
-    if (window.MaverickFrontendPresentation?.frontendPresentation) {
-      return window.MaverickFrontendPresentation.frontendPresentation(app, installation);
+    if (window.LoopinoFrontendPresentation?.frontendPresentation) {
+      return window.LoopinoFrontendPresentation.frontendPresentation(app, installation);
     }
     const source = installation ? { ...app, ...installation } : app;
     return {
@@ -113,10 +113,10 @@
     }
     const logo = app?.logo;
     if (logo?.kind === "image" && logo.value) {
-      const platformOrigin = window.__MAVERICK_PLATFORM_ORIGIN__;
+      const platformOrigin = window.__LOOPINO_PLATFORM_ORIGIN__;
       const source = platformOrigin ? new URL(String(logo.value), platformOrigin).href : String(logo.value);
       // SDK compact assets share the glyph frame and inherit its theme colour.
-      if (/^\/apps\/[^/]+\/maverick-icon-compact\.png(?:[?#].*)?$/.test(String(logo.value))) {
+      if (/^\/apps\/[^/]+\/loopino-icon-compact\.png(?:[?#].*)?$/.test(String(logo.value))) {
         const compact = document.createElement("span");
         compact.className = "app-owned-compact-glyph";
         compact.style.width = "100%";
@@ -145,5 +145,5 @@
     return frame;
   }
 
-  window.MaverickAppIcons = { frontendLaunchable, frontendRole, glyphName, renderIcon };
+  window.LoopinoAppIcons = { frontendLaunchable, frontendRole, glyphName, renderIcon };
 })();

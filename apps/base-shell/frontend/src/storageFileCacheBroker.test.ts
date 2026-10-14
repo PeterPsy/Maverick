@@ -3,16 +3,16 @@ import {
   PWA_FILE_CACHE_BROKER_ACCEPTED,
   PWA_FILE_CACHE_BROKER_OPEN,
   PWA_FILE_CACHE_BROKER_RESULT,
-} from "@maverick/pwa-cache";
-import { MaverickHttpError } from "./api";
+} from "@loopino/pwa-cache";
+import { LoopinoHttpError } from "./api";
 import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
 import { StorageFileCacheBroker } from "./storageFileCacheBroker";
 
 const storageWindow = {} as Window;
-const storageFrameOrigin = "https://af-storage.sidecars.maverick.test";
+const storageFrameOrigin = "https://af-storage.sidecars.loopino.test";
 const storageFrame = {
   contentWindow: storageWindow,
-  dataset: { maverickFrameOrigin: storageFrameOrigin },
+  dataset: { loopinoFrameOrigin: storageFrameOrigin },
 } as unknown as HTMLIFrameElement;
 
 function requestEvent(
@@ -36,11 +36,11 @@ function requestEvent(
 
 function approvedDescriptor(overrides: Record<string, unknown> = {}) {
   return {
-    schema: "maverick.storage-file-cache-descriptor.v1",
+    schema: "loopino.storage-file-cache-descriptor.v1",
     eligible: true,
     reason_code: "approved",
     policy: {
-      policy_revision: "maverick.local-persistence-policy.v2",
+      policy_revision: "loopino.local-persistence-policy.v2",
       data_class: "workspace_internal",
       provenance: "attachment",
       cache_approved: true,
@@ -73,7 +73,7 @@ describe("Base Shell Storage file-cache broker", () => {
       .mockResolvedValueOnce(new Response("cached"));
     const broker = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor: async () => approvedDescriptor(),
     });
@@ -100,7 +100,7 @@ describe("Base Shell Storage file-cache broker", () => {
     }));
     const broker = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile,
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor: async () => approvedDescriptor(),
@@ -127,7 +127,7 @@ describe("Base Shell Storage file-cache broker", () => {
     const foreignChannel = new MessageChannel();
     expect(broker.handleWindowMessage(requestEvent(foreignChannel), {
       contentWindow: {} as Window,
-      dataset: { maverickFrameOrigin: storageFrameOrigin },
+      dataset: { loopinoFrameOrigin: storageFrameOrigin },
     } as unknown as HTMLIFrameElement)).toBe(false);
     broker.dispose();
   });
@@ -140,13 +140,13 @@ describe("Base Shell Storage file-cache broker", () => {
     const unsubscribe = subscribeShellAuthorizationRevocation(revoked);
     const broker = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile: async () => {
         throw new Error("openFile must not run after descriptor authorization fails");
       },
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor: async () => {
-        throw new MaverickHttpError("/api/apps/storage/backend", new Response(null, { status: 403 }));
+        throw new LoopinoHttpError("/api/apps/storage/backend", new Response(null, { status: 403 }));
       },
     });
     const channel = new MessageChannel();
@@ -167,7 +167,7 @@ describe("Base Shell Storage file-cache broker", () => {
     const openFile = vi.fn();
     const denied = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile,
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor: async () => ({ ...approvedDescriptor(), eligible: false, reason_code: "unclassified" }),
@@ -182,7 +182,7 @@ describe("Base Shell Storage file-cache broker", () => {
 
     const malformed = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile,
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor: async () => approvedDescriptor({
@@ -202,7 +202,7 @@ describe("Base Shell Storage file-cache broker", () => {
     let operationSignal: AbortSignal | null = null;
     const broker = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile: async (_request, signal) => {
         operationSignal = signal;
         await new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
@@ -217,7 +217,7 @@ describe("Base Shell Storage file-cache broker", () => {
     await accepted;
     await vi.waitFor(() => expect(operationSignal).not.toBeNull());
 
-    channel.port1.postMessage({ request_id: "request-one", type: "maverick.storage.file-cache.cancel.v1" });
+    channel.port1.postMessage({ request_id: "request-one", type: "loopino.storage.file-cache.cancel.v1" });
 
     await vi.waitFor(() => expect(operationSignal?.aborted).toBe(true));
     broker.dispose();
@@ -226,7 +226,7 @@ describe("Base Shell Storage file-cache broker", () => {
   it("does not return bytes that fail the trusted size or digest contract", async () => {
     const broker = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile: async () => ({ blob: new Blob(["wrong!"]), etag: '"one"', source: "network" }),
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor: async () => approvedDescriptor({
@@ -256,7 +256,7 @@ describe("Base Shell Storage file-cache broker", () => {
     }));
     const broker = new StorageFileCacheBroker({
       featureEnabled,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile,
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor,
@@ -309,7 +309,7 @@ describe("Base Shell Storage file-cache broker", () => {
     }));
     const broker = new StorageFileCacheBroker({
       featureEnabled: async () => true,
-      hostOrigin: "https://maverick.test",
+      hostOrigin: "https://loopino.test",
       openFile,
       principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
       resolveDescriptor,

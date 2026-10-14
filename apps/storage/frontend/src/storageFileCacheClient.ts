@@ -3,7 +3,7 @@ import {
   type ParentFileCacheClientOptions,
   type ParentFileCacheOpenRequest,
   type ParentFileCacheOpenResult,
-} from '@maverick/pwa-cache';
+} from '@loopino/pwa-cache';
 import type { StorageFile } from './types';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;

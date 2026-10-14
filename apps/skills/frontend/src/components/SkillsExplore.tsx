@@ -204,7 +204,7 @@ export function SkillsExplore({ onInstalled }: { onInstalled: (skillId: string) 
 
       {confirming && detail ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !installing && setConfirming(false)}>
-          <section className="maverick-modal install-skill-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+          <section className="loopino-modal install-skill-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
             <header className="modal-header">
               <div>
                 <h2>Install Agent Skill</h2>

@@ -198,7 +198,7 @@ class AppContractServiceTests(unittest.TestCase):
             sidecar["host_prepare"] = {
                 "entrypoint": "hooks/prepare.py",
                 "timeout_seconds": 30,
-                "environment_keys": ["MAVERICK_APP_LAUNCH_CONFIGURATION"],
+                "environment_keys": ["LOOPINO_APP_LAUNCH_CONFIGURATION"],
             }
             (app_root / "app_contract.json").write_text(
                 json.dumps(payload, indent=2) + "\n", encoding="utf-8"
@@ -210,7 +210,7 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(parsed_sidecar.data_mount.subpath, "opendesign-native")
             self.assertEqual(
                 parsed_sidecar.host_prepare.environment_keys,
-                ["MAVERICK_APP_LAUNCH_CONFIGURATION"],
+                ["LOOPINO_APP_LAUNCH_CONFIGURATION"],
             )
             self.assertEqual(
                 app_contract_payload(loaded)["services"]["http_sidecars"][0]["data_mount"],
@@ -319,7 +319,7 @@ class AppContractServiceTests(unittest.TestCase):
         mutations = (
             ("HOME", "/operator-home"),
             ("OPENAI_API_KEY", "provider-secret"),
-            ("MAVERICK_BOOTSTRAP_SECRET", "bootstrap-secret"),
+            ("LOOPINO_BOOTSTRAP_SECRET", "bootstrap-secret"),
             ("ARBITRARY", "${host.secret}"),
             ("WORKSPACE", "${workspace.root}"),
         )
@@ -525,7 +525,7 @@ class AppContractServiceTests(unittest.TestCase):
             name="Sidecar Demo",
             version="0.1.0",
             description="HTTP sidecar test app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 services=build_app_services(
                     http_sidecars=[

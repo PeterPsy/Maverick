@@ -8,7 +8,7 @@ type StartupMetricEntry = {
 
 declare global {
   interface Window {
-    __maverickStartupMetrics?: StartupMetricEntry[];
+    __loopinoStartupMetrics?: StartupMetricEntry[];
   }
 }
 
@@ -17,7 +17,7 @@ function metricsEnabled(): boolean {
     return false;
   }
   try {
-    return window.localStorage.getItem("maverick.startupMetrics") === "1" || new URLSearchParams(window.location.search).get("startup_metrics") === "1";
+    return window.localStorage.getItem("loopino.startupMetrics") === "1" || new URLSearchParams(window.location.search).get("startup_metrics") === "1";
   } catch {
     return false;
   }
@@ -27,9 +27,9 @@ function appendMetric(entry: StartupMetricEntry): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.__maverickStartupMetrics = [...(window.__maverickStartupMetrics ?? []), entry];
+  window.__loopinoStartupMetrics = [...(window.__loopinoStartupMetrics ?? []), entry];
   if (metricsEnabled()) {
-    console.debug("[maverick.startup]", entry);
+    console.debug("[loopino.startup]", entry);
   }
 }
 

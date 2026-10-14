@@ -38,8 +38,8 @@ export function GoogleBrowserHandoff() {
   return <main className="bs-google-handoff">
     <BrandMark className="bs-google-handoff__brand" variant="mark" />
     <h1>{failed || error ? "Google connection incomplete" : starting ? "Opening Google…" : "Google connected"}</h1>
-    <p role={failed || error ? "alert" : "status"}>{failed ? "This connection has expired or was already opened. Return to Maverick and try again."
-      : error ?? (starting ? "Continue with Google in this browser." : "Return to Maverick. Your connection will update automatically.")}</p>
+    <p role={failed || error ? "alert" : "status"}>{failed ? "This connection has expired or was already opened. Return to Loopino and try again."
+      : error ?? (starting ? "Continue with Google in this browser." : "Return to Loopino. Your connection will update automatically.")}</p>
     {!starting && <p>You can close this browser tab.</p>}
   </main>;
 }

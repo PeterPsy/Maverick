@@ -1,10 +1,10 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import { appSnapshotBytes, MAX_APP_SNAPSHOT_BYTES, type MaverickAppSnapshot, type MaverickResumeParams } from '@maverick/pwa-cache';
+import { appSnapshotBytes, MAX_APP_SNAPSHOT_BYTES, type LoopinoAppSnapshot, type LoopinoResumeParams } from '@loopino/pwa-cache';
 import type { AppRegistryItem } from '../api';
-import { isMaverickFrameMessage, postToMaverickFrame } from '../iframePolicy';
+import { isLoopinoFrameMessage, postToLoopinoFrame } from '../iframePolicy';
 
 type MountedApp = { app: AppRegistryItem; mountKey: string };
-type SavedApp = { snapshot: MaverickAppSnapshot; requestId: string; bytes: number; source?: Window | null };
+type SavedApp = { snapshot: LoopinoAppSnapshot; requestId: string; bytes: number; source?: Window | null };
 const MAX_SAVED_BYTES = 2 * 1024 * 1024;
 
 /** Keep active + previous views warm; only certified, consenting apps can be removed. */
@@ -30,18 +30,18 @@ export function useAppFrameHibernation(options: {
     const onMessage = (event: MessageEvent) => {
       const { mounted, frames, setMounted } = latest.current;
       const item = mounted.find(({ app }) => app.app_id === event.data?.app_id);
-      if (!item || !item.app.frontend_resumable || !isMaverickFrameMessage(event, frames.current[item.app.app_id])) return;
+      if (!item || !item.app.frontend_resumable || !isLoopinoFrameMessage(event, frames.current[item.app.app_id])) return;
       const current = state.current;
-      if (event.data.type === 'maverick.app.resumed') {
+      if (event.data.type === 'loopino.app.resumed') {
         const saved = current.saved.get(item.mountKey);
         if (saved && saved.requestId === event.data.request_id && saved.source === event.source) current.saved.delete(item.mountKey);
         return;
       }
       const pending = current.pending.get(item.mountKey);
-      if (event.data.type !== 'maverick.app.hibernated' || !pending || pending.id !== event.data.request_id
+      if (event.data.type !== 'loopino.app.hibernated' || !pending || pending.id !== event.data.request_id
           || pending.source !== event.source || pending.expires < Date.now() || current.recent.includes(item.mountKey)) return;
       current.pending.delete(item.mountKey);
-      const snapshot = event.data.snapshot as MaverickAppSnapshot | null;
+      const snapshot = event.data.snapshot as LoopinoAppSnapshot | null;
       if (!snapshot || !snapshot.params || typeof snapshot.params !== 'object' || Array.isArray(snapshot.params)
           || Object.values(snapshot.params).some((value) => value !== null && !['string', 'boolean'].includes(typeof value))) return;
       const bytes = appSnapshotBytes(snapshot);
@@ -63,18 +63,18 @@ export function useAppFrameHibernation(options: {
       if (!frame?.contentWindow) continue;
       const id = `${options.scope}:${++current.serial}`;
       current.pending.set(mountKey, { id, expires: Date.now() + 1000, source: frame.contentWindow });
-      postToMaverickFrame(frame, { type: 'maverick.app.hibernate', app_id: app.app_id, request_id: id });
+      postToLoopinoFrame(frame, { type: 'loopino.app.hibernate', app_id: app.app_id, request_id: id });
     }
   }, [options.activeKey, options.ready, options.mounted]);
 
-  return (appId: string, navigation: MaverickResumeParams): boolean => {
+  return (appId: string, navigation: LoopinoResumeParams): boolean => {
     const { mounted, frames } = latest.current;
     const item = mounted.find(({ app }) => app.app_id === appId);
     const saved = item && state.current.saved.get(item.mountKey);
     const frame = frames.current[appId];
     if (!saved || !frame?.contentWindow) return false;
     saved.source = frame.contentWindow;
-    postToMaverickFrame(frame, { type: 'maverick.app.resume', app_id: appId,
+    postToLoopinoFrame(frame, { type: 'loopino.app.resume', app_id: appId,
       request_id: saved.requestId, snapshot: saved.snapshot, navigation });
     return true;
   };

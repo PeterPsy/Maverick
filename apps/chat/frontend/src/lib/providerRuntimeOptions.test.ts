@@ -156,7 +156,7 @@ describe("provider runtime options", () => {
           workspace_profile_binding_id: "binding-openrouter",
           definition_id: "profile-openrouter",
           display_name: "OpenRouter GLM 5.3 Flash · Relace",
-          runtime_engine_id: "maverick-tool-loop",
+          runtime_engine_id: "loopino-tool-loop",
           model_provider_id: "openrouter",
           model_id: "z-ai/glm-5.3-flash",
           default_reasoning_effort: "max",
@@ -164,7 +164,7 @@ describe("provider runtime options", () => {
             { effort: "max", label: "Maximum", description: null },
             { effort: "high", label: "High", description: null },
           ],
-          execution_family: "maverick_agent",
+          execution_family: "loopino_agent",
         })],
       },
     });

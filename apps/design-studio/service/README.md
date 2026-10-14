@@ -1,7 +1,7 @@
 # Design Studio OpenDesign Service
 
 This directory owns the external hosting and bridge code for the unchanged
-official OpenDesign installation exposed as Maverick `app_id: design-studio`.
+official OpenDesign installation exposed as Loopino `app_id: design-studio`.
 It does not contain an OpenDesign fork or an active custom UI/runtime build.
 
 ## Active runtime
@@ -61,7 +61,7 @@ Model Access Bridge after startup. Neither outcome gates native readiness.
 
 The Model Access Bridge consists of `model_access_client.py`,
 `model_access_server.py`, `model_access_profiles.py`, and the
-`maverick-codex` and `maverick-opencode` technical wrappers. The install hook
+`loopino-codex` and `loopino-opencode` technical wrappers. The install hook
 attempts to install a digest-pinned OpenCode runtime; registry or verification
 failure degrades only the API profile and never blocks native activation. The
 launcher emits whichever supported Codex and OpenCode profiles are independently
@@ -72,7 +72,7 @@ does not remove the other profile. The wrapper is only a byte-preserving
 transport: the trusted Core broker requires `--model` for every non-diagnostic
 execution and checks it against the live workspace/app-scoped catalog before
 calling the CLI executor. Both paths
-operate without a Maverick runtime session, prompt, memory, persona, skill,
+operate without a Loopino runtime session, prompt, memory, persona, skill,
 tool catalog, or semantic rewrite.
 
 `native_profile_bootstrap.py` then runs after the unchanged daemon is ready and
@@ -86,7 +86,7 @@ The declared 60-second health window covers OpenDesign 0.21's cold registration
 of the bundled plugin catalogue; warm starts normally complete much earlier.
 
 The official daemon finds the production wrappers on Core's `/app/service`
-mount, and both wrappers execute with `/usr/bin/python3`; `/maverick/python` is
+mount, and both wrappers execute with `/usr/bin/python3`; `/loopino/python` is
 reserved for artifact-root sidecars and is not part of this contract.
 
 Delegation lives outside this service directory under `../backend/`. It calls
@@ -128,7 +128,7 @@ The implementation is split by responsibility:
 
 Neither cutover nor normal hosting imports a private OpenDesign database
 driver. The immutable recovery backup necessarily retains canonical bytes;
-Maverick's live cutover marker and certification summary retain only technical
+Loopino's live cutover marker and certification summary retain only technical
 identity, counts, and SHA-256 evidence.
 
 ## Verification

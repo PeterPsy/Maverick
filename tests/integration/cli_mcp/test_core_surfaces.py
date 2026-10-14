@@ -303,7 +303,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         )
         mcp_context = McpInvocationContext(**cli_context.__dict__)
 
-        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+        with self.assertRaisesRegex(InterAgentValidationError, "LOOPINO_FEATURE_GROUP_CHAT=1"):
             run_core_cli_command(
                 command_id="inter-agent.runs.create",
                 context=cli_context,
@@ -313,7 +313,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 start_path=repo_root,
                 arguments=_group_chat_run_payload(run_id="cli-group-chat-disabled", root_session_id="root-cli-gated"),
             )
-        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+        with self.assertRaisesRegex(InterAgentValidationError, "LOOPINO_FEATURE_GROUP_CHAT=1"):
             call_mcp_tool(
                 tool_name="inter_agent_run_create",
                 context=mcp_context,
@@ -337,7 +337,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                     arguments=payload,
                 )
 
-        with patch.dict("os.environ", {"MAVERICK_FEATURE_GROUP_CHAT": "1"}):
+        with patch.dict("os.environ", {"LOOPINO_FEATURE_GROUP_CHAT": "1"}):
             run_core_cli_command(
                 command_id="inter-agent.runs.create",
                 context=cli_context,
@@ -357,7 +357,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 arguments=_group_chat_run_payload(run_id="mcp-group-chat-enabled", root_session_id="root-mcp-gated"),
             )
 
-        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+        with self.assertRaisesRegex(InterAgentValidationError, "LOOPINO_FEATURE_GROUP_CHAT=1"):
             run_core_cli_command(
                 command_id="inter-agent.runs.execute",
                 context=cli_context,
@@ -367,7 +367,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 start_path=repo_root,
                 arguments={"run_id": "cli-group-chat-enabled", "input_text": "Run gated mode."},
             )
-        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+        with self.assertRaisesRegex(InterAgentValidationError, "LOOPINO_FEATURE_GROUP_CHAT=1"):
             call_mcp_tool(
                 tool_name="inter_agent_execute",
                 context=mcp_context,
@@ -1108,7 +1108,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 name="Storage Provider",
                 version="1.0.0",
                 description="Storage provider app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     visibility=AppVisibilityDeclaration(
                         platform_roles=None,
@@ -1466,7 +1466,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             logical_name="api-token",
             secret_ref=build_secret_ref(alias=secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
         )
         webhook_secret = create_platform_secret(secret_store, label="Webhook Token", raw_value="webhook-secret", alias="webhook-token")
         grant_app_secret_use(
@@ -1476,7 +1476,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             logical_name="webhook-token",
             secret_ref=build_secret_ref(alias=webhook_secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
         )
         cli_context = CliInvocationContext(
             caller_kind="sandbox_agent",
@@ -1557,7 +1557,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             logical_name="api-token",
             secret_ref=build_secret_ref(alias=secret.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/cli/checklists"],
+            target_patterns=["loopino://app.backend/cli/checklists"],
         )
         context = CliInvocationContext(
             caller_kind="sandbox_agent",
@@ -1632,7 +1632,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             logical_name="api-token",
             secret_ref=build_secret_ref(alias=first.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             resource_type="mail_connection",
             resource_id="conn_1",
         )
@@ -1643,7 +1643,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             logical_name="api-token",
             secret_ref=build_secret_ref(alias=second.alias),
             actions=["app.backend"],
-            target_patterns=["maverick://app.backend/*"],
+            target_patterns=["loopino://app.backend/*"],
             resource_type="mail_connection",
             resource_id="conn_2",
         )

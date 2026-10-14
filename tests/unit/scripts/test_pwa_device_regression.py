@@ -60,7 +60,7 @@ def valid_waiver(*, passed: int, pending: int) -> dict:
 class PwaDeviceRegressionTests(unittest.TestCase):
     def test_merges_only_observed_smoke_results_into_progress(self) -> None:
         smoke = {
-            "schema": "maverick.pwa-physical-browser-smoke.v1",
+            "schema": "loopino.pwa-physical-browser-smoke.v1",
             "captured_at": NOW.isoformat(),
             "environment": "physical-device",
             "redaction_reviewed": True,
@@ -89,7 +89,7 @@ class PwaDeviceRegressionTests(unittest.TestCase):
 
     def test_progress_rejects_remote_or_wrong_candidate_smoke(self) -> None:
         smoke = {
-            "schema": "maverick.pwa-physical-browser-smoke.v1",
+            "schema": "loopino.pwa-physical-browser-smoke.v1",
             "captured_at": NOW.isoformat(),
             "environment": "remote-webdriver",
             "redaction_reviewed": True,

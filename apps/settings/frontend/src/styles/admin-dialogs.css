@@ -14,7 +14,7 @@
   display: grid;
   gap: 14px;
   width: min(100%, 500px);
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035)),
     #111113;
@@ -38,7 +38,7 @@
 
 .settings-toggle {
   width: max-content;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.82rem;
   font-weight: 400;
 }
@@ -47,7 +47,7 @@
 .settings-membership input,
 .settings-switch input {
   width: auto;
-  accent-color: var(--maverick-accent);
+  accent-color: var(--loopino-accent);
 }
 
 .settings-membership {
@@ -59,7 +59,7 @@
 }
 
 .settings-membership:hover {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.045);
 }
 
@@ -103,7 +103,7 @@
 }
 
 .settings-app-row {
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   padding-top: 10px;
 }
 
@@ -116,26 +116,26 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
   font-weight: 400;
   white-space: nowrap;
 }
 
 button.settings-secondary {
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.075);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 button.settings-secondary:hover:not(:disabled) {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 button.settings-danger {
   border: 1px solid rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.1);
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 button.settings-danger:hover:not(:disabled) {

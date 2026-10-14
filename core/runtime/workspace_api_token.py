@@ -221,15 +221,15 @@ def _sign(encoded_payload: str) -> str:
 
 
 def _secret() -> bytes:
-    configured_ref = os.environ.get("MAVERICK_RUNTIME_API_SECRET_REF", "").strip()
+    configured_ref = os.environ.get("LOOPINO_RUNTIME_API_SECRET_REF", "").strip()
     if configured_ref:
         return resolve_bootstrap_secret(configured_ref).encode("utf-8")
-    configured = os.environ.get("MAVERICK_RUNTIME_API_SECRET", "").strip()
+    configured = os.environ.get("LOOPINO_RUNTIME_API_SECRET", "").strip()
     if configured:
         return configured.encode("utf-8")
-    if os.environ.get("MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS") == "1":
-        return b"maverick-local-runtime-api"
-    raise RuntimeError("MAVERICK_RUNTIME_API_SECRET_REF or MAVERICK_RUNTIME_API_SECRET is required.")
+    if os.environ.get("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS") == "1":
+        return b"loopino-local-runtime-api"
+    raise RuntimeError("LOOPINO_RUNTIME_API_SECRET_REF or LOOPINO_RUNTIME_API_SECRET is required.")
 
 
 def _base64_url(raw: bytes) -> str:

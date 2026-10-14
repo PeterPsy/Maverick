@@ -159,8 +159,8 @@ class OfficialOpenDesignReleaseTests(unittest.TestCase):
             self.assertEqual(env["OD_DATA_DIR"], "/app/.od")
             self.assertEqual(env["OD_PORT"], "17456")
             self.assertEqual(env["OD_API_TOKEN"], "disposable-token")
-            self.assertEqual(env["MAVERICK_OPENDESIGN_MODEL_BRIDGE"], "disabled")
-            self.assertEqual(env["MAVERICK_OPENDESIGN_DELEGATION_BRIDGE"], "disabled")
+            self.assertEqual(env["LOOPINO_OPENDESIGN_MODEL_BRIDGE"], "disabled")
+            self.assertEqual(env["LOOPINO_OPENDESIGN_DELEGATION_BRIDGE"], "disabled")
             self.assertTrue(all("overlay" not in part.lower() and "patch" not in part.lower() for part in command))
 
     def test_disposable_api_uses_only_an_authenticated_unix_relay_into_the_network_namespace(self) -> None:
@@ -189,8 +189,8 @@ class OfficialOpenDesignReleaseTests(unittest.TestCase):
 
             rendered = " ".join(command)
             self.assertIn("--unshare-net", command)
-            self.assertIn("/run/maverick-relay/api.sock", command)
-            self.assertIn("maverick-sidecar-relay.py", rendered)
+            self.assertIn("/run/loopino-relay/api.sock", command)
+            self.assertIn("loopino-sidecar-relay.py", rendered)
             self.assertIn("--target-host 127.0.0.1", rendered)
             self.assertIn("/sbin/tini -- node apps/daemon/dist/cli.js --no-open", rendered)
 

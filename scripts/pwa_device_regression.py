@@ -12,9 +12,9 @@ import sys
 from typing import Any
 
 
-EVIDENCE_SCHEMA = "maverick.pwa-cache-device-regression.v1"
-SMOKE_SCHEMA = "maverick.pwa-physical-browser-smoke.v1"
-WAIVER_SCHEMA = "maverick.pwa-cache-device-regression-waiver.v1"
+EVIDENCE_SCHEMA = "loopino.pwa-cache-device-regression.v1"
+SMOKE_SCHEMA = "loopino.pwa-physical-browser-smoke.v1"
+WAIVER_SCHEMA = "loopino.pwa-cache-device-regression-waiver.v1"
 RELEASE_CANDIDATE_BINDING = "exact_release_id"
 POLICY_PATH = Path("docs/product/pwa_cache_operational_policy.v1.json")
 PASS = "pass"

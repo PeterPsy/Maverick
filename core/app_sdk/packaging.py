@@ -1,4 +1,4 @@
-"""Packaging helpers for SDK-created Maverick app source trees."""
+"""Packaging helpers for SDK-created Loopino app source trees."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def package_app_source(app_root: str | Path, *, output_path: str | Path | None =
         "checksum_sha256": checksum,
         "files": [str(path.relative_to(root)) for path in files],
         "provenance": {
-            "packager": "maverick-app-sdk",
+            "packager": "loopino-app-sdk",
             "source": {
                 "kind": "app_source_tree",
                 "app_id": parsed.app_id,

@@ -27,7 +27,7 @@ export async function callBackend<T>(body: Record<string, unknown>, options: { s
   } catch (error) {
     if (options.signal?.aborted) throw error;
     const transport = new Error('Fitness Coach backend transport failed.', { cause: error });
-    transport.name = 'MaverickTransportError';
+    transport.name = 'LoopinoTransportError';
     throw transport;
   }
   let payload: T & { error?: string; detail?: string };
@@ -50,7 +50,7 @@ export async function callBackend<T>(body: Record<string, unknown>, options: { s
 export class FitnessHttpError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfterMs: number | null) {
     super(message);
-    this.name = 'MaverickHttpError';
+    this.name = 'LoopinoHttpError';
   }
 }
 
@@ -218,12 +218,12 @@ function parseRetryAfter(value: string | null): number | null {
 
 export function openStorageForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null) {
   const params = storageNavigationParamsForMedia(media, sourceFolder);
-  window.parent?.postMessage({ type: 'maverick.app.open-app', app_id: 'storage', params }, "*");
+  window.parent?.postMessage({ type: 'loopino.app.open-app', app_id: 'storage', params }, "*");
 }
 
 export function openStorageVideoPicker(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null) {
   const params = storageVideoPickerNavigationParamsForMedia(media, sourceFolder);
-  window.parent?.postMessage({ type: 'maverick.app.open-app', app_id: 'storage', params }, "*");
+  window.parent?.postMessage({ type: 'loopino.app.open-app', app_id: 'storage', params }, "*");
 }
 
 export function storageVideoPickerNavigationParamsForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null): Record<string, string> {

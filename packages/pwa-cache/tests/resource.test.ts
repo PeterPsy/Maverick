@@ -274,7 +274,7 @@ describe("PWA cache resource", () => {
     const resource = client({ now: () => now }).resource("records", publicPolicy({ expiryTtlMs: 2_000 }));
     await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "old" }, revision: "r1" }));
     now = 3_001;
-    const transportError = Object.assign(new Error("no transport"), { name: "MaverickTransportError" });
+    const transportError = Object.assign(new Error("no transport"), { name: "LoopinoTransportError" });
 
     await expect(resource.readThrough("one", async () => { throw transportError; })).rejects.toBe(transportError);
     expect(await resource.get("one")).toBeNull();
@@ -328,7 +328,7 @@ describe("PWA cache resource", () => {
 
   it("marks conditional loader failures as revalidation errors without misclassifying other failures", async () => {
     const telemetry: CacheTelemetryEvent[] = [];
-    const loaderError = Object.assign(new Error("network unavailable"), { name: "MaverickTransportError" });
+    const loaderError = Object.assign(new Error("network unavailable"), { name: "LoopinoTransportError" });
     let now = 1_000;
     const resource = client({
       now: () => now,
@@ -346,7 +346,7 @@ describe("PWA cache resource", () => {
     await expect(cached.revalidation).rejects.toBe(loaderError);
     expect(telemetry).toContainEqual({
       kind: "error",
-      reason: "MaverickTransportError",
+      reason: "LoopinoTransportError",
       revalidation: true,
     });
 
@@ -355,7 +355,7 @@ describe("PWA cache resource", () => {
       .rejects.toBe(loaderError);
     expect(telemetry).toContainEqual({
       kind: "error",
-      reason: "MaverickTransportError",
+      reason: "LoopinoTransportError",
       revalidation: false,
     });
 

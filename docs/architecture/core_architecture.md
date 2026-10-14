@@ -4,7 +4,7 @@ Date: 2026-04-17
 
 ## Purpose
 
-Define the target architecture of the Maverick core as a standalone, headless platform layer.
+Define the target architecture of the Loopino core as a standalone, headless platform layer.
 
 This document exists separately from the workspace architecture because the core must be redesigned with a clean and scalable boundary.
 
@@ -22,7 +22,7 @@ It does not describe the internal business models of apps.
 
 ## Core Definition
 
-The core is the platform runtime and control layer of Maverick.
+The core is the platform runtime and control layer of Loopino.
 
 It is not a business application.
 
@@ -41,7 +41,7 @@ The core should remain:
 The repository layout for the core must reflect this directly:
 
 - `core/` is the package root of the core
-- the core code lives directly under `/maverick/core/`
+- the core code lives directly under `/loopino/core/`
 - the core must not be nested under technical wrapper folders such as `backend/`, `runtime_backend/`, or `app/`
 - the repository must not contain an ambiguous `core/core/` subtree
 
@@ -66,7 +66,7 @@ The initial repository conventions should stay minimal and explicit:
 
 - Python `3.12`
 - the package root is the repository `core/` directory
-- tests live under `/maverick/tests/`
+- tests live under `/loopino/tests/`
 - early verification should rely on standard-library-friendly commands first
 
 At this stage the repository should prefer:
@@ -89,7 +89,7 @@ Use `routes.py` only for real HTTP route wiring that is imported by the core hos
 
 ## Persistence Boundary
 
-The Maverick domain model is storage-agnostic.
+The Loopino domain model is storage-agnostic.
 
 This applies in particular to:
 
@@ -97,11 +97,11 @@ This applies in particular to:
 - `service.py`
 - domain-level errors and contracts
 
-`.maverick` is rebuildable installation-local operating material. Deleting `.maverick` must not delete the authoritative control-plane database, users, workspace links, OAuth/provider credential bindings, runtime token records, core usage samples and rollups, or secret values.
+`.loopino` is rebuildable installation-local operating material. Deleting `.loopino` must not delete the authoritative control-plane database, users, workspace links, OAuth/provider credential bindings, runtime token records, core usage samples and rollups, or secret values.
 
-Hosted deployments use the configured durable control-plane store. The default adapter is JSON, selected with `MAVERICK_CONTROL_STORE=json` or by omitting `MAVERICK_CONTROL_STORE`. Its default root is `data/control-plane/json`, outside `.maverick`, so `.maverick` remains rebuildable installation-local operating material.
+Hosted deployments use the configured durable control-plane store. The default adapter is JSON, selected with `LOOPINO_CONTROL_STORE=json` or by omitting `LOOPINO_CONTROL_STORE`. Its default root is `data/control-plane/json`, outside `.loopino`, so `.loopino` remains rebuildable installation-local operating material.
 
-MongoDB is an optional adapter, selected with `MAVERICK_CONTROL_STORE=mongo` or by providing `MAVERICK_MONGODB_URI`. MongoDB is an implementation choice, not the architectural identity of the core.
+MongoDB is an optional adapter, selected with `LOOPINO_CONTROL_STORE=mongo` or by providing `LOOPINO_MONGODB_URI`. MongoDB is an implementation choice, not the architectural identity of the core.
 
 Rules:
 
@@ -116,10 +116,10 @@ Rules:
 - adapter migration surfaces belong to the core HTTP, CLI, and MCP layers; admin apps may call them but must not own adapter semantics or persistence code
 - a prepared adapter migration must not hot-swap stores inside a live process; cutover happens on backend restart so exactly one control-plane adapter is mounted at a time
 - deletion of old adapter storage must be post-cutover cleanup, scheduled only after target write and configuration update, and executed only after the restarted backend is healthy
-- generated service environment files contain durable secrets and must not be stored under `.maverick`
+- generated service environment files contain durable secrets and must not be stored under `.loopino`
 - the control-plane database is not encrypted as a whole; sensitive values must use the core secret domain instead of raw database or environment fields
 - database passwords, runtime signing secrets, widget signing secrets, provider API keys, and OAuth client secrets must be stored as core secret values or bootstrap secret refs, not as raw `.env` values
-- the secret-store encryption key should be loaded from a local key file such as `MAVERICK_SECRET_KEY_FILE`; `MAVERICK_SECRET_STORE_KEY` is a development/backward-compatibility fallback
+- the secret-store encryption key should be loaded from a local key file such as `LOOPINO_SECRET_KEY_FILE`; `LOOPINO_SECRET_STORE_KEY` is a development/backward-compatibility fallback
 
 This keeps the core open to future adapters such as PostgreSQL, SQLite, or another control-plane store without reshaping the domain model.
 
@@ -135,7 +135,7 @@ Admin-only Core Secrets inventory may expose issue-oriented logical needs for Va
 
 The core must not introduce a separate product secret system for infrastructure credentials. Pre-adapter infrastructure secrets, such as a MongoDB password needed before a Mongo connection can be opened, may live in a local bootstrap secret store backed by the same `SecretDocumentStore` envelope format and the same secret key loader.
 
-Workspace agents must not receive filesystem access to `.env.maverick`, secret key files, bootstrap secret files, or raw control-plane secret value storage. Full-access sessions are operator break-glass sessions and should be treated as capable of reading host-level secrets.
+Workspace agents must not receive filesystem access to `.env.loopino`, secret key files, bootstrap secret files, or raw control-plane secret value storage. Full-access sessions are operator break-glass sessions and should be treated as capable of reading host-level secrets.
 
 ## Core Responsibilities
 
@@ -203,7 +203,7 @@ workspace binding whose contract declares at least one HTTP sidecar. The core
 revokes browser tickets and sessions scoped to that workspace and app, stops
 only that binding's declared sidecar processes, starts them again, waits for
 their declared readiness, writes redaction-safe audit evidence, and publishes
-a workspace/app-scoped `maverick.app.runtime-changed` event. The capability
+a workspace/app-scoped `loopino.app.runtime-changed` event. The capability
 does not know why a sidecar is restarting and must not contain app-specific
 artifact, migration, or protocol logic.
 
@@ -258,7 +258,7 @@ The installation-level `/apps` directory is the server-managed app store and tru
 
 It may contain built-in apps, commercial sealed apps, source-available store apps, and validated app bundles.
 
-Remote catalog ingestion is still a core app-hosting responsibility. The official public catalog defaults to `https://maverick-app-store.versy.ai` and may be overridden per installation with `MAVERICK_APP_STORE_URL`. The app-store UI may request installation or uninstall for selected workspaces, but the core must own the authenticated operation that downloads a remote bundle, verifies its checksum, stages it under `apps/_bundles/<app_id>/<version>/`, registers the source as an `external_bundle`, creates workspace bindings for the authorized target workspaces, reports current workspace installation state, reports installation-level server app sources whether or not they are installed in the current workspace, installs already-registered server app sources into selected workspaces without copying source into the workspace, reports workspace-local app projects for the selected workspace context, and removes bindings during uninstall without deleting app-owned data.
+Remote catalog ingestion is still a core app-hosting responsibility. The official public catalog defaults to `https://loopino.giuntitrail.com/catalog` and may be overridden per installation with `LOOPINO_APP_STORE_URL`. The app-store UI may request installation or uninstall for selected workspaces, but the core must own the authenticated operation that downloads a remote bundle, verifies its checksum, stages it under `apps/_bundles/<app_id>/<version>/`, registers the source as an `external_bundle`, creates workspace bindings for the authorized target workspaces, reports current workspace installation state, reports installation-level server app sources whether or not they are installed in the current workspace, installs already-registered server app sources into selected workspaces without copying source into the workspace, reports workspace-local app projects for the selected workspace context, and removes bindings during uninstall without deleting app-owned data.
 
 The workspace-level `workspaces/<workspace_id>/apps/` directory is editable workspace material.
 
@@ -322,7 +322,7 @@ and remains separately attributable in diagnostics without exposing its identity
 or changing the main-model context meter in Chat.
 
 The macOS Device Use path is described in
-`docs/architecture/macos_device_use_bridge.md`. Maverick Core owns the Codex
+`docs/architecture/macos_device_use_bridge.md`. Loopino Core owns the Codex
 turn, transcript, provider credentials, tool-call ledger and same-turn image
 injection; the signed Mac app is only the native executor reached over the
 authenticated device WebSocket. Chat exposes a macOS-only PC use toggle:
@@ -637,7 +637,7 @@ inputs. They do not have independent rollout, digest, certification, or admissio
 lifecycles. OpenRouter requests use the configured Chat Completions route and
 validate actual response identity and transport errors. An alias response may
 report either the requested alias or an explicitly pinned resolved model id;
-every other resolved model or upstream fails closed. Maverick does not add a
+every other resolved model or upstream fails closed. Loopino does not add a
 second mutable vendor-catalog veto.
 
 The provider status API projects current configurations directly. A row is
@@ -876,7 +876,7 @@ So the repository should not describe the core through names such as:
 - `runtime_backend/`
 - `app/`
 
-unless one of those names refers to a real product domain, which is not the case for the Maverick core.
+unless one of those names refers to a real product domain, which is not the case for the Loopino core.
 
 Those names describe implementation posture, not product architecture.
 
@@ -899,7 +899,7 @@ So:
 
 ## Core As Platform Host
 
-The public Maverick host should run the core, not one particular app.
+The public Loopino host should run the core, not one particular app.
 
 In deployment terms, the intended model is:
 
@@ -985,7 +985,7 @@ OPFS. The validated session propagates its canonical local and mount app ids as
 internal HTTP and WebSocket scope authority. Every app or widget frontend path
 must match that bound owner before routing; the proxy marker alone grants no
 document authority. Core also injects a frozen, non-configurable
-`__MAVERICK_APP_FRAME_CONTEXT__` containing only the authenticated workspace id
+`__LOOPINO_APP_FRAME_CONTEXT__` containing only the authenticated workspace id
 and public mounted app id into every isolated app and widget HTML document.
 Apps may use this host-attested scope to validate local migration candidates,
 but it does not grant application authority. Base Shell validates both the
@@ -1008,7 +1008,7 @@ iframe sandbox can serialize a direct hidden-form navigation's `Origin` as
 `null`. Nested document CSP lists the exact platform and parent origins in
 `frame-ancestors`, while normal owner matching continues to deny the widget
 document on the parent app's own origin. The nested document announces
-`maverick.app-frame.loaded` only to its bound parent origin so an embedding app
+`loopino.app-frame.loaded` only to its bound parent origin so an embedding app
 can apply exact-origin/source readiness and a bounded fallback.
 
 This isolation boundary is mandatory. Core has no same-platform-origin app or
@@ -1046,7 +1046,7 @@ to `private, no-store` unless
 their owner opts into a narrower explicit revalidation contract.
 
 Base Shell's M2R production build uses the verified
-`maverick.frontend-assets.v2` manifest. Its `navigation_fallback` names the
+`loopino.frontend-assets.v2` manifest. Its `navigation_fallback` names the
 normal HTML entrypoint, and each `precache` record contains the public URL,
 artifact path, SHA-256 digest, and exact decoded byte length. Its build identity
 covers the Rollup graph, service-worker template, navigation fallback, and
@@ -1057,8 +1057,8 @@ alias for the superseded fallback-document field.
 
 The root worker owns only these Cache API namespaces:
 
-- `maverick-static-v2:<build_id>` for an atomically installed, verified shell;
-- the exact legacy `maverick-app-static-v2` and `maverick-base-shell-v3` names
+- `loopino-static-v2:<build_id>` for an atomically installed, verified shell;
+- the exact legacy `loopino-app-static-v2` and `loopino-base-shell-v3` names
   solely for bounded migration cleanup.
 
 App and widget documents run on an isolated origin and therefore are not
@@ -1075,7 +1075,7 @@ source-like files and maps remain private. Those requests use the browser HTTP
 cache, not a shell Cache API namespace: Core preserves compression, emits the
 public CORS/CORP contract, and grants one-year immutable caching only to bytes
 verified against the app's frontend manifest. The obsolete
-`maverick-app-static-v2` runtime path must not be presented as the normal
+`loopino-app-static-v2` runtime path must not be presented as the normal
 app-loading cache.
 
 Navigation is network-first with a bounded timeout. Only `/`, `/app`, and
@@ -1100,7 +1100,7 @@ missing or corrupt entries in place without discarding entries that still
 verify.
 
 Transport recovery is an internal RAM-only mechanism, not a render authority.
-Browser `online`, focus, and visibility events are retry hints; a Maverick
+Browser `online`, focus, and visibility events are retry hints; a Loopino
 response confirms useful transport. Idempotent reads may retry with
 single-flight execution, cancellable exponential backoff, jitter, and a
 frequency cap. A transient bootstrap failure keeps the normal pending UI,
@@ -1111,7 +1111,7 @@ workspace change, and scope revision, and they are never persisted.
 
 M3 implements these shared mechanics in `packages/pwa-cache/` while the public
 `features.data_cache` projection remains fail-closed by default. The owned
-structured-data database is `maverick-pwa-data-v1`, version 3, with split
+structured-data database is `loopino-pwa-data-v1`, version 3, with split
 metadata/payload stores, transactional migration, durable cleanup markers, and
 a RAM fallback. Entry identity contains host-attested user, workspace, owning
 app, resource, entity, policy revision, app-owned resource schema revision, and
@@ -1127,7 +1127,7 @@ Private structured entries require a fresh access lease bounded to 15 minutes.
 Base Shell renews that lease only after an authoritative session response,
 cancels RAM pending work at principal/scope boundaries, clears the applicable
 database scope on logout and `401`/`403`, and routes
-`maverick.app.data-changed` to scoped invalidation. Settings may expose only
+`loopino.app.data-changed` to scoped invalidation. Settings may expose only
 aggregate byte/entry/quota/backend diagnostics and a confirmed clear action;
 it cannot enumerate cached content or clear unrelated origin storage.
 Security-sensitive deletion never reports RAM fallback as success: an
@@ -1142,7 +1142,7 @@ the fixed `storage` app scope. A mounted Storage frame can request only a
 stable file id and source version over a private `MessageChannel`; it never
 receives OPFS, IndexedDB, host capability, classification, or scope authority.
 The broker independently resolves a server-owned
-`maverick.storage-file-cache-descriptor.v1`, rejects a cross-origin or
+`loopino.storage-file-cache-descriptor.v1`, rejects a cross-origin or
 identity-mismatched media URL, and applies the canonical local-persistence
 policy before opening bytes. Until a terminal decision, it revalidates the
 exact no-store feature projection for each open. Explicit disable, malformed
@@ -1163,8 +1163,8 @@ approval makes the descriptor ineligible. Public action results redact the
 approving actor. Enabling the global flag alone therefore cannot widen the
 persistence policy.
 
-The owned file manifest is `maverick-pwa-file-v1`, at IndexedDB version 1 with
-record schema 2, and the byte directory is `maverick-pwa-file-cache-v1` in
+The owned file manifest is `loopino-pwa-file-v1`, at IndexedDB version 1 with
+record schema 2, and the byte directory is `loopino-pwa-file-cache-v1` in
 OPFS. Keys bind user, workspace, app, stable file id, source version, policy
 revision, and schema version; random UUID-derived flat OPFS names reveal none
 of those values. A writer streams chunks to an unpublished path, records
@@ -1342,7 +1342,7 @@ ledger and duplicate-event suppression.
 
 ## Everything Above The Core Is An App
 
-The Maverick product shell should also be modeled as an app.
+The Loopino product shell should also be modeled as an app.
 
 That means the system may include apps such as:
 
@@ -1355,7 +1355,7 @@ That means the system may include apps such as:
 
 The `base-shell` app may host the frontend of other apps, but it is still only an app mounted by the core.
 
-The `base-shell` app owns the product shell frontend and should preserve the current Maverick shell interaction model while using core protocols.
+The `base-shell` app owns the product shell frontend and should preserve the current Loopino shell interaction model while using core protocols.
 
 That means:
 
@@ -1426,16 +1426,16 @@ An installed workspace app has a binding in the workspace and can be managed by 
 
 For hosted and local deployments, bootstrap credentials and signing/encryption material are installation configuration, not development defaults. The core must require the bootstrap admin credential plus refs or protected key-file paths for signing and encryption material before booting a hosted platform:
 
-- `MAVERICK_ADMIN_USERNAME`
-- `MAVERICK_SECRET_KEY_FILE`
-- `MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT`
-- `MAVERICK_RUNTIME_API_SECRET_REF`
-- `MAVERICK_WIDGET_CONTEXT_SECRET_REF`
+- `LOOPINO_ADMIN_USERNAME`
+- `LOOPINO_SECRET_KEY_FILE`
+- `LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT`
+- `LOOPINO_RUNTIME_API_SECRET_REF`
+- `LOOPINO_WIDGET_CONTEXT_SECRET_REF`
 
-The installer generates and preserves the secret-store key file and bootstrap secret values outside `.maverick`, defaulting the service env file to `.env.maverick` and the bootstrap secret files to `data/bootstrap-secrets/` for local installs. Systemd units load the env file through `EnvironmentFile=`.
-Static known values for admin credentials, runtime tokens, widget context tokens, or secret-store encryption are permitted only in explicit test invocations that set `MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS=1`. `MAVERICK_ENV=development`, `MAVERICK_ENV=dev`, and `MAVERICK_ENV=test` must not by themselves authorize static credentials or signing secrets. `MAVERICK_RUNTIME_API_SECRET`, `MAVERICK_WIDGET_CONTEXT_SECRET`, and `MAVERICK_SECRET_STORE_KEY` remain compatibility/dev fallbacks, not hosted-install defaults.
-At hosted startup, `MAVERICK_ADMIN_PASSWORD` and `MAVERICK_ADMIN_PASSWORD_REF` are optional bootstrap inputs. If a bootstrap admin password or password ref is configured, startup creates or repairs the configured admin password credential. If no bootstrap password is configured, startup may create or preserve the configured admin user without a password credential and must not reset an existing admin password. This keeps normal boot independent from plaintext admin credentials.
-Admin password recovery is an explicit operator-only core CLI action. It may create or reset the configured admin user's password directly in the durable identity store, revokes existing sessions for that user, and never persists the plaintext recovery password in `.env`, `.maverick`, or bootstrap secret files.
+The installer generates and preserves the secret-store key file and bootstrap secret values outside `.loopino`, defaulting the service env file to `.env.loopino` and the bootstrap secret files to `data/bootstrap-secrets/` for local installs. Systemd units load the env file through `EnvironmentFile=`.
+Static known values for admin credentials, runtime tokens, widget context tokens, or secret-store encryption are permitted only in explicit test invocations that set `LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS=1`. `LOOPINO_ENV=development`, `LOOPINO_ENV=dev`, and `LOOPINO_ENV=test` must not by themselves authorize static credentials or signing secrets. `LOOPINO_RUNTIME_API_SECRET`, `LOOPINO_WIDGET_CONTEXT_SECRET`, and `LOOPINO_SECRET_STORE_KEY` remain compatibility/dev fallbacks, not hosted-install defaults.
+At hosted startup, `LOOPINO_ADMIN_PASSWORD` and `LOOPINO_ADMIN_PASSWORD_REF` are optional bootstrap inputs. If a bootstrap admin password or password ref is configured, startup creates or repairs the configured admin password credential. If no bootstrap password is configured, startup may create or preserve the configured admin user without a password credential and must not reset an existing admin password. This keeps normal boot independent from plaintext admin credentials.
+Admin password recovery is an explicit operator-only core CLI action. It may create or reset the configured admin user's password directly in the durable identity store, revokes existing sessions for that user, and never persists the plaintext recovery password in `.env`, `.loopino`, or bootstrap secret files.
 
 Cookie-authenticated unsafe HTTP methods must carry browser-controlled same-origin proof. If a request with session cookies uses POST, PUT, PATCH, or DELETE and lacks both `Origin` and `Referer`, the platform host must reject it unless a future explicit CSRF token mechanism replaces that proof. A client-controlled custom header is not a CSRF boundary.
 
@@ -1496,7 +1496,7 @@ The shell may activate an app frame and send:
 
 ```json
 {
-  "type": "maverick.app.navigate",
+  "type": "loopino.app.navigate",
   "app_id": "chat",
   "params": {
     "thread_id": "thread_123"
@@ -1540,7 +1540,7 @@ For example, the Agents app may create a generic core runtime session and ask th
 
 ```json
 {
-  "type": "maverick.app.open-app",
+  "type": "loopino.app.open-app",
   "app_id": "chat",
   "params": {
     "runtime_session_id": "runtime_session_123",
@@ -1559,7 +1559,7 @@ If that creates or changes thread data that is also represented by an embedded w
 
 ```json
 {
-  "type": "maverick.chat.active-thread-changed",
+  "type": "loopino.chat.active-thread-changed",
   "owner_app_id": "chat",
   "active_thread_id": "<thread_id>"
 }
@@ -1575,7 +1575,7 @@ Mounted apps should also emit:
 
 ```json
 {
-  "type": "maverick.app.ready",
+  "type": "loopino.app.ready",
   "app_id": "chat"
 }
 ```
@@ -1596,7 +1596,7 @@ Built-in app bootstrap is contract-driven and scans installation-level app roots
 Future production packaging may still narrow the default installed set through installation configuration or app-store metadata, but the core bootstrap no longer names individual app ids for discovery.
 
 The root `/` platform route is configured through the hosted platform state.
-The local hosted default is `base-shell`, and operators may override it with `MAVERICK_ROOT_SHELL_APP_ID`.
+The local hosted default is `base-shell`, and operators may override it with `LOOPINO_ROOT_SHELL_APP_ID`.
 That default is a bootstrap configuration value, not a core dependency on the shell app's internals.
 
 These assumptions are not direct code-contamination problems because they do not import app internals into core.
@@ -1610,7 +1610,7 @@ The rule is:
 
 ## Human And Agent Interfaces
 
-Apps in Maverick are not only visual applications.
+Apps in Loopino are not only visual applications.
 
 An app may need to serve:
 
@@ -1667,7 +1667,7 @@ The main core host should run through the ASGI platform host so HTTP and WebSock
 
 The main `/health` endpoint must be served directly by the ASGI host without entering mounted app dispatch or the synchronous WSGI worker pool, so app, MCP, CLI, or runtime entrypoint saturation cannot hide basic backend liveness from the external watchdog.
 
-Mounted app backend routes under `/api/apps/<mount_app_id>/backend` must run through a dedicated ASGI executor instead of the generic WSGI dispatch pool, so slow app-owned subprocess work cannot starve core HTTP surfaces. `MAVERICK_APP_BACKEND_WORKERS` may tune that executor locally; the default should stay small enough to bound subprocess fan-out.
+Mounted app backend routes under `/api/apps/<mount_app_id>/backend` must run through a dedicated ASGI executor instead of the generic WSGI dispatch pool, so slow app-owned subprocess work cannot starve core HTTP surfaces. `LOOPINO_APP_BACKEND_WORKERS` may tune that executor locally; the default should stay small enough to bound subprocess fan-out.
 
 The ASGI host must implement `lifespan` shutdown so active mounted app backend subprocess trees are terminated cooperatively during service restarts instead of relying on `systemd` timeout kills.
 
@@ -1693,14 +1693,14 @@ If no provider is configured or the configured provider is unavailable, the watc
 
 The watchdog resolves the recovery provider from durable installation-local provider selection state, not from an independent raw shell command. Provider adapter configuration may still supply provider-specific command details for the selected provider, but that command is not a separate source of recovery authority when no provider is configured.
 
-The rescue agent should diagnose the current code and deployment state, apply the smallest fix that restores the backend, run targeted verification, restart `maverick-core.service` when systemd is available, and verify the health endpoint. It must not manually recreate product runtime agents. Runtime session spin-back remains the backend startup recovery responsibility described in the runtime recovery section.
+The rescue agent should diagnose the current code and deployment state, apply the smallest fix that restores the backend, run targeted verification, restart `loopino-core.service` when systemd is available, and verify the health endpoint. It must not manually recreate product runtime agents. Runtime session spin-back remains the backend startup recovery responsibility described in the runtime recovery section.
 
 ## Target Core Tree
 
 The target core tree should look like this:
 
 ```text
-/maverick/
+/loopino/
   core/
     api/
     main.py
@@ -1724,7 +1724,7 @@ Notes:
 - `api/` is the application bootstrap surface for backend or HTTP process wiring
 - `mcp/` and `cli/` are executable capability surfaces of the same core
 - `skills/` is instructional only
-- every other top-level directory under `core/` should represent a real Maverick core domain
+- every other top-level directory under `core/` should represent a real Loopino core domain
 
 ## Core Versus Agents App
 
@@ -1796,7 +1796,7 @@ and must not be weakened by instructional assets under `skills/`.
 The core lives at installation level under:
 
 ```text
-/maverick/core/
+/loopino/core/
 ```
 
 It is outside:
@@ -1946,7 +1946,7 @@ Chat may request the fixed `runtime_profile=research` only for a new agentic
 session in an effectively full-access workspace. This profile is a Core-owned
 runner, not an Agents catalog entity. Its semantic envelope excludes platform,
 workspace, agent, skill, app-reference, filesystem, shell, and
-inter-agent context. Hosted Maverick-agent profiles inherit the exact Browser
+inter-agent context. Hosted Loopino-agent profiles inherit the exact Browser
 `web_search`/`web_open` surface. A native adapter may opt in only by declaring
 the reviewed `native-web-only-v1` contract and enforcing its provider-native
 equivalent. Research accepts user-selected Storage uploads as bounded inline
@@ -1969,7 +1969,7 @@ cannot access or modify local files,
 repositories, or a shell. This is the only platform-owned Research instruction.
 Codex uses a chat-durable, auth-only app-server thread with native live web
 search, an empty sandboxed workdir, and no developer instructions, project
-documents, environment context, skills, MCP servers, local tools, or Maverick
+documents, environment context, skills, MCP servers, local tools, or Loopino
 runtime token. Research short-circuits workspace skill resolution and
 never calls provider skill preparation, and Codex disables bundled skills and
 skips host skill discovery.
@@ -1983,7 +1983,7 @@ unknown or unattested native transports. Thus new
 hosted API models inherit Research automatically, while a new CLI/native
 adapter remains fail-closed until it proves the same isolation. A new chat
 creates a fresh private provider thread; later processes resume only that
-chat's provider history. This removes Maverick-specific bias as far as the
+chat's provider history. This removes Loopino-specific bias as far as the
 integration can control it; provider and service safety policy remains outside
 this profile and is never represented as removable.
 
@@ -2032,7 +2032,7 @@ They should not implement app-specific WebSocket routes for core runtime events.
 
 Active context and cumulative consumption are different values. Active context is the latest root-session provider snapshot divided by that model's context window and may decrease after provider compaction. Chat consumption is the monotonic sum of normalized samples for the root session and every descendant runtime session reached through `creator_runtime_session_id`, with direct and delegated subtotals. Provider subscription limits are a third, separate concept: they describe account windows and must not be inferred from chat tokens or context percentage.
 
-Canonical samples, stream cursors, session summaries, hourly/daily provider-model buckets, and redaction-safe quota observations belong to the independent `core.usage` persistence owner. `MAVERICK_USAGE_STORE=sqlite` selects `data/control-plane/usage/usage.sqlite`, requires a verified WAL-safe SQLite runtime (at least 3.51.3), and fails closed if explicit migration has not supplied a compatible database. Each observation atomically commits its identity, normalized sample, stream cursor and projections with `synchronous=FULL`; no observation is buffered for later durability. A late cumulative sample adjusts only its indexed predecessor/successor neighborhood, including reset and model boundaries. Summary and chart GETs read projections without repairing or writing history. Runtime cleanup removes a session's samples and contributions transactionally.
+Canonical samples, stream cursors, session summaries, hourly/daily provider-model buckets, and redaction-safe quota observations belong to the independent `core.usage` persistence owner. `LOOPINO_USAGE_STORE=sqlite` selects `data/control-plane/usage/usage.sqlite`, requires a verified WAL-safe SQLite runtime (at least 3.51.3), and fails closed if explicit migration has not supplied a compatible database. Each observation atomically commits its identity, normalized sample, stream cursor and projections with `synchronous=FULL`; no observation is buffered for later durability. A late cumulative sample adjusts only its indexed predecessor/successor neighborhood, including reset and model boundaries. Summary and chart GETs read projections without repairing or writing history. Runtime cleanup removes a session's samples and contributions transactionally.
 
 The `document` Usage adapter remains an explicit transition exception: before cutover it uses the current control-plane JSON/Mongo collections, and after a verified reverse export it supports rollback. Operator-only Usage migration surfaces implement prepare, validate, cutover, backup, repair and rollback under an interprocess fence. Explicit repair backs up the current database and atomically rebuilds only derived tables from committed observations, validating their counters and stream cursors before commit; samples, retained numeric provider observations and quotas remain unchanged. They retain an immutable original export, verify canonical identities and projections, and reject source changes after preparation. Cutover is performed with producers drained and completed by restarting with the requested environment setting; stale adapter instances cannot keep writing. Rollback exports the current SQLite state, including post-cutover observations, before retiring the database. Ordinary startup neither creates a missing SQLite database nor migrates it. General control-plane migrations exclude Usage collections when the SQLite owner is configured and preserve the old Usage source archive during cleanup. Owner-aware status reports Usage separately; backups use SQLite's backup API to include committed WAL pages. Historical coverage starts when metering is deployed; neither the API nor the UI may imply that older unobserved turns were reconstructed.
 
@@ -2181,7 +2181,7 @@ For Codex, the local provider runs a persistent `codex app-server --listen stdio
 - `runtime.output.delta`
 - `runtime.output.structured`
 
-The Codex adapter must not silently drop app-server notifications just because their method name is not yet known by Maverick.
+The Codex adapter must not silently drop app-server notifications just because their method name is not yet known by Loopino.
 
 Known methods should be mapped intentionally. Codex app-server item types such as `commandExecution`, `fileChange`, and `webSearch` must be normalized as first-class generic tool calls with stable `tool_kind`, `tool_call_id`, status, summary, and structured detail fields such as command output, file changes, web-search query, and web-search results.
 
@@ -2215,7 +2215,7 @@ closing resources. The budget never interrupts active work or crosses owners.
 
 Before launching the Codex process, the adapter must prepare a runtime-scoped `CODEX_HOME`.
 
-This home is operational provider state owned by one Maverick runtime session.
+This home is operational provider state owned by one Loopino runtime session.
 It lives below that session's runtime root and is never shared by independent
 sessions. The provider thread database and its referenced files remain together
 inside that root; a missing, symlinked, or non-canonical home fails as
@@ -2244,15 +2244,15 @@ Runtime API tokens issued into provider launch environments must have store-back
 
 The source of Codex identity/configuration is configurable and path-agnostic:
 
-1. `MAVERICK_CODEX_HOME`
+1. `LOOPINO_CODEX_HOME`
 2. `CODEX_HOME`
 3. the current operating-system user's default Codex home
 
 The adapter may copy required files such as auth, version, installation identity, sanitized config, and rules.
 
-The sanitized runtime config must remove inherited MCP server and plugin sections from the operator Codex home. Maverick runtime sessions should not automatically expose user-global Codex connector apps such as GitHub, Gmail, Photoshop, AllTrails, or Notion unless Maverick explicitly materializes an allowed tool surface for that runtime.
+The sanitized runtime config must remove inherited MCP server and plugin sections from the operator Codex home. Loopino runtime sessions should not automatically expose user-global Codex connector apps such as GitHub, Gmail, Photoshop, AllTrails, or Notion unless Loopino explicitly materializes an allowed tool surface for that runtime.
 
-The Codex adapter owns Maverick's managed Codex model selection for runtime
+The Codex adapter owns Loopino's managed Codex model selection for runtime
 agents. It discovers the visible model catalog through the configured Codex
 binary, exposes viable models and reasoning efforts, and writes the selected
 `model` and turn/session reasoning effort into each runtime-scoped Codex config
@@ -2284,13 +2284,13 @@ version rather than a digest of mutable source files, so an ordinary package or
 source change cannot disable all sessions. The compact model menu shows only the
 model, provider, and reasoning control, without rollout or revision badges.
 
-The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
+The Codex app-server command for Loopino-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 
-Maverick-managed Codex runtime config must also own provider-hook configuration. The adapter installs a runtime-local `maverick_codex_post_tool_use_hook.py` script under the session `bin/`, removes inherited operator-home `hooks.*` sections, enables the Codex `hooks` feature, writes `unified_exec = false` under `[features]`, removes inherited deprecated `experimental_use_unified_exec_tool` keys, registers a Maverick-owned `[[hooks.PostToolUse]]` entry for supported shell tool names, and writes the matching Codex `hooks.state` trusted hash for that generated command identity. The hook calls Maverick's runtime-token provider-hook API and, for large or redacted shell output, returns `decision: "block"`, `continue: false`, and a compact replacement reason so Codex can continue from the compacted provider-history message instead of the original shell result when Codex accepts and runs the hook under its hook-trust policy. This is a Codex `Bash` hook integration, not a blanket claim for all provider tools or for sessions where Codex skips the hook.
+Loopino-managed Codex runtime config must also own provider-hook configuration. The adapter installs a runtime-local `loopino_codex_post_tool_use_hook.py` script under the session `bin/`, removes inherited operator-home `hooks.*` sections, enables the Codex `hooks` feature, writes `unified_exec = false` under `[features]`, removes inherited deprecated `experimental_use_unified_exec_tool` keys, registers a Loopino-owned `[[hooks.PostToolUse]]` entry for supported shell tool names, and writes the matching Codex `hooks.state` trusted hash for that generated command identity. The hook calls Loopino's runtime-token provider-hook API and, for large or redacted shell output, returns `decision: "block"`, `continue: false`, and a compact replacement reason so Codex can continue from the compacted provider-history message instead of the original shell result when Codex accepts and runs the hook under its hook-trust policy. This is a Codex `Bash` hook integration, not a blanket claim for all provider tools or for sessions where Codex skips the hook.
 
-Codex may also generate provider-bundled system skills under `CODEX_HOME/skills/.system` when app-server starts. Maverick-managed Codex runtimes must remove that provider-generated `.system` tree during runtime-home preparation and again after app-server initialization before starting or resuming a provider thread. The only runtime skills visible to Maverick agents are workspace-owned skill copies from the runtime session's selected `skill.catalog` provider and materialized by Maverick.
+Codex may also generate provider-bundled system skills under `CODEX_HOME/skills/.system` when app-server starts. Loopino-managed Codex runtimes must remove that provider-generated `.system` tree during runtime-home preparation and again after app-server initialization before starting or resuming a provider thread. The only runtime skills visible to Loopino agents are workspace-owned skill copies from the runtime session's selected `skill.catalog` provider and materialized by Loopino.
 
-For sandboxed Codex sessions, sanitized runtime config must also drop inherited Codex `[projects.*]` trust entries that point outside the workspace root. This is provider-specific defense in depth: the generic Maverick runtime policy remains provider-agnostic, while the Codex adapter prevents Codex-specific trust configuration from weakening a Maverick sandbox.
+For sandboxed Codex sessions, sanitized runtime config must also drop inherited Codex `[projects.*]` trust entries that point outside the workspace root. This is provider-specific defense in depth: the generic Loopino runtime policy remains provider-agnostic, while the Codex adapter prevents Codex-specific trust configuration from weakening a Loopino sandbox.
 
 For sandbox execution, the provider launch spec must carry both `readable_roots` and `writable_roots`.
 
@@ -2304,13 +2304,13 @@ When the configured Codex command is the NPM/NVM wrapper, the provider adapter s
 
 The same narrow binding rule applies to provider-bundled helper binaries that are required for normal workspace development. For Codex, `rg` must be exposed as a read-only file bind at `runtime/bin/rg` when the packaged ripgrep binary is available. The adapter should prefer the packaged standalone ripgrep binary over the `bin/rg` dotslash script, because sandboxed sessions must not require operator-home `dotslash` or package-manager trees. Exposing `rg` this way makes workspace-local search work without granting read access to the Codex package root, NVM installation, operator home, repository root, installation-level `core/`, installation-level `apps/`, or other workspaces.
 
-Codex turn sandbox policy must keep writable roots constrained to the workspace while allowing provider network access. Codex app-server 0.130 and newer no longer accept `workspaceWrite.readOnlyAccess`; Maverick therefore relies on the operating-system workspace sandbox above to enforce the read boundary, and the turn payload must not send legacy `readOnlyAccess` or top-level `readableRoots`. The network permission is required for Codex app-server sampling, streaming, and explicit web-research tasks; it is not permission to broaden raw filesystem access beyond the workspace boundary.
+Codex turn sandbox policy must keep writable roots constrained to the workspace while allowing provider network access. Codex app-server 0.130 and newer no longer accept `workspaceWrite.readOnlyAccess`; Loopino therefore relies on the operating-system workspace sandbox above to enforce the read boundary, and the turn payload must not send legacy `readOnlyAccess` or top-level `readableRoots`. The network permission is required for Codex app-server sampling, streaming, and explicit web-research tasks; it is not permission to broaden raw filesystem access beyond the workspace boundary.
 
 If the host cannot create that read/write confinement, sandbox runtime launch must fail closed. It must not fall back to Codex `workspace-write`, legacy Landlock flags, or any mode that still permits raw reads outside the workspace.
 
 It must not copy user-global, plugin-provided, or repository-local skills into the runtime home by default.
 
-Maverick core has no preinstalled runtime skills. Skills are extension data owned by a workspace `skill.catalog` provider. The built-in Skills app is the canonical provider and seeds bundled skill templates from `apps/*/skills/` into `workspaces/<workspace_id>/data/skills/skills/` during install and migration. Another selected `skill.catalog` provider may own the same kind of editable catalog under its own workspace data root. Operators enable or disable workspace skill copies from that selected provider's editable workspace data.
+Loopino core has no preinstalled runtime skills. Skills are extension data owned by a workspace `skill.catalog` provider. The built-in Skills app is the canonical provider and seeds bundled skill templates from `apps/*/skills/` into `workspaces/<workspace_id>/data/skills/skills/` during install and migration. Another selected `skill.catalog` provider may own the same kind of editable catalog under its own workspace data root. Operators enable or disable workspace skill copies from that selected provider's editable workspace data.
 
 At turn launch, the runtime materializes skills from the workspace-owned skill catalog selected for the runtime session. The canonical default provider is the built-in Skills app. If a runtime-owning app declares and selects a `runtime-skills` dependency for the `skill.catalog` interface, the runtime session must persist that selected provider app id and resolve both explicit `skill_ids` and implicit default skills from that provider's workspace data. Direct core runtime session creation through `/api/runtime/sessions` follows the same rule for the request `source_app_id` when that source app has a selected `runtime-skills` dependency, and may also accept an explicitly supplied `skill_catalog_app_id` only after validating that the app is an enabled `skill.catalog` provider in the workspace. `skill_activation_mode=implicit` preserves the legacy behavior: an empty `skill_ids` selection exposes every enabled skill and a non-empty selection narrows the catalog. `skill_activation_mode=explicit` keeps the automatic catalog out of the Codex prompt; a turn may supply only stable `invoked_skill_ids`, which core validates against the enabled catalog and any session allowlist before resolving a session-local materialized `SKILL.md` into a structured Codex skill input. A participant `skill_ids` snapshot is only an allowlist: static participant records, direct inter-agent messages, and persisted dynamic orchestration tasks carry their exact invocation set, never expand an empty request to the allowlist or catalog, and remain subject to the per-turn limit of 32. The adaptive planner receives a server-owned capability index. Every explicit non-empty allowlist is intersected with the currently enabled catalog before it is advertised; an empty intersection is reported as `none available`, while an enumeration failure is reported separately as `catalog unavailable`. Enabled IDs live in deduplicated shared scopes instead of being repeated per agent. Agent and skill pages share a global per-prompt character budget, advertise validated continuation cursors, and let the planner issue lookup-only JSON turns before producing a persistable plan or control decision. The initial planning turn may include one shared skill page; later safe points send only the bounded capability index unless the planner requests another page. Explicit tasks must choose their required subset from retrieved scope pages and failure feedback remains visible at the next control safe point. Successful same-turn steers atomically append their validated IDs to the turn receipt so compaction and backend-restart recovery preserve every skill activated during that turn. Missing legacy fields default to `implicit`; missing legacy participant invocation receipts default to an empty list; clients never supply filesystem paths.
 
@@ -2322,7 +2322,7 @@ create a `codex-home/skills` tree in the private home.
 
 Materialized runtime skills and rules must be copied into the session-local runtime home for sandbox sessions, not symlinked to source repository or operator home paths outside the workspace boundary. Explicit invocation must fail closed if the expected runtime copy is missing, is a symlink, or resolves outside `codex-home/skills`; absolute runtime paths must not be emitted in API payloads, transcript events, or logs.
 
-Codex app-server retry notifications must be streamed as redaction-safe runtime step updates without prematurely closing the Maverick turn. Raw provider error envelopes and terminal provider errors are not chat-facing progress events.
+Codex app-server retry notifications must be streamed as redaction-safe runtime step updates without prematurely closing the Loopino turn. Raw provider error envelopes and terminal provider errors are not chat-facing progress events.
 
 Only terminal app-server failures should transition the runtime turn to failed. After a terminal error notification, the adapter must allow a bounded grace interval for the authoritative `turn/completed` notification so final usage and prompt-budget events are drained before detaching the event sink; if Codex omits that terminal notification, the bounded fallback must still unblock the turn. Structured provider error categories must propagate through the provider-neutral completion contract. In particular, Codex `serverOverloaded` maps to `provider_overloaded`, while `cyberPolicy` and `cyber_policy` map to `provider_cybersecurity_policy_blocked`; both use stable public copy rather than generic execution failure or raw provider text. Core must not automatically retry a provider policy block.
 
@@ -2339,12 +2339,12 @@ The canonical Codex runtime flow is:
 5. runtime turn submission sends `turn/start` with the provider thread id
 6. while that regular turn is active, later admitted messages may send `turn/steer` with the expected provider turn id and `clientUserMessageId`
 7. provider app-server emits structured turn, item, tool, and output events
-8. runtime normalization persists provider events and accepted same-turn user messages as Maverick runtime events
-9. WebSocket transport streams the persisted Maverick runtime events
+8. runtime normalization persists provider events and accepted same-turn user messages as Loopino runtime events
+9. WebSocket transport streams the persisted Loopino runtime events
 
 Conversation memory for the active provider session comes from the provider thread.
 
-Chat thread records and runtime event history are still persisted by Maverick for UI replay, audit, recovery, and app-owned metadata, but the Codex model context must be preserved through `thread/start` and `thread/resume`.
+Chat thread records and runtime event history are still persisted by Loopino for UI replay, audit, recovery, and app-owned metadata, but the Codex model context must be preserved through `thread/start` and `thread/resume`.
 
 WebSocket delivery is the canonical realtime transport for active runtime turns.
 
@@ -2371,7 +2371,7 @@ Runtime turn cancellation is a persisted control-plane intent, not only an in-pr
 
 Cancellation terminalization is a durable per-turn outbox. Its stable event id, event payload, event persistence, thread release, and source-app callback delivery are recorded as separate idempotent phases. Cancellation-intent ownership and terminal-outbox ownership are independent compare-and-set results. The durable intent CAS is the sole public ownership decision: among concurrent external interrupts, exactly its first claimant reports `interrupted=true`. The outbox CAS is technical only and never changes a public interrupt result, so a worker or a second caller may drain unfinished phases without creating another successful owner. Event persistence repairs history, bounded tail, and app-stream projections independently, so a crash between those writes does not turn a partial event into a permanent claim. Source-app callbacks receive the stable runtime event id and are delivered at least once: a crash or error before the delivered phase is persisted leaves the callback recoverable by a request retry or backend restart. A turn worker that observes cancellation before or during its own final transition drains this same outbox and never publishes a parallel terminal event or callback. Session cleanup and backend recovery use the authoritative turn status and the same cancellation terminalizer, so a concurrent completion never produces cancelled evidence.
 
-For the local hosted bootstrap, workspace-scoped runtime-domain collections are persisted under the owning workspace root. Installation-local `.maverick/local-state/runtime/` is not the storage home for runtime sessions, runtime threads, turns, events, processes, or state.
+For the local hosted bootstrap, workspace-scoped runtime-domain collections are persisted under the owning workspace root. Installation-local `.loopino/local-state/runtime/` is not the storage home for runtime sessions, runtime threads, turns, events, processes, or state.
 
 This is a bootstrap adapter detail, not the domain model. Production deployments may replace it with MongoDB or another store adapter without changing runtime service interfaces.
 
@@ -2625,7 +2625,7 @@ They should not become a generic dumping ground for runtime control logic.
 
 ### Provider definitions versus credentials
 
-Maverick should distinguish clearly between:
+Loopino should distinguish clearly between:
 
 - provider definition
 - provider capability metadata
@@ -2706,16 +2706,16 @@ The first implementation supports:
 - app-scoped grants with logical names, action allowlists, structured HTTP/HTTPS or platform delivery target patterns, expiry, revocation, and actor metadata
 - controlled resolution for runtime use
 - app-scoped secret write and rotation requests from mounted app backend entrypoints, including optional `resource_type` and `resource_id`, with raw values stripped before frontend responses and explicit audit/event records for automatic secret create, rotate, and delivery-grant creation
-- grant-based ephemeral delivery into mounted app backend, CLI, and MCP entrypoint payloads for grants that allow the `app.backend` action, match the synthetic delivery target, and whose logical names are declared by the app contract; backend delivery uses `maverick://app.backend/backend` and may narrow to `maverick://app.backend/backend/<resource_type>/<resource_id>`, while CLI and MCP use per-entrypoint targets such as `maverick://app.backend/cli/<command>` and `maverick://app.backend/mcp/<tool>` and receive only logical names explicitly listed in that command or tool descriptor's `required_secrets`
+- grant-based ephemeral delivery into mounted app backend, CLI, and MCP entrypoint payloads for grants that allow the `app.backend` action, match the synthetic delivery target, and whose logical names are declared by the app contract; backend delivery uses `loopino://app.backend/backend` and may narrow to `loopino://app.backend/backend/<resource_type>/<resource_id>`, while CLI and MCP use per-entrypoint targets such as `loopino://app.backend/cli/<command>` and `loopino://app.backend/mcp/<tool>` and receive only logical names explicitly listed in that command or tool descriptor's `required_secrets`
 - admin HTTP surfaces for Vault to list metadata, create/import values, rotate, disable, revoke, manage grants, and inspect audit history without returning raw values
 - ephemeral secret delivery into provider launch paths under platform authority
 - operator inspection of metadata without exposing raw values
 - operator-facing CLI and policy-gated MCP hooks for inspection and full-access create, rotation, disable, and revoke operations without ever returning raw secret values; official Core CLI/MCP secret grant surfaces list, create, and revoke grants, list grant targets, expose recommended grant specs derived from app contracts and descriptors, and list redaction-safe secret audit records
 - audit records for create, rotate, disable, revoke, grant creation, grant revocation, resolve allow, and resolve deny
 
-Grant creation must validate that the referenced secret exists and is active, the target app is installed, enabled, and surface-resolvable in the current workspace, `app.backend` logical names are declared by the target app under `permissions.secrets.read`, the logical name is unique among non-expired active grants for that app, optional expiry is in the future, and target patterns are either `*`, normalized HTTP/HTTPS URL patterns without query strings or fragments, or the platform delivery target family `maverick://app.backend/*`. Resource-specific platform delivery target patterns must match the grant's own `resource_type` and `resource_id` scope. Empty or omitted target patterns may default to `*` only for internal `app.backend` delivery grants; external or user-directed actions such as browser autofill require explicit target patterns. `*` is valid only for single-action grants; mixed-action grants must use explicit target patterns because targets are grant-wide rather than per-action. Query strings supplied by runtime targets are ignored for matching and stripped from persisted audit payloads. Creating a secret refuses existing secret ids and aliases; value replacement must use rotation. Disabling or revoking a secret explicitly revokes active grants linked to that secret in the secret service layer, regardless of whether the mutation came through HTTP, CLI, MCP, or another core caller, and records cascade audit entries in each impacted grant workspace when an audit-capable surface is present. Secret grant target discovery belongs to an admin-only Core Secrets surface such as `/api/secret-grant-targets`; generic workspace app registry responses such as `/api/apps` must not expose secret permission logical names.
+Grant creation must validate that the referenced secret exists and is active, the target app is installed, enabled, and surface-resolvable in the current workspace, `app.backend` logical names are declared by the target app under `permissions.secrets.read`, the logical name is unique among non-expired active grants for that app, optional expiry is in the future, and target patterns are either `*`, normalized HTTP/HTTPS URL patterns without query strings or fragments, or the platform delivery target family `loopino://app.backend/*`. Resource-specific platform delivery target patterns must match the grant's own `resource_type` and `resource_id` scope. Empty or omitted target patterns may default to `*` only for internal `app.backend` delivery grants; external or user-directed actions such as browser autofill require explicit target patterns. `*` is valid only for single-action grants; mixed-action grants must use explicit target patterns because targets are grant-wide rather than per-action. Query strings supplied by runtime targets are ignored for matching and stripped from persisted audit payloads. Creating a secret refuses existing secret ids and aliases; value replacement must use rotation. Disabling or revoking a secret explicitly revokes active grants linked to that secret in the secret service layer, regardless of whether the mutation came through HTTP, CLI, MCP, or another core caller, and records cascade audit entries in each impacted grant workspace when an audit-capable surface is present. Secret grant target discovery belongs to an admin-only Core Secrets surface such as `/api/secret-grant-targets`; generic workspace app registry responses such as `/api/apps` must not expose secret permission logical names.
 
-Secret value envelopes use authenticated encryption. The JSON control-plane adapter stores values as AES-GCM envelopes with a value format, nonce, ciphertext, and key id; AAD binds the ciphertext to the value format, secret id, and key id. The active key comes from the operator-managed secret-store key material, and `MAVERICK_SECRET_STORE_PREVIOUS_KEYS` may provide previous decrypt-only keys during rotation. Legacy `mvr3secret1` values remain readable for migration.
+Secret value envelopes use authenticated encryption. The JSON control-plane adapter stores values as AES-GCM envelopes with a value format, nonce, ciphertext, and key id; AAD binds the ciphertext to the value format, secret id, and key id. The active key comes from the operator-managed secret-store key material, and `LOOPINO_SECRET_STORE_PREVIOUS_KEYS` may provide previous decrypt-only keys during rotation. Legacy `mvr3secret1` values remain readable for migration.
 
 #### Recommended first file layout
 
@@ -3008,13 +3008,13 @@ The same CLI framework should be able to host both:
 
 The core remains responsible for command registration, workspace authority checks, and exposure policy.
 
-The user-facing Maverick wrapper must keep discovery scoped by authority and owner. `maverick apps list --json` is the compact app-discovery command. Core-owned CLI commands are discovered and invoked through `maverick core cli list --json`, `maverick core cli inspect <command_id> --json`, and `maverick core cli run <command_id> ...`. App-owned CLI commands are discovered and invoked through `maverick app <app_id> cli list --json`, `maverick app <app_id> cli inspect <command_name> --json`, and `maverick app <app_id> cli run <command_name> ...`. Official app frontend rebuilds use `maverick app <app_id> frontend build --json`, which runs the core app-hosting frontend build operation and emits the mounted-frontend refresh event after success. The wrapper must not provide a default global command dump that merges all core and app commands, because agents should pull only the command surface relevant to the task.
+The user-facing Loopino wrapper must keep discovery scoped by authority and owner. `loopino apps list --json` is the compact app-discovery command. Core-owned CLI commands are discovered and invoked through `loopino core cli list --json`, `loopino core cli inspect <command_id> --json`, and `loopino core cli run <command_id> ...`. App-owned CLI commands are discovered and invoked through `loopino app <app_id> cli list --json`, `loopino app <app_id> cli inspect <command_name> --json`, and `loopino app <app_id> cli run <command_name> ...`. Official app frontend rebuilds use `loopino app <app_id> frontend build --json`, which runs the core app-hosting frontend build operation and emits the mounted-frontend refresh event after success. The wrapper must not provide a default global command dump that merges all core and app commands, because agents should pull only the command surface relevant to the task.
 
 For local sidecar invocations, read-only wrapper commands such as `apps list`, CLI/MCP `list` and `inspect`, SDK docs/templates, and developer-context reads must not perform the backend host bootstrap path when usable app/provider state already exists. They should use the existing persisted control-plane state. Outside a runtime session, app-dependent discovery may perform one app/provider bootstrap, still without admin bootstrap, when persisted app source and binding state is absent for the requested workspace, because returning an empty app surface from a never-initialized control-plane is not authoritative. Runtime agents should normally reach these commands through the runtime HTTP shim rather than through the developer wrapper.
 
-Canonical coding guidance for workspace agents must also be exposed through read-only core developer-context surfaces. `maverick core cli run developer-context.list --json` returns the canonical developer document catalog, and `maverick core cli run developer-context.read --doc-id <doc_id> --json` returns one canonical document body at a time. This lets sandboxed workspace agents read `AGENTS.md` and selected architecture documents without direct filesystem reads outside the workspace boundary.
+Canonical coding guidance for workspace agents must also be exposed through read-only core developer-context surfaces. `loopino core cli run developer-context.list --json` returns the canonical developer document catalog, and `loopino core cli run developer-context.read --doc-id <doc_id> --json` returns one canonical document body at a time. This lets sandboxed workspace agents read `AGENTS.md` and selected architecture documents without direct filesystem reads outside the workspace boundary.
 
-MCP follows the same scoped discovery rule. Core tools use `maverick core mcp list --json`, `maverick core mcp inspect <tool_name> --json`, and `maverick core mcp call <tool_name> ...`. App tools use `maverick app <app_id> mcp list --json`, `maverick app <app_id> mcp inspect <tool_name> --json`, and `maverick app <app_id> mcp call <tool_name> ...`. The core developer-context tools `developer-context.list` and `developer-context.read` expose the same canonical document catalog and one-document read contract over MCP. `--help` remains human-oriented parser help; `list` and `inspect` are the machine-readable discovery contract for agents.
+MCP follows the same scoped discovery rule. Core tools use `loopino core mcp list --json`, `loopino core mcp inspect <tool_name> --json`, and `loopino core mcp call <tool_name> ...`. App tools use `loopino app <app_id> mcp list --json`, `loopino app <app_id> mcp inspect <tool_name> --json`, and `loopino app <app_id> mcp call <tool_name> ...`. The core developer-context tools `developer-context.list` and `developer-context.read` expose the same canonical document catalog and one-document read contract over MCP. `--help` remains human-oriented parser help; `list` and `inspect` are the machine-readable discovery contract for agents.
 
 Per-app lifecycle CLI commands use the app namespace but remain core-owned operations. They do not require each app to implement its own install or uninstall script. `app.<app_id>.install` is available when a platform app source or workspace-local project exists. `app.<app_id>.uninstall` is available when the app has a workspace binding. `app.<app_id>.frontend.build` is available when the enabled app declares a frontend entrypoint and has a real frontend build script. `app.<app_id>.sidecars.restart` is available only for an enabled binding with declared sidecars; it revokes browser authority for that app/workspace, restarts only its declared processes, waits for readiness, audits safely, and emits the scoped runtime/frontend-changed event. `app.<app_id>.remove` is available only for workspace-local app projects, because complete removal deletes workspace-owned source and data rather than merely detaching a binding.
 
@@ -3077,7 +3077,7 @@ How those skill assets are installed into a runtime home is provider-specific.
 
 That installation strategy belongs to the selected provider adapter, because different backends such as Codex, Claude Code, or Antigravity CLI may require different runtime-home layouts or sync behavior.
 
-Visible runtime skill ids are plain workspace skill ids, for example `maverick-code-skill` or `chat-ops`. They are intentionally not namespaced by core or source app. The selected `skill.catalog` provider owns the editable runtime catalog for that session and must prevent or resolve name collisions before saving a skill.
+Visible runtime skill ids are plain workspace skill ids, for example `loopino-code-skill` or `chat-ops`. They are intentionally not namespaced by core or source app. The selected `skill.catalog` provider owns the editable runtime catalog for that session and must prevent or resolve name collisions before saving a skill.
 
 The workspace app named `Skills` is the canonical built-in operator view for runtime skills.
 
@@ -3356,7 +3356,7 @@ Password resets and user deactivation are auth-session lifecycle events. When a 
 
 ## Design Summary
 
-The target Maverick core should be:
+The target Loopino core should be:
 
 - headless
 - standalone
@@ -3395,9 +3395,46 @@ This is the foundation required to rebuild the core in a clean and scalable way.
 `core/installation` owns installation-wide address planning, DNS-provider
 connections, durable jobs, public HTTPS verification and selective restoration.
 Native admin-only HTTP/CLI/MCP operations use one typed catalog. Local infrastructure
-state belongs in `.maverick/installation`, outside tenant workspaces. Credentials
+state belongs in `.loopino/installation`, outside tenant workspaces. Credentials
 remain in Core Secrets and are delivered only to the fixed provider/Certbot
 consumer. An operator-managed root worker performs privileged host changes;
 request handlers and runtime agents do not execute privileged shell commands.
 See `installation_address` through Developer Context for the workflow and host
 lifecycle. Settings and Base Shell own UI; the Core remains headless.
+
+## Loopino installation source and material boundaries
+
+The phase 1 installation root is `/projects/loopino`. Installation-owned app
+artifact namespaces default to `data/app-artifacts` below that root.
+`LOOPINO_APP_ARTIFACT_STORE_ROOT` accepts only that designated absolute path;
+no other repository subtree or symlink component, including `data`, is allowed.
+The same namespace identity, ownership, protection and read-only mount checks apply.
+This supersedes earlier repository-parent artifact layout examples.
+
+First-boot enablement is selected by installation-owned `apps/bootstrap.json`
+(`schema_version: "1"`, unique `app_ids`). Source scanning remains generic;
+selection contains no Core/Shell app-id exceptions. The distributed selection
+contains standard apps. Custom sources require explicit installation and remain
+outside first-boot enablement. Invalid or unavailable selections fail closed.
+A source-only custom/test checkout without a selection uses contract discovery.
+
+Provider login sources default to `data/provider-auth/codex` and
+`data/provider-auth/antigravity` inside the installation. Ambient `CODEX_HOME`
+and the OS user's home are not sources for product authentication. Explicit
+`LOOPINO_CODEX_HOME` / `LOOPINO_ANTIGRAVITY_HOME` are product configuration;
+operator development credentials must never be supplied to them. Session-private
+provider homes still copy only reviewed authentication and managed runtime data.
+
+Node lives at `.toolchains/node`; SQLite 3.51.3 is loaded from
+`.toolchains/sqlite/3.51.3/lib`. Noninteractive service templates and the sourced
+`scripts/installation_environment.sh` expose these without changing host runtimes.
+
+The isolated Linux Node closure is narrowly declared as
+`.toolchains/node-v24.11.0-linux-x64`, exposed by the `.toolchains/node` alias.
+Admission checks the real binary, its exact declared root and every ancestor
+for root ownership, real file/directory type and absence of group/world write.
+The sandbox mounts that closure read-only. No other repository subtree gains
+system-runtime trust. The hosted workspace overlay requires Bubblewrap 0.11+
+(the prepared toolchain is 0.11.2, built without setuid support).
+Browser install/migrate hooks initialize app state only; Lab startup requires
+an explicit app action, so source validation cannot leave an unsolicited worker.

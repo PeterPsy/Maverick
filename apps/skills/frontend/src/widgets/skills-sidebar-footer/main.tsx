@@ -10,7 +10,7 @@ const WIDGET_ID = 'skills-sidebar-footer';
 function createSkillInShell(appId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: appId,
       params: {
         new_skill: true,
@@ -24,7 +24,7 @@ function createSkillInShell(appId: string) {
 function postPrimaryActionState(appId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.primary-action.state',
+      type: 'loopino.widget.primary-action.state',
       owner_app_id: appId,
       widget_id: WIDGET_ID,
       available: true,
@@ -47,11 +47,11 @@ function SkillsSidebarFooterWidget() {
       if (payload.owner_app_id !== appId || payload.widget_id !== WIDGET_ID) {
         return;
       }
-      if (payload.type === 'maverick.widget.primary-action.query') {
+      if (payload.type === 'loopino.widget.primary-action.query') {
         postPrimaryActionState(appId);
         return;
       }
-      if (payload.type === 'maverick.widget.primary-action.invoke') {
+      if (payload.type === 'loopino.widget.primary-action.invoke') {
         createSkillInShell(appId);
       }
     }

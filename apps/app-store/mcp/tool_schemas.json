@@ -1,6 +1,6 @@
 {
   "tools": {
-    "maverick_app_store": {
+    "loopino_app_store": {
       "effect_class": "destructive",
       "effect_class_by_argument": {
         "argument_name": "action",

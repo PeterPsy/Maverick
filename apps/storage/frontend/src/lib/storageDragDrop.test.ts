@@ -313,7 +313,7 @@ describe('Storage drag and drop payloads', () => {
 
   it('ignores malformed payloads and payloads from another mounted app', () => {
     const malformed = new FakeDataTransfer();
-    malformed.setData('application/x-maverick-storage-file', '{broken');
+    malformed.setData('application/x-loopino-storage-file', '{broken');
 
     expect(readStorageFileDragData(malformed, 'storage')).toBeNull();
 
@@ -321,18 +321,18 @@ describe('Storage drag and drop payloads', () => {
     expect(readStorageFileDragData(otherApp, 'storage')).toBeNull();
 
     const malformedFolder = new FakeDataTransfer();
-    malformedFolder.setData('application/x-maverick-storage-folder', '{broken');
+    malformedFolder.setData('application/x-loopino-storage-folder', '{broken');
     expect(readStorageFolderDragData(malformedFolder, 'storage')).toBeNull();
 
     const otherAppFolder = writeFolderPayload(storageDragPayloadFromFolder(storageFolder(), 'storage-fork'));
     expect(readStorageFolderDragData(otherAppFolder, 'storage')).toBeNull();
 
     const malformedSelection = new FakeDataTransfer();
-    malformedSelection.setData('application/x-maverick-storage-selection', '{broken');
+    malformedSelection.setData('application/x-loopino-storage-selection', '{broken');
     expect(readStorageSelectionDragData(malformedSelection, 'storage')).toBeNull();
 
     const nonArraySelection = new FakeDataTransfer();
-    nonArraySelection.setData('application/x-maverick-storage-selection', JSON.stringify({
+    nonArraySelection.setData('application/x-loopino-storage-selection', JSON.stringify({
       files: {},
       folders: [],
       owner_app_id: 'storage',
@@ -346,7 +346,7 @@ describe('Storage drag and drop payloads', () => {
     expect(readStorageSelectionDragData(otherAppSelection, 'storage')).toBeNull();
 
     const malformedDriveFile = new FakeDataTransfer();
-    malformedDriveFile.setData('application/x-maverick-storage-drive-file', JSON.stringify({
+    malformedDriveFile.setData('application/x-loopino-storage-drive-file', JSON.stringify({
       connection_id: 'drive_conn_1',
       display_path: '/../secret',
       drive_file_id: 'drive_file_1',
@@ -358,7 +358,7 @@ describe('Storage drag and drop payloads', () => {
     expect(readStorageDriveFileDragData(malformedDriveFile, 'storage')).toBeNull();
 
     const malformedDriveFolder = new FakeDataTransfer();
-    malformedDriveFolder.setData('application/x-maverick-storage-drive-folder', JSON.stringify({
+    malformedDriveFolder.setData('application/x-loopino-storage-drive-folder', JSON.stringify({
       connection_id: 'drive_conn_1',
       display_path: '/My Drive/reports',
       drive_file_id: '',

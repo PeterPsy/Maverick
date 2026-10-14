@@ -6,14 +6,14 @@ from gateway import Gateway, GatewayError, SECRET, normalize_origin
 from state import configuration, save_configuration, notifications, dismiss, notify
 
 def event(resource):
-    return {"type": "maverick.app.data-changed", "resource": resource}
+    return {"type": "loopino.app.data-changed", "resource": resource}
 
 def handle(payload, body=None):
     body = payload.body if body is None else body
     action = body.get("action", "status")
     user = payload.user_id
     if not user:
-        raise GatewayError("A trusted Maverick user is required.", 403)
+        raise GatewayError("A trusted Loopino user is required.", 403)
     secrets = payload.raw.get("app_secrets", {})
     key = secrets.get(SECRET) if isinstance(secrets, dict) else None
     config = configuration(payload.data_root)
@@ -25,7 +25,7 @@ def handle(payload, body=None):
         if payload.platform_role != "admin":
             raise GatewayError("Only a platform administrator can configure the gateway.", 403)
         if "api_key" in body:
-            raise GatewayError("Manage the OpenWA API key and its app grant in Maverick Vault.", 400)
+            raise GatewayError("Manage the OpenWA API key and its app grant in Loopino Vault.", 400)
         origin = normalize_origin(body.get("url"))
         info = Gateway(origin, key).request("POST", "/auth/validate", {})
         if not isinstance(info, dict) or info.get("valid") is not True:

@@ -1,4 +1,4 @@
-import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility } from '@maverick/pwa-cache';
+import { connectAppEventSocket, loopinoAppIsVisible, observeLoopinoVisibility } from '@loopino/pwa-cache';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { accountSummary } from '../../api';
 import { CALENDAR_UI_STATE_RESOURCE } from '../../calendar-ui-state';
@@ -19,7 +19,7 @@ export function useCalendarSidebarReads(appId: string) {
   const timer = useRef(0);
 
   const refreshCalendarState = useCallback(async () => {
-    if (!maverickAppIsVisible()) return;
+    if (!loopinoAppIsVisible()) return;
     read.current?.abort();
     const controller = new AbortController();
     read.current = controller;
@@ -37,19 +37,19 @@ export function useCalendarSidebarReads(appId: string) {
 
   const scheduleRefresh = useCallback(() => {
     window.clearTimeout(timer.current);
-    if (maverickAppIsVisible()) timer.current = window.setTimeout(() => { void refreshCalendarState(); }, 120);
+    if (loopinoAppIsVisible()) timer.current = window.setTimeout(() => { void refreshCalendarState(); }, 120);
   }, [refreshCalendarState]);
 
   useEffect(() => {
     const suspend = () => { window.clearTimeout(timer.current); read.current?.abort(); };
     let initial = true;
-    const stopVisibility = observeMaverickVisibility((visible) => {
+    const stopVisibility = observeLoopinoVisibility((visible) => {
       if (!visible) suspend();
       else if (initial) void refreshCalendarState();
       initial = false;
     });
     const stopEvents = connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((event) => {
-      if (event.type === 'maverick.app.data-changed' && event.owner_app_id === appId
+      if (event.type === 'loopino.app.data-changed' && event.owner_app_id === appId
           && event.resource !== CALENDAR_UI_STATE_RESOURCE) scheduleRefresh();
     }, scheduleRefresh);
     return () => { suspend(); stopVisibility(); stopEvents(); };

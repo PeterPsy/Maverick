@@ -163,7 +163,7 @@ describe("HumanMessage", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
       expect(messages[0]?.message).toEqual({
-        type: "maverick.app.open-app",
+        type: "loopino.app.open-app",
         app_id: "storage",
         params: {
           provider: "google_drive",

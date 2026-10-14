@@ -3,7 +3,7 @@
 export function createBackgroundConnector({binding,session,status,execute,cancel,stop,fetch:request=globalThis.fetch}) {
   let ticking=false,active=null;
   const call=async(b,grant,body,method="POST")=>{
-    const response=await request(new URL("/.well-known/maverick-app-background/request",b.connectorFrameOrigin),{
+    const response=await request(new URL("/.well-known/loopino-app-background/request",b.connectorFrameOrigin),{
       method,credentials:"omit",cache:"no-store",redirect:"error",signal:AbortSignal.timeout(method === "DELETE" || body?.action === "companion.disconnect" ? 3000 : 15000),
       headers:{"Content-Type":"application/json",Authorization:`Bearer ${grant}`},...(method === "POST" ? {body:JSON.stringify(body)} : {}),
     });

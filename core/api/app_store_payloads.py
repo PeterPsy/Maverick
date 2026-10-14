@@ -1,4 +1,4 @@
-"""Authenticated Maverick App Store API surface."""
+"""Authenticated Loopino App Store API surface."""
 
 from __future__ import annotations
 

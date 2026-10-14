@@ -7,16 +7,16 @@ import {
   PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
   PWA_DATA_CACHE_BROKER_OPEN,
   PWA_DATA_CACHE_BROKER_RESULT,
-} from "@maverick/pwa-cache";
+} from "@loopino/pwa-cache";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
 import { shellCacheLifecycle, shellRetryCoordinator, shellPwaMetrics, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
-import { setMaverickFrameOrigin, type MaverickFrameScope } from "./iframePolicy";
+import { setLoopinoFrameOrigin, type LoopinoFrameScope } from "./iframePolicy";
 import resourceDeclarations from "./pwaDataCacheResourceDeclarations.v1.json";
 
 type PortMessage = Record<string, unknown>;
 
 const appWindow = {} as Window;
-const appOrigin = "https://af-app-store.sidecars.maverick.test";
+const appOrigin = "https://af-app-store.sidecars.loopino.test";
 const appFrame = {
   contentWindow: appWindow,
   dataset: {},
@@ -28,9 +28,9 @@ function registerFrame(
   frame: HTMLIFrameElement,
   origin: string,
   ownerAppId: string,
-  frameScope: MaverickFrameScope = FRAME_SCOPE,
+  frameScope: LoopinoFrameScope = FRAME_SCOPE,
 ): void {
-  setMaverickFrameOrigin(frame, origin, ownerAppId, frameScope);
+  setLoopinoFrameOrigin(frame, origin, ownerAppId, frameScope);
   registeredFrames.push(frame);
 }
 
@@ -88,7 +88,7 @@ async function nextOfType(messages: ReturnType<typeof portMessages>, type: strin
 
 function broker(
   featureEnabled: () => Promise<boolean | null> = async () => true,
-  frameScope: MaverickFrameScope = FRAME_SCOPE,
+  frameScope: LoopinoFrameScope = FRAME_SCOPE,
 ): PwaDataCacheBroker {
   return new PwaDataCacheBroker({
     featureEnabled,
@@ -104,7 +104,7 @@ describe("Base Shell structured data-cache broker", () => {
 
   beforeEach(() => {
     const shellWindow = new EventTarget() as EventTarget & Window;
-    Object.assign(shellWindow, { location: { origin: "https://maverick.test" }, top: shellWindow });
+    Object.assign(shellWindow, { location: { origin: "https://loopino.test" }, top: shellWindow });
     vi.stubGlobal("window", shellWindow);
     registerFrame(appFrame, appOrigin, "app-store");
     vi.unstubAllGlobals();
@@ -113,7 +113,7 @@ describe("Base Shell structured data-cache broker", () => {
   afterEach(() => {
     brokers.splice(0).forEach((item) => item.dispose());
     authorizationSubscriptions.splice(0).forEach((unsubscribe) => unsubscribe());
-    registeredFrames.splice(0).forEach((frame) => setMaverickFrameOrigin(frame, null, "cleanup", FRAME_SCOPE));
+    registeredFrames.splice(0).forEach((frame) => setLoopinoFrameOrigin(frame, null, "cleanup", FRAME_SCOPE));
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -123,13 +123,13 @@ describe("Base Shell structured data-cache broker", () => {
     const subject = broker(); brokers.push(subject);
     const otherWindow = {} as Window;
     const otherFrame = { contentWindow: otherWindow, dataset: {} } as unknown as HTMLIFrameElement;
-    vi.stubGlobal("window", { location: { origin: "https://maverick.test" } });
+    vi.stubGlobal("window", { location: { origin: "https://loopino.test" } });
     registerFrame(otherFrame, appOrigin, "app-store");
     vi.stubGlobal("window", undefined);
     const entityId = crypto.randomUUID();
     const request = { appId: "app-store", entityId, resource: "catalog", schemaRevision: "app-store.catalog.v1" };
     const options = (source: Window, signal?: AbortSignal) => ({
-      parentOrigin: "https://maverick.test", signal,
+      parentOrigin: "https://loopino.test", signal,
       parentWindow: {
         postMessage(data: unknown, _origin: string, ports?: Transferable[]) {
           subject.handleWindowMessage({ data, ports, origin: appOrigin, source } as unknown as MessageEvent, new Set(["app-store"]));
@@ -171,7 +171,7 @@ describe("Base Shell structured data-cache broker", () => {
     ['fitness-coach', 'sanitized-bootstrap-and-thumbnails', { schema: 'fitness-coach.bootstrap.v1', workspace_id: 'default', app_id: 'fitness-coach', state_version: 'one', workouts: [], workout_summaries: [], exercises: [], tags: [], runs: [], selected_workout: null, view_state: { selected_workout_id: null, setup_tab: 'workout-settings', sidebar_query: '' } }],
   ] as const)('persists the approved %s projection and delivers warm paint before conditional network', async (appId, resource, payload) => {
     vi.stubGlobal('navigator', { storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) } });
-    const hostWindow = Object.assign(new EventTarget(), { location: { origin: 'https://maverick.test' } });
+    const hostWindow = Object.assign(new EventTarget(), { location: { origin: 'https://loopino.test' } });
     Object.assign(hostWindow, { top: hostWindow });
     vi.stubGlobal('window', hostWindow);
     registerFrame(appFrame, appOrigin, appId);
@@ -215,7 +215,7 @@ describe("Base Shell structured data-cache broker", () => {
     const result = readThroughParentDataCache({
       appId: "app-store", entityId: "retry-miss", resource: "catalog", schemaRevision: "app-store.catalog.v1",
     }, loader, {
-      parentOrigin: "https://maverick.test",
+      parentOrigin: "https://loopino.test",
       parentWindow: {
         postMessage(data: unknown, _origin: string, transfer?: Transferable[]) {
           subject.handleWindowMessage({ data, ports: transfer, origin: appOrigin, source: appWindow } as unknown as MessageEvent, new Set(["app-store"]));
@@ -275,7 +275,7 @@ describe("Base Shell structured data-cache broker", () => {
       app_id: "app-store",
       kind: "value",
       network_request_id: network.network_request_id,
-      payload: { items: [], revision: "revision-one", schema: "maverick.app-store-catalog.v1" },
+      payload: { items: [], revision: "revision-one", schema: "loopino.app-store-catalog.v1" },
       request_id: "request-one",
       revision: "revision-one",
       status: "ok",
@@ -378,7 +378,7 @@ describe("Base Shell structured data-cache broker", () => {
       app_id: "app-store",
       kind: "value",
       network_request_id: seedNetwork.network_request_id,
-      payload: { items: [{ app_id: "private-b" }], revision: "workspace-b-revision", schema: "maverick.app-store-catalog.v1" },
+      payload: { items: [{ app_id: "private-b" }], revision: "workspace-b-revision", schema: "loopino.app-store-catalog.v1" },
       request_id: "request-scope-seed",
       revision: "workspace-b-revision",
       status: "ok",
@@ -414,9 +414,9 @@ describe("Base Shell structured data-cache broker", () => {
     await nextOfType(currentMessages, PWA_DATA_CACHE_BROKER_RESULT);
 
     const oldWindow = {} as Window;
-    const oldOrigin = "https://af-old-app-store.sidecars.maverick.test";
+    const oldOrigin = "https://af-old-app-store.sidecars.loopino.test";
     const oldFrame = { contentWindow: oldWindow, dataset: {} } as unknown as HTMLIFrameElement;
-    const shellWindow = { location: { origin: "https://maverick.test" } } as unknown as Window;
+    const shellWindow = { location: { origin: "https://loopino.test" } } as unknown as Window;
     Object.assign(shellWindow, { top: shellWindow });
     vi.stubGlobal("window", shellWindow);
     registerFrame(oldFrame, oldOrigin, "app-store", oldFrameScope);
@@ -447,7 +447,7 @@ describe("Base Shell structured data-cache broker", () => {
     const seed = {
       items: [],
       revision: "seed-revision",
-      schema: "maverick.app-store-catalog.v1",
+      schema: "loopino.app-store-catalog.v1",
     };
 
     subject.handleWindowMessage(requestEvent(channel, {
@@ -503,7 +503,7 @@ describe("Base Shell structured data-cache broker", () => {
     const network = await nextOfType(messages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
     channel.port1.postMessage({
       app_id: "app-store",
-      error: { name: "MaverickHttpError", status: 401 },
+      error: { name: "LoopinoHttpError", status: 401 },
       network_request_id: network.network_request_id,
       request_id: "request-auth",
       status: "error",
@@ -556,7 +556,7 @@ describe("Base Shell structured data-cache broker", () => {
       app_id: "app-store",
       kind: "value",
       network_request_id: seedNetwork.network_request_id,
-      payload: { items: [], revision: "warm-revision", schema: "maverick.app-store-catalog.v1" },
+      payload: { items: [], revision: "warm-revision", schema: "loopino.app-store-catalog.v1" },
       request_id: "request-warm-auth-seed",
       revision: "warm-revision",
       status: "ok",
@@ -582,7 +582,7 @@ describe("Base Shell structured data-cache broker", () => {
     const revalidation = await nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
     warmChannel.port1.postMessage({
       app_id: "app-store",
-      error: { name: "MaverickHttpError", status: 403 },
+      error: { name: "LoopinoHttpError", status: 403 },
       network_request_id: revalidation.network_request_id,
       request_id: "request-warm-auth-revalidation",
       status: "error",
@@ -602,12 +602,12 @@ describe("Base Shell structured data-cache broker", () => {
     const subject = broker();
     brokers.push(subject);
     const widgetWindow = {} as Window;
-    const widgetOrigin = "https://af-storage-widget.sidecars.maverick.test";
+    const widgetOrigin = "https://af-storage-widget.sidecars.loopino.test";
     const widgetFrame = {
       contentWindow: widgetWindow,
       dataset: {},
     } as unknown as HTMLIFrameElement;
-    const shellWindow = { location: { origin: "https://maverick.test" } } as unknown as Window;
+    const shellWindow = { location: { origin: "https://loopino.test" } } as unknown as Window;
     vi.stubGlobal("window", shellWindow);
     registerFrame(widgetFrame, widgetOrigin, "storage");
     vi.unstubAllGlobals();
@@ -678,7 +678,7 @@ describe("Base Shell structured data-cache broker", () => {
   });
 
   it("maps Storage metadata events to the declared catalog resource", async () => {
-    const shellWindow = { location: { origin: "https://maverick.test" } } as unknown as Window;
+    const shellWindow = { location: { origin: "https://loopino.test" } } as unknown as Window;
     Object.assign(shellWindow, { top: shellWindow });
     vi.stubGlobal("window", shellWindow);
     const subject = broker();
@@ -689,7 +689,7 @@ describe("Base Shell structured data-cache broker", () => {
       status: "complete",
     });
     const storageWindow = {} as Window;
-    const storageOrigin = "https://af-storage.sidecars.maverick.test";
+    const storageOrigin = "https://af-storage.sidecars.loopino.test";
     const storageFrame = {
       contentWindow: storageWindow,
       dataset: {},
@@ -700,7 +700,7 @@ describe("Base Shell structured data-cache broker", () => {
       data: {
         owner_app_id: "storage",
         resource: "drive-connections",
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
       },
       origin: storageOrigin,
       source: storageWindow,
@@ -713,7 +713,7 @@ describe("Base Shell structured data-cache broker", () => {
   });
 
   it("does not let a registered widget invalidate another app owner's cache", async () => {
-    const shellWindow = { location: { origin: "https://maverick.test" } } as unknown as Window;
+    const shellWindow = { location: { origin: "https://loopino.test" } } as unknown as Window;
     Object.assign(shellWindow, { top: shellWindow });
     vi.stubGlobal("window", shellWindow);
     const subject = broker();
@@ -724,7 +724,7 @@ describe("Base Shell structured data-cache broker", () => {
       status: "complete",
     });
     const storageWindow = {} as Window;
-    const storageOrigin = "https://af-storage-widget.sidecars.maverick.test";
+    const storageOrigin = "https://af-storage-widget.sidecars.loopino.test";
     const storageFrame = {
       contentWindow: storageWindow,
       dataset: {},
@@ -735,7 +735,7 @@ describe("Base Shell structured data-cache broker", () => {
       data: {
         owner_app_id: "website-studio",
         resource: "source",
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
       },
       origin: storageOrigin,
       source: storageWindow,
@@ -747,7 +747,7 @@ describe("Base Shell structured data-cache broker", () => {
 
   it("cancels an accepted read before invalidating its resource", async () => {
     const shellWindow = new EventTarget() as EventTarget & Window;
-    Object.assign(shellWindow, { location: { origin: "https://maverick.test" }, top: shellWindow });
+    Object.assign(shellWindow, { location: { origin: "https://loopino.test" }, top: shellWindow });
     const invalidation = vi.spyOn(shellCacheLifecycle, "handleDataChanged").mockResolvedValue({
       pendingCleanupCount: 0,
       removed: 1,
@@ -771,7 +771,7 @@ describe("Base Shell structured data-cache broker", () => {
         entity_id: entityId,
         owner_app_id: "app-store",
         resource: "catalog",
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
       },
       origin: shellWindow.location.origin,
       source: shellWindow,

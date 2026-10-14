@@ -4,7 +4,7 @@
   "name": "Vault",
   "version": "0.1.0",
   "description": "Active Credentials and Connection Issues workspace app for platform-owned Core Secrets metadata, issue review, controlled credential input, and advanced diagnostics.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
@@ -50,7 +50,7 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_vault"
+      "loopino_vault"
     ],
     "cli_commands": [
       "vault"

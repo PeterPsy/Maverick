@@ -1,10 +1,10 @@
-import { postToMaverickFrame } from "../iframePolicy";
+import { postToLoopinoFrame } from "../iframePolicy";
 
 export function syncAppFrameShellLayout(frame: HTMLIFrameElement | null | undefined, isMobileLayout: boolean): boolean {
-  if (!frame?.contentWindow || !frame.dataset.maverickFrameOrigin) return false;
-  postToMaverickFrame(frame, {
+  if (!frame?.contentWindow || !frame.dataset.loopinoFrameOrigin) return false;
+  postToLoopinoFrame(frame, {
     mobile: isMobileLayout,
-    type: "maverick.shell.layout-changed",
+    type: "loopino.shell.layout-changed",
   });
   return true;
 }

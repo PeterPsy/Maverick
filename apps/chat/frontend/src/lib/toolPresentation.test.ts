@@ -43,7 +43,7 @@ describe("shellCommandActivityLabel", () => {
   });
 
   it("uses a readable bounded fallback for unknown commands", () => {
-    expect(shellCommandActivityLabel("maverick core cli list --json", "started")).toBe("Running Maverick command");
+    expect(shellCommandActivityLabel("loopino core cli list --json", "started")).toBe("Running Loopino command");
     expect(shellCommandActivityLabel("custom-check --all", "completed")).toBe("Ran custom-check");
   });
 });
@@ -52,18 +52,18 @@ describe("toolActivityLabel", () => {
   it("describes web searches with their query", () => {
     expect(
       toolActivityLabel({
-        detail: { query: "Maverick runtime activity", tool_kind: "web_search" },
+        detail: { query: "Loopino runtime activity", tool_kind: "web_search" },
         name: "web_search",
         status: "started",
       }),
-    ).toBe("Searching the web for “Maverick runtime activity”");
+    ).toBe("Searching the web for “Loopino runtime activity”");
     expect(
       toolActivityLabel({
-        detail: { query: "Maverick runtime activity", tool_kind: "web_search" },
+        detail: { query: "Loopino runtime activity", tool_kind: "web_search" },
         name: "web_search",
         status: "completed",
       }),
-    ).toBe("Searched the web for “Maverick runtime activity”");
+    ).toBe("Searched the web for “Loopino runtime activity”");
   });
 
   it("uses structured file changes when available", () => {

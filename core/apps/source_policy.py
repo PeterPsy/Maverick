@@ -1,4 +1,4 @@
-"""Shared source-tree copy/package exclusion policy for Maverick apps."""
+"""Shared source-tree copy/package exclusion policy for Loopino apps."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 EXCLUDED_SOURCE_NAMES = {
     ".git",
     ".hg",
-    ".maverick",
+    ".loopino",
     ".svn",
     "__pycache__",
     "logs",

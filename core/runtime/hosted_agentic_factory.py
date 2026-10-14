@@ -12,11 +12,11 @@ from core.egress.agentic_transforms import canonical_egress_content
 from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import AgenticRuntimeError, ProviderError
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     HOSTED_TOOL_LOOP_ADAPTER_ID,
     HOSTED_TOOL_LOOP_ADAPTER_VERSION,
 )
-from core.providers.maverick_agent_onboarding import MaverickAgentOnboardingCatalog
+from core.providers.loopino_agent_onboarding import LoopinoAgentOnboardingCatalog
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_codex_command_paths import resolve_codex_vendored_tool
 from core.providers.provider_registry import ProviderRegistry
@@ -84,7 +84,7 @@ from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 
-HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
+HOSTED_AGENTIC_ENGINE_ID = "loopino-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = HOSTED_TOOL_LOOP_ADAPTER_ID
 HOSTED_AGENTIC_ADAPTER_VERSION = HOSTED_TOOL_LOOP_ADAPTER_VERSION
 
@@ -94,7 +94,7 @@ def build_hosted_agentic_engine_adapter(
     *,
     provider_registry: ProviderRegistry,
     classifier: HostedContentClassifier | None = None,
-    onboarding_catalog: MaverickAgentOnboardingCatalog | None = None,
+    onboarding_catalog: LoopinoAgentOnboardingCatalog | None = None,
 ) -> HostedAgenticEngineAdapter:
     """Compose the hosted loop from live Core-owned policy and storage surfaces."""
     if (

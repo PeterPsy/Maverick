@@ -20,7 +20,7 @@ from core.identity.service import build_auth_session, session_expiry
 from core.secrets.errors import SecretError
 from core.secrets.secret_resolution import parse_secret_ref
 
-FLOW_COOKIE = "maverick_google_flow"
+FLOW_COOKIE = "loopino_google_flow"
 
 
 def _flow_cookie(value, *, secure, clear=False):
@@ -43,7 +43,7 @@ def provider_status(state):
             configured = configured and secret.status == "active"
     except (google.AccountError, SecretError, ValueError):
         configured = False
-    return {"configured": bool(configured), "registration_enabled": os.environ.get("MAVERICK_GOOGLE_ALLOW_REGISTRATION", "1") == "1",
+    return {"configured": bool(configured), "registration_enabled": os.environ.get("LOOPINO_GOOGLE_ALLOW_REGISTRATION", "1") == "1",
             "services": [{"id": key, "label": value["label"]} for key, value in google.SERVICES.items()],
             "login_services": required_login_services(state)}
 
@@ -56,7 +56,7 @@ def _same_origin(environ):
     except AppHostingError:
         raise google.AccountError("origin_not_allowed", status=403) from None
     # Authentication/account linking is reserved for the top-level shell.
-    if environ.get("maverick.app_frame_proxy") or environ.get("HTTP_ORIGIN") != expected:
+    if environ.get("loopino.app_frame_proxy") or environ.get("HTTP_ORIGIN") != expected:
         raise google.AccountError("origin_not_allowed", status=403)
 
 
@@ -170,7 +170,7 @@ def handle_connected_accounts_api(state, environ, start_response):
             return json_response(start_response, {"error": "not_found"}, status="404 Not Found")
         if context is None:
             raise google.AccountError("authentication_required", status=401)
-        if environ.get("maverick.app_frame_proxy"):
+        if environ.get("loopino.app_frame_proxy"):
             raise google.AccountError("origin_not_allowed", status=403)
         if method != "GET":
             _same_origin(environ)

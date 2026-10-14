@@ -67,7 +67,7 @@ describe("external URL broker", () => {
 
   it("discovers the installed native handler and requests one external launch", async () => {
     const postMessage = vi.fn(async () => true);
-    vi.stubGlobal("webkit", { messageHandlers: { maverickExternalURL: { postMessage } } });
+    vi.stubGlobal("webkit", { messageHandlers: { loopinoExternalURL: { postMessage } } });
     const open = vi.spyOn(window, "open");
     const assign = vi.spyOn(window.location, "assign");
     await openExternalUrl("https://example.com/article");

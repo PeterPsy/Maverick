@@ -47,7 +47,7 @@ class McpInvocationContext:
 
 @dataclass(frozen=True)
 class McpToolDefinition:
-    """Describe one MCP tool exposed through the Maverick platform host."""
+    """Describe one MCP tool exposed through the Loopino platform host."""
 
     tool_name: str
     description: str

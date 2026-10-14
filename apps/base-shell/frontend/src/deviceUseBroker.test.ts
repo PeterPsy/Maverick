@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeviceUseBroker, DEVICE_USE_REQUEST } from "./deviceUseBroker";
-import { setMaverickFrameOrigin } from "./iframePolicy";
+import { setLoopinoFrameOrigin } from "./iframePolicy";
 
 const scope = { workspaceId: "default", sessionGeneration: "login-1" };
 afterEach(() => { document.body.innerHTML = ""; });
 
 function request(action = "status", extras: Record<string, unknown> = {}) {
   const frame = document.createElement("iframe"); document.body.append(frame);
-  setMaverickFrameOrigin(frame, "https://chat-frame.example", "chat", scope);
+  setLoopinoFrameOrigin(frame, "https://chat-frame.example", "chat", scope);
   const port = { postMessage: vi.fn(), close: vi.fn() };
   return {
     event: new MessageEvent("message", {

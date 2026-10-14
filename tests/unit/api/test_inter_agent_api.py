@@ -67,9 +67,9 @@ class InterAgentApiSupport(AppReferenceApiTestSupport, unittest.TestCase):
         with patch.dict(
             "os.environ",
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             return bootstrap_platform_state(start_path=repo_root)
@@ -81,7 +81,7 @@ class InterAgentApiSupport(AppReferenceApiTestSupport, unittest.TestCase):
                 activation_id="01234567-89ab-cdef-0123-456789abcdef",
                 workspace_id="default",
                 owner_user_id="parent-owner",
-                protocol_version="maverick.device-use.v1",
+                protocol_version="loopino.device-use.v1",
                 executor_contract="macos-v43",
                 tool_contract_digest="digest",
                 mode="full",

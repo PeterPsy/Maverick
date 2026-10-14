@@ -1,6 +1,6 @@
 import { ChatThread, orderChatThreads } from "../api/client";
 
-const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
+const THREAD_SYNC_DEBUG_STORAGE_KEY = "loopino.chat.debug.thread-sync";
 
 export function findThreadByRuntimeSession(threads: ChatThread[], runtimeSessionId: string): ChatThread | null {
   return threads.find((thread) => thread.runtime_session_id === runtimeSessionId) || null;

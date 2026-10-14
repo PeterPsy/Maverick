@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from core.apps.builtin_apps import register_and_install_builtin_apps_for_active_workspaces
+from core.apps.builtin_apps import discover_builtin_apps, register_and_install_builtin_apps_for_active_workspaces
 from core.apps.contracts import (
     build_app_compatibility,
     build_app_contract,
@@ -44,6 +44,8 @@ class BuiltinAppBootstrapTests(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[3]
         violations: list[str] = []
         for contract_path in sorted((repo_root / "apps").glob("*/app_contract.json")):
+            if contract_path.parent.name not in {spec.app_id for spec in discover_builtin_apps(start_path=repo_root)}:
+                continue
             contract = json.loads(contract_path.read_text(encoding="utf-8"))
             modes = contract.get("compatibility", {}).get("workspace_modes") or []
             if "full-access" in modes and "sandbox" in modes:
@@ -151,7 +153,7 @@ class BuiltinAppBootstrapTests(unittest.TestCase):
 
 def _make_repo_root(root: Path) -> Path:
     (root / "AGENTS.md").write_text("test", encoding="utf-8")
-    (root / "pyproject.toml").write_text("[project]\nname = \"maverick\"\nversion = \"0.1.0\"\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text("[project]\nname = \"loopino\"\nversion = \"0.1.0\"\n", encoding="utf-8")
     for name in ("apps", "core", "docs", "scripts", "tests", "workspaces"):
         (root / name).mkdir(parents=True, exist_ok=True)
     return root
@@ -163,7 +165,7 @@ def _write_contract(app_root: Path, workspace_modes: list[str], *, hooks: dict[s
         name=app_root.name.title(),
         version="1.0.0",
         description=f"{app_root.name} app",
-        publisher="maverick",
+        publisher="loopino",
         contract=build_app_contract(
             compatibility=build_app_compatibility(supported_workspace_modes=workspace_modes),
             entrypoints=build_app_entrypoints(hooks=hooks) if hooks is not None else None,

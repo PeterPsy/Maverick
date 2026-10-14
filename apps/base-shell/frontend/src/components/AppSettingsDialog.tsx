@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AppRegistryItem } from "../api";
-import type { MaverickFrameScope } from "../iframePolicy";
+import type { LoopinoFrameScope } from "../iframePolicy";
 import type { ShellThemeState } from "../theme";
 import { APP_STORE_APP_ID, SETTINGS_APP_ID } from "../navigation";
 import { AppLogo } from "./AppLogo";
@@ -16,7 +16,7 @@ export function externalSettingsProvider(apps: AppRegistryItem[], owner?: AppReg
 export function AppSettingsDialog({ app, apps, frameScope, isPinned, isLastPinned, onClose, onOpenApp, onTogglePin, shellTheme }: {
   app: AppRegistryItem;
   apps: AppRegistryItem[];
-  frameScope: MaverickFrameScope;
+  frameScope: LoopinoFrameScope;
   isPinned: boolean;
   isLastPinned: boolean;
   onClose: () => void;

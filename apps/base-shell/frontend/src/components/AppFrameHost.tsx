@@ -1,16 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { clampPrivateAccessLease } from "@maverick/pwa-cache";
+import { clampPrivateAccessLease } from "@loopino/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import {
-  MAVERICK_IFRAME_SANDBOX,
+  LOOPINO_IFRAME_SANDBOX,
   appFrameBrowserFeaturePolicy,
-  isMaverickFrameMessage,
+  isLoopinoFrameMessage,
   isShellWindowMessage,
-  postMaverickFrameVisibility,
-  postMaverickShellTheme,
-  postToMaverickFrame,
-  registeredMaverickFrameOwner,
-  type MaverickFrameScope,
+  postLoopinoFrameVisibility,
+  postLoopinoShellTheme,
+  postToLoopinoFrame,
+  registeredLoopinoFrameOwner,
+  type LoopinoFrameScope,
 } from "../iframePolicy";
 import { useAppFrameHibernation } from "../hooks/useAppFrameHibernation";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
@@ -22,7 +22,7 @@ import {
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
-import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
+import { IsolatedLoopinoFrame } from "./IsolatedLoopinoFrame";
 import { StorageFileCacheBroker } from "../storageFileCacheBroker";
 import { shellPwaMetrics, shellPwaQuotaAdapter } from "../pwaCacheRuntime";
 
@@ -48,9 +48,9 @@ type AppEventMessage = {
   workspace_id?: string;
 };
 type DependencyCache = Record<string, AppDependenciesPayload>;
-const DEPENDENCY_CACHE_STORAGE_KEY = "maverick.baseShell.appDependencies";
-const DEPENDENCY_DEBUG_STORAGE_KEY = "maverick.baseShell.debug.dependencies";
-const DEPENDENCY_LOG_PREFIX = "[Maverick dependencies]";
+const DEPENDENCY_CACHE_STORAGE_KEY = "loopino.baseShell.appDependencies";
+const DEPENDENCY_DEBUG_STORAGE_KEY = "loopino.baseShell.debug.dependencies";
+const DEPENDENCY_LOG_PREFIX = "[Loopino dependencies]";
 const APP_READY_LOAD_FALLBACK_MS = 900;
 const APP_PENDING_OVERLAY_DELAY_MS = 140;
 
@@ -70,7 +70,7 @@ export function AppFrameHost({
   activeAppParams: AppFrameParams;
   activeWorkspaceId: string;
   cacheUserId: string;
-  frameScope: MaverickFrameScope;
+  frameScope: LoopinoFrameScope;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
   sessionExpiresAt: string;
@@ -270,20 +270,20 @@ export function AppFrameHost({
 
   useEffect(() => {
     latestNavigationRef.current = { appId: activeApp.app_id, params: activeAppParams };
-    postMaverickShellTheme(frameRefs.current[activeApp.app_id], shellTheme);
+    postLoopinoShellTheme(frameRefs.current[activeApp.app_id], shellTheme);
     postNavigation(frameRefs.current[activeApp.app_id], activeApp.app_id, activeAppParams, shellTheme);
     postDependencies(frameRefs.current[activeApp.app_id], activeApp.app_id, latestDependenciesRef.current);
   }, [activeApp.app_id, paramsSignature]);
 
   useEffect(() => {
-    scopedMountedApps.forEach(({ app }) => postMaverickShellTheme(frameRefs.current[app.app_id], shellTheme));
+    scopedMountedApps.forEach(({ app }) => postLoopinoShellTheme(frameRefs.current[app.app_id], shellTheme));
   }, [scopedMountedApps, themeSignature]);
 
   useEffect(() => {
     scopedMountedApps.forEach(({ app, mountKey }) => {
       const frameKey = appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0);
       syncAppFrameShellLayout(frameRefs.current[app.app_id], isMobileLayout);
-      postMaverickFrameVisibility(frameRefs.current[app.app_id], {
+      postLoopinoFrameVisibility(frameRefs.current[app.app_id], {
         app_id: app.app_id,
         visible: visible && frameKey === visibleFrameKey,
       });
@@ -325,7 +325,7 @@ export function AppFrameHost({
       if (!isShellWindowMessage(message)) return;
       const event = message.data as AppEventMessage;
       if (event.workspace_id && event.workspace_id !== activeWorkspaceId) return;
-      if (!["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(event.type || "") || !event.owner_app_id) return;
+      if (!["loopino.app.frontend-changed", "loopino.app.runtime-changed"].includes(event.type || "") || !event.owner_app_id) return;
       const eventMountKey = `${mountScopePrefix}${event.owner_app_id}`;
       setFrameRevisions((current) => ({ ...current, [eventMountKey]: (current[eventMountKey] || 0) + 1 }));
     };
@@ -335,7 +335,7 @@ export function AppFrameHost({
 
   useEffect(() => {
     function handleAppMessage(event: MessageEvent) {
-      const senderOwnerAppId = registeredMaverickFrameOwner(event, frameScope);
+      const senderOwnerAppId = registeredLoopinoFrameOwner(event, frameScope);
       const senderIsShell = isShellWindowMessage(event);
       if (fileCacheBrokerRef.current?.handleWindowMessage(
         event,
@@ -344,7 +344,7 @@ export function AppFrameHost({
         return;
       }
       const senderFrame = Object.values(frameRefs.current)
-        .find((frame) => isMaverickFrameMessage(event, frame));
+        .find((frame) => isLoopinoFrameMessage(event, frame));
       if ((!senderOwnerAppId && !senderIsShell) || !event.data || typeof event.data !== "object") {
         return;
       }
@@ -353,7 +353,7 @@ export function AppFrameHost({
         return;
       }
       const senderIsMountedApp = Boolean(senderFrame);
-      if (payload.type === "maverick.app.external-url") {
+      if (payload.type === "loopino.app.external-url") {
         if (!senderIsMountedApp) {
           return;
         }
@@ -369,7 +369,7 @@ export function AppFrameHost({
       if (!senderIsMountedApp) {
         return;
       }
-      if (payload.type === "maverick.app.dependencies-changed") {
+      if (payload.type === "loopino.app.dependencies-changed") {
         const dependencyAppId = payload.app_id;
         getAppDependencies(dependencyAppId)
           .then((nextDependencies) => {
@@ -388,7 +388,7 @@ export function AppFrameHost({
           });
         return;
       }
-      if (payload.type === "maverick.app.ready") {
+      if (payload.type === "loopino.app.ready") {
         const frame = frameRefs.current[payload.app_id];
         if (!frame || event.source !== frame.contentWindow) {
           return;
@@ -404,7 +404,7 @@ export function AppFrameHost({
         if (latestNavigation.appId === payload.app_id && frameKey) {
           const navigationSignature = appNavigationSignature(payload.app_id, latestNavigation.params);
           if (readyDeliveredNavigationSignaturesRef.current[frameKey] !== navigationSignature) {
-            postMaverickShellTheme(frame, shellTheme);
+            postLoopinoShellTheme(frame, shellTheme);
             if (resumeHibernatedApp(payload.app_id, latestNavigation.params)
                 || postNavigation(frame, payload.app_id, latestNavigation.params, shellTheme)) {
               readyDeliveredNavigationSignaturesRef.current[frameKey] = navigationSignature;
@@ -413,7 +413,7 @@ export function AppFrameHost({
           postDependencies(frame, payload.app_id, latestDependenciesRef.current);
         }
       }
-      if (payload.type === "maverick.app.open-app") {
+      if (payload.type === "loopino.app.open-app") {
         onOpenApp(payload.app_id, {
           ...(payload.params || {}),
           workspace_id: payload.workspace_id || payload.params?.workspace_id || null,
@@ -459,7 +459,7 @@ export function AppFrameHost({
           const frameKey = appFrameInstanceKey(mountKey, revision);
           const isDisplayed = frameKey === visibleFrameKey;
           return (
-            <IsolatedMaverickFrame
+            <IsolatedLoopinoFrame
               allow={appFrameBrowserFeaturePolicy(app.public_app_id || app.app_id)}
               allowFullScreen
               appId={app.app_id}
@@ -470,8 +470,8 @@ export function AppFrameHost({
               loadingTheme={shellTheme.effective}
               onLoad={(event) => {
                 syncAppFrameShellLayout(event.currentTarget, isMobileLayout);
-                postMaverickShellTheme(event.currentTarget, shellTheme);
-                postMaverickFrameVisibility(event.currentTarget, {
+                postLoopinoShellTheme(event.currentTarget, shellTheme);
+                postLoopinoFrameVisibility(event.currentTarget, {
                   app_id: app.app_id,
                   visible: visible && isDisplayed,
                 });
@@ -485,7 +485,7 @@ export function AppFrameHost({
               ref={(frame) => {
                 frameRefs.current[app.app_id] = frame;
               }}
-              sandbox={MAVERICK_IFRAME_SANDBOX}
+              sandbox={LOOPINO_IFRAME_SANDBOX}
               launchPath={appFrameSrc(
                 app.frontend_mount,
                 revision,
@@ -540,10 +540,10 @@ function postNavigation(
   if (!frame?.contentWindow) {
     return false;
   }
-  postToMaverickFrame(
+  postToLoopinoFrame(
     frame,
     {
-      type: "maverick.app.navigate",
+      type: "loopino.app.navigate",
       app_id: appId,
       params: normalizeParams(params),
       theme: shellTheme,
@@ -560,10 +560,10 @@ function postDependencies(
   if (!frame?.contentWindow || !dependencies) {
     return;
   }
-  postToMaverickFrame(
+  postToLoopinoFrame(
     frame,
     {
-      type: "maverick.app.dependencies",
+      type: "loopino.app.dependencies",
       app_id: appId,
       dependencies,
     },
@@ -587,12 +587,12 @@ function appFrameSrc(
   isMobileLayout: boolean,
 ): string {
   const themedUrl = urlWithShellThemeSearchParams(frontendMount, shellTheme);
-  themedUrl.searchParams.set("maverick_mobile_layout", isMobileLayout ? "1" : "0");
+  themedUrl.searchParams.set("loopino_mobile_layout", isMobileLayout ? "1" : "0");
   const themedMount = `${themedUrl.pathname}${themedUrl.search}${themedUrl.hash}`;
   if (revision <= 0) {
     return themedMount;
   }
-  return mountUrlWithParam(themedMount, "_maverick_refresh", String(revision));
+  return mountUrlWithParam(themedMount, "_loopino_refresh", String(revision));
 }
 
 function bootstrapThemeForFrame(

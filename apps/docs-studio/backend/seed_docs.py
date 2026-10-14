@@ -14,10 +14,10 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = APP_ROOT / "docs"
 
 DEFAULT_SITE = {
-    "name": "Maverick Docs",
+    "name": "Loopino Docs",
     "logo": "MD",
     "accent": "#4f46e5",
-    "tagline": "Curated Maverick core, workspace, and app contract documentation.",
+    "tagline": "Curated Loopino core, workspace, and app contract documentation.",
 }
 
 DEFAULT_VIEW_STATE = {

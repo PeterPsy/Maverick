@@ -1,4 +1,4 @@
-"""Repository-level path discovery for Maverick."""
+"""Repository-level path discovery for Loopino."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class InstallationPaths:
-    """Canonical installation roots for a Maverick checkout."""
+    """Canonical installation roots for a Loopino checkout."""
 
     repository_root: Path
     core_root: Path
@@ -23,7 +23,7 @@ class InstallationPaths:
 
 
 def discover_repository_root(start_path: Path | None = None) -> Path:
-    """Return the Maverick repository root from any nested path."""
+    """Return the Loopino repository root from any nested path."""
     current = (start_path or Path(__file__)).resolve()
     if current.is_file():
         current = current.parent
@@ -34,11 +34,11 @@ def discover_repository_root(start_path: Path | None = None) -> Path:
         if required_markers.issubset({path.name for path in candidate.iterdir()}):
             return candidate
 
-    raise FileNotFoundError("Could not locate the Maverick repository root.")
+    raise FileNotFoundError("Could not locate the Loopino repository root.")
 
 
 def installation_paths(start_path: Path | None = None) -> InstallationPaths:
-    """Build canonical installation paths for the active Maverick checkout."""
+    """Build canonical installation paths for the active Loopino checkout."""
     repository_root = discover_repository_root(start_path=start_path)
     docs_root = repository_root / "docs"
     logs_root = repository_root / "logs"

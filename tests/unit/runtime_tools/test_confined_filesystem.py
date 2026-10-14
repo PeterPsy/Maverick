@@ -101,7 +101,7 @@ class ConfinedWorkspaceFilesystemTest(unittest.TestCase):
             target.write_text("#!/bin/sh\necho old\n", encoding="utf-8")
             target.chmod(0o755)
             try:
-                os.setxattr(target, "user.maverick.fixture", b"retained")
+                os.setxattr(target, "user.loopino.fixture", b"retained")
             except OSError as error:
                 self.skipTest(f"filesystem xattrs unavailable: {error}")
             filesystem = ConfinedWorkspaceFilesystem(
@@ -125,7 +125,7 @@ class ConfinedWorkspaceFilesystemTest(unittest.TestCase):
 
             self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o755)
             self.assertEqual(
-                os.getxattr(target, "user.maverick.fixture"),
+                os.getxattr(target, "user.loopino.fixture"),
                 b"retained",
             )
 
@@ -324,7 +324,7 @@ class ConfinedWorkspaceFilesystemTest(unittest.TestCase):
                     self.assertFalse((outside / "escaped.txt").exists())
                     self.assertFalse((moved / "escaped.txt").exists())
                     self.assertFalse(
-                        any(path.name.startswith(".maverick-write-") for path in moved.iterdir())
+                        any(path.name.startswith(".loopino-write-") for path in moved.iterdir())
                     )
 
 

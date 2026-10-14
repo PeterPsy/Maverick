@@ -44,8 +44,8 @@ The app remains a TypeScript/Vite work surface, with React mounted only for reus
 ## SDK Flow
 
 ```bash
-./scripts/maverick core cli run core.app-sdk.validate --app-id settings --app-root apps/settings --workspace default --json
-./scripts/maverick app settings frontend build --operator --json
+./scripts/loopino core cli run core.app-sdk.validate --app-id settings --app-root apps/settings --workspace default --json
+./scripts/loopino app settings frontend build --operator --json
 python3 -m unittest discover -s apps/settings/tests -p 'test_*.py'
 python3 scripts/test_suite.py --app settings --level integration --jobs 1
 ```

@@ -13,7 +13,7 @@ class CodexAppServerRuntimeInitializeTestCase(unittest.TestCase):
 
         self.assertEqual(
             params,
-            {"clientInfo": {"name": "maverick", "version": "3.0.0"}},
+            {"clientInfo": {"name": "loopino", "version": "3.0.0"}},
         )
 
     def test_device_use_runtime_negotiates_experimental_api(self) -> None:
@@ -24,7 +24,7 @@ class CodexAppServerRuntimeInitializeTestCase(unittest.TestCase):
         self.assertEqual(
             params,
             {
-                "clientInfo": {"name": "maverick", "version": "3.0.0"},
+                "clientInfo": {"name": "loopino", "version": "3.0.0"},
                 "capabilities": {"experimentalApi": True},
             },
         )

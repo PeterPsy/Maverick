@@ -10,7 +10,7 @@ proxy, hosted-browser or remote transcription service is used.
 
 Open Browser in the workspace shell. Download and extract Browser Companion 0.7.0,
 then load its folder with Chrome's “Load unpacked” developer-mode action.
-Use Chrome 120 or later. The official `https://maverick.loopino.ai` address is
+Use Chrome 120 or later. The official `https://loopino.giuntitrail.com` address is
 preconfigured; other installations can change Connection settings in Companion.
 Companion is centered on one dedicated agent tab, without selecting a platform,
 profile or initial URL. Choose **Open agent tab** from any Chrome page. It brings
@@ -19,9 +19,9 @@ an existing empty start tab before creating one. On that tab, click Companion in
 choose **Connect agent tab** once. This explicit
 invocation grants Chrome's tab-capture permission for that tab. The popup asks
 for HTTPS website access; the manifest also declares Chrome debugger control. By default
-it reuses the most recently used Maverick shell tab at the chosen origin in the
+it reuses the most recently used Loopino shell tab at the chosen origin in the
 same Chrome profile, including Chat or other apps, and opens Browser there.
-Private/API routes, other origins and the source tab are excluded. Loading tabs, other Chrome windows and Chrome PWAs are included. Normal Maverick
+Private/API routes, other origins and the source tab are excluded. Loading tabs, other Chrome windows and Chrome PWAs are included. Normal Loopino
 windows are preferred to old connector popups. If none matches, setup opens a
 connection tab in the existing Chrome window. Uncheck the reuse option for a
 separate bridge window. Other browsers/profiles and native desktop applications
@@ -29,7 +29,7 @@ cannot be selected by Chrome; their connection tab remains in Chrome. Sign in if
 document connects automatically using the extension's explicit sharing generation.
 There is no second Connect button to press. Automatic setup is attempted once
 per generation; a failed attempt retains the manual retry control. Keep the Agent
-tab open. Companion 0.7+ lets the Maverick authorization tab close after connecting. The agent navigates the dedicated source tab, not the bridge.
+tab open. Companion 0.7+ lets the Loopino authorization tab close after connecting. The agent navigates the dedicated source tab, not the bridge.
 It browses normal HTTPS websites using your Chrome session. It can read, scroll,
 click, hover, replace text, press keys, select options, set checkboxes and submit
 forms. Platform collection and image/video/audio analysis remain available.
@@ -55,7 +55,7 @@ actor and workspace, cancels their pending work and creates the replacement.
 Other tabs, users and workspaces keep their own leases. Reconnecting therefore
 does not consume extra active slots or leave a false Connected row after Disconnect.
 
-The popup and empty start page share app-owned Maverick neutral tokens, native
+The popup and empty start page share app-owned Loopino neutral tokens, native
 globe/control vectors, 22px cards and 18px controls. Light/dark presentation
 follows Chrome's system color-scheme preference through CSS before first paint;
 the extension does not inherit a private shell theme. Connection settings and
@@ -71,9 +71,9 @@ Existing connections retain read-only and platform-route scopes; schema-v4
 migration never grants them new authority. Connect again from 0.6.0 to opt in.
 
 The connector shell opens a fresh authenticated isolated Browser frame in Chrome;
-it works even when the original Maverick app uses another browser profile or the desktop application.
+it works even when the original Loopino app uses another browser profile or the desktop application.
 The hashed Companion ZIP is a public, immutable build asset under
-`/apps/browser/assets/` and requires no Maverick cookie. Private iframe URLs
+`/apps/browser/assets/` and requires no Loopino cookie. Private iframe URLs
 are never copied as connector addresses.
 Installing the extension or opening the connector address manually does not
 share a tab. Only an exact extension-bound document with explicit automatic-setup
@@ -84,15 +84,15 @@ replace the extracted files and reload it in `chrome://extensions`.
 
 Sharing is explicit and limited to one tab. Password entry, file selection,
 cookies, browser history and caller JavaScript remain outside the tool surface.
-The extension requests optional HTTPS website access plus the selected Maverick
+The extension requests optional HTTPS website access plus the selected Loopino
 bridge, and only controls the exact source tab chosen by the user. It probes only app identity in the selected connector window and attaches to one exact Browser frame/document;
 other tabs, shell frames and replaced documents cannot execute its fixed commands.
-Within that selected Maverick shell tab, switching apps or returning to Browser
+Within that selected Loopino shell tab, switching apps or returning to Browser
 from the rail keeps the connection alive while its bound Browser iframe remains
 mounted. The `connector=1` parameter starts setup; dropping it during native
-navigation does not revoke sharing. Before authorization completes, leaving the Maverick origin or loading a
+navigation does not revoke sharing. Before authorization completes, leaving the Loopino origin or loading a
 non-shell route stops setup. A full document reload resumes the same lease in the same authenticated app origin.
-With Companion 0.7+, closing the Maverick setup tab leaves the background connection
+With Companion 0.7+, closing the Loopino setup tab leaves the background connection
 active: continue from the macOS app with only the Agent tab open in Chrome.
 Closing the Agent tab, leaving its permitted URL scope, or Disconnect stops capture. A still-shared tab recovers an expired lease automatically; pending old operations
 are cancelled and are never replayed. Memory Saver cannot discard the connector
@@ -111,7 +111,7 @@ sharing. In 0.6.1, either tab closing stops it; 0.7 moves the operational bridge
 
 ## Background connection (Companion 0.7)
 
-The Chrome Maverick tab is required only for initial sign-in and authorization.
+The Chrome Loopino tab is required only for initial sign-in and authorization.
 The extension then owns heartbeats, command claims, progress and completion delivery.
 An offscreen capture document wakes the worker every three seconds, with an alarm
 as fallback. Closing or navigating the setup tab does not stop sharing or reopen it.
@@ -160,7 +160,7 @@ Snapshot refs and arguments never grant access by themselves. The backend checks
 actor/workspace ownership and interactive mode; Chrome independently verifies the
 sharing binding and exact source document. There is no raw selector, JavaScript
 or CDP-command tool. Existing Lab click/type/key tools retain their governed
-Maverick development policy.
+Loopino development policy.
 
 ## Workspace management
 
@@ -179,7 +179,7 @@ technical JSON is rendered only on request. Browser Lab provides public-page
 reading with automatic temporary-session cleanup, health and individual session
 closure. Research sessions and their audit entries retain the invoking user.
 
-The self-contained frontend disables the Maverick sidebar through
+The self-contained frontend disables the Loopino sidebar through
 `presentation.sidebar_enabled: false`. Rail and App Store use their existing
 native `language` globe, with the same theme, sizing and padding as other apps;
 Browser does not override the shell icon with a separate raster tile.
@@ -191,7 +191,7 @@ preserves row/button identity and coalesces simultaneous refreshes.
 Visible views poll every 3 seconds with pending
 work, 10 seconds with connected tabs and 30 seconds when idle. Hidden documents
 and frames hidden by the shell's
-`maverick.app.visibility-changed` event pause overview polling, including data
+`loopino.app.visibility-changed` event pause overview polling, including data
 invalidations; returning refreshes immediately. Failures back off to 60
 seconds. Chrome transport keeps its separate heartbeat so active observations
 continue when the management view is hidden. Its app-frame renewal is limited to
@@ -206,9 +206,9 @@ repeated manual stops cannot overwrite the first cause. SQLite migration preserv
 existing leases. Stopped or offline empty tabs do not advertise navigation readiness.
 An operation becoming terminal between its status read and progress update
 cancels/drains that worker task without revoking sharing or queued observations.
-An inline head script applies the initial `maverick_theme`/`maverick_color_scheme`
+An inline head script applies the initial `loopino_theme`/`loopino_color_scheme`
 parameters before the first paint, including when the app bundle loads slowly.
-Authenticated parent `maverick.shell.theme-changed` messages update the effective
+Authenticated parent `loopino.shell.theme-changed` messages update the effective
 theme. Media object URLs are released when a result closes; technical JSON
 omits the encoded bytes already displayed by the image/audio view.
 
@@ -217,8 +217,8 @@ omits the encoded bytes already displayed by the image/audio view.
 Discover current tools through the official surfaces:
 
 ```bash
-maverick app browser mcp list --json
-maverick app browser cli inspect browser --json
+loopino app browser mcp list --json
+loopino app browser cli inspect browser --json
 ```
 
 `browser_companion_status` lists the authenticated actor's shared Chrome sessions.
@@ -265,8 +265,8 @@ sessions are not durable workspace references.
 
 ### Boundaries and persistence
 
-`browser_session_create` automatically authenticates a temporary Maverick
-context for the invoking runtime's human owner. Use `maverick_dev_inspector` and
+`browser_session_create` automatically authenticates a temporary Loopino
+context for the invoking runtime's human owner. Use `loopino_dev_inspector` and
 navigate to the returned `platform_origin` plus `/app/<app-id>`. No user login
 activation is required. The separate HttpOnly cookie expires within four hours,
 cannot renew, never appears in tool results, and is discarded on close. Core
@@ -276,7 +276,7 @@ them. External websites use the separate Companion sharing flow. Standalone CLI
 development smoke remains an anonymous development-target check.
 
 The sealed installation-level app supports sandbox and full-access agents.
-Temporary Maverick access uses the invoking runtime's user and current workspace;
+Temporary Loopino access uses the invoking runtime's user and current workspace;
 full-access administrator authority is still required for arbitrary development
 targets and Lab lifecycle changes. Shared-tab navigation accepts only reviewed HTTPS hosts, platform routes and
 source query keys declared in `companion/platforms.json`. Python and Chrome use
@@ -302,10 +302,10 @@ No agent-owned detached build or test process is needed.
 Operator controls:
 
 ```bash
-maverick app browser cli run browser --action service.status --json
-maverick app browser cli run browser --action service.stop --json
-maverick app browser cli run browser --action service.start --json
-maverick app browser cli run browser --action acceptance.smoke --json
+loopino app browser cli run browser --action service.status --json
+loopino app browser cli run browser --action service.stop --json
+loopino app browser cli run browser --action service.start --json
+loopino app browser cli run browser --action acceptance.smoke --json
 ```
 
 Start/stop require an administrator. Stop disables automatic recovery and closes Lab
@@ -314,22 +314,22 @@ lifecycle socket, token file and rotated log. Keep credentials outside version c
 
 For manual foreground development, use `npm run broker:local` then `npm run broker`
 in `apps/browser`. Stop the managed worker first to avoid competing listeners. Use
-`hostmachine:<allowlisted-port>` and `maverick_dev_inspector` for approved development
+`hostmachine:<allowlisted-port>` and `loopino_dev_inspector` for approved development
 UI interaction; external websites remain read-only.
 Interactive tools resolve snapshot `eN` and iframe `fNeN` identities through Playwright's
 `aria-ref` locator engine before clicking or filling a development target.
-The same approved ports also accept `maverick.localhost` and exact Core-generated
-`af-<24 hex>.sidecars.maverick.localhost` frames in admin inspector sessions.
+The same approved ports also accept `loopino.localhost` and exact Core-generated
+`af-<24 hex>.sidecars.loopino.localhost` frames in admin inspector sessions.
 Other localhost names and ports remain denied. The local proxy supports WebSocket
 tunnels on the approved HTTP development ports.
 
 ## SDK Flow
 
-Browser is a built-in app under the Maverick repository root. Validate its
+Browser is a built-in app under the Loopino repository root. Validate its
 source contract through the official SDK before rebuilding:
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-id browser --app-root /home/ubuntu/projects/maverick-v3/apps/browser --workspace default --json
+loopino core cli run core.app-sdk.validate --app-id browser --app-root /projects/loopino/apps/browser --workspace default --json
 ```
 
 Core invokes the declared install, migrate and recovery hooks to manage the
@@ -339,7 +339,7 @@ built-in source.
 ## Build and verification
 
 ```bash
-maverick app browser frontend build --json
+loopino app browser frontend build --json
 python3 -m unittest discover -s apps/browser/tests -p 'test_browser*.py'
 npm --prefix apps/browser test
 npm --prefix apps/browser run test:ui

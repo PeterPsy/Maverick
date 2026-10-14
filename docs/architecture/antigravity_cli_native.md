@@ -14,7 +14,7 @@ scraping is not accepted.
 
 The host operator provisions the cached Antigravity OAuth identity. Core copies
 only required identity material into a session-private
-`MAVERICK_ANTIGRAVITY_HOME`, replaces settings with controlled values and does
+`LOOPINO_ANTIGRAVITY_HOME`, replaces settings with controlled values and does
 not expose the host HOME. Public events and app/browser APIs never contain OAuth
 material.
 
@@ -57,7 +57,7 @@ turns, including resumed conversations.
 Implicit sessions use the same enabled, session-allowed skill resolver as
 Codex; explicit sessions use the invoked set. Skills are copied to a read-only
 session subtree in sandbox mode; a skill digest change retires the process
-before reuse. The runtime-token `maverick` wrapper exposes the same governed
+before reuse. The runtime-token `loopino` wrapper exposes the same governed
 Core and app CLI/MCP surfaces as other native runtimes.
 
 ## Direct profile and admission
@@ -81,7 +81,7 @@ API-agent choice, and Google API credentials are never accepted on this path.
 Antigravity owns an internal native tool loop. In sandbox mode its filesystem
 boundary is the outer sandbox; full-access mode deliberately grants host access.
 Native workspace edits do not pass through the Core mutation bridge, while calls
-through the Maverick CLI retain Core authorization. Maverick does not claim every
+through the Loopino CLI retain Core authorization. Loopino does not claim every
 native read or write as a Core tool event. Loss of the structured protocol,
 required execution boundary, process supervision or current catalog identity
 makes the runtime unavailable.

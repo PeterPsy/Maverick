@@ -262,7 +262,7 @@ class RemoteAgenticInventoryTest(unittest.TestCase):
             session_id="session-remote",
             workspace_id="default",
             workspace_binding_id="binding-remote",
-            runtime_engine_id="maverick-tool-loop",
+            runtime_engine_id="loopino-tool-loop",
             adapter_id="hosted-adapter",
             adapter_version="5",
             model_provider_id="google-ai-studio",

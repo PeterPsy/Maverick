@@ -528,7 +528,7 @@ def app_events_for_action(action: str, payload: dict[str, object] | None = None)
         resources.append("view-selection")
     if not resources:
         resources.append("activity")
-    return [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": resource} for resource in resources]
+    return [{"type": "loopino.app.data-changed", "owner_app_id": "website-studio", "resource": resource} for resource in resources]
 
 
 def _event_truthy(value: object) -> bool:

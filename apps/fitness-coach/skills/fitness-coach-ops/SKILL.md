@@ -1,11 +1,11 @@
 ---
 name: fitness-coach-ops
-description: Use Fitness Coach to manage workspace workouts, exercise library records, validation, and run summaries through Maverick MCP/CLI surfaces.
+description: Use Fitness Coach to manage workspace workouts, exercise library records, validation, and run summaries through Loopino MCP/CLI surfaces.
 ---
 
 # Fitness Coach Operations
 
-Use this skill when a user asks to create, inspect, update, duplicate, validate, or delete Fitness Coach workouts or reusable exercises in the current Maverick workspace.
+Use this skill when a user asks to create, inspect, update, duplicate, validate, or delete Fitness Coach workouts or reusable exercises in the current Loopino workspace.
 
 ## Source Of Truth
 

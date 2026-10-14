@@ -29,9 +29,9 @@ describe("runtime helpers", () => {
   })
 
   it("builds the Google Calendar OAuth callback URL for the mounted app", () => {
-    expect(calendarOAuthRedirectUri("calendar", "https://maverick.example/")).toBe("https://maverick.example/apps/calendar/oauth/callback")
-    expect(calendarOAuthRedirectUri("team calendar", "https://maverick.example")).toBe(
-      "https://maverick.example/apps/team%20calendar/oauth/callback",
+    expect(calendarOAuthRedirectUri("calendar", "https://loopino.example/")).toBe("https://loopino.example/apps/calendar/oauth/callback")
+    expect(calendarOAuthRedirectUri("team calendar", "https://loopino.example")).toBe(
+      "https://loopino.example/apps/team%20calendar/oauth/callback",
     )
   })
 
@@ -40,15 +40,15 @@ describe("runtime helpers", () => {
       calendarOAuthCallbackFromLocation(
         "/apps/team%20calendar/oauth/callback",
         "?code= oauth-code &state= oauth-state ",
-        "https://maverick.example",
+        "https://loopino.example",
       ),
     ).toEqual({
       appId: "team calendar",
       code: "oauth-code",
       state: "oauth-state",
       error: "",
-      redirectUri: "https://maverick.example/apps/team%20calendar/oauth/callback",
+      redirectUri: "https://loopino.example/apps/team%20calendar/oauth/callback",
     })
-    expect(calendarOAuthCallbackFromLocation("/apps/calendar/events", "?code=ignored", "https://maverick.example")).toBeNull()
+    expect(calendarOAuthCallbackFromLocation("/apps/calendar/events", "?code=ignored", "https://loopino.example")).toBeNull()
   })
 })

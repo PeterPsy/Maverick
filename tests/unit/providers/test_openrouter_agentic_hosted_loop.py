@@ -12,7 +12,7 @@ from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
 )
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_models import (

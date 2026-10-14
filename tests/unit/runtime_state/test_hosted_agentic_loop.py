@@ -352,7 +352,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
             codec_id="fake-hosted-codec",
             codec_version="1",
             schema_version="1",
-            content_type="application/vnd.maverick.fake-private",
+            content_type="application/vnd.loopino.fake-private",
             payload=b"valid-private-state",
             expected_revision=0,
             turn_generation="turn-hosted",

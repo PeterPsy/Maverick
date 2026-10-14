@@ -21,7 +21,7 @@ def default_state() -> dict[str, Any]:
         "broker": {
             "status": "unconfigured",
             "provider": "playwright_lab",
-            "detail": "Set MAVERICK_BROWSER_BROKER_URL to the local Browser broker sidecar.",
+            "detail": "Set LOOPINO_BROWSER_BROKER_URL to the local Browser broker sidecar.",
         },
         "sessions": {},
         "audit": [],
@@ -144,7 +144,7 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
     session_id = str(normalized.get("session_id") or "")[:120]
     normalized["session_id"] = session_id
     mode = str(normalized.get("mode") or "read_only")
-    normalized["mode"] = mode if mode in {"read_only", "maverick_dev_inspector"} else "read_only"
+    normalized["mode"] = mode if mode in {"read_only", "loopino_dev_inspector"} else "read_only"
     normalized["status"] = str(normalized.get("status") or "active")[:80]
     normalized["url"] = str(normalized.get("url") or "about:blank")[:2048]
     normalized["title"] = str(normalized.get("title") or "")[:500]

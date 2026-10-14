@@ -10,7 +10,7 @@ import unittest
 
 from core.api.provider_api import workspace_provider_status
 from core.api.runtime_api import _session_payload
-from core.providers.maverick_agent_builtins import HOSTED_TOOL_LOOP_ADAPTER_VERSION
+from core.providers.loopino_agent_builtins import HOSTED_TOOL_LOOP_ADAPTER_VERSION
 from core.providers.service import (
     builtin_provider_registry,
     configure_workspace_provider,
@@ -128,8 +128,8 @@ class AgenticProfileApiTest(unittest.TestCase):
         register_builtin_providers(provider_store, registry=registry)
         now = datetime(2026, 8, 18, tzinfo=UTC)
         hosted_adapter = SimpleNamespace(
-            runtime_engine_id="maverick-tool-loop",
-            adapter_id="maverick-hosted-tool-loop",
+            runtime_engine_id="loopino-tool-loop",
+            adapter_id="loopino-hosted-tool-loop",
             adapter_version=HOSTED_TOOL_LOOP_ADAPTER_VERSION,
         )
         definitions = [

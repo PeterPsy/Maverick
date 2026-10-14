@@ -27,10 +27,10 @@ from core.providers.provider_codex_config_policy import (
     codex_post_tool_use_hook_trusted_hash,
 )
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
-from core.providers.provider_codex import CodexProviderAdapter, refresh_workspace_maverick_wrappers
+from core.providers.provider_codex import CodexProviderAdapter, refresh_workspace_loopino_wrappers
 from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME
 from core.providers.provider_codex_launch import CODEX_SKILL_MANIFEST_FILE, _skill_manifest
-from core.providers.provider_codex_wrappers import _workspace_maverick_wrapper_source
+from core.providers.provider_codex_wrappers import _workspace_loopino_wrapper_source
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.provider_selection import ProviderSelectionService
 from core.providers.service import (
@@ -97,7 +97,7 @@ class ProvidersTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "docs", "scripts"):
             target = repo_root / name
             if name == "docs":
@@ -167,7 +167,7 @@ class ProvidersTestCase(unittest.TestCase):
                 "antigravity-cli",
                 "google-ai-studio",
                 "kokoro-hosted",
-                "maverick-tool-loop",
+                "loopino-tool-loop",
                 "openrouter",
             },
         )
@@ -177,7 +177,7 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertTrue(codex.capabilities.supports_interactive_runtime)
 
     def test_builtin_registry_does_not_probe_codex_model_catalog(self) -> None:
-        with patch("core.providers.provider_codex_models.subprocess.run") as run:
+        with patch("core.providers.provider_codex.CodexProviderAdapter.model_options") as run:
             registry = builtin_provider_registry()
             definitions = registry.list_provider_definitions()
 
@@ -501,7 +501,7 @@ class ProvidersTestCase(unittest.TestCase):
             start_path=repo_root,
         )
 
-        with patch.dict(os.environ, {"MAVERICK_CODEX_COMMAND": "/opt/maverick/codex-fixture"}, clear=False):
+        with patch.dict(os.environ, {"LOOPINO_CODEX_COMMAND": "/projects/loopino/codex-fixture"}, clear=False):
             register_builtin_providers(provider_store)
             configure_workspace_provider(provider_store, workspace_id="default", provider_id="codex")
             _provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(
@@ -509,7 +509,7 @@ class ProvidersTestCase(unittest.TestCase):
                 session=session,
             )
 
-        self.assertEqual(runtime_adapter.codex_command, "/opt/maverick/codex-fixture")
+        self.assertEqual(runtime_adapter.codex_command, "/projects/loopino/codex-fixture")
 
     def test_configure_workspace_provider_rejects_hosted_api_without_runtime_adapter(self) -> None:
         provider_store = self.make_provider_store()
@@ -636,8 +636,8 @@ class ProvidersTestCase(unittest.TestCase):
             "/tmp/runtime/codex-home/config.toml:post_tool_use:0:0",
         )
         self.assertEqual(
-            codex_post_tool_use_hook_trusted_hash(command="/tmp/maverick_codex_post_tool_use_hook.py"),
-            "sha256:aaaa8ec2f50abcbb07464a6a10bbc2686b20bd279c17e0cd13cd181944b2f308",
+            codex_post_tool_use_hook_trusted_hash(command="/tmp/loopino_codex_post_tool_use_hook.py"),
+            "sha256:8bc7ae337d93d3461bdb9e744831293db7a1c9adacbd91529cf66beacfc04b27",
         )
 
     def test_codex_launch_spec_is_built_from_provider_adapter_not_runtime_domain(self) -> None:
@@ -690,10 +690,10 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(launch_spec.readable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertEqual(launch_spec.writable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertIn("CODEX_HOME", launch_spec.env_overrides)
-        self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ROOT"], str(repo_root / "workspaces" / "acme"))
-        self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ID"], "acme")
-        self.assertEqual(launch_spec.env_overrides["MAVERICK_EFFECTIVE_MODE"], "sandbox")
-        claims = verify_workspace_api_token(launch_spec.env_overrides["MAVERICK_RUNTIME_API_TOKEN"])
+        self.assertEqual(launch_spec.env_overrides["LOOPINO_WORKSPACE_ROOT"], str(repo_root / "workspaces" / "acme"))
+        self.assertEqual(launch_spec.env_overrides["LOOPINO_WORKSPACE_ID"], "acme")
+        self.assertEqual(launch_spec.env_overrides["LOOPINO_EFFECTIVE_MODE"], "sandbox")
+        claims = verify_workspace_api_token(launch_spec.env_overrides["LOOPINO_RUNTIME_API_TOKEN"])
         self.assertIsNotNone(claims)
         assert claims is not None
         self.assertEqual(claims["workspace_id"], "acme")
@@ -703,32 +703,32 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(launch_spec.env_overrides["TMPDIR"], str(repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1"))
         self.assertEqual(launch_spec.env_overrides["HOME"], launch_spec.env_overrides["CODEX_HOME"])
         runtime_bin = repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1" / "bin"
-        self.assertTrue((runtime_bin / "maverick").is_file())
-        self.assertTrue(os.access(runtime_bin / "maverick", os.X_OK))
-        self.assertIn("/api/runtime/cli", (runtime_bin / "maverick").read_text(encoding="utf-8"))
-        self.assertNotIn("timeout=30", (runtime_bin / "maverick").read_text(encoding="utf-8"))
+        self.assertTrue((runtime_bin / "loopino").is_file())
+        self.assertTrue(os.access(runtime_bin / "loopino", os.X_OK))
+        self.assertIn("/api/runtime/cli", (runtime_bin / "loopino").read_text(encoding="utf-8"))
+        self.assertNotIn("timeout=30", (runtime_bin / "loopino").read_text(encoding="utf-8"))
         hook_script = runtime_bin / CODEX_POST_TOOL_USE_HOOK_NAME
         self.assertTrue(hook_script.is_file())
         self.assertTrue(os.access(hook_script, os.X_OK))
         self.assertIn("/api/runtime/provider-hooks/codex/post-tool-use", hook_script.read_text(encoding="utf-8"))
         self.assertTrue((runtime_bin / "workspace_sandbox.py").is_file())
         self.assertEqual(launch_spec.env_overrides["PATH"].split(os.pathsep)[0], str(runtime_bin))
-        self.assertEqual(launch_spec.env_overrides["MAVERICK_RUNTIME_BIN"], str(runtime_bin))
+        self.assertEqual(launch_spec.env_overrides["LOOPINO_RUNTIME_BIN"], str(runtime_bin))
         runtime_config = (Path(launch_spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
         self.assertIn("[shell_environment_policy]", runtime_config)
         self.assertIn('inherit = "all"', runtime_config)
         self.assertIn("ignore_default_excludes = true", runtime_config)
-        self.assertIn('"MAVERICK_RUNTIME_API_TOKEN"', runtime_config)
-        self.assertNotIn(launch_spec.env_overrides["MAVERICK_RUNTIME_API_TOKEN"], runtime_config)
+        self.assertIn('"LOOPINO_RUNTIME_API_TOKEN"', runtime_config)
+        self.assertNotIn(launch_spec.env_overrides["LOOPINO_RUNTIME_API_TOKEN"], runtime_config)
         self.assertFalse(tomllib.loads(runtime_config)["features"]["unified_exec"])
         self.assertNotIn("experimental_use_unified_exec_tool", runtime_config)
         self.assertIn("[skills]", runtime_config)
         self.assertIn("include_instructions = true", runtime_config)
         self.assertIn("[shell_environment_policy.set]", runtime_config)
         self.assertIn(f'PATH = "{launch_spec.env_overrides["PATH"]}"', runtime_config)
-        self.assertIn(f"MAVERICK_RUNTIME_BIN = \"{runtime_bin}\"", runtime_config)
-        self.assertIn(f"MAVERICK_RUNTIME_ROOT = \"{runtime_bin.parent}\"", runtime_config)
-        self.assertIn(f"MAVERICK_WORKSPACE_ROOT = \"{repo_root / 'workspaces' / 'acme'}\"", runtime_config)
+        self.assertIn(f"LOOPINO_RUNTIME_BIN = \"{runtime_bin}\"", runtime_config)
+        self.assertIn(f"LOOPINO_RUNTIME_ROOT = \"{runtime_bin.parent}\"", runtime_config)
+        self.assertIn(f"LOOPINO_WORKSPACE_ROOT = \"{repo_root / 'workspaces' / 'acme'}\"", runtime_config)
         self.assertIn("[[hooks.PostToolUse]]", runtime_config)
         self.assertIn(f"matcher = {json.dumps(CODEX_POST_TOOL_USE_SHELL_MATCHER)}", runtime_config)
         self.assertIn("exec_command", runtime_config)
@@ -1173,7 +1173,7 @@ class ProvidersTestCase(unittest.TestCase):
         (stale_runtime_home / ".tmp" / "plugins.sha").write_text("stale\n", encoding="utf-8")
         (stale_runtime_home / ".tmp" / "app-server-remote-plugin-sync-v1").write_text("ok\n", encoding="utf-8")
 
-        with patch.dict(os.environ, {"MAVERICK_CODEX_HOME": str(source_home)}, clear=False):
+        with patch.dict(os.environ, {"LOOPINO_CODEX_HOME": str(source_home)}, clear=False):
             spec = CodexProviderAdapter(codex_command="/bin/echo").build_launch_spec(session)
 
         runtime_home = Path(spec.env_overrides["CODEX_HOME"])
@@ -1221,11 +1221,11 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertFalse((runtime_home / ".tmp" / "plugins.sha").exists())
         self.assertFalse((runtime_home / ".tmp" / "app-server-remote-plugin-sync-v1").exists())
 
-    def test_existing_runtime_maverick_wrapper_is_refreshed(self) -> None:
+    def test_existing_runtime_loopino_wrapper_is_refreshed(self) -> None:
         repo_root = self.make_repo_root()
-        wrapper = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-stale" / "bin" / "maverick"
+        wrapper = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-stale" / "bin" / "loopino"
         wrapper.parent.mkdir(parents=True, exist_ok=True)
-        legacy_create_command = "maverick app " + "create"
+        legacy_create_command = "loopino app " + "create"
         wrapper.write_text(
             "#!/usr/bin/env python3\n"
             "def parse_app_create(args):\n"
@@ -1235,27 +1235,27 @@ class ProvidersTestCase(unittest.TestCase):
         )
         wrapper.chmod(0o600)
 
-        refreshed = refresh_workspace_maverick_wrappers(repo_root)
+        refreshed = refresh_workspace_loopino_wrappers(repo_root)
         content = wrapper.read_text(encoding="utf-8")
 
         self.assertEqual(refreshed, [wrapper])
         self.assertTrue(os.access(wrapper, os.X_OK))
-        self.assertIn("maverick core cli run core.app-sdk.create --app-id <app_id>", content)
+        self.assertIn("loopino core cli run core.app-sdk.create --app-id <app_id>", content)
         self.assertIn("response_exit_code", content)
         self.assertNotIn("parse_app_create", content)
         self.assertNotIn(legacy_create_command, content)
 
-    def test_workspace_maverick_wrapper_exits_nonzero_for_error_status_payload(self) -> None:
+    def test_workspace_loopino_wrapper_exits_nonzero_for_error_status_payload(self) -> None:
         namespace: dict[str, object] = {"__name__": "wrapper_test"}
-        exec(_workspace_maverick_wrapper_source(), namespace)
+        exec(_workspace_loopino_wrapper_source(), namespace)
 
         response_exit_code = namespace["response_exit_code"]
         self.assertEqual(response_exit_code('{"status_code": 400, "error": "unsupported"}'), 1)  # type: ignore[operator]
         self.assertEqual(response_exit_code('{"status_code": 200}'), 0)  # type: ignore[operator]
 
-    def test_workspace_maverick_wrapper_requests_provider_compact_by_default(self) -> None:
+    def test_workspace_loopino_wrapper_requests_provider_compact_by_default(self) -> None:
         namespace: dict[str, object] = {"__name__": "wrapper_test"}
-        exec(_workspace_maverick_wrapper_source(), namespace)
+        exec(_workspace_loopino_wrapper_source(), namespace)
         captured_payloads: list[dict[str, object]] = []
 
         class RequestStub:
@@ -1268,7 +1268,7 @@ class ProvidersTestCase(unittest.TestCase):
         with patch.object(namespace["urllib"].request, "Request", RequestStub):  # type: ignore[index, union-attr]
             with patch.dict(os.environ, {}, clear=True):
                 self.assertEqual(namespace["call_cli"](["apps", "list", "--json"]), 0)  # type: ignore[operator]
-            with patch.dict(os.environ, {"MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE": "full"}, clear=True):
+            with patch.dict(os.environ, {"LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE": "full"}, clear=True):
                 self.assertEqual(namespace["call_cli"](["apps", "list", "--json"]), 0)  # type: ignore[operator]
 
         self.assertEqual(captured_payloads[0]["output_profile"], "provider_compact")
@@ -1291,7 +1291,7 @@ class ProvidersTestCase(unittest.TestCase):
             start_path=repo_root,
         )
 
-        with patch.dict(os.environ, {"MAVERICK_CODEX_HOME": str(source_home)}, clear=False):
+        with patch.dict(os.environ, {"LOOPINO_CODEX_HOME": str(source_home)}, clear=False):
             spec = CodexProviderAdapter(codex_command="/bin/echo").build_launch_spec(session)
 
         runtime_config = (Path(spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
@@ -1422,7 +1422,7 @@ class ProvidersTestCase(unittest.TestCase):
             secret_store=secret_store,
         )
 
-        self.assertEqual(spec.env_overrides["MAVERICK_PROVIDER_SECRET"], "super-secret-token")
+        self.assertEqual(spec.env_overrides["LOOPINO_PROVIDER_SECRET"], "super-secret-token")
         self.assertIsNotNone(spec.credential_binding_id)
         self.assertEqual(spec.resolved_secret_refs, ["platform:secret-alias/provider-secret"])
 

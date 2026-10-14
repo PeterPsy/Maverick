@@ -6,12 +6,12 @@ Accepted
 
 ## Context
 
-Maverick currently uses Codex-backed runtime sessions, but the platform cannot be architected as if Codex were the only possible backend forever.
+Loopino currently uses Codex-backed runtime sessions, but the platform cannot be architected as if Codex were the only possible backend forever.
 
 ## Decision
 
 - the runtime talks to providers through a provider abstraction
-- provider sessions are linked to Maverick runtime sessions but remain provider-specific state
+- provider sessions are linked to Loopino runtime sessions but remain provider-specific state
 - Codex app-server is the current concrete backend, not the architectural definition of the runtime layer
 
 ## Consequences

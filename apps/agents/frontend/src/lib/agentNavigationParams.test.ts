@@ -18,7 +18,7 @@ describe('agent navigation params', () => {
   it('hydrates the shell sidebar selection from widget context for active Agents routes', () => {
     expect(
       agentTypeIdFromWidgetContext({
-        type: 'maverick.widget.context-changed',
+        type: 'loopino.widget.context-changed',
         context: {
           content: {
             payload: {
@@ -34,7 +34,7 @@ describe('agent navigation params', () => {
   it('ignores widget context for other active apps', () => {
     expect(
       agentTypeIdFromWidgetContext({
-        type: 'maverick.widget.context-changed',
+        type: 'loopino.widget.context-changed',
         context: {
           content: {
             payload: {

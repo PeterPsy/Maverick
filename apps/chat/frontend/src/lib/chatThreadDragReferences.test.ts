@@ -30,7 +30,7 @@ class FakeDataTransfer {
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
-    agent_label: "Maverick",
+    agent_label: "Loopino",
     agent_role_id: "",
     agent_type_id: "",
     archived: false,

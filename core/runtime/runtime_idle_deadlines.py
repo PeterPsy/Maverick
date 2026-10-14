@@ -38,7 +38,7 @@ class RuntimeIdleDeadlines:
                         previous.at = min(previous.at, now)
             self._pending[key] = _IdleDeadline(now + max(0, delay), callback, retention_group)
             if self._thread is None:
-                self._thread = Thread(target=self._run, name='maverick-runtime-idle-resources', daemon=True)
+                self._thread = Thread(target=self._run, name='loopino-runtime-idle-resources', daemon=True)
                 self._thread.start()
             self._condition.notify()
 

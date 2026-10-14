@@ -50,7 +50,7 @@ def start_declared_sidecar_prewarms(
         thread = Thread(
             target=_prewarm_sequence,
             kwargs={"queue": tuple(queue), "shutdown_controller": shutdown_controller},
-            name=f"maverick-sidecar-prewarm-family-{app_id}-{sidecar_id}",
+            name=f"loopino-sidecar-prewarm-family-{app_id}-{sidecar_id}",
             daemon=True,
         )
         thread.start()
@@ -103,7 +103,7 @@ def start_workspace_app_sidecar_prewarms(
         thread = Thread(
             target=_prewarm_one,
             kwargs=arguments,
-            name=f"maverick-sidecar-prewarm-{binding.workspace_id}-{binding.app_id}-{sidecar.service_id}",
+            name=f"loopino-sidecar-prewarm-{binding.workspace_id}-{binding.app_id}-{sidecar.service_id}",
             daemon=True,
         )
         thread.start()
@@ -138,7 +138,7 @@ def prewarm_workspace_app_sidecars(
         sidecar = item["sidecar"]
         with _prewarm_family_lock(binding.app_id, sidecar.service_id):
             if _is_shutting_down(shutdown_controller):
-                raise RuntimeError("Maverick Core is shutting down.")
+                raise RuntimeError("Loopino Core is shutting down.")
             running = ensure_sidecar_with_declared_auto_repair(
                 binding=binding,
                 source_root=item["source_root"],

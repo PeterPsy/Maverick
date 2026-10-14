@@ -1,4 +1,4 @@
-"""Hosted platform HTTP surface for Maverick."""
+"""Hosted platform HTTP surface for Loopino."""
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ class PlatformHost:
 
     def _handle_request(self, environ: dict, start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "/")
-        request_shutdown_controller = environ.get("maverick.entrypoint_shutdown_controller")
+        request_shutdown_controller = environ.get("loopino.entrypoint_shutdown_controller")
         if not isinstance(request_shutdown_controller, EntrypointShutdownController):
             request_shutdown_controller = self.shutdown_controller
         try:
@@ -218,7 +218,7 @@ class PlatformHost:
                 return routed
 
             if path == "/health":
-                return json_response(start_response, {"status": "ok", "service": "maverick-core"})
+                return json_response(start_response, {"status": "ok", "service": "loopino-core"})
             if path == "/api/status":
                 if context is None:
                     return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")

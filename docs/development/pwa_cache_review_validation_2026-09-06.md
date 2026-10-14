@@ -62,7 +62,7 @@ Focused repeats are not counted twice in this table.
 
 **1,361 tests passed.** PWA operational audit, SDK typecheck, unused-import
 checker and final diff whitespace checks passed. Ten official
-`maverick app <id> frontend build --json` operations completed and published
+`loopino app <id> frontend build --json` operations completed and published
 scoped frontend refresh events. CRM, Mail and Website Studio were rebuilt and
 covered by SDK/broker/smoke checks; their separate full visual/E2E suites and the
 repository-wide pre-merge suite were not run.
@@ -75,7 +75,7 @@ dynamic-request exclusion, and isolated Settings refresh/clear/recovery. The
 earlier review's provider identity startup failure did **not** recur. An initial
 pre-build smoke was diagnostic only; it is not the evidence linked above.
 
-Representative commands from the Maverick root:
+Representative commands from the Loopino root:
 
 ```sh
 npm --prefix packages/pwa-cache test -- --maxWorkers=1
@@ -125,7 +125,7 @@ complete until the three operational steps above are actually recorded.
 ## Workspace plan synchronization
 
 The Storage-owned
-`storage/generated/development/maverick-pwa-cache-development-plan.md` was
+`storage/generated/development/loopino-pwa-cache-development-plan.md` was
 updated through `storage_update_markdown_file` with six guarded exact
 replacements. Prior SHA-256:
 `e8ce23ffe461f08bd696e1f0061c706412c7cb9c4079f848c787c5a21ec5e904`;

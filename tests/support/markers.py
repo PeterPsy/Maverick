@@ -14,9 +14,9 @@ SLOW_LEVELS = INTEGRATION_LEVELS | FULL_LEVELS
 def slow_tests_enabled() -> bool:
     """Return whether explicitly slow tests should run in this process."""
 
-    if os.environ.get("MAVERICK_TEST_FULL_ONLY") == "1":
+    if os.environ.get("LOOPINO_TEST_FULL_ONLY") == "1":
         return False
-    return os.environ.get("MAVERICK_TEST_LEVEL", "fast").strip().lower() in SLOW_LEVELS
+    return os.environ.get("LOOPINO_TEST_LEVEL", "fast").strip().lower() in SLOW_LEVELS
 
 
 def slow_test_class(reason: str):
@@ -28,15 +28,15 @@ def slow_test_class(reason: str):
 def integration_tests_enabled() -> bool:
     """Return whether integration tests should run in this process."""
 
-    if os.environ.get("MAVERICK_TEST_FULL_ONLY") == "1":
+    if os.environ.get("LOOPINO_TEST_FULL_ONLY") == "1":
         return False
-    return os.environ.get("MAVERICK_TEST_LEVEL", "fast").strip().lower() in INTEGRATION_LEVELS
+    return os.environ.get("LOOPINO_TEST_LEVEL", "fast").strip().lower() in INTEGRATION_LEVELS
 
 
 def full_tests_enabled() -> bool:
     """Return whether full end-to-end tests should run in this process."""
 
-    return os.environ.get("MAVERICK_TEST_LEVEL", "fast").strip().lower() in FULL_LEVELS
+    return os.environ.get("LOOPINO_TEST_LEVEL", "fast").strip().lower() in FULL_LEVELS
 
 
 def integration_test(reason: str):

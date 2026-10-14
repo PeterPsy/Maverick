@@ -57,7 +57,7 @@ def start_oauth(data_root: Path, payload: dict[str, object]) -> dict[str, object
     if provider != "gmail":
         raise ValueError(f"Unsupported OAuth provider `{provider}`")
     if any(item.get("settings", {}).get("managed_by") == "platform" for item in list_connections(data_root)):
-        raise ValueError("Manage Google permissions and accounts from Maverick Connected accounts.")
+        raise ValueError("Manage Google permissions and accounts from Loopino Connected accounts.")
     secrets_map = _secret_map(payload.get("_app_secrets"))
     client_id = str(secrets_map.get(GMAIL_CLIENT_ID_SECRET) or "").strip()
     redirect_uri = _allowed_redirect_uri(payload.get("redirect_uri") or DEFAULT_REDIRECT_PATH)

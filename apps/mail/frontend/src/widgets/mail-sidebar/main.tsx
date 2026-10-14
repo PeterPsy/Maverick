@@ -1,5 +1,5 @@
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
-import { AccountAvatar } from '@maverick/account-avatar';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
+import { AccountAvatar } from '@loopino/account-avatar';
 import { readMailDisplay } from '../../pwaCache';
 import { accountEmail as accountName, accountDisplayName } from '../../accountLabels';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -166,7 +166,7 @@ function isMobileFromContext(context: WidgetContext) {
 function openMail(params: Record<string, string | boolean | null>) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'mail',
       params
     },
@@ -175,7 +175,7 @@ function openMail(params: Record<string, string | boolean | null>) {
 }
 
 function closeShellSidebar() {
-  window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+  window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
 }
 
 function MailSidebarWidget() {
@@ -243,7 +243,7 @@ function MailSidebarWidget() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -253,17 +253,17 @@ function MailSidebarWidget() {
         selection?: Record<string, unknown>;
         type?: string;
       };
-      if (payload.type === 'maverick.widget.context-changed' && payload.context) {
+      if (payload.type === 'loopino.widget.context-changed' && payload.context) {
         setMailboxScopeIds(mailboxScopeIdsFromContext(payload.context, mailboxScopeIds));
         setIsMobileLayout(isMobileFromContext(payload.context));
         return;
       }
-      if (payload.type === 'maverick.app.selection-changed' && payload.owner_app_id === 'mail') {
+      if (payload.type === 'loopino.app.selection-changed' && payload.owner_app_id === 'mail') {
         setMailboxScopeIds(mailboxScopeIdsFromParams(payload.selection, mailboxScopeIds));
         return;
       }
       if (
-        payload.type === 'maverick.widget.data-changed' &&
+        payload.type === 'loopino.widget.data-changed' &&
         payload.owner_app_id === 'mail' &&
         typeof payload.resource === 'string' &&
         MAIL_DATA_RESOURCES.has(payload.resource)

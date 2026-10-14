@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Check, FolderPlus, HardDrive, Upload, X } from 'lucide-react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { STORAGE_CATALOG_REVALIDATED_EVENT, createFolder, currentStorageAppId, loadDirectoryChildren, startDriveOAuth, uploadDriveFile, uploadFile, type UploadProgress } from '../../storageApi';
 import { useStorageReadLifecycle } from '../../hooks/useStorageReadLifecycle';
 import { roleLabels } from '../../storageMeta';
@@ -10,7 +10,7 @@ import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from 
 import { applyStorageFoldersDelta } from '../../lib/storageCatalogDelta';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
 import {
-  maverickPlatformOrigin,
+  loopinoPlatformOrigin,
   storageOAuthNavigationDisposition,
   storageOAuthRedirectUri,
   type StorageOAuthNavigationDisposition,
@@ -127,7 +127,7 @@ function openFolderInShell(appId: string, target: FolderActionTarget) {
   }
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: appId,
       params: {
         folder_relative_path: target.relativePath,
@@ -141,7 +141,7 @@ function openFolderInShell(appId: string, target: FolderActionTarget) {
 function openDriveFolderInShell(appId: string, target: DriveFolderActionTarget) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: appId,
       params: {
         provider: 'google_drive',
@@ -157,7 +157,7 @@ function openDriveFolderInShell(appId: string, target: DriveFolderActionTarget) 
 function openFileInShell(appId: string, file: StorageFile) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: appId,
       params: {
         workspace_relative_path: file.workspace_relative_path
@@ -170,7 +170,7 @@ function openFileInShell(appId: string, file: StorageFile) {
 function postStorageFilesChanged(appId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: appId,
       resource: 'files'
     },
@@ -181,7 +181,7 @@ function postStorageFilesChanged(appId: string) {
 function postPrimaryActionState(appId: string, available: boolean) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.primary-action.state',
+      type: 'loopino.widget.primary-action.state',
       owner_app_id: appId,
       widget_id: WIDGET_ID,
       available,
@@ -245,7 +245,7 @@ function StorageSidebarFooterWidget() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -265,7 +265,7 @@ function StorageSidebarFooterWidget() {
         setStatus('');
         return;
       }
-      if (payload.type !== 'maverick.widget.data-changed' || payload.owner_app_id !== appId) {
+      if (payload.type !== 'loopino.widget.data-changed' || payload.owner_app_id !== appId) {
         return;
       }
       if (payload.resource === 'files') {
@@ -349,7 +349,7 @@ function StorageSidebarFooterWidget() {
     setIsConnectingDrive(true);
     setStatus('');
     try {
-      const payload = await startDriveOAuth({ redirectUri: storageOAuthRedirectUri(appId, maverickPlatformOrigin()) });
+      const payload = await startDriveOAuth({ redirectUri: storageOAuthRedirectUri(appId, loopinoPlatformOrigin()) });
       if (payload.status === 'not_configured') {
         closeAuthorizationWindow(authorizationWindow);
         setStatus('Google Drive OAuth is not configured');
@@ -435,11 +435,11 @@ function StorageSidebarFooterWidget() {
       if (payload.owner_app_id !== appId || payload.widget_id !== WIDGET_ID) {
         return;
       }
-      if (payload.type === 'maverick.widget.primary-action.query') {
+      if (payload.type === 'loopino.widget.primary-action.query') {
         postPrimaryActionState(appId, primaryActionAvailable);
         return;
       }
-      if (payload.type === 'maverick.widget.primary-action.invoke' && primaryActionAvailable) {
+      if (payload.type === 'loopino.widget.primary-action.invoke' && primaryActionAvailable) {
         startNewFolder();
       }
     }
@@ -580,7 +580,7 @@ function openAuthorizationUrl(
   }
   if (window.top && window.top !== window) {
     window.parent.postMessage({
-      type: 'maverick.app.external-url',
+      type: 'loopino.app.external-url',
       url: authorizationUrl,
       disposition,
       owner_app_id: ownerAppId,

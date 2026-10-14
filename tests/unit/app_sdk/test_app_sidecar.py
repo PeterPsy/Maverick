@@ -79,7 +79,7 @@ class AppSidecarSdkTests(unittest.TestCase):
     def _payload(socket_path: str) -> dict:
         return {
             "app_sidecar": {
-                "protocol": "maverick.app-sidecar.v1",
+                "protocol": "loopino.app-sidecar.v1",
                 "invocation_id": "invoke-1",
                 "services": {
                     "opendesign": {

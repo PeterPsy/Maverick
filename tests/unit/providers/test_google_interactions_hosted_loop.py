@@ -18,7 +18,7 @@ from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CONTENT_TYPE,
     GOOGLE_INTERACTIONS_SCHEMA_VERSION,
 )
-from core.providers.maverick_agent_builtins import (
+from core.providers.loopino_agent_builtins import (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
 )
 from core.runtime.execution import execute_runtime_turn
@@ -101,7 +101,7 @@ class GoogleInteractionsHostedLoopTest(unittest.TestCase):
                     ),
                     session_id=harness.session.session_id,
                     turn_id="turn-hosted",
-                    provider_id="maverick-tool-loop",
+                    provider_id="loopino-tool-loop",
                     exit_code=result.exit_code,
                     failure_reason_code=result.failure_reason_code,
                     public_error_message=result.public_error_message,

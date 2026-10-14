@@ -13,8 +13,8 @@ import test from "node:test";
 import { gzipSync } from "node:zlib";
 import { build } from "vite";
 
-import { maverickFrontendAssets } from "../../../scripts/vite-frontend-assets.mjs";
-import { maverickIsolatedFrameAssetUrls } from "../../../scripts/vite-isolated-frame-assets.mjs";
+import { loopinoFrontendAssets } from "../../../scripts/vite-frontend-assets.mjs";
+import { loopinoIsolatedFrameAssetUrls } from "../../../scripts/vite-isolated-frame-assets.mjs";
 import {
   browserExecutable,
   close,
@@ -34,8 +34,8 @@ test("a production Vite bundle keeps runtime assets on the cacheable platform or
     return;
   }
 
-  const project = mkdtempSync(resolve(tmpdir(), "maverick-vite-isolated-"));
-  const profile = mkdtempSync(resolve(tmpdir(), "maverick-vite-browser-"));
+  const project = mkdtempSync(resolve(tmpdir(), "loopino-vite-isolated-"));
+  const profile = mkdtempSync(resolve(tmpdir(), "loopino-vite-browser-"));
   const dist = resolve(project, "dist");
   context.after(() => {
     rmSync(project, { force: true, recursive: true });
@@ -51,11 +51,11 @@ test("a production Vite bundle keeps runtime assets on the cacheable platform or
       rollupOptions: { input: resolve(project, "index.html") },
     },
     logLevel: "silent",
-    plugins: [maverickIsolatedFrameAssetUrls(), maverickFrontendAssets()],
+    plugins: [loopinoIsolatedFrameAssetUrls(), loopinoFrontendAssets()],
     root: project,
   });
 
-  const manifest = JSON.parse(readFileSync(resolve(dist, "maverick-frontend-assets.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(resolve(dist, "loopino-frontend-assets.json"), "utf8"));
   const immutablePaths = manifest.immutable.map(({ path }) => path);
   assert.deepEqual(
     [".mjs", ".mp3", ".svg", ".wasm"].filter((extension) =>
@@ -226,8 +226,8 @@ Promise.all([
   if (new Set(origins).size !== 1) throw new Error("asset origins diverged");
   document.body.dataset.assetOrigin = origins[0];
   document.body.dataset.documentOrigin = location.origin;
-  if (sessionStorage.getItem("maverick-vite-round") === null) {
-    sessionStorage.setItem("maverick-vite-round", "second");
+  if (sessionStorage.getItem("loopino-vite-round") === null) {
+    sessionStorage.setItem("loopino-vite-round", "second");
     location.replace("/second");
     return;
   }

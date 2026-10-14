@@ -2,25 +2,25 @@
 
 This deployment path is for local demos, self-hosted evaluation, and controlled review environments only.
 
-Maverick is not production-ready. Do not expose this configuration with real secrets until the documented security hardening work is closed.
+Loopino is not production-ready. Do not expose this configuration with real secrets until the documented security hardening work is closed.
 
 ## Files
 
-- `scripts/deploy/systemd/maverick-core.service`
-- `scripts/deploy/systemd/maverick-rescue.service`
-- `scripts/deploy/systemd/maverick-backend-watchdog.service`
-- `scripts/deploy/systemd/maverick-backend-watchdog.timer`
-- `scripts/deploy/nginx/maverick.example.conf`
+- `scripts/deploy/systemd/loopino-core.service`
+- `scripts/deploy/systemd/loopino-rescue.service`
+- `scripts/deploy/systemd/loopino-backend-watchdog.service`
+- `scripts/deploy/systemd/loopino-backend-watchdog.timer`
+- `scripts/deploy/nginx/loopino.example.conf`
 
 Run the installer to bootstrap, verify, render, and optionally apply the deployment in one flow:
 
 ```bash
-cd maverick
-python3.12 scripts/install_maverick.py --hostname maverick.<host>.com --install-root .
+cd loopino
+python3.12 scripts/install_loopino.py --hostname loopino.<host>.com --install-root .
 ```
 
 `--install-root` currently must be the checkout root that the installer is running from.
-Clone Maverick directly into the intended install root before running the installer.
+Clone Loopino directly into the intended install root before running the installer.
 The installer fails instead of rendering systemd units that point at a different tree from the one it bootstrapped.
 
 In interactive mode the installer asks for missing values, then prompts before:
@@ -32,12 +32,12 @@ In interactive mode the installer asks for missing values, then prompts before:
 
 It always renders a copy of the deployment plan under:
 
-- `.maverick/install/systemd/*.service`
-- `.maverick/install/systemd/*.timer`
-- `.maverick/install/nginx/<hostname>.conf`
-- `.maverick/install/install-manifest.json`
+- `.loopino/install/systemd/*.service`
+- `.loopino/install/systemd/*.timer`
+- `.loopino/install/nginx/<hostname>.conf`
+- `.loopino/install/install-manifest.json`
 
-The generated `.env.maverick` file is written outside `.maverick` by default and is loaded by the systemd units through `EnvironmentFile=`.
+The generated `.env.loopino` file is written outside `.loopino` by default and is loaded by the systemd units through `EnvironmentFile=`.
 It contains local bootstrap credentials and secret refs and is written with mode `0600`.
 The corresponding encrypted bootstrap secret envelopes and local secret-store key are written to the configured bootstrap paths. Keep all of those files out of version control and rotate generated values before any longer-lived public exposure.
 Generated systemd services put `/usr/local/bin` before `/usr/bin` in `PATH`,
@@ -51,7 +51,7 @@ sessions as preferred victims for `earlyoom` or the kernel OOM killer. Operators
 must still bound or stop unrelated restart loops and memory-heavy development
 services; OOM scoring is not a substitute for host resource management.
 
-The backend watchdog also loads `.env.maverick`, but rescue authority comes from the configured provider selection persisted in the control-plane store. A `MAVERICK_BACKEND_RESCUE_COMMAND` value is only a provider command override for the selected provider; it must not start rescue by itself when no provider is configured.
+The backend watchdog also loads `.env.loopino`, but rescue authority comes from the configured provider selection persisted in the control-plane store. A `LOOPINO_BACKEND_RESCUE_COMMAND` value is only a provider command override for the selected provider; it must not start rescue by itself when no provider is configured.
 
 For a first-time HTTPS install, the installer initially writes an HTTP nginx config that can pass `nginx -t` without existing certificates and serve the ACME challenge.
 After certbot obtains the certificate, the installer rewrites nginx with the final HTTPS config and reloads it.
@@ -61,8 +61,8 @@ Certbot failure is reported separately and stops before public-origin probes.
 When an operator passes `--skip-tls` for a public HTTPS install, the installer assumes TLS is externally managed or already provisioned and renders the final HTTPS nginx config immediately.
 
 Browser-visible HTTP sidecars need a second, isolated hosted origin. For a
-public hostname such as `maverick.example.com`, first route wildcard DNS for
-`*.sidecars.maverick.example.com` to this proxy. Choose one of the following
+public hostname such as `loopino.example.com`, first route wildcard DNS for
+`*.sidecars.loopino.example.com` to this proxy. Choose one of the following
 TLS lifecycles.
 
 ### External wildcard TLS
@@ -70,11 +70,11 @@ TLS lifecycles.
 Provision a wildcard certificate with DNS-01 before live apply, then run:
 
 ```bash
-python3.12 scripts/install_maverick.py \
-  --hostname maverick.example.com \
+python3.12 scripts/install_loopino.py \
+  --hostname loopino.example.com \
   --hosted-sidecars \
-  --sidecar-tls-cert /etc/letsencrypt/live/maverick.example.com-sidecars/fullchain.pem \
-  --sidecar-tls-key /etc/letsencrypt/live/maverick.example.com-sidecars/privkey.pem \
+  --sidecar-tls-cert /projects/loopino/installation/tls/certbot/config/live/loopino.example.com-sidecars/fullchain.pem \
+  --sidecar-tls-key /projects/loopino/installation/tls/certbot/config/live/loopino.example.com-sidecars/privkey.pem \
   --skip-tls
 ```
 
@@ -99,8 +99,8 @@ When wildcard DNS already routes to this host but DNS-provider credentials are
 not available, use the managed exact lifecycle:
 
 ```bash
-python3.12 scripts/install_maverick.py \
-  --hostname maverick.example.com \
+python3.12 scripts/install_loopino.py \
+  --hostname loopino.example.com \
   --hosted-sidecars \
   --browser-origin-tls-mode managed_exact
 ```
@@ -110,7 +110,7 @@ under every routed sidecar hostname. Before Core returns a browser launch
 ticket, it asks Certbot for a public certificate containing only exact
 Core-derived `af-*` or `sc-*` names, validates the SAN/validity/key pair, and
 atomically publishes the pair under
-`/var/lib/maverick/browser-origin-tls/served`. Private ACME state remains below
+`/projects/loopino/data/browser-origin-tls/served`. Private ACME state remains below
 the service-only `private` directory; Nginx receives group read access only to
 published keys. The installer obtains both reserved probe names before its
 final Nginx reload and public health pass.
@@ -119,8 +119,8 @@ Override the storage paths only when the service user and Nginx worker can
 retain the same permission boundary:
 
 ```bash
-  --browser-origin-tls-root /var/lib/maverick/browser-origin-tls \
-  --browser-origin-acme-webroot /var/lib/maverick/browser-origin-acme \
+  --browser-origin-tls-root /projects/loopino/data/browser-origin-tls \
+  --browser-origin-acme-webroot /projects/loopino/data/browser-origin-acme \
   --browser-origin-tls-nginx-group www-data
 ```
 
@@ -131,7 +131,7 @@ renewal occurs on an authorized launch before the exact host is returned. This
 mode is appropriate for controlled or modest self-hosted use, not unbounded
 multi-tenant login volume: CA order/domain limits remain an availability gate.
 Public CAs also publish exact certificate names to Certificate Transparency
-logs. Maverick labels remain opaque hashes and never encode user, workspace, or
+logs. Loopino labels remain opaque hashes and never encode user, workspace, or
 app identifiers, but issuance volume is still observable metadata. Use the
 external wildcard mode when that metadata disclosure is unacceptable.
 Use external wildcard TLS or an explicitly reviewed CA capacity agreement for
@@ -165,9 +165,9 @@ Only type `yes` or `y` at confirmation prompts that explicitly show `[y/N]` or `
 Example command:
 
 ```bash
-cd maverick
-python3.12 scripts/install_maverick.py \
-  --hostname maverick.<host>.com \
+cd loopino
+python3.12 scripts/install_loopino.py \
+  --hostname loopino.<host>.com \
   --skip-bootstrap \
   --skip-verify \
   --install-root .
@@ -193,33 +193,33 @@ Do not continue with a wrong `Service user`, `Service group`, or `Install root`.
 ## Recovering the Azure migration
 
 The Azure host runs `migrated-nginx.service` with
-`RootDirectory=/srv/migration/loopino-root` and
+`RootDirectory=/projects/loopino/operations/migration/loopino-root` and
 `/etc/nginx/azure-runtime.conf` inside that root. This configuration includes
-`azure-loopino-unified.conf` instead of `sites-enabled/*`. Migrated Maverick
+`azure-loopino-unified.conf` instead of `sites-enabled/*`. Migrated Loopino
 virtual hosts and systemd units therefore need explicit activation on the new
 host. An omitted HTTPS virtual host can cause Nginx to present another site's
-certificate for `maverick.loopino.ai`.
+certificate for `loopino.giuntitrail.com`.
 
 Render the recovery plan without privileged writes:
 
 ```bash
-bash scripts/deploy/restore_azure_maverick.sh --render-only
+bash scripts/deploy/restore_azure_loopino.sh --render-only
 ```
 
-Review `.maverick/install/azure-recovery/`, then run from an administrative
+Review `.loopino/install/azure-recovery/`, then run from an administrative
 terminal on the Azure host:
 
 ```bash
-sudo bash /srv/migration/loopino-root/home/ubuntu/projects/maverick-v3/scripts/deploy/restore_azure_maverick.sh --apply
+sudo bash /projects/loopino/operations/migration/loopino-root/projects/loopino/scripts/deploy/restore_azure_loopino.sh --apply
 ```
 
-This first-install recovery refuses to overwrite existing host Maverick
+This first-install recovery refuses to overwrite existing host Loopino
 services. It preserves the migrated core/rescue units and their drop-ins,
 uses the migrated Ubuntu account's numeric UID/GID, and runs them inside the
 same root as Nginx. It adds the installation directory's operating group as a
 numeric supplementary group so migrated JSON collections and lock files remain
 accessible when their group differs from the account's primary group. If this
-GID has no host group entry, the recovery registers `maverick-migrated-data`
+GID has no host group entry, the recovery registers `loopino-migrated-data`
 with that GID before starting services; systemd requires the supplementary
 group to resolve in the host's group database. This group registration remains
 available after a configuration rollback.
@@ -229,7 +229,7 @@ host path because systemd reads it before applying `RootDirectory=`. The
 process home remains `/home/ubuntu` even if the host account has another name.
 
 The script backs up the changed configuration under
-`/var/backups/maverick-azure.*`, activates only the main and browser-origin
+`/var/backups/loopino-azure.*`, activates only the main and browser-origin
 virtual hosts, routes HTTP-01 challenges before renewing the migrated main
 certificate and reserved browser-origin probe certificates, then enables the
 core/rescue services and switches to HTTPS. It adds main-certificate renewal
@@ -243,11 +243,11 @@ or interruption before local validation restore the prior Nginx/systemd
 configuration; renewed certificates remain available. Public DNS/TLS checks
 run afterward. If public checks fail, the working local recovery remains
 active and the command exits nonzero. Correct the public A/AAAA records for
-the main hostname and `*.sidecars.maverick.loopino.ai`, then repeat the
+the main hostname and `*.sidecars.loopino.giuntitrail.com`, then repeat the
 read-only verification:
 
 ```bash
-bash scripts/deploy/restore_azure_maverick.sh --verify
+bash scripts/deploy/restore_azure_loopino.sh --verify
 ```
 
 ## Minimum Hardening
@@ -257,9 +257,9 @@ bash scripts/deploy/restore_azure_maverick.sh --verify
 - keep camera and geolocation disabled in nginx `Permissions-Policy`, and omit the microphone directive so Base Shell can delegate microphone access to each validated isolated app origin through the iframe `allow` attribute. `microphone=(self)` blocks Chat dictation because app origins differ from the shell origin; iframe attributes cannot override that header. Existing installations must update their nginx configuration and reload it before reloading the shell on desktop or mobile.
 - set upload limits
 - keep logs outside the repository
-- keep the configured control-plane store and `.env.maverick` on restricted filesystem permissions
+- keep the configured control-plane store and `.env.loopino` on restricted filesystem permissions
 - keep rescue automation disabled unless an operator has reviewed the policy
-- restrict filesystem permissions on `.maverick/`, `data/control-plane/`, logs, and workspace roots
+- restrict filesystem permissions on `.loopino/`, `data/control-plane/`, logs, and workspace roots
 
 ## Production Status
 

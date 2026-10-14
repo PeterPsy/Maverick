@@ -27,7 +27,7 @@ export function notifyActiveDynamicViewSelection(viewId: string, options: Notify
   const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'dynamic-views',
       selection: { view_id: normalizedViewId }
     },
@@ -37,7 +37,7 @@ export function notifyActiveDynamicViewSelection(viewId: string, options: Notify
 }
 
 export function dynamicViewIdFromSelectionMessage(message: ActiveDynamicViewSelectionMessage, ownerAppId = 'dynamic-views'): string {
-  if (message.type !== 'maverick.app.selection-changed' || message.owner_app_id !== ownerAppId) {
+  if (message.type !== 'loopino.app.selection-changed' || message.owner_app_id !== ownerAppId) {
     return '';
   }
   const selection = message.selection;

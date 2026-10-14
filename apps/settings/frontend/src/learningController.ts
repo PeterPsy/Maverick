@@ -1,7 +1,7 @@
 import { bindControl } from './controlBindings';
 import { clearSettingsDrafts } from './settingsDom';
 import { getAppDependencies, requestJson, saveAppDependencySelection, type AppDependenciesPayload } from './adminApi';
-import { connectAppEventSocket } from '@maverick/pwa-cache';
+import { connectAppEventSocket } from '@loopino/pwa-cache';
 import { bindLearningTickets } from './learningTicketBindings';
 
 export type LearningSettings = {
@@ -237,8 +237,8 @@ export function createLearningController(context: { render: () => void; workspac
       if (window.parent === window || event.ctrlKey || event.metaKey) return;
       event.preventDefault();
       const parts = new URL(link.href).pathname.split('/').filter(Boolean);
-      const origin = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }).__MAVERICK_PLATFORM_ORIGIN__ || '*';
-      window.parent.postMessage({ type: 'maverick.app.open-app', app_id: decodeURIComponent(parts[1]), params: { app_page: parts.slice(2).map(decodeURIComponent).join('/') } }, origin);
+      const origin = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: string }).__LOOPINO_PLATFORM_ORIGIN__ || '*';
+      window.parent.postMessage({ type: 'loopino.app.open-app', app_id: decodeURIComponent(parts[1]), params: { app_page: parts.slice(2).map(decodeURIComponent).join('/') } }, origin);
     }));
     document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button) => bindControl(button, 'click', () => {
       ticketViews.set(state.tab, { ticketView: state.ticketView, ticketFilter: state.ticketFilter, ticketSearch: state.ticketSearch, ticketCategory: state.ticketCategory });

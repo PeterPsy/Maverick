@@ -647,7 +647,7 @@ def _build_launch_spec_for_execution(
     runtime_adapter=None,
     agentic_adapter=None,
 ):
-    if os.environ.get("MAVERICK_RUNTIME_FAKE_RESPONSE") is not None:
+    if os.environ.get("LOOPINO_RUNTIME_FAKE_RESPONSE") is not None:
         return None, {}
     cache_fingerprint_started_at = time.perf_counter()
     cache_fingerprint = (
@@ -706,7 +706,7 @@ def _build_launch_spec_for_execution(
     skills, skill_resolve_ms, skill_prepare_ms = resolve_and_prepare_runtime_skills(
         state, session=session, runtime_adapter=runtime_adapter
     )
-    token = spec.env_overrides.get("MAVERICK_RUNTIME_API_TOKEN")
+    token = spec.env_overrides.get("LOOPINO_RUNTIME_API_TOKEN")
     if token:
         register_workspace_api_token(state.runtime_store, token)
     metadata = {

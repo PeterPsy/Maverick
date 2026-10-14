@@ -46,7 +46,7 @@ class OpenDesignTargetResolver:
             "name": request.project_name,
             "metadata": {
                 "kind": "prototype",
-                "maverickIntegration": "design-studio",
+                "loopinoIntegration": "design-studio",
             },
             "skipDiscoveryBrief": True,
             "conversationMode": "design",

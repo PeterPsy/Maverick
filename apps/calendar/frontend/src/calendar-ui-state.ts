@@ -14,9 +14,9 @@ export type CalendarUiState = {
 };
 
 export const CALENDAR_UI_STATE_RESOURCE = 'ui-state';
-export const CALENDAR_UI_STATE_CHANGED_EVENT = 'maverick.calendar.ui-state-changed';
+export const CALENDAR_UI_STATE_CHANGED_EVENT = 'loopino.calendar.ui-state-changed';
 
-const STORAGE_PREFIX = 'maverick.calendar.uiState';
+const STORAGE_PREFIX = 'loopino.calendar.uiState';
 
 const DEFAULT_UI_STATE: CalendarUiState = {
   createStart: '',
@@ -56,7 +56,7 @@ export function notifyCalendarUiStateChanged(appId: string, detail: Record<strin
   window.dispatchEvent(new CustomEvent(CALENDAR_UI_STATE_CHANGED_EVENT, { detail: { appId, ...detail } }));
   window.parent?.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: appId,
       resource: CALENDAR_UI_STATE_RESOURCE,
       detail,

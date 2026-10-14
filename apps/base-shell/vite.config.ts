@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
-import { maverickFrontendAssets } from "../../scripts/vite-frontend-assets.mjs";
+import { loopinoFrontendAssets } from "../../scripts/vite-frontend-assets.mjs";
 
 export default defineConfig({
   base: "/apps/base-shell/",
@@ -13,7 +13,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    maverickFrontendAssets({
+    loopinoFrontendAssets({
       navigationFallback: "index.html",
       serviceWorkerPath: "sw.js",
       precache: {
@@ -29,8 +29,8 @@ export default defineConfig({
         ],
         paths: [
           "app-icon-lightcolor.png",
-          "maverick-logotype.svg",
-          "maverick-mark.svg",
+          "loopino-logotype.svg",
+          "loopino-mark.svg",
           "pwa-apple-touch-icon.png",
           "pwa-logo-192.png",
           "pwa-logo.png",

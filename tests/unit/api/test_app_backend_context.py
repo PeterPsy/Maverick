@@ -27,8 +27,8 @@ class BackendContextTests(AppReferenceApiTestSupport, unittest.TestCase):
                 if include is not None:
                     contract['capabilities']['backend_workspace_apps'] = include
                 path.write_text(json.dumps(contract))
-                with patch.dict('os.environ', {'MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS': '1',
-                        'MAVERICK_ADMIN_USERNAME': 'admin', 'MAVERICK_ADMIN_PASSWORD': 'maverick'}):
+                with patch.dict('os.environ', {'LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS': '1',
+                        'LOOPINO_ADMIN_USERNAME': 'admin', 'LOOPINO_ADMIN_PASSWORD': 'loopino'}):
                     state = bootstrap_platform_state(start_path=root)
                 source = register_app_source_from_contract(state.app_store, source_kind='platform', source_path=str(app_root))
                 install_store_app(state.app_store, source_id=source.source_id, workspace_id='default', start_path=root)

@@ -85,7 +85,7 @@ function App() {
   }, [selectedId]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'dynamic-views' }, "*");
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'dynamic-views' }, "*");
   }, []);
 
   useEffect(() => {
@@ -100,11 +100,11 @@ function App() {
         resource?: string;
         type?: string;
       };
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'dynamic-views')) {
+      if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'dynamic-views')) {
         void handleNavigationParams(payload.params || {});
         return;
       }
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'dynamic-views' && payload.resource === 'views') {
+      if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'dynamic-views' && payload.resource === 'views') {
         void loadViews(selectedIdRef.current).catch((loadError: Error) => setError(loadError.message));
       }
     }

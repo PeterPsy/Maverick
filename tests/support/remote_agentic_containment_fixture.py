@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-from core.providers.maverick_agent_builtins import HOSTED_TOOL_LOOP_ADAPTER_VERSION
+from core.providers.loopino_agent_builtins import HOSTED_TOOL_LOOP_ADAPTER_VERSION
 from core.providers.agentic_models import WorkspaceAgenticProfileBinding, default_actor_selection_policy
 from core.providers.agentic_profiles import publish_codex_agentic_profile
 from core.providers.google_agentic_profile import ensure_google_agentic_preview_profile
@@ -56,7 +56,7 @@ class RemoteAgenticContainmentFixture:
         codex_definition = publish_codex_agentic_profile(
             self.provider_store,
             definition=self.registry.get_provider_definition("codex"),
-            model_id="gpt-5.6-sol",
+            model_id="gpt-6.1-sol",
             now=NOW,
         )
         self.codex_binding = self.provider_store.save_workspace_agentic_profile_binding(
@@ -78,8 +78,8 @@ class RemoteAgenticContainmentFixture:
         self.remote_definition = ensure_google_agentic_preview_profile(
             self.provider_store,
             adapter=SimpleNamespace(
-                runtime_engine_id="maverick-tool-loop",
-                adapter_id="maverick-hosted-tool-loop",
+                runtime_engine_id="loopino-tool-loop",
+                adapter_id="loopino-hosted-tool-loop",
                 adapter_version=HOSTED_TOOL_LOOP_ADAPTER_VERSION,
             ),
             now=NOW,

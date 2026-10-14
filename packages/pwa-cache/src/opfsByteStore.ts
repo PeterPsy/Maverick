@@ -1,6 +1,6 @@
 import type { FileCacheByteStore, FileCacheByteWriter } from "./fileCacheTypes";
 
-export const PWA_FILE_CACHE_OPFS_DIRECTORY = "maverick-pwa-file-cache-v1";
+export const PWA_FILE_CACHE_OPFS_DIRECTORY = "loopino-pwa-file-cache-v1";
 const OPAQUE_FILE_NAME = /^[a-z0-9][a-z0-9-]{7,95}\.bin$/u;
 
 type StorageManagerWithOpfs = StorageManager & {

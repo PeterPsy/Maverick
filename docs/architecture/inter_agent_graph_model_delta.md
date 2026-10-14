@@ -5,15 +5,15 @@ Status: F5.5B design intake
 
 ## Purpose
 
-This document compares Maverick's current inter-agent model with LangGraph's graph execution model before Maverick stabilizes a native graph engine or introduces external multi-agent adapters.
+This document compares Loopino's current inter-agent model with LangGraph's graph execution model before Loopino stabilizes a native graph engine or introduces external multi-agent adapters.
 
-The immediate goal is not to import LangGraph. LangGraph is a design reference for graph execution, state, checkpointing, interrupt/resume, replay, bounded loops, conditional routing, and human approval. Maverick remains the owner of product UX, workspace isolation, runtime sessions, authorization, visibility, events, budget, approvals, recovery, and persisted records.
+The immediate goal is not to import LangGraph. LangGraph is a design reference for graph execution, state, checkpointing, interrupt/resume, replay, bounded loops, conditional routing, and human approval. Loopino remains the owner of product UX, workspace isolation, runtime sessions, authorization, visibility, events, budget, approvals, recovery, and persisted records.
 
 ## Source Context
 
-Maverick context:
+Loopino context:
 
-- Storage blueprint: `storage/generated/specs/maverick_multi_agent_feature_blueprint_2026-06-15.md`
+- Storage blueprint: `storage/generated/specs/loopino_multi_agent_feature_blueprint_2026-06-15.md`
 - Current architecture gate: `docs/architecture/inter_agent_runtime_invariants.md`
 - Current implementation: `core/inter_agent/models.py`, `core/inter_agent/events.py`, `core/inter_agent/store.py`, `core/inter_agent/service.py`, `core/inter_agent/executor.py`
 - Current product surfaces: `core/api/inter_agent_api.py`, `core/api/inter_agent_websocket.py`, `apps/chat/frontend/src/api/interAgent.ts`
@@ -28,9 +28,9 @@ LangGraph reference docs consulted:
 - [GRAPH_RECURSION_LIMIT](https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT)
 - [Backward compatibility](https://docs.langchain.com/oss/python/langgraph/backward-compatibility)
 
-## Current Maverick Model
+## Current Loopino Model
 
-Maverick already has a product-owned inter-agent layer:
+Loopino already has a product-owned inter-agent layer:
 
 - `InterAgentRunRecord` is the lifecycle root for one run.
 - `InterAgentParticipantRecord` is the durable product-facing node concept for orchestrators, child agents, tools, humans, and system participants.
@@ -56,16 +56,16 @@ LangGraph centers execution around:
 - Time travel: replay from a prior checkpoint or fork from a prior checkpoint with modified state.
 - Recursion limits: runtime bounds for cycles and complex graphs.
 
-Maverick should copy the control ideas, not the dependency or ownership model.
+Loopino should copy the control ideas, not the dependency or ownership model.
 
 ## Delta By Capability
 
-| Capability | LangGraph | Maverick Today | Delta |
+| Capability | LangGraph | Loopino Today | Delta |
 |---|---|---|---|
 | Nodes | Callable graph nodes operate over shared state. | Participants are durable actor nodes with statuses and runtime linkage. Some graph concepts are implicit in executor code. | Keep participants as product-facing nodes. Add explicit graph execution metadata only when a native graph engine needs private router/system nodes. Do not expose hidden runtime sessions as graph nodes. |
 | Conditional edges | Edge functions route based on state and can branch to one node, multiple nodes, `END`, or dynamic sends with per-target state. | `InterAgentEdgeRecord` has source, target, kind, label, and status, but no condition, priority, default branch, fan-out contract, terminal target, or selected-edge payload. | Extend edge records or add graph-edge metadata for `routing_kind`, `condition_ref`, `condition_summary`, `priority`, `is_default`, fan-out behavior, fallback/error routes, and terminal targets. Persist edge evaluation/selection events with selected targets and state patch refs. |
 | Bounded loops | Cycles are allowed and bounded by `recursion_limit`, which applies to super-step execution. | Budgets bound participants, turns, handoffs, tools, cost, idle time, and stall time. No super-step, node execution, or edge traversal counter exists. | Define `graph_superstep` as the persisted super-step counter. Add separate budget policy and ledger counters for super-steps, node executions, and edge traversals. |
-| State/checkpoint | State schema and reducers define snapshots; checkpointers persist state per thread and pending writes per task. | State is split across run, participant, edge, approval, budget, event, and runtime records. Event replay exists, but no full graph checkpoint, task-write, or reducer model exists. | Add a Maverick-owned checkpoint model with JSON-safe state channels, schema version, reducer ids, next node ids, branch id, parent checkpoint id, task metadata, task-write ids, and state digest. Keep checkpoint/task-write retention separate from event retention. |
+| State/checkpoint | State schema and reducers define snapshots; checkpointers persist state per thread and pending writes per task. | State is split across run, participant, edge, approval, budget, event, and runtime records. Event replay exists, but no full graph checkpoint, task-write, or reducer model exists. | Add a Loopino-owned checkpoint model with JSON-safe state channels, schema version, reducer ids, next node ids, branch id, parent checkpoint id, task metadata, task-write ids, and state digest. Keep checkpoint/task-write retention separate from event retention. |
 | Interrupt/resume | `interrupt()` pauses inside a node, saves state, surfaces JSON payload, then resumes with `Command(resume=...)`. | `interrupt_run` pauses/cancels active child participants and `resume_run` marks the run running. It does not resume from a checkpoint or deliver resume values into node execution. | Add interrupt records tied to checkpoint ids. Resume must accept bounded JSON resume patches, write resume events, update checkpoint state through graph super-step commit, and schedule from saved next node ids. |
 | Replay | Replay re-executes from a checkpoint; fork branches from a checkpoint with modified state. | HTTP/WebSocket event replay and history paging exist. Execution replay and fork do not. | Reserve "event replay" for UI/audit and add explicit "checkpoint replay/fork" semantics with side-effect policy. Prefer new child run or branch id rather than mutating completed history. |
 | Human approval | Approval is commonly implemented as an interrupt before a critical action, with approve/reject routing. | `ApprovalRequestRecord` is durable, authorized, expiring, and audited. Approval resolution is not yet linked to a graph interrupt resume. | Keep approval records as the authoritative human gate. Link approvals to interrupt/checkpoint/edge ids and route approved/rejected outcomes through explicit graph edges. |
@@ -198,7 +198,7 @@ Compatibility:
 
 ### `InterAgentInterruptRecord`
 
-Maverick does not currently have a generic graph interrupt record. `interrupt_run` is an operational pause/cancel path, while approvals are separate audit records.
+Loopino does not currently have a generic graph interrupt record. `interrupt_run` is an operational pause/cancel path, while approvals are separate audit records.
 
 Needed for checkpoint-aware resume:
 
@@ -280,7 +280,7 @@ Rules:
 - `state_channels` must be JSON-safe, bounded, and redacted by channel policy.
 - Runtime session ids, runtime turn ids, artifact refs, approval ids, and participant ids can be stored as references.
 - Hidden runtime transcript content and chain-of-thought must not be copied into checkpoints.
-- Reducer behavior must be Maverick-owned and versioned. Persist reducer ids/versions, not Python callables.
+- Reducer behavior must be Loopino-owned and versioned. Persist reducer ids/versions, not Python callables.
 - `graph_superstep` is a super-step counter. Parallel nodes scheduled in the same tick share the same `graph_superstep`.
 - A full checkpoint is the resume/replay source of truth at a super-step boundary. Events describe what happened around it.
 - `tasks` records scheduled node executions for the checkpoint. Each task entry should include `task_id`, `node_id`, `participant_id`, `status`, `error_code`, `error_summary`, `interrupt_ids`, and optional subgraph/checkpoint refs.
@@ -357,7 +357,7 @@ For the JSON store this operation should hold the workspace lock and materialize
 
 ## Interrupt And Approval Semantics
 
-Maverick should model a generic interrupt as a graph-level gate and model human approval as one typed gate over that generic mechanism.
+Loopino should model a generic interrupt as a graph-level gate and model human approval as one typed gate over that generic mechanism.
 
 Minimum behavior:
 
@@ -373,7 +373,7 @@ Side effects before an interrupt must be idempotent. If a side effect cannot be 
 
 ## Replay And Fork Semantics
 
-Maverick currently supports event replay for graph UI and audit. That is not execution replay.
+Loopino currently supports event replay for graph UI and audit. That is not execution replay.
 
 Native checkpoint replay should use explicit operations:
 
@@ -434,15 +434,15 @@ Acceptance signal: graph execution can resume from checkpoint after restart with
 
 ## Decisions For F5.5B
 
-1. Maverick keeps participants as the product-facing node model.
-2. Maverick adds graph execution semantics as additive metadata and records, not by replacing `InterAgentRun/Participant/Edge/Event`.
+1. Loopino keeps participants as the product-facing node model.
+2. Loopino adds graph execution semantics as additive metadata and records, not by replacing `InterAgentRun/Participant/Edge/Event`.
 3. Event replay remains the source for Agent nodes UI and audit history.
 4. Checkpoint replay/fork is a separate future execution capability.
-5. Human approval remains Maverick-owned through `ApprovalRequestRecord`; LangGraph-style interrupts inform the resume/checkpoint mechanics only.
+5. Human approval remains Loopino-owned through `ApprovalRequestRecord`; LangGraph-style interrupts inform the resume/checkpoint mechanics only.
 6. Task-level writes are required for partial recovery before a native graph engine is stabilized.
 7. Graph execution persistence requires an explicit graph super-step commit boundary.
-8. Any F6 adapter must map immediately into current Maverick run, participant, edge, event, budget, approval, and artifact contracts. It must not write participant output to the root transcript or own sessions, secrets, providers, retention, approval, replay, workspace isolation, or any deferred native graph records.
-9. Checkpoint, task-write, generic interrupt, executable routing, graph super-step, and replay/fork concepts remain Maverick-native future contracts unless explicitly implemented by a later ADR. F6 may expose only safe observed adapter decisions through existing `InterAgentEventRecord` payloads.
+8. Any F6 adapter must map immediately into current Loopino run, participant, edge, event, budget, approval, and artifact contracts. It must not write participant output to the root transcript or own sessions, secrets, providers, retention, approval, replay, workspace isolation, or any deferred native graph records.
+9. Checkpoint, task-write, generic interrupt, executable routing, graph super-step, and replay/fork concepts remain Loopino-native future contracts unless explicitly implemented by a later ADR. F6 may expose only safe observed adapter decisions through existing `InterAgentEventRecord` payloads.
 
 ## F6 Scope Decision Table
 
@@ -453,15 +453,15 @@ This table closes the F6 scope decision required by the blueprint. It intentiona
 | Checkpoint full | No | Si, prima di stabilizzare il graph engine nativo | `core/inter_agent` graph engine ADR | Full checkpointing requires state channels, reducer versions, retention, checkpoint ids, and resume/replay policy. F6 only needs an adapter boundary and event projection. | F6 adapter tests assert no checkpoint ids, checkpoint replay, fork API, or checkpoint files are produced; event replay remains UI/audit only; restart/cancel/failure use existing run, participant, artifact, budget, and event records. |
 | Task-write partial recovery | No | Si, prima di parallel graph execution nativa | `core/inter_agent` recovery/store | Task writes matter when parallel nodes share a super-step and one sibling fails after durable side effects. F6 fixtures can fail closed without promising partial graph recovery. | Source-backed concurrent/group fixtures persist artifact/event refs before failure; cancel/retry assertions prove event sequence and budget reservation idempotency; tests explicitly document that partial task recovery is unsupported in F6. |
 | Graph super-step commit | No | Si, prima del graph engine nativo | `core/inter_agent` store | A store-level graph commit is required only when checkpoint, task writes, edge decisions, budget deltas, and run state become one atomic graph step. F6 must not fake that boundary through adapter state. | Adapter tests assert writes go through existing inter-agent service/store paths, event sequence/idempotency remains stable, terminal run status is coherent, and no checkpoint/task-write collections are created. |
-| Replay/fork execution | No | Si, dopo side-effect policy e checkpoint model | `core/inter_agent` HTTP/CLI/MCP with recovery/security review | Maverick already has event replay for Agent nodes and audit. Execution replay/fork can duplicate side effects unless checkpoint, approval, and side-effect policy are designed first. | F6 replay tests cover HTTP/WebSocket event replay only; no execution replay/fork endpoints are exposed; event replay must not invoke adapter, provider, tool, file, email, or paid side effects. |
+| Replay/fork execution | No | Si, dopo side-effect policy e checkpoint model | `core/inter_agent` HTTP/CLI/MCP with recovery/security review | Loopino already has event replay for Agent nodes and audit. Execution replay/fork can duplicate side effects unless checkpoint, approval, and side-effect policy are designed first. | F6 replay tests cover HTTP/WebSocket event replay only; no execution replay/fork endpoints are exposed; event replay must not invoke adapter, provider, tool, file, email, or paid side effects. |
 | Generic interrupt record | No | Si, dopo checkpoint-aware resume design | `core/inter_agent` approvals/runtime | Current `interrupt_run`/`resume_run` are operational pause controls and `ApprovalRequestRecord` is the human gate. A generic interrupt record needs checkpoint ids and bounded resume patches. | HITL in F6 maps to `ApprovalRequestRecord` plus existing pause/resume/close behavior; tests cover approve, reject, expiry, unauthorized resolution, pause, close, and absence of resume patch payloads. |
-| Conditional routing metadata | Solo eventi minimi osservabili | Si, per routing eseguibile, `condition_ref`, fan-out e loop edges | `core/inter_agent/adapters` with graph ADR owner | MAF fixtures need visible speaker/route/handoff decisions, but executable conditional edges are part of the future Maverick-native graph model and must not be owned by MAF. | Adapter fixtures emit safe summary/detail event payloads with route or speaker decision summaries, correlation ids, idempotency keys, participant ids, and visibility planes; tests assert no arbitrary condition code, no `inter_agent.edge.selected` semantics, and no executable edge mutation. |
+| Conditional routing metadata | Solo eventi minimi osservabili | Si, per routing eseguibile, `condition_ref`, fan-out e loop edges | `core/inter_agent/adapters` with graph ADR owner | MAF fixtures need visible speaker/route/handoff decisions, but executable conditional edges are part of the future Loopino-native graph model and must not be owned by MAF. | Adapter fixtures emit safe summary/detail event payloads with route or speaker decision summaries, correlation ids, idempotency keys, participant ids, and visibility planes; tests assert no arbitrary condition code, no `inter_agent.edge.selected` semantics, and no executable edge mutation. |
 | Loop budget fields | No new graph fields; map temporary loops to existing budgets | Si, for `max_graph_supersteps`, node executions, edge traversals, and per-edge loop counters | `core/inter_agent` budget/adapters | F6 can bound adapter loops through existing `max_rounds`, `max_total_turns`, `max_handoffs`, `max_tool_calls`, idle, and stall budgets. Native graph counters remain separate future fields. | MAF group/magentic fixtures force max-round or max-turn exhaustion; tests expect visible budget/failure summaries and no unbounded loop; existing budget reservation and release idempotency remains covered. |
-| MAF adapter event mapping | Si | No | `core/inter_agent/adapters` | This is the only F6-critical LangGraph/MAF delta: the adapter must become observable through Maverick-owned records without owning runtime, provider, secret, approval, budget, or retention state. | Source-backed handoff, group chat, and magentic fixtures assert mapping into `InterAgentEventRecord`, participants, edges/artifacts where applicable, approval/budget records when used, safe visibility planes, no raw MAF payloads, cancel/failure/event-replay coverage, package pin, and feature flag. |
+| MAF adapter event mapping | Si | No | `core/inter_agent/adapters` | This is the only F6-critical LangGraph/MAF delta: the adapter must become observable through Loopino-owned records without owning runtime, provider, secret, approval, budget, or retention state. | Source-backed handoff, group chat, and magentic fixtures assert mapping into `InterAgentEventRecord`, participants, edges/artifacts where applicable, approval/budget records when used, safe visibility planes, no raw MAF payloads, cancel/failure/event-replay coverage, package pin, and feature flag. |
 
 ## Open Implementation Work Before Stabilizing A Graph Engine
 
-Rows marked as deferred above remain open before Maverick stabilizes a native graph engine. They are not prerequisites for starting the F6 MAF adapter unless the adapter attempts to expose the deferred behavior as runtime semantics.
+Rows marked as deferred above remain open before Loopino stabilizes a native graph engine. They are not prerequisites for starting the F6 MAF adapter unless the adapter attempts to expose the deferred behavior as runtime semantics.
 
 - Add checkpoint, task-write, and interrupt records.
 - Add the graph super-step commit operation.
@@ -474,4 +474,4 @@ Rows marked as deferred above remain open before Maverick stabilizes a native gr
 
 ## Gate
 
-F6 adapter work can proceed only if this delta and the F6 scope decision table remain accepted. F6 is blocked if adapter work requires checkpoint replay, task-write recovery, generic interrupt resume patches, executable conditional routing, or graph super-step commit semantics. The native graph engine must not stabilize persistent semantics before checkpoint, task writes, graph super-step commit, conditional routing, loop bounds, interrupt/resume, replay/fork, and approval routing are represented in Maverick-owned contracts.
+F6 adapter work can proceed only if this delta and the F6 scope decision table remain accepted. F6 is blocked if adapter work requires checkpoint replay, task-write recovery, generic interrupt resume patches, executable conditional routing, or graph super-step commit semantics. The native graph engine must not stabilize persistent semantics before checkpoint, task writes, graph super-step commit, conditional routing, loop bounds, interrupt/resume, replay/fork, and approval routing are represented in Loopino-owned contracts.

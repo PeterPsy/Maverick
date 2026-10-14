@@ -1,6 +1,6 @@
 # Governance
 
-Maverick is currently maintainer-led.
+Loopino is currently maintainer-led.
 
 ## Maintainer Authority
 

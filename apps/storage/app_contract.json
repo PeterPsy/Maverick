@@ -4,7 +4,7 @@
   "name": "Storage",
   "version": "0.1.0",
   "description": "Workspace file storage for uploaded files and generated artifacts.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
@@ -154,7 +154,7 @@
   "capabilities": {
     "backend_workspace_apps": false,
     "mcp_tools": [
-      "maverick_storage",
+      "loopino_storage",
       "storage_list_files",
       "storage_file_info",
       "storage_read_file",

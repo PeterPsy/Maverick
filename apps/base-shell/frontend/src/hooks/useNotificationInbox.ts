@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   connectAppEventSocket,
-  maverickAppIsVisible,
-  observeMaverickVisibility,
-} from "@maverick/pwa-cache";
+  loopinoAppIsVisible,
+  observeLoopinoVisibility,
+} from "@loopino/pwa-cache";
 import type { AppRegistryItem } from "../api";
-import type { MaverickFrameScope } from "../iframePolicy";
+import type { LoopinoFrameScope } from "../iframePolicy";
 import {
   noticeKey,
   request,
@@ -17,7 +17,7 @@ import {
 /** One registry-driven reader; app providers own persistence, receipts and domain actions. */
 export function useNotificationInbox(
   apps: AppRegistryItem[],
-  scope: MaverickFrameScope,
+  scope: LoopinoFrameScope,
 ) {
   const providers = useMemo(
     () =>
@@ -62,7 +62,7 @@ export function useNotificationInbox(
     };
     const schedule = () => {
       window.clearTimeout(timer);
-      if (!maverickAppIsVisible()) return;
+      if (!loopinoAppIsVisible()) return;
       timer = window.setTimeout(async () => {
         if (pendingRef.current.size) return;
         const revision = mutationRevision.current;
@@ -127,7 +127,7 @@ export function useNotificationInbox(
         if (
           disposed ||
           current.signal.aborted ||
-          !maverickAppIsVisible() ||
+          !loopinoAppIsVisible() ||
           pendingRef.current.size ||
           revision !== mutationRevision.current
         )
@@ -146,7 +146,7 @@ export function useNotificationInbox(
         );
       }, 100);
     };
-    const stopVisibility = observeMaverickVisibility((visible) =>
+    const stopVisibility = observeLoopinoVisibility((visible) =>
       visible ? schedule() : suspend(),
     );
     const stopEvents = connectAppEventSocket<{
@@ -156,7 +156,7 @@ export function useNotificationInbox(
       workspace_id?: string;
     }>((event) => {
       if (
-        event.type === "maverick.app.data-changed" &&
+        event.type === "loopino.app.data-changed" &&
         event.resource === "notifications" &&
         (!event.workspace_id || event.workspace_id === scope.workspaceId) &&
         providers.some((app) => app.app_id === event.owner_app_id)

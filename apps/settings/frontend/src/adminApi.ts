@@ -221,7 +221,7 @@ export type ProviderItem = {
   latency_metadata?: Record<string, unknown>;
 };
 
-export type ExecutionFamilyId = 'native_agent' | 'maverick_agent' | 'hosted_text';
+export type ExecutionFamilyId = 'native_agent' | 'loopino_agent' | 'hosted_text';
 
 export type ExecutionFamilyDefinition = {
   family_id: ExecutionFamilyId;
@@ -512,7 +512,7 @@ export type AgenticAdminItem = {
   provider_api_version: string | null;
   adapter_id: string;
   adapter_version_constraint: string;
-  execution_family: 'native_agent' | 'maverick_agent' | null;
+  execution_family: 'native_agent' | 'loopino_agent' | null;
   runtime_status: string;
   runtime_status_reason: string | null;
   capabilities: Record<string, boolean | string[]>;

@@ -30,12 +30,12 @@ export function agenticRuntimeSettingsCardHtml(
   const visibleItems = allItems;
   const releaseDecision = admin?.release_decision || 'GO';
   const nativeFamily = executionFamily('native_agent', projectedFamilies || admin?.execution_families);
-  const maverickFamily = executionFamily('maverick_agent', projectedFamilies || admin?.execution_families);
+  const loopinoFamily = executionFamily('loopino_agent', projectedFamilies || admin?.execution_families);
   const nativeItems = visibleItems.filter((item) =>
     item.execution_family === 'native_agent'
       || (!item.execution_family && item.runtime_engine_id === 'codex')
   );
-  const maverickItems = visibleItems.filter((item) => item.execution_family === 'maverick_agent');
+  const loopinoItems = visibleItems.filter((item) => item.execution_family === 'loopino_agent');
   const representedNativeIds = new Set(allItems.filter((item) =>
     item.execution_family === 'native_agent'
       || (!item.execution_family && item.runtime_engine_id === 'codex')
@@ -57,7 +57,7 @@ export function agenticRuntimeSettingsCardHtml(
       providerLabel: item.label || runtimeProviderLabel(item.runtime_engine_id)
     }))
   ];
-  const maverickEntries = maverickItems.map((item) => ({
+  const loopinoEntries = loopinoItems.map((item) => ({
     html: agenticRuntimeBindingHtml(item, state),
     providerId: item.model_provider_id,
     providerLabel: runtimeProviderLabel(item.model_provider_id)
@@ -72,10 +72,10 @@ export function agenticRuntimeSettingsCardHtml(
       'No native-agent runtime is registered by this installation.'
     )}
     ${runtimeFamilySectionHtml(
-      maverickFamily,
-      maverickEntries,
+      loopinoFamily,
+      loopinoEntries,
       state,
-      'No complete Maverick Agent profile is currently available.'
+      'No complete Loopino Agent profile is currently available.'
     )}
   </section>`;
 }
@@ -209,7 +209,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
     allowed_workspace_role_ids: ['admin', 'member'],
     allowed_agent_type_ids: []
   };
-  const isRemote = item.execution_family === 'maverick_agent';
+  const isRemote = item.execution_family === 'loopino_agent';
   const effectiveCapabilities = item.effective_capabilities;
   const contained = item.containment_status === 'NO-GO';
   const isSaving = state.savingAgenticBindings.has(key);

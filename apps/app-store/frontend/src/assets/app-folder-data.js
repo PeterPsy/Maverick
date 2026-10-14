@@ -44,7 +44,7 @@
     },
     {
       id: "other",
-      title: "Maverick Apps",
+      title: "Loopino Apps",
       gradient: "linear-gradient(135deg, #8e2de2, #4a00e0)",
       accent: "#8e2de2",
       surfaces: [],
@@ -60,8 +60,8 @@
   }
 
   function normalizeSurfaces(app) {
-    if (window.MaverickFrontendPresentation?.normalizeSurfaces) {
-      return window.MaverickFrontendPresentation.normalizeSurfaces(app);
+    if (window.LoopinoFrontendPresentation?.normalizeSurfaces) {
+      return window.LoopinoFrontendPresentation.normalizeSurfaces(app);
     }
     return Array.isArray(app?.surfaces) ? app.surfaces.filter(Boolean) : [];
   }
@@ -103,7 +103,7 @@
     return FOLDER_TYPES.map((definition) => folders.get(definition.id));
   }
 
-  window.MaverickAppFolderData = {
+  window.LoopinoAppFolderData = {
     buildFolders,
     createNode,
     normalizeSurfaces,

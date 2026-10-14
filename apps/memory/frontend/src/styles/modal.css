@@ -15,9 +15,9 @@
   width: min(640px, 100%);
   max-height: min(760px, calc(100dvh - 48px));
   overflow: auto;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-bg);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-bg);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
   padding: 20px;
 }
@@ -38,7 +38,7 @@
 
 .modal-header p {
   margin-top: 5px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .modal-body {
@@ -64,8 +64,8 @@
   display: grid;
   gap: 0.42rem;
   min-width: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
   background: rgba(255, 255, 255, 0.045);
   padding: 0.78rem;
 }
@@ -76,7 +76,7 @@
   justify-content: space-between;
   gap: 0.65rem;
   min-width: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.7rem;
   text-transform: uppercase;
 }
@@ -90,7 +90,7 @@
 }
 
 .context-preview-card strong {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.9rem;
   font-weight: 400;
 }
@@ -98,13 +98,13 @@
 .context-preview-card p,
 .context-preview-card small,
 .context-preview-empty {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.45;
 }
 
 .context-preview-error {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
   font-size: 0.8rem;
 }
 

@@ -152,7 +152,7 @@ def _mutate_indexed(*, index: InventoryIndex, data_root: Path, role: str, root: 
         'source_signature': _signature(source) if source else None}
     stage = None
     if kind in ('write', 'create_directory', 'delete_directory'):
-        stage = target.parent / ('.maverick-storage-write-' + operation['id'])
+        stage = target.parent / ('.loopino-storage-write-' + operation['id'])
         operation['staged'] = stage.relative_to(root).as_posix()
         if kind == 'write':
             if staged_file is not None:

@@ -14,7 +14,7 @@ Keep user-facing progress updates short and operational. Prefer statements like 
 Before answering a workspace-specific question, retrieve context:
 
 ```bash
-maverick app memory cli run memory --action context --query "<user question>" --limit 8
+loopino app memory cli run memory --action context --query "<user question>" --limit 8
 ```
 
 Use returned provenance to mention files or app entities only when they are relevant.
@@ -40,9 +40,9 @@ matches were rejected; follow its cursor rather than treating it as exhaustion.
 Explore one to five known nodes without loading bodies or revisions:
 
 ```bash
-maverick app memory mcp call memory_explore --node-ids '["node_..."]' --direction both --depth 1 --limit 10 --json
-maverick app memory mcp call memory_explore --node-ids '["node_..."]' --kinds '["contradicts","depends_on","supersedes"]' --depth 2 --json
-maverick app memory mcp call memory_get_nodes --node-ids '["node_a","node_b"]' --json
+loopino app memory mcp call memory_explore --node-ids '["node_..."]' --direction both --depth 1 --limit 10 --json
+loopino app memory mcp call memory_explore --node-ids '["node_..."]' --kinds '["contradicts","depends_on","supersedes"]' --depth 2 --json
+loopino app memory mcp call memory_get_nodes --node-ids '["node_a","node_b"]' --json
 ```
 
 Keep the same seeds, direction, kinds, depth and scope when following
@@ -57,7 +57,7 @@ repeated calls. Each page's `visited_node_ids` is its endpoint set.
 For direct node lookup, inspection, or verification, use the Memory CLI instead of reading app data files:
 
 ```bash
-maverick app memory cli run memory --action inspect --node-id <node_id> --detail evidence
+loopino app memory cli run memory --action inspect --node-id <node_id> --detail evidence
 ```
 
 `inspect` defaults to a card. Select `detail=evidence`, `content`, `sources`,
@@ -78,9 +78,9 @@ inspection of the same state revision.
 For source-level evidence, use Memory source primitives instead of reading `data/memory/` files:
 
 ```bash
-maverick app memory mcp call memory_source_query --json --query "<source text or title>" --limit 10
-maverick app memory mcp call memory_fetch_chunks --json --chunk-ids '["sch_..."]'
-maverick app memory mcp call memory_inspect_source --json --source-document-id <source_document_id>
+loopino app memory mcp call memory_source_query --json --query "<source text or title>" --limit 10
+loopino app memory mcp call memory_fetch_chunks --json --chunk-ids '["sch_..."]'
+loopino app memory mcp call memory_inspect_source --json --source-document-id <source_document_id>
 ```
 
 `memory_fetch_chunks` hydrates at most 20 chunks and verifies the content-store SHA before returning body text.
@@ -108,9 +108,9 @@ source verification and agent-inferred relationships are independent.
 When Memory returns queued ingest or compile work, inspect the app-owned job queue through Memory rather than editing SQLite:
 
 ```bash
-maverick app memory cli run memory --action jobs_list --status ready --limit 20
-maverick app memory mcp call memory_jobs --json --operation claim --job-types '["compile_node"]'
-maverick app memory mcp call memory_jobs --json --operation run_until_idle --max-jobs 50
+loopino app memory cli run memory --action jobs_list --status ready --limit 20
+loopino app memory mcp call memory_jobs --json --operation claim --job-types '["compile_node"]'
+loopino app memory mcp call memory_jobs --json --operation run_until_idle --max-jobs 50
 ```
 
 If an ingest, staleness, or compile request enqueues work and the current answer depends on it, drain a bounded batch with `run_until_idle` before answering. The platform tick progresses compile/lint work even with Memory closed; inspect `compilation_state` instead of assuming it has already completed. Other ingest and Storage reindex operations remain explicit.
@@ -122,13 +122,13 @@ Storage staleness can enqueue `requires_storage_reindex` jobs. Treat those jobs 
 When the user asks to filter or curate the Memory graph UI, use the Memory app view surface instead of only reading data:
 
 ```bash
-maverick app memory cli run memory --action set_view_filter --query "Acme"
+loopino app memory cli run memory --action set_view_filter --query "Acme"
 ```
 
 For a curated graph, pass Memory node references:
 
 ```bash
-maverick app memory cli run memory --action set_custom_view --title "Acme context" --refs '[{"app_id":"memory","entity_type":"node","entity_id":"node_123"}]'
+loopino app memory cli run memory --action set_custom_view --title "Acme context" --refs '[{"app_id":"memory","entity_type":"node","entity_id":"node_123"}]'
 ```
 
 Use `clear_custom_view` to return the app to normal graph search mode.
@@ -146,7 +146,7 @@ without writing shared view state; “Workspace view” returns to the shared vi
 Save only stable, business-relevant information:
 
 ```bash
-maverick app memory cli run memory --action remember --title "<short title>" --body "<fact or note>" --type note
+loopino app memory cli run memory --action remember --title "<short title>" --body "<fact or note>" --type note
 ```
 
 Prefer updating or linking existing nodes over creating duplicates.
@@ -159,7 +159,7 @@ treating the number as certainty.
 For generated notes, imports, or other agent-owned Markdown evidence that is not a Storage or app-entity source, ingest it as an `inline_markdown` source so Memory stores a verifiable source version and chunk:
 
 ```bash
-maverick app memory mcp call memory_ingest_source --json --adapter-id inline_markdown --source-key "<stable key>" --title "<source title>" --body-markdown "<markdown body>" --compile-after-ingest true
+loopino app memory mcp call memory_ingest_source --json --adapter-id inline_markdown --source-key "<stable key>" --title "<source title>" --body-markdown "<markdown body>" --compile-after-ingest true
 ```
 
 Use a stable `source_key` when the same generated source may be updated later. Re-ingesting identical content should not create duplicate source versions; changed content creates a new version and marks compiled Memory evidence stale.
@@ -180,7 +180,7 @@ person/project, validity, user confirmation and conversation provenance.
 For local workspace Storage files, ingest through `storage_file` instead of reading Memory's database or content store directly:
 
 ```bash
-maverick app memory mcp call memory_ingest_source --json --adapter-id storage_file --file-id <stable_file_id> --workspace-relative-path storage/generated/example.md --title "<source title>" --compile-after-ingest true
+loopino app memory mcp call memory_ingest_source --json --adapter-id storage_file --file-id <stable_file_id> --workspace-relative-path storage/generated/example.md --title "<source title>" --compile-after-ingest true
 ```
 
 Memory accepts stable Storage file ids or workspace paths under `storage/uploaded/` or `storage/generated/`, and rejects mismatches when both point at different files. Memory resolves local file metadata, previewability, and bounded extracted content through Storage-owned `reference_resolve`, `file_info`, `preview_text`, and text `read_file` surfaces; previewable PDFs and Office files use Storage preview text, and non-extractable files are stored as `reference_snapshot` versions without chunks.
@@ -188,7 +188,7 @@ Memory accepts stable Storage file ids or workspace paths under `storage/uploade
 For records owned by another app, ingest through `app_entity` so Memory snapshots the official reference summary instead of reading the owner app's private data:
 
 ```bash
-maverick app memory mcp call memory_ingest_source --json --adapter-id app_entity --owning-app-id crm --entity-type account --entity-id <account_id> --compile-after-ingest true
+loopino app memory mcp call memory_ingest_source --json --adapter-id app_entity --owning-app-id crm --entity-type account --entity-id <account_id> --compile-after-ingest true
 ```
 
 Memory uses the owning app's reference summarize/resolve surface and stores the app id, entity type, entity id, and deep link as the source locator.
@@ -200,13 +200,13 @@ For Google Drive, Memory consumes only Storage references. Do not pass Google to
 Use this flow after Storage `storage_drive_index` has selected one relevant Drive file:
 
 ```bash
-maverick app memory mcp call memory_ingest_storage_source --json --memory-source '<storage_drive_index.memory_source>' --preview-text '<bounded preview_text>' --preview-truncated <true|false> --source-version <source_version> --compile-after-ingest true
+loopino app memory mcp call memory_ingest_storage_source --json --memory-source '<storage_drive_index.memory_source>' --preview-text '<bounded preview_text>' --preview-truncated <true|false> --source-version <source_version> --compile-after-ingest true
 ```
 
 Prefer the generic ingest front door for new workflows:
 
 ```bash
-maverick app memory mcp call memory_ingest_source --json --adapter-id remote_storage_file --memory-source '<storage_drive_index.memory_source>' --preview-text '<bounded preview_text>' --preview-truncated <true|false> --source-version <source_version> --compile-after-ingest true
+loopino app memory mcp call memory_ingest_source --json --adapter-id remote_storage_file --memory-source '<storage_drive_index.memory_source>' --preview-text '<bounded preview_text>' --preview-truncated <true|false> --source-version <source_version> --compile-after-ingest true
 ```
 
 If the Storage file belongs on an existing Memory node, include `--node-id <node_id>`. If no node is supplied, Memory creates or reuses a file-backed node for the stable Storage file id.
@@ -216,7 +216,7 @@ After this succeeds, call Storage `storage_drive_mark_indexed` with the returned
 When Storage `drive_sync` returns `memory_staleness`, apply it through Memory:
 
 ```bash
-maverick app memory mcp call memory_apply_storage_staleness --json --memory-staleness '<storage_drive_sync.memory_staleness item>'
+loopino app memory mcp call memory_apply_storage_staleness --json --memory-staleness '<storage_drive_sync.memory_staleness item>'
 ```
 
 The returned re-index suggestion points back to Storage `storage_drive_index`; Memory never scans Drive itself.
@@ -226,20 +226,20 @@ The returned re-index suggestion points back to Storage `storage_drive_index`; M
 When the user asks to remove a Memory item, first identify the exact active node. Use a narrow query based on the user's title, file name, person, project, or other clue:
 
 ```bash
-maverick app memory cli run memory --action context --query "<target title or clue>" --limit 8
+loopino app memory cli run memory --action context --query "<target title or clue>" --limit 8
 ```
 
 If there is exactly one clear match, soft-delete that Memory node with a reason:
 
 ```bash
-maverick app memory cli run memory --action delete_node --node-id <node_id> --reason "<why it was removed>"
+loopino app memory cli run memory --action delete_node --node-id <node_id> --reason "<why it was removed>"
 ```
 
 Then verify both that the node is deleted and that it no longer appears as active context:
 
 ```bash
-maverick app memory cli run memory --action inspect --node-id <node_id>
-maverick app memory cli run memory --action context --query "<target title or clue>" --limit 3
+loopino app memory cli run memory --action inspect --node-id <node_id>
+loopino app memory cli run memory --action context --query "<target title or clue>" --limit 3
 ```
 
 Deletion is a Memory soft delete: the node is marked `deleted`, active edges are removed, and the item is removed from Memory full-text retrieval. It does not delete the original file, email, CRM record, Drive document, or other external source referenced by the node.
@@ -267,7 +267,7 @@ If multiple plausible nodes match, ask the user to choose before deleting. If th
 Attach files only when the Memory node needs a link back to a Storage item:
 
 ```bash
-maverick app memory cli run memory --action attach_file --node-id <node_id> --file-id <file_id> --workspace-relative-path storage/uploaded/example.pdf --reason "<why it matters>"
+loopino app memory cli run memory --action attach_file --node-id <node_id> --file-id <file_id> --workspace-relative-path storage/uploaded/example.pdf --reason "<why it matters>"
 ```
 
 If the file text should support citations or source-chunk retrieval, ingest it through `memory_ingest_source` with `adapter_id=storage_file` or `adapter_id=remote_storage_file` instead of relying on `attach_file`.
@@ -275,7 +275,7 @@ If the file text should support citations or source-chunk retrieval, ingest it t
 Attach app entities when they clarify people, companies, deals, emails, or records:
 
 ```bash
-maverick app memory cli run memory --action attach_app_entity --node-id <node_id> --app records --type person --id person_123 --title "Mario Rossi"
+loopino app memory cli run memory --action attach_app_entity --node-id <node_id> --app records --type person --id person_123 --title "Mario Rossi"
 ```
 
 ## Relationship Discipline
@@ -283,7 +283,7 @@ maverick app memory cli run memory --action attach_app_entity --node-id <node_id
 Create inferred relationships only with a reason, confidence and `metadata.confidence_basis=agent_inferred`:
 
 ```bash
-maverick app memory cli run memory --action link --source-node-id <node_id> --target-node-id <node_id> --kind supports --weight 0.8 --confidence 0.7 --reason "<why these are connected>"
+loopino app memory cli run memory --action link --source-node-id <node_id> --target-node-id <node_id> --kind supports --weight 0.8 --confidence 0.7 --reason "<why these are connected>"
 ```
 
 Do not save speculative facts as confirmed memory. If uncertain, mark lower confidence or ask the user.

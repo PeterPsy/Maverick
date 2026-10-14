@@ -7,11 +7,11 @@ import { useResources } from "../src/useResources";
 import { App } from "../src/App";
 
 vi.mock("../src/api", async (original) => ({ ...await original(), operation: vi.fn(), callBackend: vi.fn() }));
-vi.mock("@maverick/pwa-cache", () => ({
-  maverickAppIsVisible: () => true,
-  observeMaverickVisibility: (listener: (visible: boolean) => void) => { listener(true); return () => {}; },
+vi.mock("@loopino/pwa-cache", () => ({
+  loopinoAppIsVisible: () => true,
+  observeLoopinoVisibility: (listener: (visible: boolean) => void) => { listener(true); return () => {}; },
   connectAppEventSocket: () => () => {},
-  isExactMaverickParentMessage: () => false,
+  isExactLoopinoParentMessage: () => false,
 }));
 const status: Status = { send_scope: "scope-a", can_configure: true,
   connection: { url: "https://example.com", configured: true, credential_available: true, role: "operator" },

@@ -1,4 +1,4 @@
-import { displayRecord, projectDisplayModel, type DisplayModelSchema } from '@maverick/pwa-cache';
+import { displayRecord, projectDisplayModel, type DisplayModelSchema } from '@loopino/pwa-cache';
 const text = (fields: string[]) => Object.fromEntries(fields.map((field) => [field, 'string']));
 const schemas: Record<string, DisplayModelSchema> = {
   projects: { required: ['projects', 'has_more'], fields: { has_more: 'boolean' }, lists: { projects: {

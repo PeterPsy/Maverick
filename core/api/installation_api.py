@@ -30,7 +30,7 @@ def handle_installation_api(state, environ, start_response):
             if not job or datetime.fromisoformat(job["updated_at"]) < datetime.now(timezone.utc) - timedelta(minutes=15):
                 raise InstallationError("probe_not_found", status=404)
             return json_response(start_response, {"nonce": job["probe_nonce"],
-                "hostname": os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "")})
+                "hostname": os.environ.get("LOOPINO_SIDECAR_INSTALLATION_DOMAIN", "")})
         except (InstallationError, KeyError, ValueError):
             return json_response(start_response, {"error": "probe_not_found"}, status="404 Not Found")
     prefix = "/api/admin/installation"

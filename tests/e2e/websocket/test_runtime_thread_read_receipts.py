@@ -30,7 +30,7 @@ class RuntimeThreadReadReceiptTestCase(unittest.IsolatedAsyncioTestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -65,13 +65,13 @@ class RuntimeThreadReadReceiptTestCase(unittest.IsolatedAsyncioTestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
         session = state.identity_store.collections.auth_sessions.find({})[-1]
-        return f"maverick_session={session['session_id']}"
+        return f"loopino_session={session['session_id']}"
 
     def create_completed_thread(self, state):
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
@@ -107,7 +107,7 @@ class RuntimeThreadReadReceiptTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_runtime_thread_changed_frame_uses_viewer_read_receipts(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
-        admin = state.identity_store.get_user_by_username(os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"))
+        admin = state.identity_store.get_user_by_username(os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"))
         session, now = self.create_completed_thread(state)
 
         unread_frame = runtime_thread_changed_frame(

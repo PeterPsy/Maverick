@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${ROOT_DIR}/.venv"
-HOST="${MAVERICK_HOST:-127.0.0.1}"
-PORT="${MAVERICK_PORT:-8000}"
-PYTHON_BIN="${MAVERICK_PYTHON:-}"
+HOST="${LOOPINO_HOST:-127.0.0.1}"
+PORT="${LOOPINO_PORT:-8000}"
+PYTHON_BIN="${LOOPINO_PYTHON:-}"
 
 if [[ -d "${VENV_DIR}" ]]; then
   source "${VENV_DIR}/bin/activate"
@@ -22,12 +22,12 @@ fi
 ENV_FILE=""
 if [[ -f "${ROOT_DIR}/.env" ]]; then
   ENV_FILE="${ROOT_DIR}/.env"
-elif [[ -f "${ROOT_DIR}/.env.maverick" ]]; then
-  ENV_FILE="${ROOT_DIR}/.env.maverick"
+elif [[ -f "${ROOT_DIR}/.env.loopino" ]]; then
+  ENV_FILE="${ROOT_DIR}/.env.loopino"
 fi
 
 if [[ -z "${ENV_FILE}" ]]; then
-  "${PYTHON_BIN}" "${ROOT_DIR}/scripts/install_maverick.py" \
+  "${PYTHON_BIN}" "${ROOT_DIR}/scripts/install_loopino.py" \
     --local-only \
     --skip-bootstrap \
     --skip-verify \
@@ -44,18 +44,18 @@ if [[ -n "${ENV_FILE}" ]]; then
   # shellcheck disable=SC1091
   source "${ENV_FILE}"
   set +a
-  HOST="${MAVERICK_HOST:-${HOST}}"
-  PORT="${MAVERICK_PORT:-${PORT}}"
+  HOST="${LOOPINO_HOST:-${HOST}}"
+  PORT="${LOOPINO_PORT:-${PORT}}"
 fi
 
-if [[ -z "${MAVERICK_ADMIN_USERNAME:-}" ]]; then
+if [[ -z "${LOOPINO_ADMIN_USERNAME:-}" ]]; then
   cat >&2 <<EOF
-MAVERICK_ADMIN_USERNAME is required.
+LOOPINO_ADMIN_USERNAME is required.
 
 Run bootstrap to generate a local environment file:
   ./scripts/bootstrap_local.sh
 
-Or create .env from .env.example and set MAVERICK_ADMIN_USERNAME.
+Or create .env from .env.example and set LOOPINO_ADMIN_USERNAME.
 EOF
   exit 1
 fi

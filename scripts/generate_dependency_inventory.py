@@ -1,4 +1,4 @@
-"""Generate a direct-dependency inventory for Maverick root and app packages."""
+"""Generate a direct-dependency inventory for Loopino root and app packages."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { applySettingsTheme } from './settingsTheme';
 
 let hostVisible = true;
@@ -10,15 +10,15 @@ export function bindSettingsHostEvents(context: {
   visibilityChanged: (visible: boolean) => void;
 }) {
   window.addEventListener('message', (event) => {
-    if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
+    if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') return;
     const payload = event.data as { app_id?: string; params?: Record<string, unknown>; type?: string; visible?: boolean; theme?: unknown };
-    if (payload.type === 'maverick.shell.theme-changed' || (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'settings'))) applySettingsTheme(payload.theme);
-    if (payload.type === 'maverick.app.visibility-changed' && payload.app_id === 'settings') {
+    if (payload.type === 'loopino.shell.theme-changed' || (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'settings'))) applySettingsTheme(payload.theme);
+    if (payload.type === 'loopino.app.visibility-changed' && payload.app_id === 'settings') {
       hostVisible = payload.visible === true;
       context.visibilityChanged(settingsHostVisible());
     }
-    if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'settings')) context.navigate(payload.params || {});
+    if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'settings')) context.navigate(payload.params || {});
   });
   document.addEventListener('visibilitychange', () => context.visibilityChanged(settingsHostVisible()));
-  window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'settings' }, '*');
+  window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'settings' }, '*');
 }

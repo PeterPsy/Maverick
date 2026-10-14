@@ -112,7 +112,7 @@ class CliFrame:
 
 
 class ModelCliExecutor(Protocol):
-    """Execute one approved local CLI invocation outside Maverick runtime."""
+    """Execute one approved local CLI invocation outside Loopino runtime."""
 
     def execute(
         self,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { cachedWorkspaceSnapshot, invalidateWorkspaceSnapshots, type WorkspaceSnapshot } from '../../api';
 import {
   TreeExpander,
@@ -189,14 +189,14 @@ function WebsiteSitemapSidebarWidget() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { context?: { content?: { payload?: { active_app_params?: Record<string, string> } } }; owner_app_id?: string; resource?: string; type?: string };
-      if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === 'website-studio') {
+      if (payload.type === 'loopino.widget.data-changed' && payload.owner_app_id === 'website-studio') {
         invalidateWorkspaceSnapshots(payload.resource ? [payload.resource] : []);
         load(activeSiteId).catch((loadError: Error) => { if (loadError.name !== 'AbortError') setError(loadError.message || 'Visual navigation unavailable.'); });
         return;
       }
-      if (payload.type !== 'maverick.widget.context-changed') return;
+      if (payload.type !== 'loopino.widget.context-changed') return;
       const params = payload.context?.content?.payload?.active_app_params || {};
       if (params.site_id && params.site_id !== activeSiteId) {
         load(String(params.site_id)).catch((loadError: Error) => { if (loadError.name !== 'AbortError') setError(loadError.message || 'Visual navigation unavailable.'); });
@@ -216,7 +216,7 @@ function WebsiteSitemapSidebarWidget() {
       return;
     }
     await backend({ action: 'site_set_active', site_id: siteId }).catch(() => null);
-    window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: siteId } }, "*");
+    window.parent?.postMessage({ type: 'loopino.widget.open-app', app_id: 'website-studio', params: { site_id: siteId } }, "*");
     await load(siteId);
   }
 
@@ -492,8 +492,8 @@ function openNode(node: TreeItem, activeSiteId: string) {
     if (kind === 'section') params.section_id = id;
     if (kind === 'anchor') params.anchor_id = id;
   }
-  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params }, "*");
-  window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+  window.parent?.postMessage({ type: 'loopino.widget.open-app', app_id: 'website-studio', params }, "*");
+  window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
 }
 
 function WebsiteTreeSkeleton() {

@@ -1,19 +1,19 @@
-.settings-context { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--maverick-text-muted); font-size: 12px; }
+.settings-context { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--loopino-text-muted); font-size: 12px; }
 .settings-context span + span::before { content: '·'; margin-right: 10px; }
 .settings-context button { margin-left: auto; padding: 7px 12px; }
-.settings-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; color: var(--maverick-text-muted); }
+.settings-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; color: var(--loopino-text-muted); }
 .settings-pagination span { margin-right: auto; }
 .settings-user-create summary, .settings-content > details > summary { cursor: pointer; font-size: 14px; font-weight: 600; }
 .settings-user-create[open] > form, #create-workspace { margin-top: 18px; }
-.settings-create label, .settings-session-filters label { display: grid; gap: 8px; font-size: 12px; color: var(--maverick-text-muted); }
-.settings-subscription-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--maverick-border); font-size: 13px; }
-.settings-subscription-row p { color: var(--maverick-text-muted); }
-.settings-confirm-dialog { position: fixed; inset: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; color: var(--maverick-text); }
+.settings-create label, .settings-session-filters label { display: grid; gap: 8px; font-size: 12px; color: var(--loopino-text-muted); }
+.settings-subscription-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--loopino-border); font-size: 13px; }
+.settings-subscription-row p { color: var(--loopino-text-muted); }
+.settings-confirm-dialog { position: fixed; inset: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; color: var(--loopino-text); }
 .settings-confirm-dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(8px); }
 .settings-confirm-dialog > p { margin: 18px 0; }
 .settings-confirm-dialog form { margin-top: 20px; }
 .settings-app-icon:is(img) { object-fit: contain; padding: 5px; }
-.settings-content button:focus-visible, .settings-content summary:focus-visible, .settings-modal button:focus-visible { outline: 2px solid var(--maverick-text); outline-offset: 3px; }
+.settings-content button:focus-visible, .settings-content summary:focus-visible, .settings-modal button:focus-visible { outline: 2px solid var(--loopino-text); outline-offset: 3px; }
 
 html, body, #app { height: 100%; min-height: 0; overflow: hidden; }
 .settings-shell { height: 100dvh; min-height: 0; overflow: hidden; }
@@ -22,14 +22,14 @@ html, body, #app { height: 100%; min-height: 0; overflow: hidden; }
 .settings-platform-runtime-list { max-height: none; overflow: visible; }
 
 @media (max-width: 979px) {
-  .settings-main { padding-top: calc(18px + var(--maverick-shell-mobile-content-top-offset, 0px)); padding-left: 16px; padding-right: 16px; }
+  .settings-main { padding-top: calc(18px + var(--loopino-shell-mobile-content-top-offset, 0px)); padding-left: 16px; padding-right: 16px; }
   .settings-heading { flex-wrap: wrap; gap: 12px; }
   .settings-heading > button { max-width: 100%; }
   .settings-context { gap: 8px; }
   .settings-session-filters { grid-template-columns: minmax(0, 1fr); }
 }
 
-:root[data-maverick-theme="light"] .settings-modal { background: var(--maverick-bg-strong); }
-:root[data-maverick-theme="light"] .settings-content :is(input:not([type="checkbox"]), select, textarea),
-:root[data-maverick-theme="light"] .settings-modal :is(input:not([type="checkbox"]), select) { background: var(--maverick-bg-strong); color: var(--maverick-text); border-color: var(--maverick-border-strong); }
-:root[data-maverick-theme="light"] .settings-pill { color: var(--maverick-text); background: var(--maverick-surface); border-color: var(--maverick-border-strong); }
+:root[data-loopino-theme="light"] .settings-modal { background: var(--loopino-bg-strong); }
+:root[data-loopino-theme="light"] .settings-content :is(input:not([type="checkbox"]), select, textarea),
+:root[data-loopino-theme="light"] .settings-modal :is(input:not([type="checkbox"]), select) { background: var(--loopino-bg-strong); color: var(--loopino-text); border-color: var(--loopino-border-strong); }
+:root[data-loopino-theme="light"] .settings-pill { color: var(--loopino-text); background: var(--loopino-surface); border-color: var(--loopino-border-strong); }

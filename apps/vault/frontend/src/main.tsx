@@ -77,7 +77,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'vault' }, "*");
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'vault' }, "*");
   }, []);
 
   useEffect(() => {
@@ -91,11 +91,11 @@ function App() {
         return;
       }
       const payload = event.data as ShellNavigatePayload & { owner_app_id?: string; resource?: string };
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'vault' && payload.resource === 'state') {
+      if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'vault' && payload.resource === 'state') {
         void refresh();
         return;
       }
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'vault' && payload.resource === 'view-state') {
+      if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'vault' && payload.resource === 'view-state') {
         const nextState = readVaultViewState();
         setCredentialPanel(nextState.credentialPanel);
         setMetricFilter(nextState.metricFilter);
@@ -104,7 +104,7 @@ function App() {
         setTab(nextState.tab);
         return;
       }
-      if (payload.type !== 'maverick.app.navigate' || (payload.app_id && payload.app_id !== 'vault')) {
+      if (payload.type !== 'loopino.app.navigate' || (payload.app_id && payload.app_id !== 'vault')) {
         return;
       }
       const nextTab = tabFromValue(payload.params?.tab);
@@ -159,7 +159,7 @@ function App() {
     const currentState = readVaultViewState();
     writeVaultViewState({ ...currentState, credentialPanel: 'edit', metricFilter: null, selectedSecretId: secretId, tab: 'credentials' });
     notifyVaultViewStateChanged();
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.open' }, "*");
   }
 
   return (

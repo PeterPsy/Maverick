@@ -21,7 +21,7 @@
   align-items: center;
   gap: 1rem;
   padding: 0.9rem 1rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
 }
 
 .records-title-block {
@@ -35,7 +35,7 @@
 }
 
 .records-title-block small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
   text-transform: uppercase;
 }
@@ -60,10 +60,10 @@
 .entity-segment button,
 .records-pagination-controls button,
 .records-menu > button {
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  color: var(--maverick-text);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
+  color: var(--loopino-text);
 }
 
 .entity-segment button,
@@ -88,8 +88,8 @@
 .records-menu > button:focus-visible,
 .records-pagination-controls button:hover,
 .records-pagination-controls button:focus-visible {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
@@ -103,8 +103,8 @@
   min-width: 1.25rem;
   height: 1.25rem;
   border-radius: 999px;
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
+  background: var(--loopino-accent);
+  color: var(--loopino-text-on-accent);
   font-size: 0.68rem;
   font-weight: 500;
 }
@@ -127,7 +127,7 @@
   display: grid;
   min-width: 11rem;
   overflow: hidden;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 14px;
   background: rgba(18, 18, 20, 0.96);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
@@ -140,13 +140,13 @@
   border-radius: 0;
   background: transparent;
   padding: 0 0.8rem;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-align: left;
 }
 
 .records-menu-panel button:hover,
 .records-menu-panel button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 
@@ -157,7 +157,7 @@
   overflow-x: auto;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--maverick-border-strong) transparent;
+  scrollbar-color: var(--loopino-border-strong) transparent;
 }
 
 .records-table {
@@ -172,7 +172,7 @@
 .records-table th,
 .records-table td {
   min-width: 0;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   border-right: 1px solid rgba(255, 255, 255, 0.045);
   padding: 0.72rem 0.75rem;
   text-align: left;
@@ -191,7 +191,7 @@
   top: 0;
   z-index: 2;
   background: rgba(12, 12, 14, 0.94);
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.74rem;
   font-weight: 400;
 }
@@ -236,7 +236,7 @@
 .records-table th button:hover,
 .records-table th button:focus-visible {
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
 }
 
@@ -278,11 +278,11 @@
   align-items: center;
   max-width: 100%;
   min-height: 1.45rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
   padding: 0 0.45rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
   line-height: 1;
   overflow: hidden;
@@ -294,17 +294,17 @@
 .deal-card__connections small.attention,
 .operation-evidence small {
   border-color: rgba(159, 240, 202, 0.24);
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .connection-badge.approval,
 .deal-card__connections small.attention {
   border-color: rgba(255, 179, 191, 0.28);
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
 }
 
 .connection-empty {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .records-person-pill,
@@ -317,7 +317,7 @@
 .records-person-pill {
   gap: 0.42rem;
   border-radius: 999px;
-  background: var(--maverick-surface);
+  background: var(--loopino-surface);
   padding: 0.28rem 0.58rem;
 }
 
@@ -325,7 +325,7 @@
   width: 0.86rem;
   height: 0.86rem;
   flex: 0 0 auto;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .records-person-pill span {
@@ -374,12 +374,12 @@
 .records-pagination-controls {
   flex-wrap: wrap;
   justify-content: flex-end;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
 .records-page-range {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   font-weight: 600;
   white-space: nowrap;
@@ -399,7 +399,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 0 0.62rem;
   font-size: 0.78rem;
   font-weight: 500;
@@ -408,19 +408,19 @@
 
 .sliding-pagination button:hover,
 .sliding-pagination button:focus-visible {
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
 }
 
 .sliding-pagination button.is-active,
 .sliding-pagination button.is-active:hover,
 .sliding-pagination button.is-active:focus-visible {
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .sliding-pagination__dots {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   padding: 0 0.25rem;
 }
 
@@ -429,7 +429,7 @@
   bottom: 1px;
   height: 2px;
   border-radius: 999px;
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
   transition: left 260ms cubic-bezier(0.22, 1, 0.36, 1), width 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -442,18 +442,18 @@
 
 .records-pagination-controls select {
   min-height: 2rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-surface);
-  color: var(--maverick-text);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-control-radius);
+  background: var(--loopino-surface);
+  color: var(--loopino-text);
   padding: 0 1.8rem 0 0.62rem;
   font: inherit;
 }
 
 .records-pagination-controls select:hover,
 .records-pagination-controls select:focus-visible {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 

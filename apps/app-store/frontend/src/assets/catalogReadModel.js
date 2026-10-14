@@ -1,4 +1,4 @@
-const CATALOG_SCHEMA = 'maverick.app-store-catalog.v1';
+const CATALOG_SCHEMA = 'loopino.app-store-catalog.v1';
 const REVISION_PATTERN = /^[a-f0-9]{64}$/u;
 const FORBIDDEN_KEYS = new Set([
   'authorization',

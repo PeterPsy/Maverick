@@ -29,10 +29,10 @@ class InstallationServiceTests(unittest.TestCase):
         self.folder.cleanup()
 
     def plan(self, **overrides):
-        return self.service.plan(address="https://maverick.example.com/", target_ip="8.8.8.8", **overrides)
+        return self.service.plan(address="https://loopino.example.com/", target_ip="8.8.8.8", **overrides)
 
     def test_hostname_and_address_validation_rejects_shell_or_private_targets(self):
-        self.assertEqual(hostname("https://Maverick.example.com/"), "maverick.example.com")
+        self.assertEqual(hostname("https://Loopino.example.com/"), "loopino.example.com")
         for value in ("https://user:password@example.com", "localhost", "example.com/other", "example.com;touch", "example.com\n"):
             with self.subTest(value=value), self.assertRaises(InstallationError):
                 hostname(value)
@@ -43,7 +43,7 @@ class InstallationServiceTests(unittest.TestCase):
     def test_plan_preserves_matching_existing_wildcard_and_has_required_tls_sans(self):
         plan = self.plan()
         self.assertEqual([item["action"] for item in plan["dns_changes"]], ["keep", "keep"])
-        self.assertEqual(plan["certificate_names"], ["maverick.example.com", "*.sidecars.maverick.example.com"])
+        self.assertEqual(plan["certificate_names"], ["loopino.example.com", "*.sidecars.loopino.example.com"])
         self.assertNotIn("raw_value", str(plan))
 
     def test_apply_is_idempotent_and_conflicting_changes_are_rejected(self):

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Maverick bug
+description: Report a reproducible Loopino bug
 title: "[Bug]: "
 labels: ["needs reproduction"]
 body:

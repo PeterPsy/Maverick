@@ -9,7 +9,7 @@ const roots: Root[] = [];
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 beforeEach(() => {
   localStorage.clear();
-  vi.spyOn(window.location, "hostname", "get").mockReturnValue("af-0123456789abcdef01234567.sidecars.maverick.test");
+  vi.spyOn(window.location, "hostname", "get").mockReturnValue("af-0123456789abcdef01234567.sidecars.loopino.test");
 });
 afterEach(() => {
   roots.splice(0).forEach(root => act(() => root.unmount()));
@@ -80,7 +80,7 @@ it("waits for live initialization and excludes shared platform origins", async (
   const key = composerDraftKey("default", "", "thread:a");
   writeComposerDraft(localStorage, key, "private draft");
   expect((await mount("thread:a", "", "default", false)).text()).toBe("");
-  vi.spyOn(window.location, "hostname", "get").mockReturnValue("maverick.test");
+  vi.spyOn(window.location, "hostname", "get").mockReturnValue("loopino.test");
   expect(composerDraftStorage()).toBeNull();
   expect((await mount()).text()).toBe("");
 });

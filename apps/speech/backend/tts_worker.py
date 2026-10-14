@@ -33,7 +33,7 @@ def main() -> None:
 
 
 def worker_idle_timeout_seconds() -> int:
-    configured = os.environ.get("MAVERICK_SPEECH_PIPER_WORKER_IDLE_SECONDS", "").strip()
+    configured = os.environ.get("LOOPINO_SPEECH_PIPER_WORKER_IDLE_SECONDS", "").strip()
     if not configured:
         return DEFAULT_IDLE_TIMEOUT_SECONDS
     try:

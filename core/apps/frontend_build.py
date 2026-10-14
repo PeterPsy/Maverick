@@ -50,7 +50,7 @@ def build_workspace_app_frontend(
         raise AppLifecycleError(f"Frontend build for app `{app_id}` produced an invalid asset manifest: {error}") from error
 
     event = {
-        "type": "maverick.app.frontend-changed",
+        "type": "loopino.app.frontend-changed",
         "workspace_id": workspace_id,
         "owner_app_id": app_id,
         "resource": "frontend",

@@ -12,7 +12,7 @@ import type { NestedWidgetLaunch } from "../lib/nestedWidgetFrame";
 import { openAppParamsInShell } from "../lib/shellNavigation";
 import { boundedWidgetHeightPx } from "../lib/widgetResize";
 
-const MAVERICK_WIDGET_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-same-origin allow-scripts";
+const LOOPINO_WIDGET_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-same-origin allow-scripts";
 
 type MountedWidgetState = {
   contextToken: string;
@@ -46,7 +46,7 @@ export function WidgetHostFrame({
   const submittedTicketRef = useRef("");
   const contentSignature = useMemo(() => stableContentSignature(content), [content]);
   const frameName = useMemo(
-    () => `maverick-widget-${Math.random().toString(36).slice(2)}`,
+    () => `loopino-widget-${Math.random().toString(36).slice(2)}`,
     [contentSignature, hostAppId, messageId],
   );
 
@@ -125,7 +125,7 @@ export function WidgetHostFrame({
         type?: string;
         widget_id?: string;
       };
-      if (payload.type === "maverick.app-frame.authorization-required") {
+      if (payload.type === "loopino.app-frame.authorization-required") {
         setState({ status: "fallback", reason: "Widget session unavailable." });
         return;
       }
@@ -133,7 +133,7 @@ export function WidgetHostFrame({
         return;
       }
       if (
-        payload.type === "maverick.widget.resize"
+        payload.type === "loopino.widget.resize"
         && payload.owner_app_id === widget.owner_app_id
         && payload.widget_id === widget.widget_id
       ) {
@@ -143,7 +143,7 @@ export function WidgetHostFrame({
         }
         return;
       }
-      if (payload.type === "maverick.widget.open-app" && typeof payload.app_id === "string") {
+      if (payload.type === "loopino.widget.open-app" && typeof payload.app_id === "string") {
         openAppParamsInShell(payload.app_id, shellRouteParamsFromWidgetParams(payload.params));
       }
     }
@@ -210,7 +210,7 @@ export function WidgetHostFrame({
         name={frameName}
         onError={() => setState({ status: "fallback", reason: "Widget frame failed to load." })}
         ref={frameRef}
-        sandbox={MAVERICK_WIDGET_IFRAME_SANDBOX}
+        sandbox={LOOPINO_WIDGET_IFRAME_SANDBOX}
         scrolling="no"
         src="about:blank"
         style={frameHeight ? { height: `${frameHeight}px` } : undefined}

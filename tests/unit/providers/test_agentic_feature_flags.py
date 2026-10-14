@@ -15,15 +15,15 @@ from core.runtime.authority import (
     runtime_feature_flag_revision,
 )
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-    MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
-    MAVERICK_FEATURE_AGENTIC_PROFILES,
-    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
-    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-    MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+    LOOPINO_FEATURE_AGENTIC_PROFILES,
+    LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
     feature_enabled,
     provider_preview_feature,
     require_agentic_feature,
@@ -33,15 +33,15 @@ from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 
 
 _NORMATIVE_FLAGS = (
-    MAVERICK_FEATURE_AGENTIC_PROFILES,
-    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
-    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
-    MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
-    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_AGENTIC_PROFILES,
+    LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
+    LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+    LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
 )
 
 
@@ -49,19 +49,19 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
     def test_local_surfaces_default_on_and_remote_agentic_defaults_off(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             for name in (
-                MAVERICK_FEATURE_AGENTIC_PROFILES,
-                MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-                MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
-                MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
-                MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+                LOOPINO_FEATURE_AGENTIC_PROFILES,
+                LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+                LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+                LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
+                LOOPINO_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
             ):
                 with self.subTest(name=name):
                     self.assertTrue(feature_enabled(name))
             for name in (
-                MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-                MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-                MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
-                MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+                LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+                LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+                LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+                LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
             ):
                 with self.subTest(name=name):
                     self.assertFalse(feature_enabled(name))
@@ -81,13 +81,13 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
                 )
 
     def test_invalid_value_fails_closed_regardless_of_declared_default(self) -> None:
-        environment = {MAVERICK_FEATURE_AGENTIC_PROFILES: "invalid"}
+        environment = {LOOPINO_FEATURE_AGENTIC_PROFILES: "invalid"}
         self.assertFalse(
-            feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES, environment=environment)
+            feature_enabled(LOOPINO_FEATURE_AGENTIC_PROFILES, environment=environment)
         )
         self.assertFalse(
             feature_enabled(
-                MAVERICK_FEATURE_AGENTIC_PROFILES,
+                LOOPINO_FEATURE_AGENTIC_PROFILES,
                 default=False,
                 environment=environment,
             )
@@ -96,12 +96,12 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
     def test_runtime_guard_returns_stable_blocked_reason(self) -> None:
         with patch.dict(
             os.environ,
-            {MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "0"},
+            {LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "0"},
             clear=False,
         ):
             with self.assertRaises(HostedAgenticLoopError) as raised:
                 require_agentic_feature(
-                    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+                    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
                     "hosted_agent_runtime_disabled",
                 )
         self.assertEqual(raised.exception.reason_code, "hosted_agent_runtime_disabled")
@@ -109,11 +109,11 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
     def test_provider_preview_flags_are_provider_specific(self) -> None:
         self.assertEqual(
             provider_preview_feature("google-ai-studio"),
-            (MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW, "google_agentic_preview_disabled"),
+            (LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW, "google_agentic_preview_disabled"),
         )
         self.assertEqual(
             provider_preview_feature("openrouter"),
-            (MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW, "openrouter_agentic_preview_disabled"),
+            (LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW, "openrouter_agentic_preview_disabled"),
         )
         self.assertIsNone(provider_preview_feature("codex"))
 
@@ -126,8 +126,8 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-                MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "0",
+                LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+                LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "0",
             },
             clear=False,
         ):
@@ -141,12 +141,12 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
             model_provider_id="google",
         )
         environment = {
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: "0",
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: "0",
         }
         with patch.dict(os.environ, environment, clear=True):
             disabled = runtime_feature_flag_revision(binding)
-        environment[MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW] = "1"
+        environment[LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW] = "1"
         with patch.dict(os.environ, environment, clear=True):
             enabled = runtime_feature_flag_revision(binding)
         self.assertNotEqual(disabled, enabled)
@@ -155,7 +155,7 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
         policy = codex_runtime_policy()
         with patch.dict(
             os.environ,
-            {"MAVERICK_FEATURE_PARALLEL_TOOL_CALLS": "0"},
+            {"LOOPINO_FEATURE_PARALLEL_TOOL_CALLS": "0"},
             clear=False,
         ):
             self.assertEqual(

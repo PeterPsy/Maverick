@@ -1,6 +1,6 @@
 import type { FileCacheFilter } from "./fileCacheTypes";
 
-const STORAGE_KEY = "maverick-pwa-file-cache-cleanup-barrier-v1";
+const STORAGE_KEY = "loopino-pwa-file-cache-cleanup-barrier-v1";
 const records = new Map<string, BarrierRecord>();
 const memoryOnlyIds = new Set<string>();
 

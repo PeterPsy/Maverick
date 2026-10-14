@@ -19,7 +19,7 @@ from core.runtime.tool_errors import RuntimeToolError
 
 
 MAX_TOOL_PRIVATE_PAYLOAD_BYTES = 1_048_576
-_DIGEST_DOMAIN = b"maverick.runtime.tool-arguments.v1\x00"
+_DIGEST_DOMAIN = b"loopino.runtime.tool-arguments.v1\x00"
 
 
 class RuntimeToolPrivatePayloadStore(Protocol):

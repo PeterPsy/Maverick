@@ -4,7 +4,7 @@
   "name": "Speech",
   "version": "0.1.0",
   "description": "Backend-only speech provider app for workspace text-to-speech and speech-to-text transcription surfaces.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

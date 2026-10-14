@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from core.providers.execution_families import (
-    MAVERICK_AGENT_EXECUTION_FAMILY,
+    LOOPINO_AGENT_EXECUTION_FAMILY,
     NATIVE_AGENT_EXECUTION_FAMILY,
     NO_WORKSPACE_ACTIONS_MESSAGE,
     effective_agentic_execution_family,
@@ -43,7 +43,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
             [item.family_id for item in catalog],
             [
                 NATIVE_AGENT_EXECUTION_FAMILY,
-                MAVERICK_AGENT_EXECUTION_FAMILY,
+                LOOPINO_AGENT_EXECUTION_FAMILY,
             ],
         )
         self.assertEqual(catalog[0].label, "CLI models")

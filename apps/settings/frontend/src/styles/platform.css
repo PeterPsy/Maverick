@@ -27,7 +27,7 @@
 
 .settings-platform-runtime-copy strong {
   overflow: hidden;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -35,7 +35,7 @@
 
 .settings-platform-runtime-copy small,
 .settings-platform-runtime-copy code {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.75rem;
   line-height: 1.35;
 }
@@ -49,11 +49,11 @@
   place-items: center;
   width: 2.3rem;
   height: 2.3rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 0.86rem;
   background: rgba(255, 255, 255, 0.06);
-  box-shadow: var(--maverick-inner-edge);
-  color: var(--maverick-accent);
+  box-shadow: var(--loopino-inner-edge);
+  color: var(--loopino-accent);
 }
 
 .settings-platform-provider-forms {

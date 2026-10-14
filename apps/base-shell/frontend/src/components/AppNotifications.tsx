@@ -3,7 +3,7 @@ import { NotificationPopover } from "./NotificationPopover";
 import { LiveNotificationFeed } from "./ui/live-notification-feed";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import type { AppRegistryItem } from "../api";
-import type { MaverickFrameScope } from "../iframePolicy";
+import type { LoopinoFrameScope } from "../iframePolicy";
 import { noticeKey, noticeTime } from "../notificationInbox";
 import {
   navigationParams,
@@ -21,7 +21,7 @@ export function AppNotifications({
   placement,
 }: {
   apps: AppRegistryItem[];
-  scope: MaverickFrameScope;
+  scope: LoopinoFrameScope;
   children: (notifications: ReactNode) => ReactNode;
   placement: "sidebar" | "header";
   onOpenApp: (

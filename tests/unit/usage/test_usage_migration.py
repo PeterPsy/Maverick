@@ -32,7 +32,7 @@ class UsageMigrationTests(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
-        self.env = patch.dict(os.environ, {'MAVERICK_USAGE_STORE': 'document'})
+        self.env = patch.dict(os.environ, {'LOOPINO_USAGE_STORE': 'document'})
         self.env.start()
         self.addCleanup(self.env.stop)
         self.collections = UsageCollections(*(JsonFileCollection(self.root / "json" / (name + ".json"))
@@ -51,7 +51,7 @@ class UsageMigrationTests(unittest.TestCase):
         prepared = migration.prepare(self.root, self.collections)
         migration.validate(self.root, prepared['migration_id'])
         migration.cutover(self.root, self.collections, prepared['migration_id'])
-        os.environ['MAVERICK_USAGE_STORE'] = 'sqlite'
+        os.environ['LOOPINO_USAGE_STORE'] = 'sqlite'
         self.state.usage_store = build_usage_store(self.root, self.collections)
         return prepared
 
@@ -71,7 +71,7 @@ class UsageMigrationTests(unittest.TestCase):
         migration.rollback(self.root, self.collections)
         with self.assertRaisesRegex(RuntimeError, 'adapter changed'):
             sql_store.delete_sessions(['root'])
-        os.environ['MAVERICK_USAGE_STORE'] = 'document'
+        os.environ['LOOPINO_USAGE_STORE'] = 'document'
         self.state.usage_store = build_usage_store(self.root, self.collections)
         self.assertEqual(self.ingest('three', 300).summary.tokens.total_tokens, 600)
         migration.rollback(self.root, self.collections)
@@ -150,13 +150,13 @@ class UsageMigrationTests(unittest.TestCase):
         with patch.object(migration, 'atomic_json', side_effect=fail_marker), self.assertRaises(OSError):
             migration.cutover(self.root, self.collections, prepared['migration_id'])
         migration.cutover(self.root, self.collections, prepared['migration_id'])
-        os.environ['MAVERICK_USAGE_STORE'] = 'sqlite'
+        os.environ['LOOPINO_USAGE_STORE'] = 'sqlite'
         self.state.usage_store = build_usage_store(self.root, self.collections)
         self.ingest('two', 200)
         with patch.object(migration, '_retire_after_rollback', side_effect=OSError('crash after marker')), self.assertRaises(OSError):
             migration.rollback(self.root, self.collections)
         self.assertTrue((self.root / USAGE_ROOT / 'usage.sqlite').exists())
-        os.environ['MAVERICK_USAGE_STORE'] = 'document'
+        os.environ['LOOPINO_USAGE_STORE'] = 'document'
         self.state.usage_store = build_usage_store(self.root, self.collections)
         self.ingest('three', 300)
         migration.rollback(self.root, self.collections)
@@ -164,7 +164,7 @@ class UsageMigrationTests(unittest.TestCase):
         self.assertEqual(len(self.state.usage_store.list_samples()), 3)
 
     def test_missing_database_or_wrong_schema_never_create_or_migrate_implicitly(self):
-        os.environ['MAVERICK_USAGE_STORE'] = 'sqlite'
+        os.environ['LOOPINO_USAGE_STORE'] = 'sqlite'
         with self.assertRaisesRegex(RuntimeError, 'adapter changed'):
             build_usage_store(self.root, self.collections)
         marker = self.root / USAGE_ROOT / 'store.json'
@@ -184,7 +184,7 @@ class UsageMigrationTests(unittest.TestCase):
         target = build_control_plane_collections(ControlStoreSettings(kind='json', json_root=target_root))
         source.usage.samples.replace_all([{'sample_id': 'preserved-source'}])
         self.assertIn('usage_samples', {spec.name for spec in control_plane_collection_specs(source)})
-        os.environ['MAVERICK_USAGE_STORE'] = 'sqlite'
+        os.environ['LOOPINO_USAGE_STORE'] = 'sqlite'
         copied = _copy_collections(source, target)
         self.assertNotIn('usage_samples', {item['name'] for item in copied})
         self.assertEqual(target.usage.samples.find({}), [])

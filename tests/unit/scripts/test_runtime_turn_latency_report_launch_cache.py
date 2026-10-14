@@ -18,7 +18,7 @@ from tests.unit.scripts.test_runtime_turn_latency_report import (
 class RuntimeTurnLatencyReportLaunchCacheTestCase(unittest.TestCase):
     def test_exposes_launch_cache_metrics_and_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-launch", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,
@@ -65,7 +65,7 @@ class RuntimeTurnLatencyReportLaunchCacheTestCase(unittest.TestCase):
 
     def test_associates_app_reference_prepare_with_next_turn(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-prepare", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,

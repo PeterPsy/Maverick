@@ -1,4 +1,4 @@
-import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
+import { readLoopinoAppFrameContext } from '@loopino/pwa-cache';
 import { decodeBase64, previewDriveFile, readPreviewTable, readPreviewText, renderPreview, renderThumbnail, storageMediaStreamUrl } from './storageApi';
 import { openStorageFileFromDeviceCache } from './storageFileCacheClient';
 import { PreviewMemoryCache, type PreviewLease, type PreviewValue } from './lib/previewMemoryCache';
@@ -22,7 +22,7 @@ export function clearPreviewCache(): void {
 if (typeof window !== 'undefined') window.addEventListener('pagehide', clearPreviewCache);
 
 function previewKey(file: StorageFile, kind: 'card' | 'full') {
-  const currentScope = JSON.stringify(readMaverickAppFrameContext());
+  const currentScope = JSON.stringify(readLoopinoAppFrameContext());
   if (scope !== currentScope) { clearPreviewCache(); scope = currentScope; }
   return JSON.stringify([scope, kind, file.provider, file.connection_id, file.id, file.modified_at,
     file.size_bytes, file.preview_kind, file.sha256, file.etag_or_version || file.source_version]);

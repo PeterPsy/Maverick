@@ -13,7 +13,7 @@ const width = Number(params.get("width") || 390);
 const widget = params.get("widget") === "true";
 const count = Number(params.get("count") || 1);
 const research = params.get("research") === "true";
-if (params.has('shell_origin')) Object.defineProperty(window, '__MAVERICK_PLATFORM_ORIGIN__', { value: params.get('shell_origin') });
+if (params.has('shell_origin')) Object.defineProperty(window, '__LOOPINO_PLATFORM_ORIGIN__', { value: params.get('shell_origin') });
 listenForShellReferenceDrops();
 
 function ComposerFixture() {

@@ -13,12 +13,12 @@ This document is the versioned acceptance reference for the Website Studio scope
 
 ## Acceptance Checks
 
-- `app_contract.json` declares `publisher=maverick`, `distribution.mode=source_available`, and `distribution.source_access=forkable`.
+- `app_contract.json` declares `publisher=loopino`, `distribution.mode=source_available`, and `distribution.source_access=forkable`.
 - `website_manifest` returns `implemented_phases` containing `phase_1`, `phase_2`, `phase_3_app_orchestration`, and `phase_3a_runtime_preview`.
 - `website_manifest` returns `platform_hosting_status=pending_generic_surface` and does not imply public production hosting is available.
 - ZIP and Git import reject traversal, symlinks, executables, sensitive files, excessive file counts, excessive expanded size, and inline GitHub credentials.
 - GitHub private import and GitHub PR publish require a prepared connection and Vault/Core Secrets delivery of `github-token`; missing delivery blocks publish before approval consumption.
-- GitHub PR publish creates a deterministic `maverick/<site_id>/<publish_request_slug>` branch, opens or reuses a PR, and updates existing branches with `force=false`; non-fast-forward conflicts block the publish instead of force-pushing.
+- GitHub PR publish creates a deterministic `loopino/<site_id>/<publish_request_slug>` branch, opens or reuses a PR, and updates existing branches with `force=false`; non-fast-forward conflicts block the publish instead of force-pushing.
 - Writes and patches require optimistic concurrency through `expected_hash`; concurrent stale writes are rejected.
 - Static preview documents use app-approved file gateway capabilities for local assets and run in a nested opaque-origin sandbox iframe.
 - Phase 3A Node builds require `package-lock.json`, run `npm ci --ignore-scripts --no-audit --no-fund`, resolve build binaries from site-local `node_modules/.bin`, and execute only allowlisted build commands.
@@ -46,9 +46,9 @@ The acceptance suite is anchored by:
 ```bash
 python3 -m unittest discover -s apps/website-studio/tests -p 'test_*.py'
 python3 -m unittest apps/website-studio/tests/test_phase_acceptance_smoke.py -v
-maverick core cli run core.app-sdk.validate --app-root apps/website-studio --json
-maverick app website-studio mcp call website_manifest --json
-maverick app website-studio frontend build --json
+loopino core cli run core.app-sdk.validate --app-root apps/website-studio --json
+loopino app website-studio mcp call website_manifest --json
+loopino app website-studio frontend build --json
 npm --prefix apps/website-studio run test:visual
 ```
 

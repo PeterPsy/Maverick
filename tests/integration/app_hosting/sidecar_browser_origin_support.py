@@ -34,7 +34,7 @@ class SidecarBrowserOriginTestSupport:
             host=host,
             path="/api/auth/login",
             method="POST",
-            body=json.dumps({"username": "admin", "password": "maverick"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "loopino"}).encode("utf-8"),
             headers={"content-type": "application/json"},
             scheme=scheme,
         )
@@ -197,7 +197,7 @@ class SidecarBrowserOriginTestSupport:
 
     @staticmethod
     def _repo_root(temp_root: Path) -> Path:
-        repo_root = temp_root / "maverick"
+        repo_root = temp_root / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -224,7 +224,7 @@ class SidecarBrowserOriginTestSupport:
             name="Sidecar Browser Demo",
             version="0.1.0",
             description="Isolated browser origin integration fixture.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 services=build_app_services(
                     http_sidecars=[

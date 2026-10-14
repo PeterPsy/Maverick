@@ -85,7 +85,7 @@ def build_runtime_launch_context_fingerprint(
         "model_reasoning_effort": getattr(provider_selection, "model_reasoning_effort", None),
         "binding_id": getattr(provider_selection, "binding_id", None),
         "definition": _provider_definition_fingerprint(provider_definition),
-        "codex_command": os.environ.get("MAVERICK_CODEX_COMMAND", "").strip() or "codex",
+        "codex_command": os.environ.get("LOOPINO_CODEX_COMMAND", "").strip() or "codex",
         "skill_catalog": _skill_catalog_metadata_fingerprint(
             workspace_id=session.workspace_id,
             repository_root=Path(state.repository_root),

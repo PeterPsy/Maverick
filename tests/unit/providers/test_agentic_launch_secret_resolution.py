@@ -129,11 +129,11 @@ class AgenticLaunchSecretResolutionTest(unittest.TestCase):
         self.assertIs(adapter.context.binding, execution_binding)
         self.assertEqual(
             adapter.context.secret_env,
-            {"MAVERICK_PROVIDER_SECRET": "fixture-native-secret"},
+            {"LOOPINO_PROVIDER_SECRET": "fixture-native-secret"},
         )
         self.assertEqual(
             spec.env_overrides,
-            {"MAVERICK_PROVIDER_SECRET": "fixture-native-secret"},
+            {"LOOPINO_PROVIDER_SECRET": "fixture-native-secret"},
         )
         self.assertEqual(spec.credential_binding_id, credential.binding_id)
         self.assertEqual(

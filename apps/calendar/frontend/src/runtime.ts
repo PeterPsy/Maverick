@@ -39,8 +39,8 @@ export function calendarOAuthRedirectUri(appId: string, origin: string) {
   return `${normalizedOrigin}/apps/${encodeURIComponent(appId)}/oauth/callback`;
 }
 
-export function maverickPlatformOrigin(): string {
-  const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+export function loopinoPlatformOrigin(): string {
+  const value = (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__;
   return typeof value === 'string' && /^https?:\/\//u.test(value) ? value : window.location.origin;
 }
 

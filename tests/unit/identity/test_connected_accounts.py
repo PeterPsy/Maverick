@@ -65,9 +65,9 @@ class ConnectedAccountsTests(unittest.TestCase):
         create_platform_secret(self.secrets, label="Client secret", secret_id="client-secret", alias="google-oauth-client-secret", raw_value="private-client-secret")
         self.state = SimpleNamespace(account_store=self.accounts, identity_store=self.identity, workspace_store=self.workspace,
                                      secret_store=self.secrets, repository_root=ROOT)
-        self.environment = patch.dict("os.environ", {"MAVERICK_GOOGLE_REDIRECT_URI": "https://maverick.example/api/auth/google/callback",
-            "MAVERICK_GOOGLE_ALLOW_REGISTRATION": "1", "MAVERICK_GOOGLE_CLIENT_ID_REF": "platform:secret-alias/google-oauth-client-id",
-            "MAVERICK_GOOGLE_CLIENT_SECRET_REF": "platform:secret-alias/google-oauth-client-secret"})
+        self.environment = patch.dict("os.environ", {"LOOPINO_GOOGLE_REDIRECT_URI": "https://loopino.example/api/auth/google/callback",
+            "LOOPINO_GOOGLE_ALLOW_REGISTRATION": "1", "LOOPINO_GOOGLE_CLIENT_ID_REF": "platform:secret-alias/google-oauth-client-id",
+            "LOOPINO_GOOGLE_CLIENT_SECRET_REF": "platform:secret-alias/google-oauth-client-secret"})
         self.environment.start()
         self.addCleanup(self.environment.stop)
 
@@ -174,10 +174,10 @@ class ConnectedAccountsTests(unittest.TestCase):
         self.assertEqual(provider_status(self.state)["login_services"], ["gmail", "drive"])
 
     def test_start_rejects_cross_origin_and_isolated_frame_requests(self):
-        for origin, frame in [("https://evil.example", False), ("https://maverick.example", True)]:
+        for origin, frame in [("https://evil.example", False), ("https://loopino.example", True)]:
             headers = []
             environ = {"PATH_INFO": "/api/auth/google/start", "REQUEST_METHOD": "POST", "HTTP_ORIGIN": origin,
-                       "maverick.app_frame_proxy": frame, "wsgi.url_scheme": "https", "HTTP_HOST": "maverick.example", "wsgi.input": BytesIO(), "CONTENT_LENGTH": "0"}
+                       "loopino.app_frame_proxy": frame, "wsgi.url_scheme": "https", "HTTP_HOST": "loopino.example", "wsgi.input": BytesIO(), "CONTENT_LENGTH": "0"}
             with patch("core.api.connected_accounts_api.resolve_request_session", return_value=self.context):
                 result = handle_connected_accounts_api(self.state, environ, lambda status, _: headers.append(status))
             self.assertEqual(headers, ["403 Forbidden"])
@@ -275,7 +275,7 @@ class ConnectedAccountsTests(unittest.TestCase):
                 public = result["json"]
                 self.assertIn("platform_" + account.account_id, json.dumps(public))
                 self.assertNotIn("private-refresh", json.dumps(public))
-                self.assertNotIn("maverick-account:", json.dumps(public))
+                self.assertNotIn("loopino-account:", json.dumps(public))
                 prefix = {"calendar": "calendar_connections", "mail": "connections", "storage": "drive_connections"}[app]
                 for action in [prefix + ".start_oauth", prefix + ".disconnect"]:
                     denied = run_json_entrypoint_with_sidecars(source / parsed.contract.entrypoints.backend,
@@ -287,7 +287,7 @@ class ConnectedAccountsTests(unittest.TestCase):
                         actor_user_id=self.user.user_id, runtime_session_id=None,
                         identity_store=self.identity, workspace_store=self.workspace, secret_store=self.secrets)
                     self.assertGreaterEqual(denied["status_code"], 400, denied)
-                    self.assertIn("Maverick Connected accounts", json.dumps(denied["json"]))
+                    self.assertIn("Loopino Connected accounts", json.dumps(denied["json"]))
 
     def test_callback_creates_platform_cookie_and_pending_registration_does_not(self):
         query, browser = self.flow(["calendar"])
@@ -296,14 +296,14 @@ class ConnectedAccountsTests(unittest.TestCase):
             login_query, login_browser = self.flow(mode="login")
             captured = []
             environ = {"PATH_INFO": "/api/auth/google/callback", "REQUEST_METHOD": "GET", "wsgi.url_scheme": "https",
-                "HTTP_COOKIE": "maverick_google_flow=" + login_browser,
+                "HTTP_COOKIE": "loopino_google_flow=" + login_browser,
                 "QUERY_STRING": "code=code&state=" + login_query["state"][0]}
             with patch("core.api.connected_accounts_api.resolve_request_session", return_value=None), patch(
                     "core.api.connected_accounts_api.complete_claimed_flow", return_value=(user, account, "login", membership)):
                 handle_connected_accounts_api(self.state, environ, lambda status, headers: captured.extend(headers))
             cookies = [value for name, value in captured if name == "Set-Cookie"]
-            self.assertTrue(any("maverick_google_flow=;" in cookie for cookie in cookies))
-            self.assertEqual(any(cookie.startswith("maverick_session=") for cookie in cookies), membership is not None)
+            self.assertTrue(any("loopino_google_flow=;" in cookie for cookie in cookies))
+            self.assertEqual(any(cookie.startswith("loopino_session=") for cookie in cookies), membership is not None)
             self.assertNotIn("private-refresh", repr(captured))
 
     def test_real_cli_and_mcp_registries_reuse_the_personal_connection(self):
@@ -333,7 +333,7 @@ class ConnectedAccountsTests(unittest.TestCase):
                 result = mcp.call_tool(tool_name=f"app.{app}.{tool}", arguments={}, context=mcp_context)
                 self.assertEqual(result.get("status_code", 200), 200, result)
                 self.assertNotIn("private-refresh", json.dumps(result))
-                self.assertNotIn("maverick-account:", json.dumps(result))
+                self.assertNotIn("loopino-account:", json.dumps(result))
 
     def test_personal_context_does_not_cross_actor_or_membership_boundaries(self):
         query, browser = self.flow(["calendar"])

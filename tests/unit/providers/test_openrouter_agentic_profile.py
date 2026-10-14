@@ -9,8 +9,8 @@ from core.providers.openrouter_agentic_profile import (
     openrouter_deepseek_flash_latest_publication,
     openrouter_agentic_preview_publication,
 )
-from core.providers.maverick_agent_onboarding import publish_maverick_agent_profile
-from tests.support.maverick_agent_onboarding import provider_store
+from core.providers.loopino_agent_onboarding import publish_loopino_agent_profile
+from tests.support.loopino_agent_onboarding import provider_store
 
 
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
@@ -35,8 +35,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         store = provider_store()
         publication = openrouter_agentic_preview_publication(now=NOW)
 
-        publish_maverick_agent_profile(store, publication=publication, now=NOW)
-        publish_maverick_agent_profile(store, publication=publication, now=NOW)
+        publish_loopino_agent_profile(store, publication=publication, now=NOW)
+        publish_loopino_agent_profile(store, publication=publication, now=NOW)
 
         self.assertEqual(store.list_agentic_profile_definitions(), [publication.profile])
 
@@ -50,7 +50,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
         self.assertEqual(profile.display_name, "DeepSeek Flash Latest")
         self.assertEqual(profile.model_id, "~deepseek/deepseek-flash-latest")
-        self.assertEqual(profile.runtime_engine_id, "maverick-tool-loop")
+        self.assertEqual(profile.runtime_engine_id, "loopino-tool-loop")
         self.assertEqual(profile.adapter_version_constraint, "==59")
         self.assertEqual(profile.routing_constraint.allowed_upstream_ids, ("relace",))
         self.assertEqual(profile.routing_constraint.allowed_quantizations, ("fp4",))

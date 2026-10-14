@@ -1,10 +1,10 @@
-# Contributing to Maverick
+# Contributing to Loopino
 
-Maverick is a clean-slate rebuild. Contributions should make the platform easier to read, test, delete, and secure.
+Loopino is a clean-slate rebuild. Contributions should make the platform easier to read, test, delete, and secure.
 
 ## Project Status
 
-Maverick is experimental and not production-ready. Public security posture is documented in `SECURITY.md` and `docs/security/threat_model.md`. Public launch priorities are tracked in `ROADMAP.md`.
+Loopino is experimental and not production-ready. Public security posture is documented in `SECURITY.md` and `docs/security/threat_model.md`. Public launch priorities are tracked in `ROADMAP.md`.
 
 ## Before You Change Code
 

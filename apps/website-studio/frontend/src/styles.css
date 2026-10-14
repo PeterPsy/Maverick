@@ -1,43 +1,43 @@
 :root {
   color-scheme: dark;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-bg-strong: #171717;
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #9ff0ca;
-  --maverick-warning: #f6d58f;
-  --maverick-danger: #ffb3bf;
-  --maverick-card-radius: 22px;
-  --maverick-control-radius: 18px;
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
-  --website-studio-bg: var(--maverick-bg);
-  --website-studio-bg-strong: var(--maverick-bg-strong);
-  --website-studio-surface: var(--maverick-glass-surface);
-  --website-studio-surface-muted: var(--maverick-surface);
-  --website-studio-surface-hover: var(--maverick-surface-hover);
-  --website-studio-surface-active: var(--maverick-surface-active);
-  --website-studio-border: var(--maverick-border);
-  --website-studio-border-strong: var(--maverick-border-strong);
-  --website-studio-text: var(--maverick-text);
-  --website-studio-muted: var(--maverick-text-muted);
-  --website-studio-soft: var(--maverick-text-soft);
-  --website-studio-accent: var(--maverick-accent);
-  --website-studio-accent-soft: var(--maverick-accent-soft);
-  --website-studio-focus: var(--maverick-accent);
-  --website-studio-radius-card: var(--maverick-card-radius);
-  --website-studio-radius-control: var(--maverick-control-radius);
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-bg-strong: #171717;
+  --loopino-surface: rgba(255, 255, 255, 0.055);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-border: rgba(255, 255, 255, 0.08);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-glass-surface: rgba(12, 12, 14, 0.58);
+  --loopino-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.66);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-accent-soft: rgba(255, 255, 255, 0.18);
+  --loopino-text-on-accent: #0a0a0b;
+  --loopino-success: #9ff0ca;
+  --loopino-warning: #f6d58f;
+  --loopino-danger: #ffb3bf;
+  --loopino-card-radius: 22px;
+  --loopino-control-radius: 18px;
+  --loopino-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --website-studio-bg: var(--loopino-bg);
+  --website-studio-bg-strong: var(--loopino-bg-strong);
+  --website-studio-surface: var(--loopino-glass-surface);
+  --website-studio-surface-muted: var(--loopino-surface);
+  --website-studio-surface-hover: var(--loopino-surface-hover);
+  --website-studio-surface-active: var(--loopino-surface-active);
+  --website-studio-border: var(--loopino-border);
+  --website-studio-border-strong: var(--loopino-border-strong);
+  --website-studio-text: var(--loopino-text);
+  --website-studio-muted: var(--loopino-text-muted);
+  --website-studio-soft: var(--loopino-text-soft);
+  --website-studio-accent: var(--loopino-accent);
+  --website-studio-accent-soft: var(--loopino-accent-soft);
+  --website-studio-focus: var(--loopino-accent);
+  --website-studio-radius-card: var(--loopino-card-radius);
+  --website-studio-radius-control: var(--loopino-control-radius);
 }
 
 * { box-sizing: border-box; }
@@ -51,7 +51,7 @@ body,
   overflow: hidden;
   background: var(--website-studio-bg);
   color: var(--website-studio-text);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -76,7 +76,7 @@ select {
 .import-mode {
   display: grid;
   place-items: center;
-  padding: calc(18px + var(--maverick-shell-mobile-content-top-offset, 0px)) 18px 18px;
+  padding: calc(18px + var(--loopino-shell-mobile-content-top-offset, 0px)) 18px 18px;
 }
 
 .site-canvas,
@@ -93,7 +93,7 @@ select {
 
 .website-info-panel {
   position: absolute;
-  top: calc(14px + var(--maverick-shell-mobile-content-top-offset, 0px));
+  top: calc(14px + var(--loopino-shell-mobile-content-top-offset, 0px));
   right: 14px;
   z-index: 4;
   display: grid;
@@ -104,7 +104,7 @@ select {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 38%),
     rgba(12, 12, 14, 0.74);
-  box-shadow: var(--maverick-glass-edge), 0 24px 58px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--loopino-glass-edge), 0 24px 58px rgba(0, 0, 0, 0.32);
   color: var(--website-studio-muted);
   padding: 14px;
   backdrop-filter: blur(28px);
@@ -204,19 +204,19 @@ select {
   height: 0.62rem;
   margin-top: 0.28rem;
   border-radius: 999px;
-  background: var(--maverick-success);
+  background: var(--loopino-success);
   box-shadow: 0 0 0 4px rgba(159, 240, 202, 0.12);
 }
 
 .website-info-runtime[data-runtime-status="blocked"] i,
 .website-info-runtime[data-runtime-status="failed"] i {
-  background: var(--maverick-danger);
+  background: var(--loopino-danger);
   box-shadow: 0 0 0 4px rgba(255, 179, 191, 0.12);
 }
 
 .website-info-runtime[data-runtime-status="static_fallback"] i,
 .website-info-runtime[data-runtime-status="degraded"] i {
-  background: var(--maverick-warning);
+  background: var(--loopino-warning);
   box-shadow: 0 0 0 4px rgba(246, 213, 143, 0.12);
 }
 
@@ -269,11 +269,11 @@ select {
 }
 
 .website-info-metric[data-tone="ok"] strong {
-  color: var(--maverick-success);
+  color: var(--loopino-success);
 }
 
 .website-info-metric[data-tone="warn"] strong {
-  color: var(--maverick-warning);
+  color: var(--loopino-warning);
 }
 
 .website-info-lines {
@@ -418,7 +418,7 @@ select {
 
 .notice {
   position: absolute;
-  top: calc(14px + var(--maverick-shell-mobile-content-top-offset, 0px));
+  top: calc(14px + var(--loopino-shell-mobile-content-top-offset, 0px));
   left: 50%;
   z-index: 5;
   width: min(calc(100% - 28px), 640px);
@@ -426,17 +426,17 @@ select {
   border: 1px solid var(--website-studio-border);
   border-radius: 18px;
   background: var(--website-studio-surface);
-  box-shadow: var(--maverick-glass-edge);
+  box-shadow: var(--loopino-glass-edge);
   color: var(--website-studio-muted);
   padding: 10px 14px;
 }
 
-.notice.warn { color: var(--maverick-warning); }
-.notice.error { color: var(--maverick-danger); }
+.notice.warn { color: var(--loopino-warning); }
+.notice.error { color: var(--loopino-danger); }
 
 @media (max-width: 700px) {
   .website-info-panel {
-    top: calc(10px + var(--maverick-shell-mobile-content-top-offset, 0px));
+    top: calc(10px + var(--loopino-shell-mobile-content-top-offset, 0px));
     right: 10px;
     width: min(360px, calc(100% - 20px));
   }

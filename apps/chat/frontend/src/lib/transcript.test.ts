@@ -384,7 +384,7 @@ describe("runtime event transcript projection", () => {
         event_id: "delta-with-file",
         event_type: "runtime.output.delta",
         payload: {
-          text: "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/home/ubuntu/projects/maverick-v3/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
+          text: "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
         },
       }),
       event({
@@ -398,7 +398,7 @@ describe("runtime event transcript projection", () => {
       {
         role: "agent",
         content:
-          "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/home/ubuntu/projects/maverick-v3/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
+          "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
         status: "complete",
       },
       {
@@ -442,7 +442,7 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "final-with-local-path",
         event_type: "runtime.output.final",
-        payload: { text: "File: /srv/maverick/workspaces/default/storage/generated/secret.pdf" },
+        payload: { text: "File: /srv/loopino/workspaces/default/storage/generated/secret.pdf" },
       }),
     ]);
 
@@ -454,7 +454,7 @@ describe("runtime event transcript projection", () => {
         workspace_relative_path: "storage/generated/secret.pdf",
       },
     });
-    expect(JSON.stringify(preview?.structuredContent?.payload)).not.toContain("/srv/maverick");
+    expect(JSON.stringify(preview?.structuredContent?.payload)).not.toContain("/srv/loopino");
   });
 
   it("groups runtime tool call events under one tool-used message", () => {

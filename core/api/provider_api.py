@@ -799,7 +799,7 @@ def _profile_effective_capability_snapshot(
             if callable(handle_resolver)
             else (
                 authorized_core_tool_handles(execution_binding)
-                if execution_binding.runtime_engine_id == "maverick-tool-loop" else ()
+                if execution_binding.runtime_engine_id == "loopino-tool-loop" else ()
             )
         )
         authority = resolve_runtime_authority(

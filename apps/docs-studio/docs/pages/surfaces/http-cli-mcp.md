@@ -20,19 +20,19 @@ App backend actions are mounted through:
 ## CLI discovery
 
 ```bash
-maverick core cli list --json
-maverick core cli inspect <command_id> --json
-maverick app <app_id> cli list --json
-maverick app <app_id> cli inspect <command_name> --json
+loopino core cli list --json
+loopino core cli inspect <command_id> --json
+loopino app <app_id> cli list --json
+loopino app <app_id> cli inspect <command_name> --json
 ```
 
 ## MCP discovery
 
 ```bash
-maverick core mcp list --json
-maverick core mcp inspect <tool_name> --json
-maverick app <app_id> mcp list --json
-maverick app <app_id> mcp inspect <tool_name> --json
+loopino core mcp list --json
+loopino core mcp inspect <tool_name> --json
+loopino app <app_id> mcp list --json
+loopino app <app_id> mcp inspect <tool_name> --json
 ```
 
 ## Invocation rule

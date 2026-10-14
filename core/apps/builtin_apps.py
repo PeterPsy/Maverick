@@ -1,9 +1,10 @@
-"""Bootstrap built-in apps that ship with the Maverick core host."""
+"""Bootstrap built-in apps that ship with the Loopino core host."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+import json
 import logging
 from pathlib import Path
 
@@ -28,15 +29,32 @@ class BuiltinAppSpec:
     source_path: Path
 
 
-def discover_builtin_apps(*, start_path: Path | None = None) -> list[BuiltinAppSpec]:
+def discover_builtin_apps(*, start_path: Path | None = None, include_unselected: bool = False) -> list[BuiltinAppSpec]:
     """Return the built-in apps shipped in the repository app root."""
     paths = installation_paths(start_path=start_path)
     if not paths.apps_root.is_dir():
         return []
     specs: list[BuiltinAppSpec] = []
+    selection_path = paths.apps_root / "bootstrap.json"
+    selected = None
+    if selection_path.exists():
+        payload = json.loads(selection_path.read_text(encoding="utf-8"))
+        app_ids = payload.get("app_ids") if isinstance(payload, dict) else None
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"schema_version", "app_ids"}
+            or payload["schema_version"] != "1"
+            or not isinstance(app_ids, list)
+            or any(not isinstance(value, str) or not value for value in app_ids)
+            or len(app_ids) != len(set(app_ids))
+        ):
+            raise AppContractValidationError("Invalid installation app bootstrap selection.")
+        selected = set(app_ids)
     for source_path in sorted(path for path in paths.apps_root.iterdir() if path.is_dir()):
-        if (source_path / "app_contract.json").is_file():
+        if (include_unselected or selected is None or source_path.name in selected) and (source_path / "app_contract.json").is_file():
             specs.append(BuiltinAppSpec(app_id=source_path.name, source_path=source_path))
+    if selected is not None and not selected <= {spec.app_id for spec in specs}:
+        raise AppContractValidationError("Installation app bootstrap selection references unavailable apps.")
     return specs
 
 
@@ -52,7 +70,8 @@ def register_and_install_builtin_apps(
     """Ensure built-in apps are known and enabled in one workspace."""
     ensure_default_workspace_record(workspace_store, now=now)
     ensured: list[str] = []
-    for spec in discover_builtin_apps(start_path=start_path):
+    selected_ids = {spec.app_id for spec in discover_builtin_apps(start_path=start_path)}
+    for spec in discover_builtin_apps(start_path=start_path, include_unselected=True):
         if not spec.source_path.is_dir():
             continue
         try:
@@ -63,6 +82,8 @@ def register_and_install_builtin_apps(
                 now=now,
             )
         except AppContractValidationError:
+            continue
+        if source.app_id not in selected_ids:
             continue
         if _current_builtin_binding_exists(
             app_store,

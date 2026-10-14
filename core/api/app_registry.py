@@ -60,7 +60,7 @@ def enabled_app_items(
         if not user_can_mount_app(state, user=user, workspace_id=workspace_id, visibility=parsed.contract.visibility):
             continue
         try:
-            logo_path = source_root / "frontend" / "dist" / "maverick-icon-compact.png"
+            logo_path = source_root / "frontend" / "dist" / "loopino-icon-compact.png"
             local_app_id = binding.app_id
             public_app_id = binding.public_app_id or parsed.app_id
             mount_app_id = binding.mount_app_id or local_app_id
@@ -98,7 +98,7 @@ def enabled_app_items(
                     for item in parsed.contract.requires
                 ],
                 "logo": (
-                    {"kind": "image", "value": f"/apps/{mount_app_id}/maverick-icon-compact.png"}
+                    {"kind": "image", "value": f"/apps/{mount_app_id}/loopino-icon-compact.png"}
                     if logo_path.exists()
                     else None
                 ),

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { calendarWindow } from './pwaCache';
 import { sanitizeCalendarReadModel } from './pwaReadModel';
 
-vi.mock('@maverick/pwa-cache', async (original) => ({ ...await original<object>(), readAppCacheModel: vi.fn() }));
+vi.mock('@loopino/pwa-cache', async (original) => ({ ...await original<object>(), readAppCacheModel: vi.fn() }));
 
 describe('Calendar persistent display model', () => {
   const event = { id: 'e', title: 'Event', startTime: '2026-09-05T10:00:00Z', endTime: '2026-09-05T11:00:00Z', color: 'blue' };
@@ -21,7 +21,7 @@ describe('Calendar persistent display model', () => {
     expect(window.start_after).toBe('2026-08-25T00:00:00.000Z');
   });
   it('publishes warm pages and changed revalidation without waiting for other reads', async () => {
-    const { readAppCacheModel } = await import('@maverick/pwa-cache');
+    const { readAppCacheModel } = await import('@loopino/pwa-cache');
     const { readCalendarWindow } = await import('./pwaCache');
     const initial = { events: [event], calendars: [], has_more: false };
     vi.mocked(readAppCacheModel).mockResolvedValue({ payload: initial } as never);

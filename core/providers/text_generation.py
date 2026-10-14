@@ -33,7 +33,7 @@ GOOGLE_AI_STUDIO_ENDPOINT_ROOT = "https://generativelanguage.googleapis.com/v1be
 BLOCKED_HOSTED_TEXT_MARKERS = (
     "local path:",
     "Referenced app-owned records:",
-    "/home/ubuntu/projects/maverick-v3/workspaces/",
+    "/projects/loopino/workspaces/",
     "workspaces/default/",
 )
 

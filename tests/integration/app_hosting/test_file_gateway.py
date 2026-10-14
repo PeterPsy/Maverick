@@ -28,7 +28,7 @@ class AppFileGatewayIntegrationTests(unittest.TestCase):
             (manifest_root / f"{token}.json").write_text(
                 json.dumps(
                     {
-                        "schema": "maverick.app.file_gateway.v1",
+                        "schema": "loopino.app.file_gateway.v1",
                         "app_id": "website-studio",
                         "access": "public_capability",
                         "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=15)).isoformat(),
@@ -107,7 +107,7 @@ class AppFileGatewayIntegrationTests(unittest.TestCase):
             (manifest_root / f"{token}.json").write_text(
                 json.dumps(
                     {
-                        "schema": "maverick.app.file_gateway.v1",
+                        "schema": "loopino.app.file_gateway.v1",
                         "app_id": "website-studio",
                         "access": "authenticated",
                         "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=15)).isoformat(),
@@ -130,7 +130,7 @@ class AppFileGatewayIntegrationTests(unittest.TestCase):
         self.assertNotIn("ETag", headers)
 
     def _repo_root(self, temp_dir: str) -> Path:
-        repo_root = Path(temp_dir) / "maverick"
+        repo_root = Path(temp_dir) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -145,7 +145,7 @@ class AppFileGatewayIntegrationTests(unittest.TestCase):
             name="Website Studio",
             version="1.0.0",
             description="Preview gateway test app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(),
         )
         write_app_contract_file(app_root, parsed)
@@ -168,7 +168,7 @@ class AppFileGatewayIntegrationTests(unittest.TestCase):
         (manifest_root / f"{token}.json").write_text(
             json.dumps(
                 {
-                    "schema": "maverick.app.file_gateway.v1",
+                    "schema": "loopino.app.file_gateway.v1",
                     "app_id": "website-studio",
                     "access": "public_capability",
                     "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=15)).isoformat(),

@@ -41,12 +41,12 @@ class DnsTransactionTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.private = Path(self.folder.name)
         self.mail = {"id": "mail", "name": "example.com", "type": "MX", "content": "mail.example.com", "ttl": 300, "priority": 10}
-        self.before = [{"id": "one", "name": "maverick.example.com", "type": "A", "content": "1.1.1.1", "ttl": 300, "proxied": False}, self.mail]
+        self.before = [{"id": "one", "name": "loopino.example.com", "type": "A", "content": "1.1.1.1", "ttl": 300, "proxied": False}, self.mail]
         self.provider = Provider(self.before)
         self.service = SimpleNamespace(secret_store=None, dns_factory=lambda *a, **kw: self.provider)
         self.job = {"job_id": "b" * 32, "actor_user_id": "admin"}
-        self.plan = {"hostname": "maverick.example.com", "target_ip": "8.8.8.8", "dns_secret_ref": "platform:secret-alias/test-token",
-                     "zone": {"id": "a" * 32}, "dns_changes": dns_changes("maverick.example.com", "8.8.8.8", self.before)}
+        self.plan = {"hostname": "loopino.example.com", "target_ip": "8.8.8.8", "dns_secret_ref": "platform:secret-alias/test-token",
+                     "zone": {"id": "a" * 32}, "dns_changes": dns_changes("loopino.example.com", "8.8.8.8", self.before)}
 
     def tearDown(self):
         self.folder.cleanup()
@@ -73,11 +73,11 @@ class DnsTransactionTests(unittest.TestCase):
 
     def test_wildcard_cannot_bypass_an_existing_txt_node_or_wrong_ipv6(self):
         wildcard = {"type": "A", "name": "*.example.com", "content": "8.8.8.8", "proxied": False}
-        for obstruction in [{"type": "TXT", "name": "maverick.example.com"},
-                            {"type": "TXT", "name": "nested.maverick.example.com"},
+        for obstruction in [{"type": "TXT", "name": "loopino.example.com"},
+                            {"type": "TXT", "name": "nested.loopino.example.com"},
                             {"type": "AAAA", "name": "*.example.com", "content": "2606:4700::1111"}]:
             with self.subTest(obstruction=obstruction):
-                changes = dns_changes('maverick.example.com', '8.8.8.8', [wildcard, obstruction])
+                changes = dns_changes('loopino.example.com', '8.8.8.8', [wildcard, obstruction])
                 self.assertEqual(changes[0]['action'], 'create')
 
     def test_plan_that_promised_no_mutation_cannot_silently_create_records(self):

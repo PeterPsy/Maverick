@@ -31,7 +31,7 @@ class McpHostSurface:
 def build_mcp_host_surface(
     registry: McpToolRegistry,
     *,
-    server_name: str = "maverick",
+    server_name: str = "loopino",
     transport: McpTransportKind = "stdio",
     mount_path: str = "/mcp",
 ) -> McpHostSurface:

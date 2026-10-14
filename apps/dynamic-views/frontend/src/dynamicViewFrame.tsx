@@ -3,7 +3,7 @@ import type { DynamicViewPayload } from './types';
 
 const MIN_HEIGHT = 1;
 const DEFAULT_HEIGHT = 1;
-const RESIZE_EVENT = 'maverick.dynamic_view.resize';
+const RESIZE_EVENT = 'loopino.dynamic_view.resize';
 
 const HOST_CSS = `
 html, body {
@@ -64,9 +64,9 @@ export function buildSrcDoc(payload: DynamicViewPayload, frameId: string) {
     '</head><body>',
     payload.package.html,
     '<script>',
-    `window.MaverickDynamicView = ${runtimePayload};`,
-    "const maverickFrameId = window.MaverickDynamicView?.metadata?.frameId || '';",
-    'function maverickDynamicViewContentHeight() {',
+    `window.LoopinoDynamicView = ${runtimePayload};`,
+    "const loopinoFrameId = window.LoopinoDynamicView?.metadata?.frameId || '';",
+    'function loopinoDynamicViewContentHeight() {',
     '  const doc = document.documentElement;',
     '  const body = document.body;',
     '  const bodyTop = body?.getBoundingClientRect?.().top || 0;',
@@ -77,24 +77,24 @@ export function buildSrcDoc(payload: DynamicViewPayload, frameId: string) {
     '  const fallbackHeight = Math.max(body?.scrollHeight || 0, body?.offsetHeight || 0, doc?.scrollHeight || 0);',
     '  return elementBottom > 0 ? elementBottom : fallbackHeight;',
     '}',
-    'function reportMaverickDynamicViewHeight() {',
-    '  const height = maverickDynamicViewContentHeight();',
-    "  window.parent?.postMessage({ type: 'maverick.dynamic_view.resize', frameId: maverickFrameId, height }, '*');",
+    'function reportLoopinoDynamicViewHeight() {',
+    '  const height = loopinoDynamicViewContentHeight();',
+    "  window.parent?.postMessage({ type: 'loopino.dynamic_view.resize', frameId: loopinoFrameId, height }, '*');",
     '}',
     "window.addEventListener('error', function(event) {",
-    "  document.body.setAttribute('data-maverick-error', String(event.message || 'runtime-error'));",
-    '  reportMaverickDynamicViewHeight();',
+    "  document.body.setAttribute('data-loopino-error', String(event.message || 'runtime-error'));",
+    '  reportLoopinoDynamicViewHeight();',
     '});',
-    "window.addEventListener('load', reportMaverickDynamicViewHeight);",
-    "window.addEventListener('resize', reportMaverickDynamicViewHeight);",
+    "window.addEventListener('load', reportLoopinoDynamicViewHeight);",
+    "window.addEventListener('resize', reportLoopinoDynamicViewHeight);",
     "if (typeof ResizeObserver !== 'undefined') {",
-    '  const observer = new ResizeObserver(reportMaverickDynamicViewHeight);',
+    '  const observer = new ResizeObserver(reportLoopinoDynamicViewHeight);',
     '  if (document.documentElement) observer.observe(document.documentElement);',
     '  if (document.body) observer.observe(document.body);',
     '}',
     '</script>',
     `<script>${payload.package.javascript || ''}</script>`,
-    '<script>reportMaverickDynamicViewHeight(); setTimeout(reportMaverickDynamicViewHeight, 32); setTimeout(reportMaverickDynamicViewHeight, 180);</script>',
+    '<script>reportLoopinoDynamicViewHeight(); setTimeout(reportLoopinoDynamicViewHeight, 32); setTimeout(reportLoopinoDynamicViewHeight, 180);</script>',
     '</body></html>'
   ].join('');
 }

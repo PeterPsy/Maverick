@@ -1,4 +1,4 @@
-# Maverick PWA Transparent Cache Product Contract
+# Loopino PWA Transparent Cache Product Contract
 
 Status: approved for the M2R corrective gate on 2026-08-31. This document is
 the normative product and UI contract for browser caching and transport
@@ -14,7 +14,7 @@ physical-device and controlled-rollout gates below.
 
 ## Product invariant
 
-Maverick is an online application with transparent, best-effort caches. Cache
+Loopino is an online application with transparent, best-effort caches. Cache
 reuse may improve speed and allow a function that already has every required
 valid byte to continue, but it never creates a second application mode.
 
@@ -37,7 +37,7 @@ replace an app icon, or select a different route.
 | Server returns `401` or `403` | Immediately withdraw authenticated frames through the shared shell revocation path, run applicable durable cleanup, and never substitute stale data. |
 | Server returns validation or conflict response | Show the function's normal terminal outcome; do not classify it as a transport wait. |
 | Useful transport returns | Retry or revalidate internally without a banner, toast, route change, or icon change. |
-| First visit without network or verified shell | Allow the browser's normal navigation failure; do not synthesize a Maverick product page. |
+| First visit without network or verified shell | Allow the browser's normal navigation failure; do not synthesize a Loopino product page. |
 
 Equivalent cached and server responses must be visually indistinguishable
 apart from existing domain metadata, such as a timestamp that the feature
@@ -64,7 +64,7 @@ must not reveal expired data merely because transport is unavailable.
 ## Retry and recovery contract
 
 - Browser `online`, focus, and visibility events are hints, not authority.
-- A Maverick response confirms that transport is useful again.
+- A Loopino response confirms that transport is useful again.
 - Idempotent reads may retry with one in-flight attempt per stable request key.
 - Backoff is exponential, jittered, and capped; hidden UI suspends
   non-essential attempts.

@@ -265,22 +265,22 @@ class DeepgramFluxSessionManager:
     ) -> None:
         self.client_factory = client_factory
         self.idle_ttl_seconds = max(0, idle_ttl_seconds) if idle_ttl_seconds is not None else _configured_int(
-            "MAVERICK_SPEECH_FLUX_SESSION_IDLE_SECONDS",
+            "LOOPINO_SPEECH_FLUX_SESSION_IDLE_SECONDS",
             DEFAULT_FLUX_SESSION_IDLE_SECONDS,
             minimum=5,
         )
         self.max_age_seconds = max(1, max_age_seconds) if max_age_seconds is not None else _configured_int(
-            "MAVERICK_SPEECH_FLUX_SESSION_MAX_AGE_SECONDS",
+            "LOOPINO_SPEECH_FLUX_SESSION_MAX_AGE_SECONDS",
             DEFAULT_FLUX_SESSION_MAX_AGE_SECONDS,
             minimum=30,
         )
         self.prune_interval_seconds = max(0, prune_interval_seconds) if prune_interval_seconds is not None else _configured_int(
-            "MAVERICK_SPEECH_FLUX_SESSION_PRUNE_INTERVAL_SECONDS",
+            "LOOPINO_SPEECH_FLUX_SESSION_PRUNE_INTERVAL_SECONDS",
             DEFAULT_FLUX_SESSION_PRUNE_INTERVAL_SECONDS,
             minimum=1,
         )
         self.max_sessions = max(1, max_sessions) if max_sessions is not None else _configured_int(
-            "MAVERICK_SPEECH_FLUX_MAX_SESSIONS",
+            "LOOPINO_SPEECH_FLUX_MAX_SESSIONS",
             DEFAULT_FLUX_MAX_SESSIONS,
             minimum=1,
         )
@@ -460,7 +460,7 @@ def _runtime_secret(settings: dict, logical_name: str) -> str:
 
 
 def _persistent_backend_worker_enabled() -> bool:
-    mode = os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER", "auto").strip().lower() or "auto"
+    mode = os.environ.get("LOOPINO_SPEECH_BACKEND_WORKER", "auto").strip().lower() or "auto"
     return mode not in {"0", "false", "no", "off", "entrypoint", "process", "disabled"}
 
 

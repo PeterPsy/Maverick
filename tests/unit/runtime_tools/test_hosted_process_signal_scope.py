@@ -63,7 +63,7 @@ def _marked_processes(session_id):
             continue
         try:
             environment = (directory / "environ").read_bytes().split(b"\0")
-            if f"MAVERICK_RUNTIME_SESSION_ID={session_id}".encode() in environment:
+            if f"LOOPINO_RUNTIME_SESSION_ID={session_id}".encode() in environment:
                 fields = (directory / "stat").read_text().rsplit(")", 1)[1].split()
                 result.append(tuple(int(fields[index]) for index in (2, 3, 4)))  # pgid, sid, tty
         except OSError:

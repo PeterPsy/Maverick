@@ -308,7 +308,7 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
         self.assertEqual(bodies, [b": keepalive\n\n"])
 
     def _repo_root(self, temp_dir: str) -> Path:
-        repo_root = Path(temp_dir) / "maverick"
+        repo_root = Path(temp_dir) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -326,7 +326,7 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
             name="Sidecar Core Demo",
             version="0.1.0",
             description="Sidecar core route integration app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 entrypoints=build_app_entrypoints(backend="backend/app_backend.py"),
                 services=build_app_services(
@@ -383,7 +383,7 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": "admin", "password": "maverick"},
+            body={"username": "admin", "password": "loopino"},
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]

@@ -13,7 +13,7 @@ describe('doc navigation params', () => {
   it('extracts the active docs page from widget context', () => {
     expect(
       docPageIdFromWidgetContext({
-        type: 'maverick.widget.context-changed',
+        type: 'loopino.widget.context-changed',
         context: {
           content: {
             payload: {

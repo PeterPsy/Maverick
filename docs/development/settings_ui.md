@@ -63,7 +63,7 @@ current theme tokens, and primary buttons keep the matching accent text colour.
 
 Models, synthesis, transcription, routing, usage and sessions have separate view
 modules. CSS is split by responsibility while preserving the original cascade.
-The app owns copies of native Maverick tokens, pre-paint dark/light setup, exact
+The app owns copies of native Loopino tokens, pre-paint dark/light setup, exact
 parent theme/navigation handling, the inner scrolling region and mobile offset.
 
 ## Administrative actions
@@ -85,7 +85,7 @@ Run frontend behavioral tests serially with
 run the app fast checks with
 `python3 scripts/test_suite.py --app settings --level fast --jobs 1` and Core
 settings checks with `python3 -m unittest tests.unit.api.test_settings_api`.
-Build mounted assets through `maverick app settings frontend build --json`.
+Build mounted assets through `loopino app settings frontend build --json`.
 
 Regression coverage includes continuous sidebar input, late/cancelled reads,
 partial failures, retained focus/selection/disclosures/chart islands, draft

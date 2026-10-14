@@ -11,8 +11,8 @@ from core.recovery.backend_service import _terminate_process_with_escalation, re
 RUNNING_STATUS = "MainPID=100\nRestart=always\nActiveState=active\nSubState=running\n"
 RESTARTED_STATUS = "MainPID=101\nRestart=always\nActiveState=active\nSubState=running\n"
 ACCESS_DENIED_RESTART_ERROR = (
-    "Failed to restart maverick-core.service: Access denied\n"
-    "See system logs and 'systemctl status maverick-core.service' for details."
+    "Failed to restart loopino-core.service: Access denied\n"
+    "See system logs and 'systemctl status loopino-core.service' for details."
 )
 
 
@@ -70,7 +70,7 @@ class RecoveryBackendServiceTest(unittest.TestCase):
     def test_restart_backend_service_does_not_signal_on_non_auth_restart_failure(self) -> None:
         responses = [
             CompletedProcessStub(returncode=0, stdout=RUNNING_STATUS),
-            CompletedProcessStub(returncode=1, stderr="Failed to restart maverick-core.service: Unit not found.\n"),
+            CompletedProcessStub(returncode=1, stderr="Failed to restart loopino-core.service: Unit not found.\n"),
             CompletedProcessStub(returncode=0, stdout=RUNNING_STATUS),
         ]
 

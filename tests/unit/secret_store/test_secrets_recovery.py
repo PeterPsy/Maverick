@@ -136,7 +136,7 @@ class SecretsRecoveryTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "docs", "scripts"):
             target = repo_root / name
             if name == "docs":
@@ -190,7 +190,7 @@ class SecretsRecoveryTestCase(unittest.TestCase):
             key_file.chmod(0o400)
             store = self.make_secret_store()
 
-            with patch.dict("os.environ", {"MAVERICK_SECRET_KEY_FILE": str(key_file)}, clear=True):
+            with patch.dict("os.environ", {"LOOPINO_SECRET_KEY_FILE": str(key_file)}, clear=True):
                 record = create_platform_secret(store, label="File Key", raw_value="file-secret", alias="file-key")
                 self.assertEqual(store.get_secret_value(secret_id=record.secret_id), "file-secret")
 
@@ -309,7 +309,7 @@ class SecretsRecoveryTestCase(unittest.TestCase):
                 name="Chat",
                 version="1.0.0",
                 description="Chat app",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     lifecycle=build_app_lifecycle(health_check=True),
                     entrypoints=build_app_entrypoints(hooks={"health_check": "backend/lifecycle/health.py"}),

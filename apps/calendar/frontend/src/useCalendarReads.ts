@@ -1,4 +1,4 @@
-import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility } from '@maverick/pwa-cache';
+import { connectAppEventSocket, loopinoAppIsVisible, observeLoopinoVisibility } from '@loopino/pwa-cache';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getFullEvent, listCalendars, listConnections, listEvents, readViewFilter } from './api';
 import { CALENDAR_UI_STATE_RESOURCE } from './calendar-ui-state';
@@ -6,7 +6,7 @@ import { calendarEvents, calendarWindow, readCalendarEvent, readCalendarWindow }
 import { mergeReloadMode, type ReloadMode } from './runtime';
 import type { CalendarConnection, CalendarEvent, CalendarRemoteCalendar, CalendarViewState } from './types';
 
-const foreground = () => maverickAppIsVisible({ requireOnline: false });
+const foreground = () => loopinoAppIsVisible({ requireOnline: false });
 const DEFAULT_VIEW: CalendarViewState = { mode: 'default', entity_ids: [], tags: [], conflicts_only: false };
 
 /** Display reads have separate cancellation lanes; accepted mutations live in App. */
@@ -38,7 +38,7 @@ export function useCalendarReads(appId: string) {
   }
 
   async function loadView() {
-    if (!maverickAppIsVisible()) return;
+    if (!loopinoAppIsVisible()) return;
     const request = begin('view');
     try {
       const value = await readViewFilter(appId, request.signal);
@@ -56,7 +56,7 @@ export function useCalendarReads(appId: string) {
         detailEvent.current = item;
         setEvents((current) => [...current.filter((event) => event.id !== item.id), item]);
       }, request.report);
-      if (maverickAppIsVisible()) {
+      if (loopinoAppIsVisible()) {
         const event = await getFullEvent(appId, id, request.signal);
         if (event && request.current()) { detailEvent.current = event; setEvents(current => [...current.filter(e => e.id !== id), event]) }
       }
@@ -71,7 +71,7 @@ export function useCalendarReads(appId: string) {
     setError('');
     if (detailId.current) void loadEvent(detailId.current);
     let liveCalendars = false;
-    if (maverickAppIsVisible()) {
+    if (loopinoAppIsVisible()) {
       void loadView();
       void listConnections(appId, request.signal).then((value) => { if (request.current()) setConnections(value); }, request.report);
       void listCalendars(appId, undefined, request.signal).then((value) => {
@@ -88,7 +88,7 @@ export function useCalendarReads(appId: string) {
           if (!liveCalendars) setCalendars(model.calendars);
           setIsLoading(false);
         }, request.report);
-      } else if (maverickAppIsVisible()) {
+      } else if (loopinoAppIsVisible()) {
         const next = await listEvents(appId, request.signal);
         if (request.current()) { setEvents(next); setIsLoading(false); }
       }
@@ -114,7 +114,7 @@ export function useCalendarReads(appId: string) {
       for (const controller of Object.values(reads.current)) controller?.abort();
     };
     let initial = true;
-    const stopVisibility = observeMaverickVisibility((visible) => {
+    const stopVisibility = observeLoopinoVisibility((visible) => {
       if (!visible) suspend();
       // Online resume comes from the app-events transport once it is live.
       // Offline resume may still paint a previously authorized cached window.
@@ -125,7 +125,7 @@ export function useCalendarReads(appId: string) {
     const schedule = (resource?: string) => {
       reloadMode.current = mergeReloadMode(reloadMode.current, resource === 'view-state' ? 'view' : 'full');
       window.clearTimeout(reloadTimer.current);
-      if (!maverickAppIsVisible()) return;
+      if (!loopinoAppIsVisible()) return;
       reloadTimer.current = window.setTimeout(() => {
         const mode = reloadMode.current;
         reloadMode.current = 'view';
@@ -133,7 +133,7 @@ export function useCalendarReads(appId: string) {
       }, 120);
     };
     const stopEvents = connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((payload) => {
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === appId
+      if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === appId
           && payload.resource !== CALENDAR_UI_STATE_RESOURCE && payload.resource !== 'notifications') schedule(payload.resource);
     }, () => schedule());
     return () => { suspend(); stopVisibility(); stopEvents(); window.removeEventListener('offline', suspend); };

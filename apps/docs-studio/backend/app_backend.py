@@ -45,13 +45,13 @@ try:
     app_events = []
     if action in {"update-site", "create-page", "update-page"}:
         app_events.append({
-            "type": "maverick.app.data-changed",
+            "type": "loopino.app.data-changed",
             "owner_app_id": "docs-studio",
             "resource": "state",
         })
     if action == "set_view_filter":
         app_events.append({
-            "type": "maverick.app.data-changed",
+            "type": "loopino.app.data-changed",
             "owner_app_id": "docs-studio",
             "resource": "view-state",
         })

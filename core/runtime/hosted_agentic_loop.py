@@ -19,11 +19,11 @@ from core.providers.agentic_protocol import (
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-    MAVERICK_FEATURE_AGENTIC_PROFILES,
-    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    LOOPINO_FEATURE_AGENTIC_PROFILES,
+    LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
     feature_enabled,
     require_agentic_feature,
 )
@@ -190,19 +190,19 @@ class HostedAgenticLoop:
         event: Callable[[str, dict[str, object]], RuntimeProviderEvent],
     ) -> AsyncIterator[RuntimeProviderEvent]:
         require_agentic_feature(
-            MAVERICK_FEATURE_AGENTIC_PROFILES,
+            LOOPINO_FEATURE_AGENTIC_PROFILES,
             "agentic_profiles_disabled",
         )
         require_agentic_feature(
-            MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+            LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
             "agentic_adapter_contract_disabled",
         )
         require_agentic_feature(
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
             "hosted_agent_runtime_disabled",
         )
         require_agentic_feature(
-            MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+            LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
             "provider_private_state_disabled",
         )
         authority = self.authority_refresher(context)
@@ -699,7 +699,7 @@ class HostedAgenticLoop:
                 output_id = str(
                     uuid5(
                         NAMESPACE_URL,
-                        f"maverick:provider-final-output:{step_journal.journal_id}",
+                        f"loopino:provider-final-output:{step_journal.journal_id}",
                     )
                 )
                 private_ref, content_sha256, size_bytes = (
@@ -832,7 +832,7 @@ class HostedAgenticLoop:
                             policy=tool_policy,
                         )
                 if outcome.awaiting_confirmation:
-                    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION):
+                    if not feature_enabled(LOOPINO_FEATURE_AGENTIC_TOOL_CONFIRMATION):
                         outcome = RuntimeToolInvocationOutcome(
                             self.tool_ledger.cancel_before_effect(
                                 outcome.invocation,

@@ -1,8 +1,8 @@
-# Maverick Startup Baseline
+# Loopino Startup Baseline
 
 Date: 2026-07-08
 
-Source plan: `storage/generated/maverick-startup-performance-plan.md`
+Source plan: `storage/generated/loopino-startup-performance-plan.md`
 (`file_21acd1af772e4e2db7213b7a0d9b41db`), read through the Storage app.
 
 ## Asset Baseline
@@ -234,7 +234,7 @@ reported `skipped: true` with reason `missing credentials`.
 `python3 scripts/startup_browser_baseline.py --use-insecure-test-defaults --runs 1 --warm-reloads 0 --max-runtime-thread-websocket-p95 1 --json`
 started a temporary local host, then reported `skipped: true` because the local
 Playwright Chromium executable is not installed in this environment. Use
-`MAVERICK_STARTUP_USERNAME` and `MAVERICK_STARTUP_PASSWORD`, or
+`LOOPINO_STARTUP_USERNAME` and `LOOPINO_STARTUP_PASSWORD`, or
 `--use-insecure-test-defaults` for a local temporary host, plus an installed
 Playwright Chromium browser, to collect authenticated desktop/mobile browser
 metrics. For statistical browser baselines, use `--runs` and `--warm-reloads`;

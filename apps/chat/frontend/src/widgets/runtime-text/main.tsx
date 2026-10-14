@@ -4,12 +4,12 @@ import type { PendingMessage } from "../../lib/messageState";
 import type { RuntimeEvent, RuntimeSession, RuntimeTurn } from "../../api/client";
 import { getWidgetContext } from "../../api/client";
 import { useRuntimeEvents } from "../../hooks/useRuntimeEvents";
-import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
+import { applyInitialLoopinoTheme, listenForLoopinoThemeMessages } from "../../lib/shellTheme";
 import { eventsToMessages } from "../../lib/transcript";
 import "./styles.css";
 
-applyInitialMaverickTheme();
-listenForMaverickThemeMessages();
+applyInitialLoopinoTheme();
+listenForLoopinoThemeMessages();
 
 const CONTENT_KIND = "chat.runtime.text.preview";
 const MAX_VISIBLE_MESSAGES = 12;
@@ -113,7 +113,7 @@ function RuntimeTextWidget() {
         return;
       }
       const message = event.data as { context?: Record<string, unknown>; type?: string };
-      if (message.type !== "maverick.widget.context-changed" || !message.context) {
+      if (message.type !== "loopino.widget.context-changed" || !message.context) {
         return;
       }
       setPayload(runtimePayloadFromContext(message.context));
@@ -137,7 +137,7 @@ function RuntimeTextWidget() {
     const height = `${Math.min(280, Math.max(112, root.scrollHeight))}px`;
     window.parent?.postMessage(
       {
-        type: "maverick.widget.resize",
+        type: "loopino.widget.resize",
         owner_app_id: "chat",
         widget_id: "chat-runtime-text",
         height,

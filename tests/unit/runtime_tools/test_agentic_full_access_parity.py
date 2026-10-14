@@ -239,12 +239,12 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                                 [
                                     "printf 'cli:git\\n'; git --version",
                                     "printf 'cli:rg\\n'; rg --version",
-                                    "printf 'cli:maverick\\n'; maverick --help",
-                                    "printf 'maverick-path:%s\\n' \"$(command -v maverick)\"",
-                                    "test -n \"$MAVERICK_RUNTIME_API_TOKEN\" && printf 'token:present\\n'",
+                                    "printf 'cli:loopino\\n'; loopino --help",
+                                    "printf 'loopino-path:%s\\n' \"$(command -v loopino)\"",
+                                    "test -n \"$LOOPINO_RUNTIME_API_TOKEN\" && printf 'token:present\\n'",
                                     "printf 'workspace:%s mode:%s\\n' "
-                                    '"$MAVERICK_WORKSPACE_ID" '
-                                    '"$MAVERICK_EFFECTIVE_MODE"',
+                                    '"$LOOPINO_WORKSPACE_ID" '
+                                    '"$LOOPINO_EFFECTIVE_MODE"',
                                 ]
                             ),
                         ],
@@ -254,17 +254,17 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                     None,
                 )
             self.assertEqual(shell["exit_code"], 0)
-            for name in (*required_host_cli, "maverick"):
+            for name in (*required_host_cli, "loopino"):
                 self.assertIn(f"cli:{name}", shell["output"].lower())
-            runtime_maverick = (
+            runtime_loopino = (
                 workspace
                 / "runtime"
                 / "sessions"
                 / "session-parity"
                 / "bin"
-                / "maverick"
+                / "loopino"
             )
-            self.assertIn(f"maverick-path:{runtime_maverick}", shell["output"])
+            self.assertIn(f"loopino-path:{runtime_loopino}", shell["output"])
             self.assertIn("token:present", shell["output"])
             self.assertIn("workspace:default mode:full-access", shell["output"])
 
@@ -273,8 +273,8 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                     "argv": [
                         "/bin/sh",
                         "-c",
-                        "read line; printf 'received:%s maverick:%s' "
-                        '"$line" "$(command -v maverick)"',
+                        "read line; printf 'received:%s loopino:%s' "
+                        '"$line" "$(command -v loopino)"',
                     ],
                     "cwd": str(outside),
                 },
@@ -298,7 +298,7 @@ class AgenticFullAccessParityTest(unittest.TestCase):
             self.assertIsNotNone(status)
             self.assertEqual(status["status"], "exited")
             self.assertIn("received:hello", status["output"])
-            self.assertIn(f"maverick:{runtime_maverick}", status["output"])
+            self.assertIn(f"loopino:{runtime_loopino}", status["output"])
 
             sleeping = surfaces["core-capability:process.start"].handler(
                 {"argv": ["/bin/sh", "-c", "sleep 30"], "cwd": str(outside)},

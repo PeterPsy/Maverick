@@ -20,7 +20,7 @@ Use these surfaces:
 
 ## Scheduled tasks
 
-Use `chat_scheduled` over MCP or `maverick app chat cli run scheduled --json`.
+Use `chat_scheduled` over MCP or `loopino app chat cli run scheduled --json`.
 Actions are `list`, `read`, `create`, `update`, `run`, `pause`, `resume`, `continue`,
 `retry`, `cancel`, `initialize` and `delete`. A scheduled-task reference is
 `app_ref:chat/scheduled_chat/<id>` and opens `/app/chat/scheduled/<id>`.

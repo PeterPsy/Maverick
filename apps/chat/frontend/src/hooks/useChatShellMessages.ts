@@ -48,7 +48,7 @@ export function useChatShellMessages({
   transcriptionProviderAppId,
 }: UseChatShellMessagesParams) {
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: "chat" }, "*");
+    window.parent?.postMessage({ type: "loopino.app.ready", app_id: "chat" }, "*");
   }, []);
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function useChatShellMessages({
         return;
       }
       const payload = event.data as ShellNavigationMessage;
-      if (payload.type === "maverick.widget.capture-area.complete") {
+      if (payload.type === "loopino.widget.capture-area.complete") {
         if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
           return;
         }
@@ -68,14 +68,14 @@ export function useChatShellMessages({
         }
         return;
       }
-      if (payload.type === "maverick.widget.capture-area.error") {
+      if (payload.type === "loopino.widget.capture-area.error") {
         if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
           return;
         }
         setComposerError(payload.error || "Unable to capture page area.");
         return;
       }
-      if (payload.type === "maverick.widget.context-changed") {
+      if (payload.type === "loopino.widget.context-changed") {
         if (activeAppContextOverride !== undefined) return;
         // Unlike app-navigation messages, widget context keeps the scope under
         // context.content.payload. Read it there so a dock receives its live
@@ -89,7 +89,7 @@ export function useChatShellMessages({
         setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
         return;
       }
-      if (payload.type === "maverick.app.dependencies" && payload.app_id === "chat" && payload.dependencies) {
+      if (payload.type === "loopino.app.dependencies" && payload.app_id === "chat" && payload.dependencies) {
         void Promise.all([
           loadAgentOptionsFromDependencies(payload.dependencies),
           loadSpeechProviderFromDependencies(payload.dependencies),
@@ -98,7 +98,7 @@ export function useChatShellMessages({
         return;
       }
       if (
-        payload.type === "maverick.app.data-changed" &&
+        payload.type === "loopino.app.data-changed" &&
         payload.resource === "configuration" &&
         (payload.owner_app_id === agentCatalogAppId || payload.owner_app_id === speechProviderAppId || payload.owner_app_id === transcriptionProviderAppId)
       ) {
@@ -108,7 +108,7 @@ export function useChatShellMessages({
       if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
         return;
       }
-      if (payload.type !== "maverick.app.navigate" || (payload.app_id && payload.app_id !== "chat")) {
+      if (payload.type !== "loopino.app.navigate" || (payload.app_id && payload.app_id !== "chat")) {
         return;
       }
       void onNavigate(payload.params || {});

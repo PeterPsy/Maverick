@@ -43,7 +43,7 @@ print(json.dumps({'type':'turn.completed','usage':{'input_tokens':11,'output_tok
             definition=SimpleNamespace(provider_id='codex',default_model_family='fixture-model',model_options=[SimpleNamespace(model_id='fixture-model')])
             state=SimpleNamespace(provider_store=object())
             request={'system_prompt':'Return JSON','input_text':'untrusted fixture','output_schema':{'type':'object'},'timeout_seconds':10,'max_output_tokens':128}
-            with (root/'gate').open('a+') as gate, patch.dict(os.environ,{'MAVERICK_CODEX_COMMAND':str(executable),'MAVERICK_CODEX_HOME':str(source),'PRIVATE_TEST_SECRET':'must not propagate'}), patch('core.providers.background_text.resolve_provider_for_workspace',return_value=(definition,None)):
+            with (root/'gate').open('a+') as gate, patch.dict(os.environ,{'LOOPINO_CODEX_COMMAND':str(executable),'LOOPINO_CODEX_HOME':str(source),'PRIVATE_TEST_SECRET':'must not propagate'}), patch('core.providers.background_text.resolve_provider_for_workspace',return_value=(definition,None)):
                 # Descriptor numbers vary under the test runner; pass it to the fixture assertion.
                 script=executable.read_text().replace("'/proc/self/fd/3'",repr('/proc/self/fd/'+str(gate.fileno())))
                 executable.write_text(script)

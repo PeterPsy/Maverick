@@ -52,7 +52,7 @@ class WidgetsTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -79,7 +79,7 @@ class WidgetsTestCase(unittest.TestCase):
             name="Checklists",
             version="1.0.0",
             description="Checklist widget owner.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 entrypoints=build_app_entrypoints(backend="backend/app_backend.py"),
                 widgets=[
@@ -140,8 +140,8 @@ class WidgetsTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)

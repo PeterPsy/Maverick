@@ -11,8 +11,8 @@ from typing import Any, Iterable
 from urllib.parse import unquote, urlsplit
 
 
-FRONTEND_ASSET_MANIFEST_NAME = "maverick-frontend-assets.json"
-FRONTEND_ASSET_MANIFEST_SCHEMA = "maverick.frontend-assets.v2"
+FRONTEND_ASSET_MANIFEST_NAME = "loopino-frontend-assets.json"
+FRONTEND_ASSET_MANIFEST_SCHEMA = "loopino.frontend-assets.v2"
 _HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _BUILD_ID = re.compile(r"^[0-9a-f]{12,64}$")
 _PRECACHE_URL = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$")

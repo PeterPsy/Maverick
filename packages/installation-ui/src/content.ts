@@ -9,7 +9,7 @@ const errorMessages: Record<string, string> = {
   dns_zone_not_authorized: 'This token cannot access the domain. Add Zone · DNS · Edit and Zone · Zone · Read for this domain.',
   dns_access_denied: 'Cloudflare rejected this connection. Check the token permissions in Vault.',
   dns_automation_connection_required: 'Connect Cloudflare to automate wildcard certificates and renewal. Other providers can delegate DNS to Cloudflare while keeping the domain at the same registrar.',
-  invalid_hostname: 'Enter a public domain such as maverick.example.com, without a path or port.',
+  invalid_hostname: 'Enter a public domain such as loopino.example.com, without a path or port.',
   invalid_server_ip: 'Enter the public IP address of this server.', public_server_ip_required: 'Use the public server IP.',
   stale_installation_plan: 'The setup changed. Review a fresh plan before applying.',
   installation_change_in_progress: 'An installation change is already running. Follow its progress below.',
@@ -37,8 +37,8 @@ export function planHtml(plan: Plan, busy: boolean): string {
   return `<section class="installation-card"><p class="installation-eyebrow">Review your setup</p><h2>${e(plan.hostname)}</h2><p class="installation-muted">Server ${e(plan.target_ip)} · DNS only · ${blocked ? 'Connect DNS automation to enable renewal' : 'HTTPS with automatic renewal'}</p>
     <ul class="installation-records">${plan.dns_changes.map(item => `<li><code>${e(item.name)}</code><span>${item.action === 'keep' ? 'Already correct' : e(item.after?.type + ' → ' + item.after?.content)}</span></li>`).join('')}</ul>
     <p class="installation-muted">Certificates: ${plan.certificate_names.map(e).join(', ')}</p>
-    ${plan.blocking_issues.map(item => `<div class="installation-notice">${item.code === 'dns_delegation_pending' ? `Set these nameservers at your registrar once, then Maverick will continue automatically: <ul>${(item.nameservers || []).map(name => `<li><code>${e(name)}</code></li>`).join('')}</ul>` : e(errorMessage(item.code))}</div>`).join('')}
-    ${plan.external_actions.length ? '<p>Keep the current provider callback registered until the new connection is ready. Maverick will pause for your confirmation.</p>' : ''}
+    ${plan.blocking_issues.map(item => `<div class="installation-notice">${item.code === 'dns_delegation_pending' ? `Set these nameservers at your registrar once, then Loopino will continue automatically: <ul>${(item.nameservers || []).map(name => `<li><code>${e(name)}</code></li>`).join('')}</ul>` : e(errorMessage(item.code))}</div>`).join('')}
+    ${plan.external_actions.length ? '<p>Keep the current provider callback registered until the new connection is ready. Loopino will pause for your confirmation.</p>' : ''}
     <div class="installation-actions"><button class="installation-primary" type="button" data-installation-action="apply" ${blocked || busy ? 'disabled' : ''}>Apply setup</button>${plan.token_template_url ? link(plan.token_template_url, 'Scoped token template') : ''}</div></section>`;
 }
 
@@ -51,11 +51,11 @@ export function jobHtml(job: Job, plan?: Plan): string {
     ${job.status === 'waiting_external_actions' && plan ? `<form data-installation-confirm="${e(job.job_id)}"><p>Add each new address in its provider console, then confirm.</p>${plan.external_actions.map(item => `<label class="installation-confirm-row"><input type="checkbox" name="action_id" value="${e(item.id)}" ${job.confirmed_actions?.includes(item.id) ? 'checked' : ''}><span><strong>${e(item.label)}</strong><code>${e(item.url)}</code>${item.provider_url ? link(item.provider_url, 'Open provider') : ''}</span></label>`).join('')}<button class="installation-primary" type="submit">Confirm provider updates</button></form>` : ''}
     ${job.verification ? verificationHtml(job.verification) : ''}
     ${job.status === 'ready' && plan?.change_kind === 'address_change' ? '<p class="installation-muted">Use the new address for saved server connections and installed apps. Saved web links on this server will forward to the new address.</p>' : ''}
-    <div class="installation-actions">${job.status === 'failed' ? '<button type="button" data-installation-action="retry">Retry</button>' : ''}${job.status !== 'rolled_back' && job.status !== 'rollback_requested' ? '<button type="button" data-installation-action="rollback-review">Restore previous setup</button>' : ''}${job.status === 'ready' && plan ? link(plan.public_url, 'Open Maverick') : ''}</div>
+    <div class="installation-actions">${job.status === 'failed' ? '<button type="button" data-installation-action="retry">Retry</button>' : ''}${job.status !== 'rolled_back' && job.status !== 'rollback_requested' ? '<button type="button" data-installation-action="rollback-review">Restore previous setup</button>' : ''}${job.status === 'ready' && plan ? link(plan.public_url, 'Open Loopino') : ''}</div>
     <div data-installation-rollback hidden><p>Restore the DNS and address settings saved before this change. Provider registrations remain under your control.</p><button type="button" data-installation-action="rollback">Confirm restoration</button></div></section>`;
 }
 
 export function verificationHtml(result: Verification): string {
-  const title = (host: string) => host.startsWith('af-') ? 'Secure app pages' : host.startsWith('sc-') ? 'Secure app services' : 'Maverick address';
+  const title = (host: string) => host.startsWith('af-') ? 'Secure app pages' : host.startsWith('sc-') ? 'Secure app services' : 'Loopino address';
   return `<div class="installation-verification" role="status"><strong>${result.healthy ? 'Connection verified' : 'Some connections need attention'}</strong><ul>${result.checks.map(item => `<li><span>${title(item.host)}</span><span>${item.healthy ? 'HTTPS ready' : e(item.error || 'Unavailable')}</span></li>`).join('')}</ul><details><summary>Technical details</summary>${result.checks.map(item => `<p><code>${e(item.host)}</code></p>`).join('')}</details></div>`;
 }

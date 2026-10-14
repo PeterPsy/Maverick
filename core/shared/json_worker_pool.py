@@ -99,7 +99,7 @@ class JsonWorkerPool:
                     worker = _Worker(key, _start_process(path, cwd))
                     self._workers.append(worker)
                     if self._reaper is None:
-                        self._reaper = Thread(target=self._reap, name="maverick-app-json-idle", daemon=True)
+                        self._reaper = Thread(target=self._reap, name="loopino-app-json-idle", daemon=True)
                         self._reaper.start()
                     return worker
                 remaining = deadline - time.monotonic()

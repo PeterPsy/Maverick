@@ -24,8 +24,8 @@ from core.runtime.failure_messages import (
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    LOOPINO_FEATURE_AGENTIC_PROFILES,
     feature_enabled,
 )
 from core.skills.models import SkillDefinition
@@ -69,9 +69,9 @@ async def execute_agentic_runtime_turn(
     if binding is None:
         raise ValueError("Agentic adapter execution requires a pinned session binding.")
     disabled_reason = None
-    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+    if not feature_enabled(LOOPINO_FEATURE_AGENTIC_PROFILES):
         disabled_reason = "agentic_profiles_disabled"
-    elif not feature_enabled(MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT):
+    elif not feature_enabled(LOOPINO_FEATURE_AGENTIC_ADAPTER_CONTRACT):
         disabled_reason = "agentic_adapter_contract_disabled"
     if disabled_reason is not None:
         if event_sink is not None:

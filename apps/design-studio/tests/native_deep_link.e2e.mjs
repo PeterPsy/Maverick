@@ -24,7 +24,7 @@ const nativeServer = http.createServer((request, response) => {
     response.end(`<!doctype html><main data-native-path="${escapeHtml(request.url)}">native</main>`);
     return;
   }
-  if (request.method !== "POST" || request.url !== "/.well-known/maverick-sidecar-bootstrap") {
+  if (request.method !== "POST" || request.url !== "/.well-known/loopino-sidecar-bootstrap") {
     response.writeHead(404).end();
     return;
   }
@@ -71,7 +71,7 @@ const vite = await createServer({
             response.writeHead(200, { "Content-Type": "application/json" });
             response.end(JSON.stringify({
               origin: nativeOrigin,
-              bootstrap_url: `${nativeOrigin}/.well-known/maverick-sidecar-bootstrap`,
+              bootstrap_url: `${nativeOrigin}/.well-known/loopino-sidecar-bootstrap`,
               method: "POST",
               ticket_field: "ticket",
               ticket,

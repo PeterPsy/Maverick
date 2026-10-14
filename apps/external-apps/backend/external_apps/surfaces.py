@@ -71,5 +71,5 @@ def run(surface):
         result, code = {"error_code": "operation_failed"}, 500
     response = backend_response(code, result) if surface == "backend" else {"status_code": code, **result}
     if code < 400 and body.get("action") not in READS:
-        response["app_events"] = [{"type": "maverick.app.data-changed", "resource": "state"}]
+        response["app_events"] = [{"type": "loopino.app.data-changed", "resource": "state"}]
     emit_json(response)

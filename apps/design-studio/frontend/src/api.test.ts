@@ -11,7 +11,7 @@ import {
 
 const VALID_LAUNCH = {
   origin: "https://sc-proof.sidecars.example",
-  bootstrap_url: "https://sc-proof.sidecars.example/.well-known/maverick-sidecar-bootstrap",
+  bootstrap_url: "https://sc-proof.sidecars.example/.well-known/loopino-sidecar-bootstrap",
   bootstrap_transport: "cors" as const,
   method: "POST" as const,
   parent_origin: "https://af-design.sidecars.example",
@@ -55,7 +55,7 @@ describe("isolated browser launch validation", () => {
   it("accepts a one-shot cross-origin POST bootstrap", () => {
     expect(validateSidecarLaunch(
       VALID_LAUNCH,
-      "https://maverick.example",
+      "https://loopino.example",
       VALID_LAUNCH.parent_origin,
       "/",
     )).toEqual(VALID_LAUNCH);
@@ -64,7 +64,7 @@ describe("isolated browser launch validation", () => {
 
   it("rejects same-origin, query-bearing, and overlong capabilities", () => {
     for (const candidate of [
-      { ...VALID_LAUNCH, origin: "https://maverick.example", bootstrap_url: "https://maverick.example/.well-known/maverick-sidecar-bootstrap" },
+      { ...VALID_LAUNCH, origin: "https://loopino.example", bootstrap_url: "https://loopino.example/.well-known/loopino-sidecar-bootstrap" },
       { ...VALID_LAUNCH, bootstrap_url: `${VALID_LAUNCH.bootstrap_url}?ticket=leaked` },
       { ...VALID_LAUNCH, target_url: `${VALID_LAUNCH.origin}/projects/other` },
       { ...VALID_LAUNCH, parent_origin: "https://af-attacker.sidecars.example" },
@@ -73,7 +73,7 @@ describe("isolated browser launch validation", () => {
     ]) {
       expect(() => validateSidecarLaunch(
         candidate,
-        "https://maverick.example",
+        "https://loopino.example",
         VALID_LAUNCH.parent_origin,
         "/",
       )).toThrow(SidecarLaunchError);

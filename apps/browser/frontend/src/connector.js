@@ -45,7 +45,7 @@ export function createConnector(report) {
       shared=await bridge("status");
       if(attempt!==generation || stopped || !lease)return;
       if(background) {
-        report(`Connected in background · ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}. You can close this Maverick tab.`,"connected");
+        report(`Connected in background · ${shared.title || shared.url}${shared.companion_version ? ` · Companion ${shared.companion_version}` : ""}. You can close this Loopino tab.`,"connected");
         return;
       }
       if(recovery && !command && !shared.active_operation) {
@@ -81,7 +81,7 @@ export function createConnector(report) {
       if(Date.now()-lastRenewed>=60000) {
         lastRenewed=Date.now();
         // Authentication maintenance must never hold up commands/heartbeats.
-        void fetch("/.well-known/maverick-app-frame-session",{method:"POST",credentials:"same-origin",cache:"no-store",signal:AbortSignal.timeout(5000)}).catch(()=>{});
+        void fetch("/.well-known/loopino-app-frame-session",{method:"POST",credentials:"same-origin",cache:"no-store",signal:AbortSignal.timeout(5000)}).catch(()=>{});
       }
     } catch(error) {
       if(attempt!==generation || stopped)return;
@@ -97,13 +97,13 @@ export function createConnector(report) {
           lease=restored;failures=0;
         } catch(failure){await revoke(failure);}
       } else if([401,403].includes(error.status) && !["connector_unauthorized","actor_required","user_connector_required"].includes(error.code) && failures<10 && recoverFrameAuthorization()) {
-        report("Restoring Maverick sign-in…","recovering");
+        report("Restoring Loopino sign-in…","recovering");
       } else if([401,403,404,409,410].includes(error.status) || /^(connector_scope_required|connector_principal_changed|sharing_revoked|platform_route_unavailable|shared_platform_scope_required|invalid_platform_url|website_scope_required|invalid_website_url|extension_unavailable)/u.test(error.code || error.message) || failures>=10)await revoke(error);
     }
     finally {ticking=false;if(!stopped)timer=setTimeout(tick,3000);}
   };
   window.addEventListener("message",event=>{
-    if(event.source === window && event.origin === location.origin && event.data?.type === "maverick.browser.wake")void tick();
+    if(event.source === window && event.origin === location.origin && event.data?.type === "loopino.browser.wake")void tick();
   });
   return {
     start() {
@@ -126,12 +126,12 @@ export function createConnector(report) {
         if(shared.background_connector === true) {
           let grant={};
           if(!shared.background_active) {
-            const response=await fetch("/.well-known/maverick-app-background/grant",{
+            const response=await fetch("/.well-known/loopino-app-background/grant",{
               method:"POST",credentials:"same-origin",cache:"no-store",signal:AbortSignal.timeout(10000),
               headers:{"Content-Type":"application/json"},body:JSON.stringify({client_origin:shared.extension_origin,actions:["companion.poll","companion.progress","companion.complete","companion.disconnect","companion.connect","operation.get"]}),
             });
             grant=await response.json();
-            if(!response.ok || grant.error)throw new Error("Maverick could not authorize the background connection. Reconnect from Companion.");
+            if(!response.ok || grant.error)throw new Error("Loopino could not authorize the background connection. Reconnect from Companion.");
           }
           if(attempt!==generation) {
             await request({action:"companion.disconnect",session_id:result.connection.session_id}).catch(()=>{});

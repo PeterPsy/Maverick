@@ -1,4 +1,4 @@
-import { readAppCachePages } from '@maverick/pwa-cache';
+import { readAppCachePages } from '@loopino/pwa-cache';
 import type { MailThread } from './api';
 import { readMailDisplay } from './pwaCache';
 

@@ -1,4 +1,4 @@
-"""Independent rescue HTTP surface for Maverick."""
+"""Independent rescue HTTP surface for Loopino."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class RescueHost:
         if path == "/health":
             return _respond(
                 start_response,
-                json.dumps({"status": "ok", "service": "maverick-rescue"}).encode("utf-8"),
+                json.dumps({"status": "ok", "service": "loopino-rescue"}).encode("utf-8"),
                 status="200 OK",
                 content_type="application/json; charset=utf-8",
             )
@@ -30,7 +30,7 @@ class RescueHost:
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Maverick Rescue</title>
+    <title>Loopino Rescue</title>
     <style>
       body { margin: 0; font-family: Georgia, serif; background: #1f2428; color: #f3efe6; }
       main { max-width: 760px; margin: 0 auto; padding: 48px 24px; }
@@ -41,7 +41,7 @@ class RescueHost:
   <body>
     <main>
       <article>
-        <h1>Maverick Rescue</h1>
+        <h1>Loopino Rescue</h1>
         <p>This rescue service runs independently from the main core host.</p>
         <p>Use it when the main platform backend is degraded and you still need an operational recovery entrypoint.</p>
         <p><a href="/health">Health JSON</a></p>

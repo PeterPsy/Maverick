@@ -1,4 +1,4 @@
-import { createRequestFingerprint, readThroughParentDataCache } from '@maverick/pwa-cache';
+import { createRequestFingerprint, readThroughParentDataCache } from '@loopino/pwa-cache';
 import { currentStorageAppId, mountedAppIdFromPath } from './api';
 import { mediaCacheKey } from './mediaPlaybackResolver';
 import type { ExerciseMediaRef } from './types';
@@ -7,7 +7,7 @@ const THUMB_PREVIEW_STORAGE_KEY = 'fitness-coach:media-thumb-preview:v1';
 const THUMB_PREVIEW_CACHE_LIMIT = 48;
 const THUMB_PREVIEW_MAX_WIDTH = 192;
 const THUMB_PREVIEW_MAX_DATA_URL_CHARS = 480_000;
-export const THUMB_PREVIEW_CACHE_CHANGED_EVENT = 'maverick.fitness.thumb-cache-changed';
+export const THUMB_PREVIEW_CACHE_CHANGED_EVENT = 'loopino.fitness.thumb-cache-changed';
 
 type ThumbPreviewEntry = {
   key: string;

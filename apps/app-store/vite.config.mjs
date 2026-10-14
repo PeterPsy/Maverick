@@ -2,14 +2,14 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
-import { maverickFrontendAssets } from "../../scripts/vite-frontend-assets.mjs";
+import { loopinoFrontendAssets } from "../../scripts/vite-frontend-assets.mjs";
 
 const appRoot = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
   base: "/apps/app-store/",
   root: resolve(appRoot, "frontend/src"),
-  plugins: [maverickFrontendAssets()],
+  plugins: [loopinoFrontendAssets()],
   build: {
     outDir: resolve(appRoot, "frontend/dist"),
     emptyOutDir: true,

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Loopino wildcard TLS every fifteen minutes
+
+[Timer]
+OnCalendar={{FIRST_ATTEMPT_UTC}}
+OnUnitActiveSec=15min
+Persistent=true
+Unit=loopino-wildcard-tls.service
+
+[Install]
+WantedBy=timers.target

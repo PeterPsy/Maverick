@@ -18,7 +18,7 @@ body,
 body {
   background: transparent;
   color: var(--marta-text);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -84,7 +84,7 @@ button {
 .marta-sidebar-row.is-active {
   border-color: var(--marta-border-strong);
   background: var(--marta-surface-active);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .marta-sidebar-row:focus-visible {
@@ -125,7 +125,7 @@ button {
   font-variant-numeric: tabular-nums;
 }
 .marta-sidebar-badge.is-danger {
-  color: var(--maverick-danger);
+  color: var(--loopino-danger);
   background: var(--marta-surface-hover);
 }
 .marta-sidebar-dot {
@@ -136,7 +136,7 @@ button {
   background: var(--marta-soft);
 }
 .marta-sidebar-dot.is-danger {
-  background: var(--maverick-danger);
+  background: var(--loopino-danger);
 }
 .marta-sidebar-feedback {
   display: grid;
@@ -175,7 +175,7 @@ button {
   border-radius: 22px;
   color: var(--marta-text);
   background: var(--marta-sidebar-surface);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   padding: 0 0.82rem;

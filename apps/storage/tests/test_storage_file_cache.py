@@ -61,7 +61,7 @@ class StorageFileCacheContractTest(unittest.TestCase):
                 },
             )
             self.assertEqual(descriptor_status, 200)
-            self.assertEqual(descriptor["schema"], "maverick.storage-file-cache-descriptor.v1")
+            self.assertEqual(descriptor["schema"], "loopino.storage-file-cache-descriptor.v1")
             self.assertFalse(descriptor["eligible"])
             self.assertEqual(descriptor["reason_code"], "approval_required")
             self.assertEqual(descriptor["file"]["expected_sha256"], expected_sha256)

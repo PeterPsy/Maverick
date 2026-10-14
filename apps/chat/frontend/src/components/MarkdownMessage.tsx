@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
-import { requestParentExternalUrl } from "@maverick/pwa-cache";
+import { requestParentExternalUrl } from "@loopino/pwa-cache";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";

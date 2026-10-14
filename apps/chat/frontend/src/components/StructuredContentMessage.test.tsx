@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("StructuredContentMessage", () => {
-  it("shows the canonical Maverick spinner and loading label while widget discovery is pending", async () => {
+  it("shows the canonical Loopino spinner and loading label while widget discovery is pending", async () => {
     apiMocks.listWidgets.mockReturnValue(new Promise(() => undefined));
     container = document.createElement("div");
     document.body.append(container);

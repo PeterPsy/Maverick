@@ -6,14 +6,14 @@ describe("widget selection messages", () => {
     expect(
       widgetSelectionChangedMessage(
         {
-          type: "maverick.app.selection-changed",
+          type: "loopino.app.selection-changed",
           owner_app_id: "agents",
           selection: { agent_type_id: "agent-type-a" },
         },
         "agents",
       ),
     ).toEqual({
-      type: "maverick.app.selection-changed",
+      type: "loopino.app.selection-changed",
       owner_app_id: "agents",
       selection: { agent_type_id: "agent-type-a" },
     });
@@ -23,13 +23,13 @@ describe("widget selection messages", () => {
     expect(
       widgetSelectionChangedMessage(
         {
-          type: "maverick.app.selection-changed",
+          type: "loopino.app.selection-changed",
           owner_app_id: "chat",
           selection: { thread_id: "thread-a" },
         },
         "agents",
       ),
     ).toBeNull();
-    expect(widgetSelectionChangedMessage({ type: "maverick.widget.data-changed", owner_app_id: "agents" }, "agents")).toBeNull();
+    expect(widgetSelectionChangedMessage({ type: "loopino.widget.data-changed", owner_app_id: "agents" }, "agents")).toBeNull();
   });
 });

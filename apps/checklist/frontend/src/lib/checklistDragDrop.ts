@@ -1,6 +1,6 @@
 import type { ChecklistItem } from '../types';
 
-export const CHECKLIST_DRAG_DATA_TYPE = 'application/x-maverick-checklist';
+export const CHECKLIST_DRAG_DATA_TYPE = 'application/x-loopino-checklist';
 
 export type ChecklistDragPayload = {
   checked_count: number;

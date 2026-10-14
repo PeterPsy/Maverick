@@ -1,6 +1,6 @@
 # ADR Index
 
-This directory stores short architecture decision records for Maverick.
+This directory stores short architecture decision records for Loopino.
 
 These ADRs summarize the major design decisions that external contributors and reviewers should understand without reading the entire architecture corpus first.
 

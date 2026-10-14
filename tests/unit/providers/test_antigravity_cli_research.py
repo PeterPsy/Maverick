@@ -53,8 +53,8 @@ class AntigravityResearchTest(AntigravityCliFixture, unittest.IsolatedAsyncioTes
         self.assertEqual(self.spec.writable_roots, [str(self.root / "runtime")])
         self.assertNotIn("--dangerously-skip-permissions", self.spec.command)
         self.assertNotIn("--add-dir", self.spec.command)
-        self.assertFalse(any(key.startswith("MAVERICK_") for key in self.spec.env_overrides))
-        self.assertFalse((self.root / "runtime/bin/maverick").exists() and
+        self.assertFalse(any(key.startswith("LOOPINO_") for key in self.spec.env_overrides))
+        self.assertFalse((self.root / "runtime/bin/loopino").exists() and
                          str(self.root / "runtime/bin") in self.spec.env_overrides["PATH"])
         home = Path(self.spec.env_overrides["HOME"])
         agent = (home / ".gemini/config/agents" / ANTIGRAVITY_RESEARCH_AGENT / "agent.md").read_text()

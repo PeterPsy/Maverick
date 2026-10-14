@@ -47,8 +47,8 @@ async function recoveryHarness(page: Page, sameBuild: boolean) {
     }
   });
   const message = (data: Record<string, unknown>) => page.evaluate((data) => { window.postMessage(data, window.location.origin); }, data);
-  const navigate = (route: string) => message({ type: 'maverick.app.navigate', params: { site_id: 'site', route } });
-  const changed = () => message({ type: 'maverick.app.data-changed', owner_app_id: 'website-studio', resource: 'records' });
+  const navigate = (route: string) => message({ type: 'loopino.app.navigate', params: { site_id: 'site', route } });
+  const changed = () => message({ type: 'loopino.app.data-changed', owner_app_id: 'website-studio', resource: 'records' });
   const runtime = page.locator('.site-canvas > iframe');
   const document = runtime.contentFrame().locator('#preview').contentFrame().locator('main');
   await page.goto('/apps/website-studio/');

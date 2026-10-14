@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 from core.providers.errors import ProviderError
+from core.providers.source_homes import codex_source_home
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import effective_provider_registry, resolve_provider_for_workspace
 from core.providers.text_generation import (
@@ -58,14 +59,14 @@ def generate_background_text(state, *, workspace_id, app_id, request, controller
     model = request.get("model_id") or (selection.model_id if selection else None) or definition.default_model_family
     if not model or not any(item.model_id == model for item in definition.model_options):
         raise ProviderError("background_model_selection_invalid")
-    with tempfile.TemporaryDirectory(prefix="maverick-background-") as directory:
+    with tempfile.TemporaryDirectory(prefix="loopino-background-") as directory:
         root = Path(directory)
-        executable = os.environ.get("MAVERICK_CODEX_COMMAND", "").strip() or "codex"
+        executable = os.environ.get("LOOPINO_CODEX_COMMAND", "").strip() or "codex"
         if codex_research_runtime_version(executable) is None:
             raise ProviderError("background_native_runtime_unreviewed")
         private_home = root / "codex-home"
         private_home.mkdir(mode=0o700)
-        source_home = Path(os.environ.get("MAVERICK_CODEX_HOME") or os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser()
+        source_home = codex_source_home()
         if (source_home / "auth.json").is_file():
             shutil.copyfile(source_home / "auth.json", private_home / "auth.json")
             (private_home / "auth.json").chmod(0o600)

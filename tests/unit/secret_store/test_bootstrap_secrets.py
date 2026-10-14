@@ -25,8 +25,8 @@ class BootstrapSecretsTestCase(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_SECRET_KEY_FILE": str(key_file),
-                    "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": str(bootstrap_root),
+                    "LOOPINO_SECRET_KEY_FILE": str(key_file),
+                    "LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT": str(bootstrap_root),
                 },
                 clear=True,
             ):
@@ -55,10 +55,10 @@ class BootstrapSecretsTestCase(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_SECRET_KEY_FILE": str(key_file),
-                    "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": str(bootstrap_root),
-                    "MAVERICK_RUNTIME_API_SECRET_REF": "platform:secret-alias/runtime-api-secret",
-                    "MAVERICK_WIDGET_CONTEXT_SECRET_REF": "platform:secret-alias/widget-context-secret",
+                    "LOOPINO_SECRET_KEY_FILE": str(key_file),
+                    "LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT": str(bootstrap_root),
+                    "LOOPINO_RUNTIME_API_SECRET_REF": "platform:secret-alias/runtime-api-secret",
+                    "LOOPINO_WIDGET_CONTEXT_SECRET_REF": "platform:secret-alias/widget-context-secret",
                 },
                 clear=True,
             ):

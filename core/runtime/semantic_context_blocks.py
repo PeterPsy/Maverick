@@ -79,7 +79,7 @@ class SemanticContextMaterializer:
                 content_type="text/plain",
                 content=platform_instruction,
                 classification=platform_classification(
-                    "core:maverick-platform-instruction",
+                    "core:loopino-platform-instruction",
                     SEMANTIC_ENVELOPE_SCHEMA_VERSION,
                     platform_instruction,
                 ),

@@ -1,7 +1,7 @@
-export const PWA_FILE_CACHE_BROKER_OPEN = "maverick.storage.file-cache.open.v1";
-export const PWA_FILE_CACHE_BROKER_ACCEPTED = "maverick.storage.file-cache.accepted.v1";
-export const PWA_FILE_CACHE_BROKER_RESULT = "maverick.storage.file-cache.result.v1";
-export const PWA_FILE_CACHE_BROKER_CANCEL = "maverick.storage.file-cache.cancel.v1";
+export const PWA_FILE_CACHE_BROKER_OPEN = "loopino.storage.file-cache.open.v1";
+export const PWA_FILE_CACHE_BROKER_ACCEPTED = "loopino.storage.file-cache.accepted.v1";
+export const PWA_FILE_CACHE_BROKER_RESULT = "loopino.storage.file-cache.result.v1";
+export const PWA_FILE_CACHE_BROKER_CANCEL = "loopino.storage.file-cache.cancel.v1";
 
 const DEFAULT_ACCEPTANCE_TIMEOUT_MS = 750;
 const MAX_IDENTITY_LENGTH = 256;
@@ -167,7 +167,7 @@ function defaultParentWindow(): Pick<Window, "postMessage"> | null {
 function defaultParentOrigin(): string | null {
   if (typeof window === "undefined") return null;
   const platformOrigin = exactHttpOrigin(
-    (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__,
+    (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__,
   );
   const frameOrigin = exactHttpOrigin(window.location.origin);
   return platformOrigin && frameOrigin && platformOrigin !== frameOrigin

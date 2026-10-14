@@ -88,10 +88,10 @@
         window.__WEBSITE_STUDIO_PREVIEW_REPORT__ = envelope;
         previewReports.push(envelope);
         if (previewReports.length > 12) previewReports.shift();
-        window.dispatchEvent(new CustomEvent('maverick.website-studio.preview-report', { detail: envelope }));
+        window.dispatchEvent(new CustomEvent('loopino.website-studio.preview-report', { detail: envelope }));
         try {
           window.parent?.postMessage({
-            type: 'maverick.website-studio.preview-report',
+            type: 'loopino.website-studio.preview-report',
             owner_app_id: 'website-studio',
             preview_id: envelope.preview_id,
             report: envelope.report

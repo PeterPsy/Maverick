@@ -6,10 +6,10 @@ Repository decision: [`external_apps_v1.md`](../../docs/architecture/external_ap
 
 ## Use
 
-1. Install/enable the platform app through Maverick App Store. Do not register it
+1. Install/enable the platform app through Loopino App Store. Do not register it
    as a workspace-local app. Select an enabled Website Studio provider for the
    `static-exporter` dependency in App Store.
-2. An administrator supplies the Maverick installation hostname through the
+2. An administrator supplies the Loopino installation hostname through the
    authenticated `deployment.configure` action; public names derive as
    `<app>.apps.<hostname>`. Saving
    this value does **not** provision DNS, TLS, ingress or a public service.
@@ -54,7 +54,7 @@ the UI handoff, not a direct-file or policy bypass.
   workspace; 15-minute plans. Preparation stops at 2,000 plans/10,000 operations.
   Expired unused plans/releases and old unreferenced artifacts are reclaimed on
   preparation and lifecycle recovery; published history is retained.
-- Closed MIME allowlist; no executable backend, secret delivery, private Maverick
+- Closed MIME allowlist; no executable backend, secret delivery, private Loopino
   routes, service worker, external fetch, forms or embedded frames. Local JS/CSS
   and inline scripts/styles are supported. Documents have opaque sandbox origins:
   no cookies, localStorage or document.domain. Anonymous CORS supports ESM/lazy
@@ -67,9 +67,9 @@ the UI handoff, not a direct-file or policy bypass.
 Production requires Linux, the system Python under `/usr/bin` and bubblewrap with
 user namespaces available. Unsupported confinement fails closed; there is no
 unconfined fallback. The namespace is always `apps.<installation-domain>`; in this
-installation, `apps.maverick.loopino.ai`. DNS must resolve its base and wildcard
+installation, `apps.loopino.giuntitrail.com`. DNS must resolve its base and wildcard
 to the host. No alternate DNS provider/domain is selected automatically.
-Because public documents are same-site with Maverick, their CSP sandbox blocks
+Because public documents are same-site with Loopino, their CSP sandbox blocks
 parent-cookie injection; stripping ingress cookies alone would not be sufficient.
 
 The private foreground supervisor reads the **same canonical control-store
@@ -93,7 +93,7 @@ data for crash reconciliation; it does not need write access to other apps.
 After operator DNS/TLS/ingress setup, run in the foreground:
 
 ```bash
-python3 scripts/external_apps_supervisor.py --config /etc/maverick/external-apps.json
+python3 scripts/external_apps_supervisor.py --config /projects/loopino/installation/config/external-apps.json
 ```
 
 An operator may manage this command in their normal service manager. This app
@@ -102,7 +102,7 @@ is revoked, and the confined child exits. A killed/stalled supervisor expires
 authority in at most 10 seconds. Workspace close, app disable/uninstall or an
 invalid deployment removes the mount on the next successful authority refresh;
 failure to refresh also expires it. An app-level suspend is checked synchronously
-at the next request admission. Unknown hosts never reach private Maverick routes.
+at the next request admission. Unknown hosts never reach private Loopino routes.
 
 ## Deployment acceptance
 
@@ -143,7 +143,7 @@ only an ephemeral Unix listener in a temporary directory. No live app is install
 and no backend restart is required. UI checks use one Chromium worker:
 
 ```bash
-maverick app external-apps frontend build --json  # once installed, official build
+loopino app external-apps frontend build --json  # once installed, official build
 npm --prefix apps/external-apps run test:ui
 ```
 
@@ -156,7 +156,7 @@ the executable operation manifest is the default `external-apps` command or
 ## SDK Flow
 
 Source was created with the official App SDK. Validate with
-`maverick core cli run core.app-sdk.validate --app-id external-apps --json` or
+`loopino core cli run core.app-sdk.validate --app-id external-apps --json` or
 the canonical `core.app_sdk.service.validate_app_source` API before installation.
 The frontend uses the official isolated-frame assets/manifest plugins and the
 Core frontend build service; lifecycle hooks initialize only app-owned data.

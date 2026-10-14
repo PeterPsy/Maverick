@@ -1,4 +1,4 @@
-"""Maverick core bootstrap entrypoint."""
+"""Loopino core bootstrap entrypoint."""
 
 from core.api.application import create_application
 

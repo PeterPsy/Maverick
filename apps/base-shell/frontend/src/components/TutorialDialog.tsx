@@ -30,7 +30,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     eyebrow: "Apps",
-    title: "Open focused tools inside Maverick.",
+    title: "Open focused tools inside Loopino.",
     description: "Installed apps add dedicated panels for operations, media, documents, and more.",
     linkLabel: "Explore the apps layer",
     linkHref: "#",
@@ -69,7 +69,7 @@ export function TutorialDialog({ onClose, open }: { onClose: () => void; open: b
 
   return (
     <Dialog
-      description="A quick walkthrough of Maverick's core workflow."
+      description="A quick walkthrough of Loopino's core workflow."
       hideHeader
       onClose={onClose}
       open={open}

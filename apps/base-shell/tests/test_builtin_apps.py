@@ -100,7 +100,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
             name="Agents",
             backend=True,
             cli_commands=["agents"],
-            mcp_tools=["maverick_agents_app"],
+            mcp_tools=["loopino_agents_app"],
             skills=["agents-ops"],
             views=["agents"],
         )
@@ -110,7 +110,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
             name="Skills",
             backend=True,
             cli_commands=["skills"],
-            mcp_tools=["maverick_skills_app"],
+            mcp_tools=["loopino_skills_app"],
             skills=["skills-ops"],
             views=["skills"],
         )
@@ -161,8 +161,8 @@ class BuiltinAppsTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -178,9 +178,9 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(sorted(binding.app_id for binding in bindings), ["agents", "base-shell", "chat", "skills"])
         self.assertEqual(versions["base-shell"], "2.0.0")
         self.assertFalse((repo_root / "workspaces" / "default" / "apps" / "base-shell").exists())
-        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / ".maverick-app.json").is_file())
-        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "agents" / ".maverick-app.json").is_file())
-        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / ".maverick-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / ".loopino-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "agents" / ".loopino-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / ".loopino-app.json").is_file())
 
     def test_builtin_frontend_apps_have_honest_build_scripts(self) -> None:
         apps_root = Path(__file__).resolve().parents[3] / "apps"
@@ -274,9 +274,9 @@ class BuiltinAppsTestCase(unittest.TestCase):
 
         bindings = restarted_state.app_store.list_workspace_app_bindings(workspace.workspace_id)
         self.assertEqual(sorted(binding.app_id for binding in bindings), ["agents", "base-shell", "chat", "skills"])
-        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "chat" / ".maverick-app.json").is_file())
-        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "agents" / ".maverick-app.json").is_file())
-        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "skills" / ".maverick-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "chat" / ".loopino-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "agents" / ".loopino-app.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "skills" / ".loopino-app.json").is_file())
 
     def test_bootstrap_queues_resume_turn_for_running_session_interrupted_by_backend_restart(self) -> None:
         repo_root = self.make_repo_root()
@@ -295,7 +295,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
         turn = queue_runtime_turn(initial_state.runtime_store, turn_id="interrupted-turn", session_id=session.session_id, input_text="long work")
         transition_runtime_turn(initial_state.runtime_store, turn_id=turn.turn_id, target_status="active")
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "resumed after restart"}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "resumed after restart"}):
             restarted_state = bootstrap_platform_state(start_path=repo_root, recover_backend_restart=True)
             for _attempt in range(100):
                 turns = restarted_state.runtime_store.list_turns(session.session_id)
@@ -408,7 +408,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
             event_bus=initial_state.runtime_event_bus,
         )
 
-        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "resumed after interrupted resume"}):
+        with patch.dict("os.environ", {"LOOPINO_RUNTIME_FAKE_RESPONSE": "resumed after interrupted resume"}):
             restarted_state = bootstrap_platform_state(start_path=repo_root, recover_backend_restart=True)
             for _attempt in range(100):
                 turns = restarted_state.runtime_store.list_turns(session.session_id)
@@ -549,14 +549,14 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertGreater(len(favicon_body), 0)
         self.assertIn(b'"name"', manifest_body)
         self.assertIn(b"pwa-maskable-logo.png", manifest_body)
-        self.assertIn(b"maverick-static-v2", worker_body)
-        self.assertNotIn(b'"__MAVERICK_BUILD_ID__"', worker_body)
-        self.assertNotIn(b"__MAVERICK_PRECACHE_MANIFEST__", worker_body)
-        self.assertNotIn(b"__MAVERICK_IMMUTABLE_ASSETS__", worker_body)
+        self.assertIn(b"loopino-static-v2", worker_body)
+        self.assertNotIn(b'"__LOOPINO_BUILD_ID__"', worker_body)
+        self.assertNotIn(b"__LOOPINO_PRECACHE_MANIFEST__", worker_body)
+        self.assertNotIn(b"__LOOPINO_IMMUTABLE_ASSETS__", worker_body)
         asset_manifest = json.loads(
-            (repo_root / "apps" / "base-shell" / "frontend" / "dist" / "maverick-frontend-assets.json").read_text()
+            (repo_root / "apps" / "base-shell" / "frontend" / "dist" / "loopino-frontend-assets.json").read_text()
         )
-        self.assertEqual(asset_manifest["schema"], "maverick.frontend-assets.v2")
+        self.assertEqual(asset_manifest["schema"], "loopino.frontend-assets.v2")
         self.assertEqual(asset_manifest["navigation_fallback"], "index.html")
         self.assertIn("/", {record["url"] for record in asset_manifest["precache"]})
         self.assertNotIn("/offline.html", {record["url"] for record in asset_manifest["precache"]})
@@ -586,7 +586,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
 
     def test_platform_host_uses_configured_root_shell_app(self) -> None:
         repo_root = self.make_repo_root()
-        with patch.dict("os.environ", {"MAVERICK_ROOT_SHELL_APP_ID": "chat"}):
+        with patch.dict("os.environ", {"LOOPINO_ROOT_SHELL_APP_ID": "chat"}):
             state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
 
@@ -634,7 +634,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(items["base-shell"]["distribution_mode"], "sealed")
         self.assertEqual(items["base-shell"]["source_access"], "none")
-        self.assertEqual(items["base-shell"]["description"], "Maverick product shell app that hosts enabled app frontends through the platform registry.")
+        self.assertEqual(items["base-shell"]["description"], "Loopino product shell app that hosts enabled app frontends through the platform registry.")
         self.assertEqual(items["base-shell"]["views"], ["shell"])
         self.assertEqual(items["base-shell"]["frontend_role"], "supporting")
         self.assertFalse(items["base-shell"]["frontend_launchable"])
@@ -778,7 +778,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
         cookie = self.login(app)
 
         status_index, body_index, index_headers = self.invoke(app, path="/apps/base-shell/", cookie=cookie)
-        status_asset, logo_body, _ = self.invoke(app, path="/apps/base-shell/maverick-logotype.svg", cookie=cookie)
+        status_asset, logo_body, _ = self.invoke(app, path="/apps/base-shell/loopino-logotype.svg", cookie=cookie)
         script_path = next((repo_root / "apps" / "base-shell" / "frontend" / "dist" / "assets").glob("index-*.js")).name
         status_script, script_body, script_headers = self.invoke(
             app,

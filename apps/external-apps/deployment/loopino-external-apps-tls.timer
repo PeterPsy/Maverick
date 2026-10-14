@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile Loopino External Apps certificates
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=loopino-external-apps-tls.service
+
+[Install]
+WantedBy=timers.target

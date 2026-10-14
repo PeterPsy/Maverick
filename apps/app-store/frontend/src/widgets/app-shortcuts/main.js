@@ -29,8 +29,8 @@ async function requestJson(url, options = {}) {
 }
 
 function appIcon(app) {
-  if (window.MaverickAppIcons?.renderIcon) {
-    return window.MaverickAppIcons.renderIcon(app, "app-shortcuts__icon");
+  if (window.LoopinoAppIcons?.renderIcon) {
+    return window.LoopinoAppIcons.renderIcon(app, "app-shortcuts__icon");
   }
   const frame = document.createElement("span");
   frame.className = "app-shortcuts__icon is-glyph";
@@ -49,13 +49,13 @@ function appIcon(app) {
 }
 
 function openApp(appId) {
-  window.parent?.postMessage({ type: "maverick.widget.open-app", app_id: appId }, "*");
+  window.parent?.postMessage({ type: "loopino.widget.open-app", app_id: appId }, "*");
 }
 
 function notifyPinnedAppsChanged() {
   window.parent?.postMessage(
     {
-      type: "maverick.app.data-changed",
+      type: "loopino.app.data-changed",
       owner_app_id: "app-store",
       resource: "pinned-apps",
     },
@@ -68,16 +68,16 @@ function isPinned(appId) {
 }
 
 function frontendRole(app = {}) {
-  if (window.MaverickFrontendPresentation?.frontendRole) {
-    return window.MaverickFrontendPresentation.frontendRole(app);
+  if (window.LoopinoFrontendPresentation?.frontendRole) {
+    return window.LoopinoFrontendPresentation.frontendRole(app);
   }
   const role = String(app.frontend_role || app.presentation?.frontend_role || "").trim();
   return ["workspace", "supporting", "none"].includes(role) ? role : "none";
 }
 
 function isFrontendLaunchable(app = {}) {
-  if (window.MaverickFrontendPresentation?.frontendLaunchable) {
-    return window.MaverickFrontendPresentation.frontendLaunchable(app);
+  if (window.LoopinoFrontendPresentation?.frontendLaunchable) {
+    return window.LoopinoFrontendPresentation.frontendLaunchable(app);
   }
   return app.frontend_launchable === true || frontendRole(app) === "workspace";
 }
@@ -113,13 +113,13 @@ function visibleApps() {
 
 function surfaceLabel(app) {
   if (frontendRole(app) === "workspace") return "Frontend";
-  const surfaces = window.MaverickFrontendPresentation?.normalizeSurfaces
-    ? window.MaverickFrontendPresentation.normalizeSurfaces(app)
+  const surfaces = window.LoopinoFrontendPresentation?.normalizeSurfaces
+    ? window.LoopinoFrontendPresentation.normalizeSurfaces(app)
     : app.provides?.flatMap((item) => item.surfaces || []) || [];
   if (surfaces.includes("mcp")) return "MCP";
   if (surfaces.includes("cli")) return "CLI";
   if (surfaces.includes("backend")) return "Backend";
-  return app.publisher || "Maverick";
+  return app.publisher || "Loopino";
 }
 
 function renderEmpty(message) {
@@ -303,10 +303,10 @@ window.addEventListener("message", (event) => {
   if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
     return;
   }
-  if (event.data.type === "maverick.widget.context-changed") {
+  if (event.data.type === "loopino.widget.context-changed") {
     applyWidgetContext(event.data);
   }
-  if (event.data.type === "maverick.widget.data-changed" && event.data.owner_app_id === "app-store") {
+  if (event.data.type === "loopino.widget.data-changed" && event.data.owner_app_id === "app-store") {
     load().catch((error) => renderEmpty(error.message));
   }
 });

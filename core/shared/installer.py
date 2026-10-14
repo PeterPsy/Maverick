@@ -1,4 +1,4 @@
-"""CLI installer helpers for Maverick deployment configuration."""
+"""CLI installer helpers for Loopino deployment configuration."""
 
 from __future__ import annotations
 
@@ -39,6 +39,7 @@ from core.shared.installer_tls import (
 )
 from core.shared.node_runtime import node_runtime_diagnostic
 from core.shared.repository import installation_paths
+from core.shared.installation_material import certbot_root, certbot_directory_arguments
 from core.workspaces.store import WorkspaceDocumentStore
 
 DEFAULT_MONGODB_PASSWORD_REF = "platform:secret-alias/mongodb-password"
@@ -46,7 +47,7 @@ DEFAULT_MONGODB_PASSWORD_REF = "platform:secret-alias/mongodb-password"
 
 @dataclass(frozen=True)
 class InstallerConfig:
-    """Explicit parameters for one Maverick installation rendering pass."""
+    """Explicit parameters for one Loopino installation rendering pass."""
 
     repository_root: Path
     install_root: Path
@@ -71,8 +72,8 @@ class InstallerConfig:
     build_frontends: bool
     control_store: str = "json"
     json_control_store_root: str = "data/control-plane/json"
-    mongodb_uri: str = "mongodb://127.0.0.1:27017/maverick"
-    mongodb_database: str = "maverick"
+    mongodb_uri: str = "mongodb://127.0.0.1:27017/loopino"
+    mongodb_database: str = "loopino"
     mongodb_username: str = ""
     mongodb_password_ref: str = ""
     mongodb_password: str = ""
@@ -100,13 +101,13 @@ class InstallerConfig:
     def tls_certificate_path(self) -> str:
         if not self.hostname:
             return ""
-        return f"/etc/letsencrypt/live/{self.hostname}/fullchain.pem"
+        return str(certbot_root(self.install_root) / "config/live" / self.hostname / "fullchain.pem")
 
     @property
     def tls_certificate_key_path(self) -> str:
         if not self.hostname:
             return ""
-        return f"/etc/letsencrypt/live/{self.hostname}/privkey.pem"
+        return str(certbot_root(self.install_root) / "config/live" / self.hostname / "privkey.pem")
 
     @property
     def sidecar_tls_certificate_path(self) -> str:
@@ -114,7 +115,7 @@ class InstallerConfig:
             return self.sidecar_tls_cert_path
         if not self.hostname:
             return ""
-        return f"/etc/letsencrypt/live/{self.hostname}-sidecars/fullchain.pem"
+        return str(certbot_root(self.install_root) / "config/live" / f"{self.hostname}-sidecars" / "fullchain.pem")
 
     @property
     def sidecar_tls_certificate_key_path(self) -> str:
@@ -122,15 +123,15 @@ class InstallerConfig:
             return self.sidecar_tls_key_path
         if not self.hostname:
             return ""
-        return f"/etc/letsencrypt/live/{self.hostname}-sidecars/privkey.pem"
+        return str(certbot_root(self.install_root) / "config/live" / f"{self.hostname}-sidecars" / "privkey.pem")
 
     @property
     def managed_browser_origin_tls_root(self) -> str:
-        return self.browser_origin_tls_root or "/var/lib/maverick/browser-origin-tls"
+        return self.browser_origin_tls_root or str(self.install_root / "data/browser-origin-tls")
 
     @property
     def managed_browser_origin_acme_webroot(self) -> str:
-        return self.browser_origin_acme_webroot or "/var/lib/maverick/browser-origin-acme"
+        return self.browser_origin_acme_webroot or str(self.install_root / "data/browser-origin-acme")
 
 
 def render_install_plan(config: InstallerConfig, *, force_https_nginx: bool = False) -> dict[Path, str]:
@@ -141,12 +142,12 @@ def render_install_plan(config: InstallerConfig, *, force_https_nginx: bool = Fa
 
     outputs: dict[Path, str] = {}
     for template_path in sorted((templates_root / "systemd").glob("*")):
-        if template_path.name.startswith("maverick-wildcard-tls."):
+        if template_path.name.startswith("loopino-wildcard-tls."):
             continue
         rendered = _render_template(template_path, substitutions)
         outputs[config.systemd_dir / template_path.name] = rendered
-    outputs[config.systemd_dir / "maverick-installation.service"] = render_service(config.install_root)
-    outputs[config.systemd_dir / "maverick-installation.timer"] = TIMER
+    outputs[config.systemd_dir / "loopino-installation.service"] = render_service(config.install_root, environment_path=config.install_env_path)
+    outputs[config.systemd_dir / "loopino-installation.timer"] = TIMER
     if config.nginx_conf_path is not None:
         outputs[config.nginx_conf_path] = render_nginx_config(config, force_https=force_https_nginx)
     outputs[secret_key_path] = secret_key_content
@@ -160,18 +161,18 @@ def render_nginx_config(config: InstallerConfig, *, force_https: bool = False) -
     """Render nginx config that is safe before and after TLS certificates exist."""
     templates_root = config.repository_root / "scripts" / "deploy" / "nginx"
     https_ready = force_https or _tls_certificate_files_exist(config)
-    template_name = "maverick.example.conf" if https_ready else "maverick.http.conf"
+    template_name = "loopino.example.conf" if https_ready else "loopino.http.conf"
     rendered = _render_template(templates_root / template_name, _template_substitutions(config))
     if config.hosted_sidecars:
         if config.browser_origin_tls_mode == MANAGED_EXACT_TLS_MODE:
             template_name = (
-                "maverick.sidecars.managed.example.conf"
+                "loopino.sidecars.managed.example.conf"
                 if https_ready
                 and (
                     force_https
                     or _managed_browser_origin_probe_files_exist(config)
                 )
-                else "maverick.sidecars.managed.http.conf"
+                else "loopino.sidecars.managed.http.conf"
             )
             rendered += "\n" + _render_template(
                 templates_root / template_name,
@@ -179,7 +180,7 @@ def render_nginx_config(config: InstallerConfig, *, force_https: bool = False) -
             )
         elif https_ready:
             rendered += "\n" + _render_template(
-                templates_root / "maverick.sidecars.example.conf",
+                templates_root / "loopino.sidecars.example.conf",
                 _template_substitutions(config),
             )
     return rendered
@@ -189,46 +190,50 @@ def render_install_env_file(config: InstallerConfig) -> str:
     """Render the service environment file, preserving existing generated secrets."""
     existing = read_env_file(config.install_env_path)
     values = {
-        "MAVERICK_ENV": existing.get("MAVERICK_ENV") or "local",
-        "MAVERICK_HOST": existing.get("MAVERICK_HOST") or config.bind_host,
-        "MAVERICK_PORT": existing.get("MAVERICK_PORT") or str(config.core_port),
-        "MAVERICK_API_BASE": existing.get("MAVERICK_API_BASE") or f"http://{config.bind_host}:{config.core_port}",
-        "MAVERICK_CORE_HEALTH_URL": existing.get("MAVERICK_CORE_HEALTH_URL") or f"http://{config.bind_host}:{config.core_port}/health",
-        "MAVERICK_ADMIN_USERNAME": existing.get("MAVERICK_ADMIN_USERNAME") or "admin",
-        "MAVERICK_SECRET_KEY_FILE": config.secret_key_file,
-        "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": config.bootstrap_secret_store_root,
-        "MAVERICK_RUNTIME_API_SECRET_REF": config.runtime_api_secret_ref,
-        "MAVERICK_WIDGET_CONTEXT_SECRET_REF": config.widget_context_secret_ref,
-        "MAVERICK_CONTROL_STORE": config.control_store,
-        "MAVERICK_JSON_CONTROL_STORE_ROOT": config.json_control_store_root,
-        "MAVERICK_APP_STORE_URL": existing.get("MAVERICK_APP_STORE_URL") or "https://maverick-app-store.versy.ai",
+        "LOOPINO_ENV": existing.get("LOOPINO_ENV") or "local",
+        "LOOPINO_HOST": existing.get("LOOPINO_HOST") or config.bind_host,
+        "LOOPINO_PORT": existing.get("LOOPINO_PORT") or str(config.core_port),
+        "LOOPINO_API_BASE": existing.get("LOOPINO_API_BASE") or f"http://{config.bind_host}:{config.core_port}",
+        "LOOPINO_CORE_HEALTH_URL": existing.get("LOOPINO_CORE_HEALTH_URL") or f"http://{config.bind_host}:{config.core_port}/health",
+        "LOOPINO_ADMIN_USERNAME": existing.get("LOOPINO_ADMIN_USERNAME") or "admin",
+        "LOOPINO_SECRET_KEY_FILE": config.secret_key_file,
+        "LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT": config.bootstrap_secret_store_root,
+        "LOOPINO_RUNTIME_API_SECRET_REF": config.runtime_api_secret_ref,
+        "LOOPINO_WIDGET_CONTEXT_SECRET_REF": config.widget_context_secret_ref,
+        "LOOPINO_CONTROL_STORE": config.control_store,
+        "LOOPINO_JSON_CONTROL_STORE_ROOT": config.json_control_store_root,
+        "LOOPINO_APP_STORE_URL": existing.get("LOOPINO_APP_STORE_URL") or "https://loopino.giuntitrail.com/catalog",
+        "HOME": str(config.install_root / "data/service-home"),
+        "LOOPINO_CODEX_HOME": str(config.install_root / "data/provider-auth/codex"),
+        "LOOPINO_ANTIGRAVITY_HOME": str(config.install_root / "data/provider-auth/antigravity"),
+        "LOOPINO_SERVICE_ENV_FILE": str(config.install_env_path),
     }
     if config.control_store == "mongo":
         mongodb_password_ref = config.mongodb_password_ref or (DEFAULT_MONGODB_PASSWORD_REF if config.mongodb_password else "")
-        values["MAVERICK_MONGODB_URI"] = config.mongodb_uri
-        values["MAVERICK_MONGODB_DATABASE"] = config.mongodb_database
+        values["LOOPINO_MONGODB_URI"] = config.mongodb_uri
+        values["LOOPINO_MONGODB_DATABASE"] = config.mongodb_database
         if config.mongodb_username:
-            values["MAVERICK_MONGODB_USERNAME"] = config.mongodb_username
+            values["LOOPINO_MONGODB_USERNAME"] = config.mongodb_username
         if mongodb_password_ref:
-            values["MAVERICK_MONGODB_PASSWORD_REF"] = mongodb_password_ref
-    if existing.get("MAVERICK_CODEX_COMMAND"):
-        values["MAVERICK_CODEX_COMMAND"] = existing["MAVERICK_CODEX_COMMAND"]
-    if existing.get("MAVERICK_BACKEND_RESCUE_COMMAND"):
-        values["MAVERICK_BACKEND_RESCUE_COMMAND"] = existing["MAVERICK_BACKEND_RESCUE_COMMAND"]
+            values["LOOPINO_MONGODB_PASSWORD_REF"] = mongodb_password_ref
+    if existing.get("LOOPINO_CODEX_COMMAND"):
+        values["LOOPINO_CODEX_COMMAND"] = existing["LOOPINO_CODEX_COMMAND"]
+    if existing.get("LOOPINO_BACKEND_RESCUE_COMMAND"):
+        values["LOOPINO_BACKEND_RESCUE_COMMAND"] = existing["LOOPINO_BACKEND_RESCUE_COMMAND"]
     if config.hosted_sidecars:
         if config.local_only or config.public_scheme != "https" or not config.hostname:
             raise ValueError("Hosted sidecars require one public HTTPS hostname.")
-        values["MAVERICK_SIDECAR_ORIGIN_MODE"] = "hosted"
-        values["MAVERICK_SIDECAR_INSTALLATION_DOMAIN"] = config.hostname
-        values["MAVERICK_SIDECAR_PLATFORM_ORIGIN"] = config.public_url
-        values["MAVERICK_BROWSER_ORIGIN_TLS_MODE"] = config.browser_origin_tls_mode
+        values["LOOPINO_SIDECAR_ORIGIN_MODE"] = "hosted"
+        values["LOOPINO_SIDECAR_INSTALLATION_DOMAIN"] = config.hostname
+        values["LOOPINO_SIDECAR_PLATFORM_ORIGIN"] = config.public_url
+        values["LOOPINO_BROWSER_ORIGIN_TLS_MODE"] = config.browser_origin_tls_mode
         if config.browser_origin_tls_mode == MANAGED_EXACT_TLS_MODE:
-            values["MAVERICK_BROWSER_ORIGIN_TLS_ROOT"] = config.managed_browser_origin_tls_root
-            values["MAVERICK_BROWSER_ORIGIN_ACME_WEBROOT"] = config.managed_browser_origin_acme_webroot
+            values["LOOPINO_BROWSER_ORIGIN_TLS_ROOT"] = config.managed_browser_origin_tls_root
+            values["LOOPINO_BROWSER_ORIGIN_ACME_WEBROOT"] = config.managed_browser_origin_acme_webroot
             if config.browser_origin_acme_ca:
-                values["MAVERICK_BROWSER_ORIGIN_ACME_CA"] = config.browser_origin_acme_ca
+                values["LOOPINO_BROWSER_ORIGIN_ACME_CA"] = config.browser_origin_acme_ca
     lines = [
-        "# Generated by scripts/install_maverick.py.",
+        "# Generated by scripts/install_loopino.py.",
         "# Contains local bootstrap credentials and secret refs; keep permissions restricted.",
     ]
     lines.extend(f"{key}={quote_env_value(value)}" for key, value in values.items())
@@ -258,9 +263,9 @@ def _render_bootstrap_secret_files(config: InstallerConfig, *, key_text: str) ->
         return {path: path.read_text(encoding="utf-8") for path in paths.values()}
 
     existing = read_env_file(config.install_env_path)
-    runtime_raw_value = existing.get("MAVERICK_RUNTIME_API_SECRET") or secrets.token_urlsafe(32)
-    widget_raw_value = existing.get("MAVERICK_WIDGET_CONTEXT_SECRET") or secrets.token_urlsafe(32)
-    with tempfile.TemporaryDirectory(prefix="maverick-bootstrap-secrets-") as temp_dir:
+    runtime_raw_value = existing.get("LOOPINO_RUNTIME_API_SECRET") or secrets.token_urlsafe(32)
+    widget_raw_value = existing.get("LOOPINO_WIDGET_CONTEXT_SECRET") or secrets.token_urlsafe(32)
+    with tempfile.TemporaryDirectory(prefix="loopino-bootstrap-secrets-") as temp_dir:
         temp_root = Path(temp_dir)
         store = SecretDocumentStore(
             SecretCollections(
@@ -378,7 +383,7 @@ def write_install_plan(files: dict[Path, str]) -> None:
     for path, content in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-        if path.name in {"maverick.env", ".env.maverick", ".env"}:
+        if path.name in {"loopino.env", ".env.loopino", ".env"}:
             path.chmod(0o600)
         if path.name == "secret-store.key" or path.parent.name == "bootstrap-secrets":
             path.chmod(0o600)
@@ -390,9 +395,9 @@ def run_install_steps(config: InstallerConfig) -> None:
     if config.bootstrap:
         env = dict(os.environ)
         if config.build_frontends:
-            env["MAVERICK_BUILD_FRONTENDS"] = "1"
+            env["LOOPINO_BUILD_FRONTENDS"] = "1"
         if config.control_store == "mongo":
-            env["MAVERICK_PYPROJECT_EXTRAS"] = "dev,mongo"
+            env["LOOPINO_PYPROJECT_EXTRAS"] = "dev,mongo"
         subprocess.run([str(repository_root / "scripts" / "bootstrap_local.sh")], cwd=repository_root, env=env, check=True)
     if config.verify:
         subprocess.run([str(repository_root / "scripts" / "verify_local.sh")], cwd=repository_root, check=True)
@@ -423,8 +428,8 @@ def apply_initial_admin_password(config: InstallerConfig) -> None:
 class _bootstrap_secret_environment:
     def __init__(self, config: InstallerConfig) -> None:
         self.values = {
-            "MAVERICK_SECRET_KEY_FILE": str(_install_relative_path(config, config.secret_key_file)),
-            "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": str(_install_relative_path(config, config.bootstrap_secret_store_root)),
+            "LOOPINO_SECRET_KEY_FILE": str(_install_relative_path(config, config.secret_key_file)),
+            "LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT": str(_install_relative_path(config, config.bootstrap_secret_store_root)),
         }
         self.previous: dict[str, str | None] = {}
 
@@ -535,16 +540,16 @@ def apply_install_plan(
     if config.acme_root is not None:
         runner(["mkdir", "-p", str(config.acme_root)])
     runner(["install", "-d", "-o", config.service_user, "-g", config.service_group, "-m", "0700",
-            str(config.install_root / ".maverick" / "installation")])
+            str(config.install_root / ".loopino" / "installation")])
     runner(["systemctl", "daemon-reload"])
-    runner(["systemctl", "enable", "maverick-core.service"])
-    runner(["systemctl", "enable", "maverick-rescue.service"])
-    runner(["systemctl", "enable", "maverick-backend-watchdog.timer"])
-    runner(["systemctl", "restart", "maverick-core.service"])
-    runner(["systemctl", "restart", "maverick-rescue.service"])
-    runner(["systemctl", "start", "maverick-backend-watchdog.timer"])
-    runner(["systemctl", "enable", "maverick-installation.timer"])
-    runner(["systemctl", "start", "maverick-installation.timer"])
+    runner(["systemctl", "enable", "loopino-core.service"])
+    runner(["systemctl", "enable", "loopino-rescue.service"])
+    runner(["systemctl", "enable", "loopino-backend-watchdog.timer"])
+    runner(["systemctl", "restart", "loopino-core.service"])
+    runner(["systemctl", "restart", "loopino-rescue.service"])
+    runner(["systemctl", "start", "loopino-backend-watchdog.timer"])
+    runner(["systemctl", "enable", "loopino-installation.timer"])
+    runner(["systemctl", "start", "loopino-installation.timer"])
     if config.live_nginx_conf_path is not None:
         runner(["nginx", "-t"])
         runner(["systemctl", "reload", "nginx"])
@@ -565,7 +570,7 @@ def request_tls_certificate(config: InstallerConfig, *, run_command: Any = None)
             str(config.acme_root),
             "-d",
             config.hostname,
-        ]
+        ] + certbot_directory_arguments(config.install_root)
     )
     if config.hosted_sidecars and config.browser_origin_tls_mode == MANAGED_EXACT_TLS_MODE:
         prepare_managed_browser_origin_tls(config, run_command=runner)
@@ -678,7 +683,7 @@ def check_health(
 
 def default_output_root(repository_root: Path) -> Path:
     """Return the default installer output root inside the repository."""
-    return repository_root / ".maverick" / "install"
+    return repository_root / ".loopino" / "install"
 
 
 def default_systemd_dir(output_root: Path) -> Path:
@@ -688,7 +693,7 @@ def default_systemd_dir(output_root: Path) -> Path:
 
 def default_install_env_path(install_root: Path) -> Path:
     """Return the service environment file path for one install root."""
-    return install_root / ".env.maverick"
+    return install_root / ".env.loopino"
 
 
 def default_nginx_conf_path(output_root: Path, *, hostname: str | None) -> Path | None:
@@ -741,7 +746,7 @@ def _template_substitutions(config: InstallerConfig) -> dict[str, str]:
         "{{CORE_PORT}}": str(config.core_port),
         "{{RESCUE_PORT}}": str(config.rescue_port),
         "{{HOSTNAME}}": config.hostname or "",
-        "{{ACME_ROOT}}": str(config.acme_root or Path("/var/www/localhost")),
+        "{{ACME_ROOT}}": str(config.acme_root or config.install_root / "data/acme-webroot"),
         "{{TLS_CERT_PATH}}": config.tls_certificate_path,
         "{{TLS_CERT_KEY_PATH}}": config.tls_certificate_key_path,
         "{{SIDECAR_TLS_CERT_PATH}}": config.sidecar_tls_certificate_path,

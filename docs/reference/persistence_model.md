@@ -2,7 +2,7 @@
 
 ## Control Plane vs App Data
 
-Maverick separates platform control-plane state from app-owned workspace data.
+Loopino separates platform control-plane state from app-owned workspace data.
 
 ### Control plane
 
@@ -65,11 +65,11 @@ partitions.
 
 ## JSON
 
-The default hosted control-plane persistence path uses JSON collections stored outside `.maverick`:
+The default hosted control-plane persistence path uses JSON collections stored outside `.loopino`:
 
 ```bash
-MAVERICK_CONTROL_STORE=json
-MAVERICK_JSON_CONTROL_STORE_ROOT=data/control-plane/json
+LOOPINO_CONTROL_STORE=json
+LOOPINO_JSON_CONTROL_STORE_ROOT=data/control-plane/json
 ```
 
 When JSON is selected, platform-owned control-plane records such as identity, workspace registry, app bindings, provider selections, provider credential bindings, runtime API tokens, and secret metadata/value envelopes use the configured JSON root.
@@ -79,16 +79,16 @@ When JSON is selected, platform-owned control-plane records such as identity, wo
 The hosted control-plane persistence path can use MongoDB instead by setting:
 
 ```bash
-MAVERICK_CONTROL_STORE=mongo
-MAVERICK_MONGODB_URI=mongodb://127.0.0.1:27017/maverick
-MAVERICK_MONGODB_DATABASE=maverick
+LOOPINO_CONTROL_STORE=mongo
+LOOPINO_MONGODB_URI=mongodb://127.0.0.1:27017/loopino
+LOOPINO_MONGODB_DATABASE=loopino
 ```
 
 For a local MongoDB service without authentication, omit the MongoDB username. If MongoDB authentication is enabled, the URI should not contain the raw password. The installer asks for the password once, stores it in the encrypted bootstrap secret store, and writes only a username plus secret ref:
 
 ```bash
-MAVERICK_MONGODB_USERNAME=maverick
-MAVERICK_MONGODB_PASSWORD_REF=platform:secret-alias/mongodb-password
+LOOPINO_MONGODB_USERNAME=loopino
+LOOPINO_MONGODB_PASSWORD_REF=platform:secret-alias/mongodb-password
 ```
 
 When MongoDB is selected, platform-owned control-plane records such as identity, workspace registry, app bindings, provider selections, provider credential bindings, runtime API tokens, and secret metadata/value envelopes use Mongo collections.
@@ -97,16 +97,16 @@ Workspace-scoped runtime history and app-owned workspace data remain under the w
 
 ## Secrets
 
-Maverick does not encrypt the whole control-plane database. It does encrypt secret values through the core secret domain.
+Loopino does not encrypt the whole control-plane database. It does encrypt secret values through the core secret domain.
 
 The preferred secret-store key configuration is:
 
 ```bash
-MAVERICK_SECRET_KEY_FILE=<protected-secret-key-file>
-MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT=data/bootstrap-secrets
+LOOPINO_SECRET_KEY_FILE=<protected-secret-key-file>
+LOOPINO_BOOTSTRAP_SECRET_STORE_ROOT=data/bootstrap-secrets
 ```
 
-`MAVERICK_SECRET_STORE_KEY` is a deprecated development and compatibility fallback. It should not be used for hosted installs.
+`LOOPINO_SECRET_STORE_KEY` is a deprecated development and compatibility fallback. It should not be used for hosted installs.
 
 The same core secret value envelope is used for app/provider/workspace secrets and for platform infrastructure secrets. Pre-adapter secrets that are needed before the configured control-plane adapter is reachable may be stored in a local bootstrap secret store, but they still use the core secret envelope and secret ref grammar.
 

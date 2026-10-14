@@ -66,11 +66,11 @@ class DelegationRequest:
 
     @property
     def conversation_title(self) -> str:
-        return f"Maverick delegation {self.delegation_id[-8:]}"
+        return f"Loopino delegation {self.delegation_id[-8:]}"
 
     @property
     def visible_message(self) -> str:
-        return f"Brief delegated by Maverick\n\n{self.brief}"
+        return f"Brief delegated by Loopino\n\n{self.brief}"
 
     def attachment_path(self, index: int, attachment: AuthorizedAttachment) -> str:
         return f"delegated/{self.delegation_id}/{index + 1:02d}-{attachment.safe_name}"
@@ -146,7 +146,7 @@ def parse_delegation_request(workspace_id: str, arguments: dict[str, Any]) -> De
 
 
 def deep_link(app_id: str, project_id: str, conversation_id: str) -> str:
-    """Build the exact native conversation route mounted by Maverick."""
+    """Build the exact native conversation route mounted by Loopino."""
     app = quote(str(app_id or "design-studio"), safe="")
     project = quote(validated_identifier(project_id, label="OpenDesign project id"), safe="")
     conversation = quote(

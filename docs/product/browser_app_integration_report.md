@@ -13,22 +13,22 @@ The P0 login/profile and external interaction restrictions below still apply.
 
 ## Purpose
 
-This report defines how Maverick should integrate browser capabilities for
-web reading, agent assistance, and Maverick UI debugging.
+This report defines how Loopino should integrate browser capabilities for
+web reading, agent assistance, and Loopino UI debugging.
 
 The development direction is deliberately staged:
 
-- first, build a Maverick Browser Lab that lets Maverick inspect the web and
-  debug Maverick UI through an isolated Playwright/Chromium browser;
-- later, add a Maverick Chrome Companion extension that can assist the user in
+- first, build a Loopino Browser Lab that lets Loopino inspect the web and
+  debug Loopino UI through an isolated Playwright/Chromium browser;
+- later, add a Loopino Chrome Companion extension that can assist the user in
   their real Chrome profile after explicit consent.
 
-Maverick should not embed arbitrary public web pages directly in app iframes.
+Loopino should not embed arbitrary public web pages directly in app iframes.
 The viable first implementation is a Browser app backend/controller plus a
 persistent isolated browser broker sidecar, with core-governed egress policy
-and a Maverick-safe MCP surface inspired by Playwright MCP.
+and a Loopino-safe MCP surface inspired by Playwright MCP.
 
-An app backend can absolutely be the Maverick-facing surface that gives agents
+An app backend can absolutely be the Loopino-facing surface that gives agents
 browser capability. The important constraint is lifecycle: the app backend
 should control policy, audit, and tool contracts, while a broker sidecar owns
 long-lived Playwright/Chromium state.
@@ -36,17 +36,17 @@ long-lived Playwright/Chromium state.
 ## Verdict
 
 Build the Browser app, but start with the lowest-risk useful slice:
-**Browser Lab read-only web inspection plus Maverick development debugging**.
+**Browser Lab read-only web inspection plus Loopino development debugging**.
 
 Accepted direction:
 
 - Use Playwright/Chromium remotely through an isolated broker.
-- Expose Browser app backend and MCP tools so Maverick agents can request
+- Expose Browser app backend and MCP tools so Loopino agents can request
   web snapshots, screenshots, console logs, and network observations.
 - Allow a read-only web mode first: navigate, snapshot, screenshot, extract,
   console logs, and network logs.
-- Allow click/type early only for the Maverick development inspector use case,
-  where targets are allowlisted Maverick dev URLs.
+- Allow click/type early only for the Loopino development inspector use case,
+  where targets are allowlisted Loopino dev URLs.
 - Add Chrome Companion later as a separate high-trust integration for the
   user's real browser profile.
 
@@ -69,14 +69,14 @@ Non-negotiable corrections:
 
 ## P0 Scope Lock
 
-P0 is now fixed as a Maverick-native Browser Lab app. It is not a Chrome
+P0 is now fixed as a Loopino-native Browser Lab app. It is not a Chrome
 extension, not a workspace-local custom app, and not a general-purpose browser
 automation surface.
 
 Source and distribution:
 
 - App id: `browser`.
-- Source location: installation-level `apps/browser/` in the Maverick root.
+- Source location: installation-level `apps/browser/` in the Loopino root.
 - Workspace-local source is explicitly out of scope; do not create
   `workspaces/<workspace_id>/apps/browser/` for P0.
 - Contract distribution must be:
@@ -93,7 +93,7 @@ Source and distribution:
 P0 product surface:
 
 - Browser Lab read-only web inspection.
-- Maverick development visual inspector.
+- Loopino development visual inspector.
 - Thin Browser app backend/controller for policy, audit, MCP, session
   coordination, and explicit artifact handoff to Storage.
 - Isolated Playwright/Chromium broker connection for browser execution.
@@ -110,12 +110,12 @@ P0 allowed Browser Lab capabilities:
 - list tabs
 - wait for bounded page states
 
-P0 allowed Maverick dev inspector capabilities:
+P0 allowed Loopino dev inspector capabilities:
 
 - all Browser Lab read-only capabilities
 - click, type, and key press only when the target URL is an admin-enabled
-  Maverick dev allowlist entry
-- initial dev allowlist includes the local hosted Maverick shell at
+  Loopino dev allowlist entry
+- initial dev allowlist includes the local hosted Loopino shell at
   `http://hostmachine:8000` and the current local app dev preview target at
   `http://hostmachine:8014`; additional ports or hostnames must be explicit
   policy entries, not implicit private-network access
@@ -136,22 +136,22 @@ P0 exclusions:
 Implementation gate:
 
 - Until the egress policy model is implemented and tested, P0 may expose only
-  the Maverick dev inspector against admin-enabled allowlisted Maverick URLs.
+  the Loopino dev inspector against admin-enabled allowlisted Loopino URLs.
 - Broad read-only public web inspection remains part of P0, but it is blocked
   behind the egress policy from the next implementation step.
 
 ## Two-Level Browser Strategy
 
-Maverick should eventually expose one conceptual browser capability with two
+Loopino should eventually expose one conceptual browser capability with two
 different trust levels.
 
-### Level 1: Maverick Browser Lab
+### Level 1: Loopino Browser Lab
 
-This is the first implementation target. It is a Maverick-controlled isolated
+This is the first implementation target. It is a Loopino-controlled isolated
 browser using Playwright/Chromium. It serves:
 
 - read-only web observation;
-- Maverick UI debugging and visual inspection;
+- Loopino UI debugging and visual inspection;
 - accessibility snapshots, DOM-derived extraction, screenshots, console logs,
   and network logs;
 - bounded agent MCP/CLI tools;
@@ -159,7 +159,7 @@ browser using Playwright/Chromium. It serves:
 
 This is the correct surface for autonomous agent work.
 
-### Level 2: Maverick Chrome Companion
+### Level 2: Loopino Chrome Companion
 
 This is a later Chrome extension installed in the user's real Chrome profile.
 It can expose tab metadata, active-tab context, screenshots, DOM/text from
@@ -174,9 +174,9 @@ cookies, logins, history, open tabs, and personal pages. Its default mode must
 be metadata-only or explicit active-tab sharing, not background control of all
 tabs.
 
-## Current Maverick Constraints
+## Current Loopino Constraints
 
-Maverick already has the right app-hosting shape:
+Loopino already has the right app-hosting shape:
 
 - apps declare frontend, backend, CLI, MCP, widgets, permissions, storage, and
   lifecycle through `app_contract.json`
@@ -205,15 +205,15 @@ entrypoint.
 
 ## Why Direct Web Iframes Are Rejected
 
-Directly embedding public web pages inside Maverick app iframes fails both
+Directly embedding public web pages inside Loopino app iframes fails both
 product and security requirements:
 
 - many sites intentionally block framing through `X-Frame-Options`
 - modern sites may use CSP `frame-ancestors` to restrict allowed embedding
   parents
-- even when a page renders, Maverick cannot reliably inspect or automate it from
+- even when a page renders, Loopino cannot reliably inspect or automate it from
   the host page because browser same-origin boundaries apply
-- embedding arbitrary web in a same-origin Maverick iframe surface would expand
+- embedding arbitrary web in a same-origin Loopino iframe surface would expand
   a currently documented frontend isolation weakness
 
 External references:
@@ -225,7 +225,7 @@ External references:
   parents may embed a page:
   https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors
 
-Therefore the Browser app frontend should render Maverick-owned UI only: URL
+Therefore the Browser app frontend should render Loopino-owned UI only: URL
 bar, tabs, status, screenshots or streamed frames, accessibility snapshots,
 network/console logs, and controls. The actual web page should run in a remote
 browser process.
@@ -236,7 +236,7 @@ Use a Browser Context Broker model with provider-specific capabilities.
 
 Initial provider:
 
-- `playwright_lab`: isolated Maverick-controlled Playwright/Chromium sessions.
+- `playwright_lab`: isolated Loopino-controlled Playwright/Chromium sessions.
 
 Later provider:
 
@@ -266,7 +266,7 @@ Each tool must consult provider capabilities and policy before executing.
 
 Use three separate layers for the first Browser Lab implementation.
 
-### 1. Frontend Maverick app
+### 1. Frontend Loopino app
 
 Responsibilities:
 
@@ -286,7 +286,7 @@ The frontend must not load arbitrary external pages in its own iframe.
 
 Responsibilities:
 
-- authenticate user and workspace context through Maverick
+- authenticate user and workspace context through Loopino
 - expose Browser app backend operations and MCP tools
 - enforce Browser app policy before forwarding commands
 - map browser artifacts into workspace Storage
@@ -295,7 +295,7 @@ Responsibilities:
 - coordinate session lifecycle with the browser broker
 - expose only bounded app backend operations
 
-The backend is the correct Maverick-facing control plane. It should not be the
+The backend is the correct Loopino-facing control plane. It should not be the
 long-lived browser process owner.
 
 ### 3. Persistent browser broker sidecar
@@ -315,10 +315,10 @@ supervised sidecar or container pool.
 
 ## Why The Current App Backend Is Not Enough
 
-An app backend is the right place to expose browser capability to Maverick. It
+An app backend is the right place to expose browser capability to Loopino. It
 is not the right lifecycle boundary for Chromium itself.
 
-Maverick app backends are currently deterministic JSON entrypoint subprocesses.
+Loopino app backends are currently deterministic JSON entrypoint subprocesses.
 `core/shared/entrypoints.py` starts a Python process, writes JSON stdin, reads
 JSON stdout, and terminates the operation under a timeout. That is good for
 ordinary backend actions. It is the wrong lifecycle for a browser.
@@ -357,7 +357,7 @@ Reference:
 
 - https://playwright.dev/mcp/capabilities
 
-Maverick should not expose that full toolset directly. It should use it as a
+Loopino should not expose that full toolset directly. It should use it as a
 design reference and expose a governed subset.
 
 Do expose early:
@@ -409,7 +409,7 @@ Reference:
 
 - https://playwright.dev/mcp/snapshots
 
-Maverick should follow that model:
+Loopino should follow that model:
 
 - every action returns a fresh snapshot when possible
 - refs are session-local and snapshot-local
@@ -429,7 +429,7 @@ Reference:
 
 - https://playwright.dev/mcp/configuration/user-profile
 
-Maverick should invert the default:
+Loopino should invert the default:
 
 - isolated sessions by default
 - no automatic cookie or localStorage persistence
@@ -459,7 +459,7 @@ Reference:
 
 - https://playwright.dev/docs/docker
 
-This is suitable for a dev-only MVP, especially for the Maverick visual
+This is suitable for a dev-only MVP, especially for the Loopino visual
 inspector use case.
 
 ### CDP is not the default
@@ -472,7 +472,7 @@ Reference:
 - https://playwright.dev/docs/api/class-browsertype
 
 Use CDP only when a chosen broker requires it. Default to the Playwright
-protocol when Maverick controls both ends.
+protocol when Loopino controls both ends.
 
 ### Browserless
 
@@ -485,8 +485,8 @@ Reference:
 - https://docs.browserless.io/enterprise/open-source
 
 Before choosing it, verify whether the intended path uses native Playwright
-protocol or CDP for the specific feature set Maverick needs. Do not assume
-Browserless removes the need for Maverick-owned policy, audit, or workspace
+protocol or CDP for the specific feature set Loopino needs. Do not assume
+Browserless removes the need for Loopino-owned policy, audit, or workspace
 isolation.
 
 ## Hardening Requirements
@@ -509,7 +509,7 @@ P0 hardening:
   host gateway addresses, and cloud metadata endpoints
 - protect against DNS rebinding by checking resolved IPs before navigation and
   after redirects
-- add a separate admin-only dev mode for local Maverick targets such as
+- add a separate admin-only dev mode for local Loopino targets such as
   `hostmachine:8000`
 - deny browser permissions by default: camera, microphone, geolocation,
   notifications, clipboard, MIDI, USB, serial, and automatic downloads
@@ -529,7 +529,7 @@ P0 action policy:
   and inspect console/network state
 - read-only web mode must not click, type, submit forms, upload files, download
   automatically, persist cookies, or reuse login state
-- click/type may be enabled in P0 only for allowlisted Maverick development
+- click/type may be enabled in P0 only for allowlisted Loopino development
   inspector targets
 
 Playwright's Docker documentation is also conservative about untrusted websites:
@@ -542,7 +542,7 @@ Reference:
 
 ## Network Egress Gap
 
-Maverick app contracts already include `permissions.network.outbound`, and the
+Loopino app contracts already include `permissions.network.outbound`, and the
 parser validates entries as hostnames, host:port, or `*`.
 
 Current local source:
@@ -579,7 +579,7 @@ The first useful implementation should combine two related but distinct modes.
 
 ### Read-only web inspection
 
-Maverick can open public web pages in an isolated Browser Lab session and
+Loopino can open public web pages in an isolated Browser Lab session and
 observe them without acting on them.
 
 Allowed capabilities:
@@ -602,25 +602,25 @@ Disallowed in this mode:
 - arbitrary JavaScript evaluation
 - unrestricted cookie or localStorage mutation
 
-This mode lets Maverick understand what is happening on the web while keeping
+This mode lets Loopino understand what is happening on the web while keeping
 the first implementation bounded.
 
-### Maverick development visual inspector
+### Loopino development visual inspector
 
-The strongest first debugging use case is Maverick development inspection.
-Here click/type can be useful earlier because targets are Maverick-owned dev
+The strongest first debugging use case is Loopino development inspection.
+Here click/type can be useful earlier because targets are Loopino-owned dev
 surfaces, not arbitrary third-party sites.
 
-P0 should target only allowlisted Maverick dev URLs:
+P0 should target only allowlisted Loopino dev URLs:
 
-- local hosted Maverick shell
+- local hosted Loopino shell
 - app routes under `/app/<app_id>`
 - direct mounted app assets under `/apps/<app_id>/` when needed
 - app backend/API calls only as a consequence of user-visible UI interactions
 
 Capabilities:
 
-- navigate to an allowlisted Maverick route
+- navigate to an allowlisted Loopino route
 - capture accessibility snapshot
 - capture screenshot
 - inspect console errors
@@ -634,7 +634,7 @@ opening the browser to broader web automation.
 
 Important: the Browser Lab should not introspect the user's real browser or PWA
 session. A browser-hosted PWA cannot safely control the host browser's DOM,
-cookies, tabs, or extension state. Maverick should operate a separate remote
+cookies, tabs, or extension state. Loopino should operate a separate remote
 browser session until the later Chrome Companion integration exists.
 
 ## Chrome Companion Extension
@@ -656,7 +656,7 @@ snapshot and action.
 
 ## Roadmap
 
-### P0: Browser Lab read-only plus Maverick dev inspector
+### P0: Browser Lab read-only plus Loopino dev inspector
 
 Scope:
 
@@ -671,7 +671,7 @@ Scope:
 - no automatic download persistence
 - read-only web inspection for allowed public `http`/`https` URLs under egress
   policy
-- Maverick development inspector with click/type only on allowlisted Maverick
+- Loopino development inspector with click/type only on allowlisted Loopino
   dev URLs
 - accessibility snapshots
 - screenshot capture
@@ -690,7 +690,7 @@ Scope:
 - optional trace/video save to Storage
 - session status records under Browser app data
 - cancellation and timeout controls
-- approval gates for click/type on non-Maverick web targets
+- approval gates for click/type on non-Loopino web targets
 - profile persistence only by explicit opt-in
 - encrypted or governed storage-state handling
 
@@ -712,7 +712,7 @@ Scope:
 Scope:
 
 - Chrome MV3 extension
-- secure pairing with Maverick
+- secure pairing with Loopino
 - tab metadata view
 - active-tab snapshot and screenshot after user gesture
 - optional per-domain permissions
@@ -733,14 +733,14 @@ Scope:
 - Which artifacts are retained by default, and what retention policy applies to
   screenshots, traces, videos, downloaded files, and network logs?
 - What is the minimum safe read-only egress policy for public web inspection?
-- Which additional Maverick dev hosts or ports, beyond the built-in
+- Which additional Loopino dev hosts or ports, beyond the built-in
   `http://hostmachine:8000` and `http://hostmachine:8014` entries, should an
   admin be able to enable?
 - What pairing, revocation, and audit model should Chrome Companion use?
 
 ## Decision Summary
 
-Maverick should build browser capability in stages.
+Loopino should build browser capability in stages.
 
 First, ship a Browser Lab:
 
@@ -748,7 +748,7 @@ First, ship a Browser Lab:
 - thin app backend for policy, audit, MCP, and Storage integration
 - persistent isolated browser broker sidecar for Playwright/Chromium
 - read-only public web inspection under egress policy
-- Maverick development inspector with click/type only on allowlisted Maverick
+- Loopino development inspector with click/type only on allowlisted Loopino
   dev URLs
 - snapshot-first MCP protocol inspired by official Playwright MCP
 - isolated sessions by default
@@ -763,6 +763,6 @@ for assisted context and already-logged-in pages, but it must default to
 metadata or active-tab sharing, visible attachment, explicit approvals, audit,
 and revocation.
 
-This approach lets Maverick gain practical web visibility and debugging value
+This approach lets Loopino gain practical web visibility and debugging value
 early without turning browser automation into an ungoverned side channel around
 workspace isolation, app permissions, and core policy.

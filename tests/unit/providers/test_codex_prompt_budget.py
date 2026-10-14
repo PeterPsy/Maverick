@@ -51,7 +51,7 @@ class CodexPromptBudgetTestCase(unittest.TestCase):
             current_provider_turn_id="turn-provider-first",
             prompt_budget_pending=True,
             prompt_budget_turn_id=None,
-            prompt_profile="maverick-explicit-lean-v1",
+            prompt_profile="loopino-explicit-lean-v1",
             first_turn_input_token_budget=8_000,
         )
 
@@ -95,7 +95,7 @@ class CodexPromptBudgetTestCase(unittest.TestCase):
             current_provider_turn_id="turn-provider-first",
             prompt_budget_pending=True,
             prompt_budget_turn_id="turn-provider-first",
-            prompt_profile="maverick-explicit-lean-v1",
+            prompt_profile="loopino-explicit-lean-v1",
             first_turn_input_token_budget=8_000,
             prompt_budget_latest_input_tokens=7_691,
             prompt_budget_latest_cached_input_tokens=0,

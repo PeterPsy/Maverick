@@ -215,9 +215,9 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     """Return app data-change events for mutating actions."""
     normalized = normalize_action(action)
     if normalized in MUTATING_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": "checklist", "resource": "state"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": "checklist", "resource": "state"}]
     if normalized in VIEW_STATE_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": "checklist", "resource": "view-state"}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": "checklist", "resource": "view-state"}]
     return []
 
 

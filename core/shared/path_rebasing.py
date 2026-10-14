@@ -10,7 +10,7 @@ from core.shared.repository import discover_repository_root
 
 _REPOSITORY_ROOT_MARKERS = (
     "data/control-plane/json",
-    ".maverick/local-state",
+    ".loopino/local-state",
     "workspaces/",
     "apps/",
 )
@@ -72,7 +72,7 @@ def rebase_local_state_paths(*, start_path: Path | None = None) -> list[Path]:
 
     control_store_roots = (
         repository_root / "data" / "control-plane" / "json",
-        repository_root / ".maverick" / "local-state",
+        repository_root / ".loopino" / "local-state",
     )
     targets = []
     for control_store_root in control_store_roots:

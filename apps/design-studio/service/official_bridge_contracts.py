@@ -25,7 +25,7 @@ def probe_delegation_contract(
     timeout_seconds: float = 45.0,
 ) -> dict[str, Any]:
     """Exercise the public delegation API only on a disposable data copy."""
-    identity = f"maverick-update-{uuid4().hex[:16]}"
+    identity = f"loopino-update-{uuid4().hex[:16]}"
     with running_official_api(
         installation,
         data_dir=data_dir,
@@ -37,7 +37,7 @@ def probe_delegation_contract(
             "/api/projects",
             {
                 "id": identity,
-                "name": "Maverick update compatibility probe",
+                "name": "Loopino update compatibility probe",
                 "metadata": {"kind": "prototype", "compatibilityProbe": True},
                 "skipDiscoveryBrief": True,
                 "conversationMode": "design",
@@ -74,7 +74,7 @@ def probe_delegation_contract(
             "POST",
             f"/api/projects/{identity}/files",
             {
-                "name": ".maverick/compatibility-probe.txt",
+                "name": ".loopino/compatibility-probe.txt",
                 "content": "cHJvYmU=",
                 "encoding": "base64",
                 "overwrite": True,
@@ -97,7 +97,7 @@ def probe_delegation_contract(
                 "conversationId": conversation_id,
                 "sessionMode": "design",
                 "assistantMessageId": assistant_id,
-                "clientRequestId": f"maverick-update:{uuid4().hex}",
+                "clientRequestId": f"loopino-update:{uuid4().hex}",
                 "attachments": [],
             },
         )

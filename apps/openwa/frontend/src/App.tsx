@@ -4,7 +4,7 @@ import { Icon } from "./Icons";
 import { ConnectionSettings } from "./ConnectionSettings";
 import { SessionPanel } from "./SessionPanel";
 import { Workspace } from "./Workspace";
-import { useMaverickHost } from "./host";
+import { useLoopinoHost } from "./host";
 import { Dialog } from "./Dialog";
 import { useWorkspace } from "./useWorkspace";
 
@@ -23,7 +23,7 @@ export function App() {
     void refresh();
     setRevision((value) => value + 1);
   }, [refresh]);
-  useMaverickHost(refreshAll, setSelected);
+  useLoopinoHost(refreshAll, setSelected);
   async function newSession(e: FormEvent) {
     e.preventDefault();
     if (creating.current || online !== true || !name.trim()) return;

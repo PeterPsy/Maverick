@@ -12,7 +12,7 @@ from core.secrets.errors import SecretBindingError
 MAX_AUDIT_TARGET_LENGTH = 240
 MAX_AUDIT_CONTEXT_VALUE_LENGTH = 160
 AUDIT_REQUEST_CONTEXT_KEYS = {"surface", "method", "route_path", "tool_name", "command_id"}
-SUPPORTED_URL_SCHEMES = {"http", "https", "maverick"}
+SUPPORTED_URL_SCHEMES = {"http", "https", "loopino"}
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,7 @@ def _parse_url_target(value: str, *, label: str) -> SecretTarget:
     parts = urlsplit(value)
     scheme = parts.scheme.lower()
     if scheme not in SUPPORTED_URL_SCHEMES:
-        raise SecretBindingError(f"{label} must use http, https, or maverick URLs.")
+        raise SecretBindingError(f"{label} must use http, https, or loopino URLs.")
     if not parts.hostname:
         raise SecretBindingError(f"{label} must include a hostname.")
     if parts.username or parts.password:

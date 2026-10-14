@@ -28,7 +28,7 @@ import time
 
 host_port = int(sys.argv[1])
 results = {
-    "sentinel_absent": "MAVERICK_G2_HOST_SENTINEL" not in os.environ,
+    "sentinel_absent": "LOOPINO_G2_HOST_SENTINEL" not in os.environ,
     "home_absent": "HOME" not in os.environ,
     "operator_home_absent": not Path("/operator-home/proof-secret").exists(),
     "other_workspace_absent": not Path("/other-workspace/proof-secret").exists(),
@@ -195,7 +195,7 @@ class SidecarConfinementDecisionProof(unittest.TestCase):
                 "/proof.py",
                 str(host_listener.getsockname()[1]),
             ]
-            env = {"MAVERICK_G2_HOST_SENTINEL": "must-not-cross", "HOME": str(operator_home)}
+            env = {"LOOPINO_G2_HOST_SENTINEL": "must-not-cross", "HOME": str(operator_home)}
             process = subprocess.Popen(
                 command,
                 env=env,
@@ -246,7 +246,7 @@ class SidecarConfinementDecisionProof(unittest.TestCase):
 
     def test_missing_bubblewrap_fails_explicitly(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "bubblewrap is required"):
-            _bubblewrap_binary("maverick-definitely-missing-bwrap")
+            _bubblewrap_binary("loopino-definitely-missing-bwrap")
 
     def _terminate(self, process: subprocess.Popen[str]) -> None:
         if process.poll() is None:

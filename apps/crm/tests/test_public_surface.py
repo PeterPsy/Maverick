@@ -27,7 +27,7 @@ class PublicSurfaceTest(unittest.TestCase):
         self.base = Path(self.tmp.name)
         self.root = self.base / 'data'
         handle_action(self.root, 'crm.create_contact', {'display_name': 'Public contact', 'email': 'public@example.test'})
-        atomic_json(self.root / 'external-hosting/deployment.json', {'installation_domain': 'maverick.example.test'})
+        atomic_json(self.root / 'external-hosting/deployment.json', {'installation_domain': 'loopino.example.test'})
         self.access = {'enabled': True, 'access': 'read-only', 'revision': 1}
         atomic_json(self.root / 'external-hosting/access.json', self.access)
         self.assets = self.base / 'assets'
@@ -35,12 +35,12 @@ class PublicSurfaceTest(unittest.TestCase):
         (self.assets / 'index.html').write_text('<html lang="en"><script src="/apps/crm/assets/app.js"></script></html>')
         (self.assets / 'assets/app.js').write_text('test')
         self.projection = self.base / 'state/authority.json'
-        atomic_json(self.projection, {'hostname': 'crm.apps.maverick.example.test', 'revision': 1, 'expires': time.time() + 8})
-        self.runtime = Runtime(self.root, self.assets, self.projection, 'crm.apps.maverick.example.test', 'read-only')
+        atomic_json(self.projection, {'hostname': 'crm.apps.loopino.example.test', 'revision': 1, 'expires': time.time() + 8})
+        self.runtime = Runtime(self.root, self.assets, self.projection, 'crm.apps.loopino.example.test', 'read-only')
 
-    def request(self, path='/', method='GET', body=None, host='crm.apps.maverick.example.test', headers=None):
+    def request(self, path='/', method='GET', body=None, host='crm.apps.loopino.example.test', headers=None):
         return self.runtime.response(method, host, path, headers if headers is not None else {
-            'origin': 'https://crm.apps.maverick.example.test', 'content-type': 'application/json',
+            'origin': 'https://crm.apps.loopino.example.test', 'content-type': 'application/json',
         }, json.dumps(body).encode() if body is not None else b'')
 
     def test_native_reads_and_explicit_write_mode(self):
@@ -88,8 +88,8 @@ class PublicSurfaceTest(unittest.TestCase):
         self.assertEqual(self.request('/apps/crm/assets/app.js')[0], 200)
         for path in ('/api/apps/chat/backend', '/api/auth/session', '/data/crm.sqlite', '/apps/crm/widgets/crm-external-settings/', '/apps/crm/assets/../index.html', '/apps/crm/assets/%2e%2e/x', '//evil.test/', 'https://evil.test/'):
             self.assertGreaterEqual(self.request(path)[0], 400, path)
-        self.assertEqual(self.request(host='maverick.example.test')[0], 404)
-        for origin in ('null', 'https://sibling.apps.maverick.example.test', ''):
+        self.assertEqual(self.request(host='loopino.example.test')[0], 404)
+        for origin in ('null', 'https://sibling.apps.loopino.example.test', ''):
             self.assertEqual(self.request('/api/apps/crm/backend', 'POST', {'action': 'bootstrap'}, headers={'origin': origin, 'content-type': 'application/json'})[0], 403)
         self.assertEqual(self.request('/api/apps/crm/backend', 'POST', {'action': 'bootstrap'})[0], 200)
         atomic_json(self.root / 'external-hosting/access.json', {**self.access, 'enabled': False})
@@ -111,8 +111,8 @@ class PublicSurfaceTest(unittest.TestCase):
         with self.assertRaises(CrmError):
             configure(self.root, body, actor=actor)
         self.assertEqual(self.request()[0], 404)  # Old child cannot retain authority.
-        self.assertEqual(status(self.root)['url'], 'https://crm.apps.maverick.example.test')
-        for domain in ('https://maverick.test', '127.0.0.1', 'example.test/path', '-bad.test', 'Example.test'):
+        self.assertEqual(status(self.root)['url'], 'https://crm.apps.loopino.example.test')
+        for domain in ('https://loopino.test', '127.0.0.1', 'example.test/path', '-bad.test', 'Example.test'):
             with self.assertRaises(CrmError):
                 hostname(domain)
 

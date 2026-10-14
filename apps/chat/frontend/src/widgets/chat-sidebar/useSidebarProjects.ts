@@ -1,4 +1,4 @@
-import { readAppCachePages } from "@maverick/pwa-cache";
+import { readAppCachePages } from "@loopino/pwa-cache";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatProject } from "../../api/client";
 import { readChatDisplay } from "../../pwaCache";

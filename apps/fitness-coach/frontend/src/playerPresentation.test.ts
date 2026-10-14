@@ -213,7 +213,7 @@ describe('work player presentation', () => {
   });
 
   it('anchors top player controls below the mobile shell without double-counting safe area', () => {
-    expect(styles).toMatch(/--fitness-player-top-offset:\s*var\(--maverick-shell-mobile-content-top-offset,\s*env\(safe-area-inset-top,\s*0px\)\);/);
+    expect(styles).toMatch(/--fitness-player-top-offset:\s*var\(--loopino-shell-mobile-content-top-offset,\s*env\(safe-area-inset-top,\s*0px\)\);/);
     expect(styles).toMatch(/--fitness-player-progress-top:\s*calc\(0\.62rem \+ var\(--fitness-player-top-offset\)\);/);
     expect(styles).toMatch(/\.player-header\s*{[\s\S]*top:\s*var\(--fitness-player-progress-top\);/);
     expect(styles).toMatch(/\.player-top\s*{[\s\S]*margin-top:\s*var\(--fitness-player-heading-gap\);/);

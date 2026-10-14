@@ -1,4 +1,4 @@
-"""Private Unix broker for sidecar model access without Maverick cognition."""
+"""Private Unix broker for sidecar model access without Loopino cognition."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ class ModelAccessBroker:
         self._thread = Thread(
             target=self._server.serve_forever,
             kwargs={"poll_interval": 0.1},
-            name="maverick-model-access-broker",
+            name="loopino-model-access-broker",
             daemon=True,
         )
         self._thread.start()
@@ -225,7 +225,7 @@ class ModelAccessBroker:
 def start_model_access_broker_server(state, *, shutdown_controller) -> ModelAccessBroker | None:
     """Start one Core-owned broker before any declarative sidecar prewarm."""
     repository_root = Path(state.repository_root).resolve(strict=True)
-    socket_path = repository_root / "tmp" / "maverick-model-access" / "broker.sock"
+    socket_path = repository_root / "tmp" / "loopino-model-access" / "broker.sock"
     with _BROKERS_LOCK:
         existing = _BROKERS.get(repository_root)
         if existing is not None and not existing._stopped:

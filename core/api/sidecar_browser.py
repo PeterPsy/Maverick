@@ -49,7 +49,7 @@ AsgiReceive = Callable[[], Awaitable[dict[str, Any]]]
 AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 BROWSER_LAUNCH_PATH = "/api/app-sidecars/browser-launch"
 BROWSER_LAUNCH_STATUS_PATH = "/api/app-sidecars/browser-launch-status"
-BROWSER_BOOTSTRAP_PATH = "/.well-known/maverick-sidecar-bootstrap"
+BROWSER_BOOTSTRAP_PATH = "/.well-known/loopino-sidecar-bootstrap"
 _MAX_BOOTSTRAP_BODY_BYTES = 4096
 _DOMAIN_PATTERN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -128,7 +128,7 @@ def handle_sidecar_browser_launch(
             [host],
             group_key=(
                 "sidecar-installation:"
-                + os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
+                + os.environ.get("LOOPINO_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
             ),
             repository_root=state.repository_root,
         )
@@ -613,7 +613,7 @@ def _resolve_origin_configuration(
     *,
     target: AuthorizedSidecarTarget,
 ) -> tuple[str, str, str, bool]:
-    mode = os.environ.get("MAVERICK_SIDECAR_ORIGIN_MODE", "local").strip().lower() or "local"
+    mode = os.environ.get("LOOPINO_SIDECAR_ORIGIN_MODE", "local").strip().lower() or "local"
     if mode == "local":
         platform_origin = _request_platform_origin(environ)
         parsed = urlsplit(platform_origin)
@@ -626,18 +626,18 @@ def _resolve_origin_configuration(
         host = f"{_opaque_label(target)}.sidecars.{platform_hostname}{suffix}"
         return f"{parsed.scheme}://{host}", host, platform_origin, parsed.scheme == "https"
     if mode == "hosted":
-        domain = os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
-        configured_platform_origin = os.environ.get("MAVERICK_SIDECAR_PLATFORM_ORIGIN", "").strip()
+        domain = os.environ.get("LOOPINO_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
+        configured_platform_origin = os.environ.get("LOOPINO_SIDECAR_PLATFORM_ORIGIN", "").strip()
         if not domain or not _DOMAIN_PATTERN.fullmatch(domain) or not configured_platform_origin:
             raise AppHostingError(
-                "Hosted sidecar origins require MAVERICK_SIDECAR_INSTALLATION_DOMAIN and MAVERICK_SIDECAR_PLATFORM_ORIGIN."
+                "Hosted sidecar origins require LOOPINO_SIDECAR_INSTALLATION_DOMAIN and LOOPINO_SIDECAR_PLATFORM_ORIGIN."
             )
         platform_origin = _normalize_origin(configured_platform_origin)
         if not platform_origin.startswith("https://") or _request_platform_origin(environ) != platform_origin:
             raise AppHostingError("Hosted sidecar origins require the exact configured HTTPS platform origin.")
         host = f"{_opaque_label(target)}.sidecars.{domain}"
         return f"https://{host}", host, platform_origin, True
-    raise AppHostingError("MAVERICK_SIDECAR_ORIGIN_MODE must be `local` or `hosted`.")
+    raise AppHostingError("LOOPINO_SIDECAR_ORIGIN_MODE must be `local` or `hosted`.")
 
 
 def _resolve_parent_binding(

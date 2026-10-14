@@ -6,15 +6,15 @@ agent, tool, capability, authority record, or persistent outbox.
 
 ## Owned artifacts and caches
 
-- Build manifest: `apps/base-shell/frontend/dist/maverick-frontend-assets.json`
+- Build manifest: `apps/base-shell/frontend/dist/loopino-frontend-assets.json`
 - Worker source: `apps/base-shell/frontend/public/sw.js`
 - Generated worker: `apps/base-shell/frontend/dist/sw.js`
 - Standard navigation fallback: verified `index.html`
-- Versioned shell cache: `maverick-static-v2:<build_id>`
+- Versioned shell cache: `loopino-static-v2:<build_id>`
 - App/widget bundles: public platform-origin HTTP cache with verified manifest
   policy, CORS/CORP, and gzip/Brotli
-- Exact migratable legacy caches: `maverick-app-static-v2` and
-  `maverick-base-shell-v3`
+- Exact migratable legacy caches: `loopino-app-static-v2` and
+  `loopino-base-shell-v3`
 
 There is no alternative HTML document, synthetic product response, or global
 transport-status UI. No operation in this runbook may clear the whole origin.
@@ -25,7 +25,7 @@ IndexedDB, OPFS, and unrelated Cache API names are outside worker ownership.
 Use the official app build so mounted clients receive the refresh event:
 
 ```bash
-maverick app base-shell frontend build --json
+loopino app base-shell frontend build --json
 npm --prefix apps/base-shell test
 npm --prefix apps/base-shell run test:service-worker
 # Includes a real Chrome two-origin Vite build and verifies lazy/worker/media
@@ -33,7 +33,7 @@ npm --prefix apps/base-shell run test:service-worker
 python3 -m unittest discover -s tests/unit/apps -p 'test_frontend_assets.py'
 python3 -m unittest discover -s tests/unit/pwa -p 'test_feature_flags.py'
 python3 -m unittest tests.integration.app_hosting.test_app_frame_browser_origin
-PYTHONPATH=. MAVERICK_TEST_LEVEL=slow python3 \
+PYTHONPATH=. LOOPINO_TEST_LEVEL=slow python3 \
   apps/base-shell/tests/test_builtin_apps.py \
   BuiltinAppsTestCase.test_platform_host_serves_root_shell_pwa_assets_without_session
 ```
@@ -70,8 +70,8 @@ Against a production-artifact host, run:
 node scripts/pwa_shell_cache_smoke.mjs \
   --base-url http://127.0.0.1:8014 \
   --engine chromium \
-  --username "$MAVERICK_STARTUP_USERNAME" \
-  --password "$MAVERICK_STARTUP_PASSWORD"
+  --username "$LOOPINO_STARTUP_USERNAME" \
+  --password "$LOOPINO_STARTUP_PASSWORD"
 ```
 
 `--engine webkit` is useful development evidence when installed, but does not
@@ -112,9 +112,9 @@ the browser; it must never receive generated fallback HTML.
 5. Confirm B waits while A still owns clients. No connectivity indicator or app
    icon is repurposed for this lifecycle state.
 6. Close every A client and confirm normal service-worker activation selects B.
-   An explicit operator test may send `MAVERICK_SKIP_WAITING`; it is not a
+   An explicit operator test may send `LOOPINO_SKIP_WAITING`; it is not a
    transport-recovery action.
-7. Confirm activation removes only obsolete `maverick-static-v2:*` caches and
+7. Confirm activation removes only obsolete `loopino-static-v2:*` caches and
    the two exact legacy caches. Unrelated Cache API entries, IndexedDB, and OPFS
    remain.
 
@@ -132,10 +132,10 @@ after live initialization; it never replays a send.
 2. Request an immutable asset. The worker rejects bad bytes, fetches and verifies
    declared size/SHA-256, and repairs the entry best-effort.
 3. Delete one selected revalidated static asset and remove transport.
-4. From DevTools, send `{type: "MAVERICK_RECOVER"}` to the active worker.
-   Recovery must report `MAVERICK_SW_RECOVERY_FAILED` without deleting the
+4. From DevTools, send `{type: "LOOPINO_RECOVER"}` to the active worker.
+   Recovery must report `LOOPINO_SW_RECOVERY_FAILED` without deleting the
    verified entries that remain.
-5. Restore transport and repeat. The worker reports `MAVERICK_SW_RECOVERED` and
+5. Restore transport and repeat. The worker reports `LOOPINO_SW_RECOVERED` and
    every generated precache record is present.
 
 Recovery has no product dialog and never changes the normal shell tree.
@@ -147,16 +147,16 @@ The consolidated rollout, dashboard, redaction, and incident sequence is in
 Set the backend environment and restart through the operator-managed service:
 
 ```bash
-MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2=off
+LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2=off
 ```
 
-Confirm `/api/pwa/config` returns schema `maverick.pwa-config.v2`, generation
+Confirm `/api/pwa/config` returns schema `loopino.pwa-config.v2`, generation
 `v2`, and `service_worker.enabled: false`. On the next reachable shell load the
 client unregisters the root worker and deletes only:
 
-- `maverick-static-v2:*`;
-- `maverick-app-static-v2`;
-- `maverick-base-shell-v3`.
+- `loopino-static-v2:*`;
+- `loopino-app-static-v2`;
+- `loopino-base-shell-v3`.
 
 An unreachable config endpoint is not a kill-switch decision: the client keeps
 the functioning worker and changes no origin storage. Re-enable the flag, reload
@@ -164,9 +164,9 @@ with working transport, and confirm a fresh verified cache installs.
 
 The remaining cache-centric gates are:
 
-- `MAVERICK_FEATURE_PWA_DATA_CACHE` (default off);
-- `MAVERICK_FEATURE_PWA_APP_CACHE_<APP_ID>` (default off and subordinate);
-- `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE` (default off).
+- `LOOPINO_FEATURE_PWA_DATA_CACHE` (default off);
+- `LOOPINO_FEATURE_PWA_APP_CACHE_<APP_ID>` (default off and subordinate);
+- `LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE` (default off).
 
 There is no mutation-outbox flag or legacy file-cache alias.
 

@@ -399,7 +399,7 @@ function requiredArg(parsed, key) {
 }
 
 function printText(payload) {
-  console.log("Maverick authenticated browser startup baseline");
+  console.log("Loopino authenticated browser startup baseline");
   console.log(`runs=${payload.runs} warm_reloads=${payload.warm_reloads}`);
   for (const profile of payload.profiles) {
     printSummaryLine(profile.profile, "cold", profile.cold);

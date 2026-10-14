@@ -3,7 +3,7 @@ import { observeBootstrapConfirmation } from './bootstrapConfirmation';
 import type { SidecarLaunch } from './types';
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), visible: true, notify: (_visible: boolean) => {}, stop: vi.fn() }));
-vi.mock('@maverick/pwa-cache', () => ({ observeMaverickVisibility: (notify: (visible: boolean) => void) => {
+vi.mock('@loopino/pwa-cache', () => ({ observeLoopinoVisibility: (notify: (visible: boolean) => void) => {
   mocks.notify = notify;
   notify(mocks.visible);
   return mocks.stop;

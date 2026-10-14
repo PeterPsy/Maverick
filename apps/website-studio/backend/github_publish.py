@@ -235,7 +235,7 @@ def _github_request(
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {token}",
                 "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "maverick-website-studio",
+                "User-Agent": "loopino-website-studio",
             },
             "json": body,
         },

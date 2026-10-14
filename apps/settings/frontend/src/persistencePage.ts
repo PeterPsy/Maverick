@@ -116,7 +116,7 @@ function persistenceHtml(state: PersistenceMigrationViewState) {
         <span class="settings-adapter-card-icon material-symbols-rounded" aria-hidden="true">${mongoActive ? 'check_circle' : 'database'}</span>
         <span>
           <strong>Mongo</strong>
-          <small>${escapeHtml(mongoActive ? active.mongo_database : 'mongodb://127.0.0.1:27017/maverick')}</small>
+          <small>${escapeHtml(mongoActive ? active.mongo_database : 'mongodb://127.0.0.1:27017/loopino')}</small>
         </span>
         <em>${mongoActive ? 'Current' : 'Review migration'}</em>
       </button>

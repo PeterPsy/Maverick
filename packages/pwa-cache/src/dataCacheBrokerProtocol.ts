@@ -6,13 +6,13 @@ import type {
   CacheRevalidationResult,
 } from "./types";
 
-export const PWA_DATA_CACHE_BROKER_OPEN = "maverick.pwa.data-cache.open.v1";
-export const PWA_DATA_CACHE_BROKER_ACCEPTED = "maverick.pwa.data-cache.accepted.v1";
-export const PWA_DATA_CACHE_BROKER_NETWORK_REQUEST = "maverick.pwa.data-cache.network-request.v1";
-export const PWA_DATA_CACHE_BROKER_NETWORK_RESULT = "maverick.pwa.data-cache.network-result.v1";
-export const PWA_DATA_CACHE_BROKER_RESULT = "maverick.pwa.data-cache.result.v1";
-export const PWA_DATA_CACHE_BROKER_INVALIDATE = "maverick.pwa.data-cache.invalidate.v1";
-export const PWA_DATA_CACHE_BROKER_CANCEL = "maverick.pwa.data-cache.cancel.v1";
+export const PWA_DATA_CACHE_BROKER_OPEN = "loopino.pwa.data-cache.open.v1";
+export const PWA_DATA_CACHE_BROKER_ACCEPTED = "loopino.pwa.data-cache.accepted.v1";
+export const PWA_DATA_CACHE_BROKER_NETWORK_REQUEST = "loopino.pwa.data-cache.network-request.v1";
+export const PWA_DATA_CACHE_BROKER_NETWORK_RESULT = "loopino.pwa.data-cache.network-result.v1";
+export const PWA_DATA_CACHE_BROKER_RESULT = "loopino.pwa.data-cache.result.v1";
+export const PWA_DATA_CACHE_BROKER_INVALIDATE = "loopino.pwa.data-cache.invalidate.v1";
+export const PWA_DATA_CACHE_BROKER_CANCEL = "loopino.pwa.data-cache.cancel.v1";
 
 const DEFAULT_ACCEPTANCE_TIMEOUT_MS = 750;
 const MAX_IDENTITY_LENGTH = 256;
@@ -71,7 +71,7 @@ export type ParentDataCacheNetworkRequestMessage = {
 };
 
 export type ParentDataCacheSerializedError = {
-  name: "AbortError" | "MaverickHttpError" | "MaverickTransportError" | "TerminalError" | "TimeoutError";
+  name: "AbortError" | "LoopinoHttpError" | "LoopinoTransportError" | "TerminalError" | "TimeoutError";
   retry_after_ms?: number;
   status?: number;
 };
@@ -194,7 +194,7 @@ export function isParentDataCacheNetworkResultMessage(
 }
 
 /** Accept app lifecycle/navigation messages only from the exact shell parent. */
-export function isExactMaverickParentMessage(
+export function isExactLoopinoParentMessage(
   event: Pick<MessageEvent, "origin" | "source">,
 ): boolean {
   if (typeof window === "undefined") return false;
@@ -219,11 +219,11 @@ export function serializeParentDataCacheError(error: unknown): ParentDataCacheSe
     : undefined;
   const retryAfterMs = finiteDelay(record.retryAfterMs);
   const name: ParentDataCacheSerializedError["name"] = status !== undefined
-    ? "MaverickHttpError"
+    ? "LoopinoHttpError"
     : rawName === "AbortError"
       ? "AbortError"
-      : rawName === "MaverickTransportError"
-        ? "MaverickTransportError"
+      : rawName === "LoopinoTransportError"
+        ? "LoopinoTransportError"
         : rawName === "TimeoutError"
           ? "TimeoutError"
           : "TerminalError";
@@ -540,8 +540,8 @@ function validSerializedError(value: unknown): value is ParentDataCacheSerialize
   const payload = messageRecord(value);
   if (!payload || ![
     "AbortError",
-    "MaverickHttpError",
-    "MaverickTransportError",
+    "LoopinoHttpError",
+    "LoopinoTransportError",
     "TerminalError",
     "TimeoutError",
   ].includes(String(payload.name || ""))) return false;
@@ -561,7 +561,7 @@ function defaultParentWindow(): Pick<Window, "postMessage"> | null {
 function defaultParentOrigin(): string | null {
   if (typeof window === "undefined") return null;
   const platformOrigin = exactHttpOrigin(
-    (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__,
+    (window as Window & { __LOOPINO_PLATFORM_ORIGIN__?: unknown }).__LOOPINO_PLATFORM_ORIGIN__,
   );
   const frameOrigin = exactHttpOrigin(window.location.origin);
   return platformOrigin && frameOrigin && platformOrigin !== frameOrigin

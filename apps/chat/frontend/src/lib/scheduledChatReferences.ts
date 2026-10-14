@@ -1,10 +1,10 @@
-import { startMaverickReferencePointerDrag } from "@maverick/pwa-cache";
+import { startLoopinoReferencePointerDrag } from "@loopino/pwa-cache";
 import type { PointerEvent } from "react";
 import type { AppEntityReference } from "../api/client";
 import type { ScheduledChat } from "../api/scheduledChats";
 import { referenceKey, type MentionItem } from "./mentions";
 
-export const SCHEDULED_CHAT_DRAG_TYPE = "application/x-maverick-scheduled-chat";
+export const SCHEDULED_CHAT_DRAG_TYPE = "application/x-loopino-scheduled-chat";
 
 export function scheduledChatReference(chat: Pick<ScheduledChat, "id" | "title">): AppEntityReference {
   return { type: "entity", app_id: "chat", entity_type: "scheduled_chat", entity_id: chat.id,
@@ -34,7 +34,7 @@ export function scheduledChatMentionItems(transfer: Pick<DataTransfer, "getData"
 /** Pointer transport crosses isolated app frames; the native payload also works within Chat. */
 export function startScheduledChatPointerDrag(event: PointerEvent<HTMLElement>, chat: Pick<ScheduledChat, "id" | "title">, onDraggingChange: (dragging: boolean) => void = () => undefined) {
   if (event.target instanceof Element && event.target.closest("button, input, textarea, select, a") && !event.target.closest("[data-scheduled-drag-open]")) return;
-  return startMaverickReferencePointerDrag(event.nativeEvent, event.currentTarget, () => ({
+  return startLoopinoReferencePointerDrag(event.nativeEvent, event.currentTarget, () => ({
     label: chat.title, transfer: { type: SCHEDULED_CHAT_DRAG_TYPE, data: scheduledChatDragData(chat) },
   }), onDraggingChange);
 }

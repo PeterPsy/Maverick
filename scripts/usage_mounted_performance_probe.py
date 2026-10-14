@@ -93,9 +93,9 @@ def main():
     args = parser.parse_args()
     if args.count < 1 or args.requests < 1 or args.warmup < 0:
         parser.error('count and requests must be positive; warmup nonnegative')
-    with tempfile.TemporaryDirectory(prefix='maverick-usage-http-') as scratch, patch.dict(os.environ, {
-            'MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS': '1', 'MAVERICK_ADMIN_USERNAME': 'fixture-admin',
-            'MAVERICK_ADMIN_PASSWORD': 'fixture-only-password', 'MAVERICK_USAGE_STORE': 'document'}):
+    with tempfile.TemporaryDirectory(prefix='loopino-usage-http-') as scratch, patch.dict(os.environ, {
+            'LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS': '1', 'LOOPINO_ADMIN_USERNAME': 'fixture-admin',
+            'LOOPINO_ADMIN_PASSWORD': 'fixture-only-password', 'LOOPINO_USAGE_STORE': 'document'}):
         root = Path(scratch)
         for name in ('core', 'apps', 'workspaces', 'scripts', 'docs'):
             (root / name).mkdir()
@@ -108,7 +108,7 @@ def main():
             observed_at=now - timedelta(seconds=args.count - number))) for number in range(args.count)])
         migration = prepare(root, collections)
         cutover(root, collections, migration['migration_id'])
-        os.environ['MAVERICK_USAGE_STORE'] = 'sqlite'
+        os.environ['LOOPINO_USAGE_STORE'] = 'sqlite'
         state = replace(state, usage_store=build_usage_store(root, collections))
         session = SimpleNamespace(session_id='root-0', workspace_id='default', creator_runtime_session_id=None,
             execution_binding=None, hosted_provider_id=None, hosted_model_id=None, provider_id='codex')

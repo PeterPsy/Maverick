@@ -16,7 +16,7 @@ import sys
 import tempfile
 import unittest
 
-from core.app_sdk.cli import main as maverick_cli_main
+from core.app_sdk.cli import main as loopino_cli_main
 from core.apps.contracts import parse_app_contract_file
 from core.api.platform_state import bootstrap_platform_state
 from core.cli.models import CliInvocationContext
@@ -53,7 +53,7 @@ class MemoryAppTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         # Mounted lifecycle entrypoints import the official app SDK in their
@@ -79,25 +79,25 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("json", result)
         return result
 
-    def run_maverick_cli(self, argv: list[str], *, cwd: Path) -> dict:
+    def run_loopino_cli(self, argv: list[str], *, cwd: Path) -> dict:
         original_cwd = Path.cwd()
         output = StringIO()
         try:
             os.chdir(cwd)
             with redirect_stdout(output):
-                exit_code = maverick_cli_main(argv)
+                exit_code = loopino_cli_main(argv)
         finally:
             os.chdir(original_cwd)
         self.assertEqual(exit_code, 0)
         return json.loads(output.getvalue())
 
-    def run_maverick_cli_text(self, argv: list[str], *, cwd: Path) -> str:
+    def run_loopino_cli_text(self, argv: list[str], *, cwd: Path) -> str:
         original_cwd = Path.cwd()
         output = StringIO()
         try:
             os.chdir(cwd)
             with redirect_stdout(output):
-                exit_code = maverick_cli_main(argv)
+                exit_code = loopino_cli_main(argv)
         finally:
             os.chdir(original_cwd)
         self.assertEqual(exit_code, 0)
@@ -890,7 +890,7 @@ class MemoryAppTestCase(unittest.TestCase):
 
         entrypoint_errors = self.import_backend_module("entrypoint_errors")
 
-        with self.assertLogs("maverick.memory", level="ERROR") as logs:
+        with self.assertLogs("loopino.memory", level="ERROR") as logs:
             status_code, payload = entrypoint_errors.storage_error_response(
                 sqlite3.OperationalError("token value leaked"),
                 app_id="memory-fork",
@@ -2245,7 +2245,7 @@ class MemoryAppTestCase(unittest.TestCase):
 
         def fake_run(args, **_kwargs):
             calls.append(list(args))
-            if args[:5] == ["maverick", "app", "crm", "mcp", "list"]:
+            if args[:5] == ["loopino", "app", "crm", "mcp", "list"]:
                 return subprocess.CompletedProcess(
                     args,
                     0,
@@ -2301,7 +2301,7 @@ class MemoryAppTestCase(unittest.TestCase):
             return subprocess.CompletedProcess(args, 1, stdout=json.dumps({"status_code": 404}), stderr="")
 
         try:
-            app_entity_sources.shutil.which = lambda _name: "/usr/bin/maverick"
+            app_entity_sources.shutil.which = lambda _name: "/usr/bin/loopino"
             app_surface_transport.subprocess.run = fake_run
             with tempfile.TemporaryDirectory() as temp:
                 data_root = Path(temp) / "data" / "memory"
@@ -2992,7 +2992,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 return Completed()
 
             try:
-                storage_sources.shutil.which = lambda _name: "/usr/bin/maverick"
+                storage_sources.shutil.which = lambda _name: "/usr/bin/loopino"
                 app_surface_transport.subprocess.run = fake_run
                 result = storage_sources.default_storage_preview_surface(
                     data_root,
@@ -3009,7 +3009,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 storage_sources.shutil.which = original_which
 
             self.assertEqual(result["preview_text"], "Drive preview text.")
-            self.assertEqual(calls[0][:7], ["maverick", "app", "storage", "mcp", "call", "storage_drive_preview", "--json"])
+            self.assertEqual(calls[0][:7], ["loopino", "app", "storage", "mcp", "call", "storage_drive_preview", "--json"])
             self.assertNotIn("--arguments", calls[0])
             self.assertIn("--stable-storage-file-id", calls[0])
             self.assertIn("file_drive_plan", calls[0])
@@ -3020,7 +3020,7 @@ class MemoryAppTestCase(unittest.TestCase):
     def test_app_surface_transport_does_not_retry_by_default(self) -> None:
         app_surface_transport = self.import_backend_module("app_surface_transport")
         original_run = app_surface_transport.subprocess.run
-        original_retry_env = os.environ.pop("MAVERICK_MEMORY_APP_SURFACE_RETRIES", None)
+        original_retry_env = os.environ.pop("LOOPINO_MEMORY_APP_SURFACE_RETRIES", None)
         calls: list[list[str]] = []
 
         def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -3030,16 +3030,16 @@ class MemoryAppTestCase(unittest.TestCase):
         try:
             app_surface_transport.subprocess.run = fake_run
             completed = app_surface_transport.run_json_subprocess(
-                ["maverick", "app", "storage", "mcp", "list", "--json"],
+                ["loopino", "app", "storage", "mcp", "list", "--json"],
                 cwd=REPO_ROOT,
                 label="storage MCP list",
             )
         finally:
             app_surface_transport.subprocess.run = original_run
             if original_retry_env is None:
-                os.environ.pop("MAVERICK_MEMORY_APP_SURFACE_RETRIES", None)
+                os.environ.pop("LOOPINO_MEMORY_APP_SURFACE_RETRIES", None)
             else:
-                os.environ["MAVERICK_MEMORY_APP_SURFACE_RETRIES"] = original_retry_env
+                os.environ["LOOPINO_MEMORY_APP_SURFACE_RETRIES"] = original_retry_env
 
         self.assertEqual(completed.returncode, 1)
         self.assertEqual(len(calls), 1)
@@ -3062,7 +3062,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 return Completed()
 
             try:
-                storage_file_sources.shutil.which = lambda _name: "/usr/bin/maverick"
+                storage_file_sources.shutil.which = lambda _name: "/usr/bin/loopino"
                 app_surface_transport.subprocess.run = fake_run
                 result = storage_file_sources.default_storage_file_surface(
                     data_root,
@@ -3074,7 +3074,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 storage_file_sources.shutil.which = original_which
 
             self.assertEqual(result["file"]["workspace_relative_path"], "storage/generated/notes/handoff.md")
-            self.assertEqual(calls[0][:7], ["maverick", "app", "storage", "mcp", "call", "storage_file_info", "--json"])
+            self.assertEqual(calls[0][:7], ["loopino", "app", "storage", "mcp", "call", "storage_file_info", "--json"])
             self.assertIn("--workspace-relative-path", calls[0])
             self.assertIn("storage/generated/notes/handoff.md", calls[0])
 
@@ -3083,7 +3083,7 @@ class MemoryAppTestCase(unittest.TestCase):
             data_root = Path(temp) / "data" / "memory"
             storage_file_sources = self.import_backend_module("storage_file_sources")
             original_which = storage_file_sources.shutil.which
-            original_flag = os.environ.pop("MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK", None)
+            original_flag = os.environ.pop("LOOPINO_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK", None)
             try:
                 storage_file_sources.shutil.which = lambda _name: None
                 with self.assertRaises(storage_file_sources.MemoryValidationError):
@@ -3095,7 +3095,7 @@ class MemoryAppTestCase(unittest.TestCase):
             finally:
                 storage_file_sources.shutil.which = original_which
                 if original_flag is not None:
-                    os.environ["MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK"] = original_flag
+                    os.environ["LOOPINO_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK"] = original_flag
 
     def test_remote_storage_ingestion_uses_storage_preview_and_cites_source_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -3690,12 +3690,12 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertNotIn('body_text',result['nodes'][0])
 
     @full_test("full memory wrapper suite; run with scripts/test_suite.py --level full")
-    def test_maverick_wrapper_invokes_workspace_app_cli_and_mcp_without_app_paths(self) -> None:
+    def test_loopino_wrapper_invokes_workspace_app_cli_and_mcp_without_app_paths(self) -> None:
         repo_root = self.make_repo_root()
         workspace_root = repo_root / "workspaces" / "default"
         workspace_root.mkdir(parents=True, exist_ok=True)
 
-        remembered = self.run_maverick_cli(
+        remembered = self.run_loopino_cli(
             [
                 "--repository-root",
                 str(repo_root),
@@ -3713,7 +3713,7 @@ class MemoryAppTestCase(unittest.TestCase):
             ],
             cwd=workspace_root,
         )
-        cli_context = self.run_maverick_cli(
+        cli_context = self.run_loopino_cli(
             [
                 "--repository-root",
                 str(repo_root),
@@ -3729,7 +3729,7 @@ class MemoryAppTestCase(unittest.TestCase):
             ],
             cwd=workspace_root,
         )
-        mcp_context = self.run_maverick_cli(
+        mcp_context = self.run_loopino_cli(
             [
                 "--repository-root",
                 str(repo_root),
@@ -3746,39 +3746,39 @@ class MemoryAppTestCase(unittest.TestCase):
 
         self.assertEqual(remembered["status_code"], 200)
         self.assertEqual(remembered["node"]["title"], "Acme")
-        apps_list = self.run_maverick_cli(
+        apps_list = self.run_loopino_cli(
             ["--repository-root", str(repo_root), "apps", "list", "--json"],
             cwd=workspace_root,
         )
         self.assertIn("memory", [app["app_id"] for app in apps_list["apps"]])
-        help_text = self.run_maverick_cli_text(
+        help_text = self.run_loopino_cli_text(
             ["--repository-root", str(repo_root), "app", "memory", "cli", "--help"],
             cwd=workspace_root,
         )
-        self.assertIn("maverick app memory cli list --json", help_text)
-        self.assertIn("list` and `inspect`", self.run_maverick_cli_text(["--help"], cwd=workspace_root))
-        cli_list = self.run_maverick_cli(
+        self.assertIn("loopino app memory cli list --json", help_text)
+        self.assertIn("list` and `inspect`", self.run_loopino_cli_text(["--help"], cwd=workspace_root))
+        cli_list = self.run_loopino_cli(
             ["--repository-root", str(repo_root), "app", "memory", "cli", "list", "--json"],
             cwd=workspace_root,
         )
         self.assertEqual(cli_list["commands"][0]["name"], "memory")
-        cli_inspect = self.run_maverick_cli(
+        cli_inspect = self.run_loopino_cli(
             ["--repository-root", str(repo_root), "app", "memory", "cli", "inspect", "memory", "--json"],
             cwd=workspace_root,
         )
         self.assertEqual(cli_inspect["command"]["name"], "memory")
-        mcp_list = self.run_maverick_cli(
+        mcp_list = self.run_loopino_cli(
             ["--repository-root", str(repo_root), "app", "memory", "mcp", "list", "--json"],
             cwd=workspace_root,
         )
         self.assertIn("memory_context", [tool["name"] for tool in mcp_list["tools"]])
-        mcp_inspect = self.run_maverick_cli(
+        mcp_inspect = self.run_loopino_cli(
             ["--repository-root", str(repo_root), "app", "memory", "mcp", "inspect", "memory_context", "--json"],
             cwd=workspace_root,
         )
         self.assertEqual(mcp_inspect["tool"]["name"], "memory_context")
         with self.assertRaises(SystemExit):
-            self.run_maverick_cli(
+            self.run_loopino_cli(
                 ["--repository-root", str(repo_root), "app", "cli", "memory", "--action", "context", "--query", "Acme"],
                 cwd=workspace_root,
             )

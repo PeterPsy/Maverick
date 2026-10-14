@@ -70,7 +70,7 @@ class HostedAgenticLifecycleBoundaryTest(unittest.TestCase):
             runtime_store=harness.store,
         )
         engine = (
-            SimpleNamespace(provider_id="maverick-tool-loop"),
+            SimpleNamespace(provider_id="loopino-tool-loop"),
             None,
             adapter,
             None,
@@ -110,7 +110,7 @@ class HostedAgenticLifecycleBoundaryTest(unittest.TestCase):
                     yield None
 
         adapter = HostedAgenticEngineAdapter(
-            runtime_engine_id="maverick-tool-loop",
+            runtime_engine_id="loopino-tool-loop",
             adapter_id="fixture-hosted",
             adapter_version="1",
             loop=DelayedCancellationLoop(),

@@ -1,6 +1,6 @@
 # Release Process
 
-Maverick has no stable release yet.
+Loopino has no stable release yet.
 
 ## Versioning
 

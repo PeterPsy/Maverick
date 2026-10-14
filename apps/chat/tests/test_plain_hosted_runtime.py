@@ -51,11 +51,11 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": "",
-            "HTTP_HOST": "maverick.test",
+            "HTTP_HOST": "loopino.test",
             "wsgi.input": BytesIO(payload),
         }
         if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
-            environ["HTTP_ORIGIN"] = "http://maverick.test"
+            environ["HTTP_ORIGIN"] = "http://loopino.test"
         if cookie:
             environ["HTTP_COOKIE"] = cookie
 
@@ -72,8 +72,8 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)
@@ -107,7 +107,7 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         cookie = self.login_cookie(state)
 
         with (
-            patch.dict(os.environ, {"MAVERICK_HOSTED_TEXT_FAKE_CHUNKS": '["Hosted ", "answer"]'}, clear=False),
+            patch.dict(os.environ, {"LOOPINO_HOSTED_TEXT_FAKE_CHUNKS": '["Hosted ", "answer"]'}, clear=False),
             patch("core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"),
             patch(
                 "core.runtime.turn_submission_service_submit.resolve_runtime_backend_for_session",

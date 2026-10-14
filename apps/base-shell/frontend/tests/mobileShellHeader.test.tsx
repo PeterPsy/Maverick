@@ -17,7 +17,7 @@ function app(app_id: string): AppRegistryItem {
     frontend_launchable: true,
     logo: null,
     name: app_id,
-    publisher: "maverick",
+    publisher: "loopino",
     source_access: "none",
     status: "enabled",
     version: "1.0.0",

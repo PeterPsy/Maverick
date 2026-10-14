@@ -17,7 +17,7 @@ def management_request(db, chat):
     config = json.loads(chat["config"])
     prompt = ("This is the management conversation for a Scheduled task. Initialize it by briefly confirming it is ready. "
               "Do not execute any blocks now. When the user asks to create or edit blocks, use the chat_scheduled MCP tool "
-              "(or maverick app chat cli run scheduled) with action read, then update with expected_revision and the complete graph. "
+              "(or loopino app chat cli run scheduled) with action read, then update with expected_revision and the complete graph. "
               "A graph has nodes {id,title,instructions,skill_ids,position:{x,y}} and edges {id,source,target}. "
               "Connections are prerequisites and must form a DAG. Every successful block stops at a checkpoint; "
               "only the user's explicit confirmation may continue it. Keep all UI titles and labels in English. "

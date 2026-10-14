@@ -58,7 +58,7 @@ class _RuntimeTurnOutputRecorder:
                     else str(
                         uuid5(
                             NAMESPACE_URL,
-                            f"maverick:provider-completed:{delivery_id}",
+                            f"loopino:provider-completed:{delivery_id}",
                         )
                     )
                 )

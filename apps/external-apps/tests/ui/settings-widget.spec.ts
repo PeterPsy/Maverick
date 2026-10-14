@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 for (const width of [860, 340]) {
   test(`per-app widget keeps source scope, consent and parent identity isolated ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 740 });
-    await page.addInitScript(() => Object.defineProperty(window, '__MAVERICK_APP_FRAME_CONTEXT__', { value: { app_id: 'publisher', workspace_id: 'synthetic' }, writable: false }));
+    await page.addInitScript(() => Object.defineProperty(window, '__LOOPINO_APP_FRAME_CONTEXT__', { value: { app_id: 'publisher', workspace_id: 'synthetic' }, writable: false }));
     const calls: Record<string, unknown>[] = [];
     const release = { release_id: 'rel_' + 'a'.repeat(32), digest: 'b'.repeat(64), size_bytes: 300, file_count: 2, format: 'static_bundle' };
     const app = { id: 'app_a', name: 'Sito A', managed_url: 'https://site-a.apps.example.test', provider_id: 'website-studio', source_id: 'site_a', status: 'draft', last_error_code: '', health: { status: 'unknown' }, binding: { generation: 0, enabled: false, archived: false } };
@@ -15,12 +15,12 @@ for (const width of [860, 340]) {
         : body.action === 'get' ? { app, plans: [plan], releases: [], history: [] }
         : body.action === 'plan.approve' ? { plan: { ...plan, approved_by: 'human' } } : { status: 'published' } });
     });
-    await page.goto('/widgets/external-surfaces-settings/?maverick_theme=dark');
+    await page.goto('/widgets/external-surfaces-settings/?loopino_theme=dark');
     await expect(page.getByRole('status')).toHaveText('Caricamento del contesto app…');
     expect(calls).toHaveLength(0);
     async function context(id: string, owner = 'publisher', origin?: string) {
       await page.evaluate(({ id, owner, origin }) => {
-        const data = { type: 'maverick.widget.context-changed', owner_app_id: owner, widget_id: 'external-surfaces-settings', context: { content: { kind: 'shell.app.external.surfaces', payload: { app_id: id, app_name: id }, shell_theme: { effective: 'dark' } } } };
+        const data = { type: 'loopino.widget.context-changed', owner_app_id: owner, widget_id: 'external-surfaces-settings', context: { content: { kind: 'shell.app.external.surfaces', payload: { app_id: id, app_name: id }, shell_theme: { effective: 'dark' } } } };
         if (origin) window.dispatchEvent(new MessageEvent('message', { source: window, origin, data }));
         else window.postMessage(data, location.origin);
       }, { id, owner, origin });
@@ -45,7 +45,7 @@ for (const width of [860, 340]) {
     await expect(page.getByText('Nessuna UI o API privata viene resa pubblica.', { exact: false })).toBeVisible();
     await expect(page.getByRole('article', { name: 'Dettaglio pubblicazione' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Sito A/ })).toHaveCount(0);
-    await expect(page.getByLabel('Dominio di Maverick')).toHaveCount(0);
+    await expect(page.getByLabel('Dominio di Loopino')).toHaveCount(0);
     await context('website-studio');
     await page.getByRole('button', { name: /Sito A/ }).click();
     await expect(page.getByRole('checkbox')).not.toBeChecked();

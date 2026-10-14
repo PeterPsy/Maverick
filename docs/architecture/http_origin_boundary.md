@@ -15,7 +15,7 @@ and action authorization are independent requirements.
 App-event WebSockets already require a session at handshake and filter events
 to that session's workspace. This implementation evidence is not a completed
 CSRF, proxy-deployment or long-lived session/revocation security audit, and does
-not change Maverick's experimental production-readiness status.
+not change Loopino's experimental production-readiness status.
 
 Regression coverage: `tests/unit/api/test_http_origin.py`,
 `tests/unit/api/test_http.py`, and the anonymous-handshake/workspace-filter

@@ -96,193 +96,193 @@
   ],
   "original_worktrees": [
     {
-      "path": "/home/ubuntu/projects/maverick-v3",
+      "path": "/projects/loopino",
       "sha": "57e98a4d212a4eae5481424a3e0dacc435c52d59",
       "outside_design": 0,
       "subject": "fix(tls): keep covered browser origins available during renewal failures"
     },
     {
-      "path": "/tmp/maverick-installation-setup",
+      "path": "/tmp/loopino-installation-setup",
       "sha": "8f52f4238d9d2211914f75398c353f2d34118e77",
       "outside_design": 3,
       "subject": "Integrate Installation settings and agent workflow with app endpoint declarations"
     },
     {
-      "path": "/tmp/maverick-p6-audit-37eaa",
+      "path": "/tmp/loopino-p6-audit-37eaa",
       "sha": "37eaa7d48f67f6f93767ff4db36eeedf2acf7784",
       "outside_design": 0,
       "subject": "Complete hosted restart recovery path"
     },
     {
-      "path": "/tmp/maverick-p6-closure.L32oDb/source",
+      "path": "/tmp/loopino-p6-closure.L32oDb/source",
       "sha": "5a7ca45af4c10879e7f95c89d31fba6fa0eaea1d",
       "outside_design": 0,
       "subject": "feat(certification): freeze P6 suite 41 and reviewed candidate identities"
     },
     {
-      "path": "/var/lib/maverick/certification/jobs/openrouter-glm-r68-20260913T111647Z/source",
+      "path": "/projects/loopino/data/certification/jobs/openrouter-glm-r68-20260913T111647Z/source",
       "sha": "ffb330f2937c051941f257e4ae7006119128ec41",
       "outside_design": 0,
       "subject": "fix(mail): surface local drafts in mailbox"
     },
     {
-      "path": "/var/lib/maverick/certification/jobs/openrouter-glm-r68-20260913T111647Z/source-v70",
+      "path": "/projects/loopino/data/certification/jobs/openrouter-glm-r68-20260913T111647Z/source-v70",
       "sha": "1dc8b284652ff8b437d1dcd8d95df08b0fb9a3b9",
       "outside_design": 0,
       "subject": "Refresh certified Mail read effect authority"
     },
     {
-      "path": "/var/lib/maverick/certification/jobs/openrouter-glm-r68-20260913T111647Z/source-v70b",
+      "path": "/projects/loopino/data/certification/jobs/openrouter-glm-r68-20260913T111647Z/source-v70b",
       "sha": "bbcadfeef9b6a120bf4560f1bd50eb68c0cd2e89",
       "outside_design": 0,
       "subject": "Preserve agentic flags in production certification environment"
     },
     {
-      "path": "/var/tmp/maverick/login-session-core-20261001",
+      "path": "/var/tmp/loopino/login-session-core-20261001",
       "sha": "c68a180fec9f996ae31ea02ba0dd3b55a9a304ac",
       "outside_design": 1,
       "subject": "fix(auth): renew login sessions and recover connectivity without false logout"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-admission-4fjnnnf8/source",
+      "path": "/var/tmp/loopino/loopino-p6-admission-4fjnnnf8/source",
       "sha": "23e364036ffe2335dd086389297e683658f29e90",
       "outside_design": 6,
       "subject": "docs(certification): record exact candidate verification and remaining release gates"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-autonomous-r48-68zsX93m/source-b5aa07dd",
+      "path": "/var/tmp/loopino/loopino-p6-autonomous-r48-68zsX93m/source-b5aa07dd",
       "sha": "b5aa07dd1b83bf179ae8766c0f74293dfb087473",
       "outside_design": 0,
       "subject": "docs(mac): record v30 validated build"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-openrouter-ckjko1y0/source",
+      "path": "/var/tmp/loopino/loopino-p6-openrouter-ckjko1y0/source",
       "sha": "dfbf045f9dac9bd142c7ae2fd7bf0e4e9b5b8dda",
       "outside_design": 11,
       "subject": "merge: unify retained-publication fixes and tools-omitted P6 candidate"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-operator-dd5hrvqq/source-r44-167e5547",
+      "path": "/var/tmp/loopino/loopino-p6-operator-dd5hrvqq/source-r44-167e5547",
       "sha": "167e5547880584aeb5eb59abdd429e11533ded6b",
       "outside_design": 0,
       "subject": "fix(providers): refresh Google agentic catalog identity"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-r43-DD1swg/source",
+      "path": "/var/tmp/loopino/loopino-p6-r43-DD1swg/source",
       "sha": "c4b8fc7a9dc90062f6286740e88ab93b72c41fb6",
       "outside_design": 0,
       "subject": "fix(agentic): attribute host operator authority"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/source-13c3a357",
+      "path": "/var/tmp/loopino/loopino-p6-remediation-r50-yxYYWR2i/source-13c3a357",
       "sha": "13c3a3570c574433653c69ddcc3f7b03d4c3c1d6",
       "outside_design": 0,
       "subject": "fix(providers): refine Google created id diagnostics"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/source-6140b58a",
+      "path": "/var/tmp/loopino/loopino-p6-remediation-r50-yxYYWR2i/source-6140b58a",
       "sha": "6140b58a296dd70c1bfcb6ef7605ae4a8f275cb4",
       "outside_design": 0,
       "subject": "feat(providers): authorize isolated natural certification"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/source-6214e2bf",
+      "path": "/var/tmp/loopino/loopino-p6-remediation-r50-yxYYWR2i/source-6214e2bf",
       "sha": "6214e2bf7296fd6ed0e9e3abe0f351c2d5373954",
       "outside_design": 0,
       "subject": "fix(providers): diagnose Google live response failures"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/source-6b5749c5",
+      "path": "/var/tmp/loopino/loopino-p6-remediation-r50-yxYYWR2i/source-6b5749c5",
       "sha": "6b5749c5c98c947143a65a5f20c1f397f11a0db6",
       "outside_design": 0,
       "subject": "fix(providers): support stateless Google empty ids"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/source-cf369cec",
+      "path": "/var/tmp/loopino/loopino-p6-remediation-r50-yxYYWR2i/source-cf369cec",
       "sha": "cf369cecf3023b270ce969af1460ec2ab9a89d3c",
       "outside_design": 0,
       "subject": "fix(providers): serialize Antigravity session preparation"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/source-fd0aba0e",
+      "path": "/var/tmp/loopino/loopino-p6-remediation-r50-yxYYWR2i/source-fd0aba0e",
       "sha": "fd0aba0e05d35c06ec86270fdc74756262578cce",
       "outside_design": 0,
       "subject": "fix(providers): refine Google created diagnostics"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/source-fe92d954",
+      "path": "/var/tmp/loopino/loopino-p6-remediation-r50-yxYYWR2i/source-fe92d954",
       "sha": "fe92d9548f3c2ddb7f3879a88f7f24a727aced88",
       "outside_design": 0,
       "subject": "fix(providers): preserve Antigravity live failure stage"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-review-Ac8glue9/source",
+      "path": "/var/tmp/loopino/loopino-p6-review-Ac8glue9/source",
       "sha": "a2b8a1588c9a8dbefd2dcfa7eb5da4e53774138e",
       "outside_design": 0,
       "subject": "feat(agentic): harden hosted parity candidate"
     },
     {
-      "path": "/var/tmp/maverick/maverick-p6-settings-lab-7za9sh4q/source",
+      "path": "/var/tmp/loopino/loopino-p6-settings-lab-7za9sh4q/source",
       "sha": "c3857ebdc3a355efff054153662bfed190451740",
       "outside_design": 15,
       "subject": "test(certification-lab): verify cross-process fences and record the offline delta"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-full-r63-wEv2aQrm/source",
+      "path": "/var/tmp/loopino/openrouter-glm-full-r63-wEv2aQrm/source",
       "sha": "dc243a166bc22622cdd5c9c6128677ae294e6b3f",
       "outside_design": 0,
       "subject": "docs(mac): record v33 signed install"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-full-r64-kr5f6qjv/source",
+      "path": "/var/tmp/loopino/openrouter-glm-full-r64-kr5f6qjv/source",
       "sha": "d7ea154f1309d8aa11f7a4afc87987cda267579e",
       "outside_design": 0,
       "subject": "fix(providers): advance Google profile for hosted adapter 57"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-full-r65-rsO3qqFM/source",
+      "path": "/var/tmp/loopino/openrouter-glm-full-r65-rsO3qqFM/source",
       "sha": "ec047fff79f607e35f816571b87fa22861d32446",
       "outside_design": 0,
       "subject": "docs(agentic): align certification examples with suite 65"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-full-r66-jIRR8YdH/source",
+      "path": "/var/tmp/loopino/openrouter-glm-full-r66-jIRR8YdH/source",
       "sha": "900e2cc6d06738ee28ddff9fe2374ce6edfb2297",
       "outside_design": 0,
       "subject": "docs(agentic): advance hosted finalization candidate"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-full-r67-GsG2mnSz/source",
+      "path": "/var/tmp/loopino/openrouter-glm-full-r67-GsG2mnSz/source",
       "sha": "f19b0685350464551ad606d6775e8a15874de838",
       "outside_design": 0,
       "subject": "docs(agentic): advance GLM catalog candidate"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-r61-klxuslRf/source",
+      "path": "/var/tmp/loopino/openrouter-glm-r61-klxuslRf/source",
       "sha": "dc95cbb8212288d4748df63acfa0b40200791c36",
       "outside_design": 0,
       "subject": "feat(providers): replace OpenRouter agent with GLM 5.3 Flash"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-relace-r62-5x47q66X/source",
+      "path": "/var/tmp/loopino/openrouter-glm-relace-r62-5x47q66X/source",
       "sha": "e5c04ef4f4cbd1822c179df8891f67787707ced9",
       "outside_design": 0,
       "subject": "test(providers): bind Relace GLM accounting"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-glm-relace-r62-5x47q66X/source-head0c8f0e37",
+      "path": "/var/tmp/loopino/openrouter-glm-relace-r62-5x47q66X/source-head0c8f0e37",
       "sha": "0c8f0e37147cdd0980424fe055ac3f2d7442a0b9",
       "outside_design": 0,
       "subject": "docs(mac): record blocked storage-neutral install"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-r68-preflight-source-94cba18b-1789298257",
+      "path": "/var/tmp/loopino/openrouter-r68-preflight-source-94cba18b-1789298257",
       "sha": "94cba18bfdb42ba6432375f41a80c528cc2dfa68",
       "outside_design": 0,
       "subject": "Support bounded OpenRouter-only certification budgets"
     },
     {
-      "path": "/var/tmp/maverick/openrouter-r68-validation-2a1f8b62-1789297154",
+      "path": "/var/tmp/loopino/openrouter-r68-validation-2a1f8b62-1789297154",
       "sha": "2a1f8b62966cc2b87234f0de92ad3ebb94c84c9c",
       "outside_design": 0,
       "subject": "Productize OpenRouter natural certification release"
@@ -325,10 +325,10 @@
       "design"
     ],
     "empty_app_roots_removed": [],
-    "remaining_worktrees": "worktree /home/ubuntu/projects/maverick-v3\nHEAD 036552580d465e73b2ec27bba300796599539096\nbranch refs/heads/design\n\n",
+    "remaining_worktrees": "worktree /home/ubuntu/projects/loopino\nHEAD 036552580d465e73b2ec27bba300796599539096\nbranch refs/heads/design\n\n",
     "cache_only_app_roots_removed": [
       "gmail-app",
-      "maverick-monitor"
+      "loopino-monitor"
     ]
   }
 }

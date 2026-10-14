@@ -1641,7 +1641,7 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertIn("redacted by the CLI output profile", payload["detail"])
             self.assertIn("mail_send_approved", payload["detail"])
-            self.assertIn("MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full", payload["detail"])
+            self.assertIn("LOOPINO_RUNTIME_CLI_OUTPUT_PROFILE=full", payload["detail"])
 
     def test_draft_confirmation_token_is_consumed_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2246,11 +2246,11 @@ class MailServiceTest(unittest.TestCase):
 
     def test_mcp_draft_action_emits_data_event(self) -> None:
         events = app_events_for_action("mail_create_draft")
-        self.assertEqual(events, [{"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": "drafts"}])
+        self.assertEqual(events, [{"type": "loopino.app.data-changed", "owner_app_id": "mail", "resource": "drafts"}])
 
     def test_disconnect_action_emits_connection_event(self) -> None:
         events = app_events_for_action("connections.disconnect")
-        self.assertEqual(events, [{"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": "connections"}])
+        self.assertEqual(events, [{"type": "loopino.app.data-changed", "owner_app_id": "mail", "resource": "connections"}])
 
     def test_thread_mutations_publish_an_opaque_entity_hint(self) -> None:
         import hashlib
@@ -2264,7 +2264,7 @@ class MailServiceTest(unittest.TestCase):
         for action in ("attachments.get", "mail_get_attachment"):
             with self.subTest(action=action):
                 saved_events = app_events_for_action(action, {"fetch": {"status": "saved"}})
-                self.assertEqual(saved_events, [{"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": "threads"}])
+                self.assertEqual(saved_events, [{"type": "loopino.app.data-changed", "owner_app_id": "mail", "resource": "threads"}])
 
         for result in (
             None,
@@ -2334,7 +2334,7 @@ class MailServiceTest(unittest.TestCase):
                 {
                     "action": "connections.start_oauth",
                     "provider": "gmail",
-                    "redirect_uri": "https://maverick.local/app/mail/oauth/callback",
+                    "redirect_uri": "https://loopino.local/app/mail/oauth/callback",
                     "_app_secrets": {"gmail-oauth-client-id": "client-id"},
                 },
             )
@@ -2349,7 +2349,7 @@ class MailServiceTest(unittest.TestCase):
                 {
                     "action": "connections.start_oauth",
                     "provider": "gmail",
-                    "redirect_uri": "https://maverick.local/apps/mail/oauth/callback",
+                    "redirect_uri": "https://loopino.local/apps/mail/oauth/callback",
                     "_app_secrets": {"gmail-oauth-client-id": "client-id"},
                 },
             )
@@ -2375,7 +2375,7 @@ class MailServiceTest(unittest.TestCase):
                 {
                     "action": "connections.start_oauth",
                     "provider": "gmail",
-                    "redirect_uri": "https://maverick.local/apps/mail/oauth/callback",
+                    "redirect_uri": "https://loopino.local/apps/mail/oauth/callback",
                     "_app_secrets": {"gmail-oauth-client-id": "client-id"},
                 },
             )
@@ -3886,10 +3886,10 @@ class MailServiceTest(unittest.TestCase):
                         "email_thread_gmail_fixture_welcome",
                         connection_id,
                         "provider-fixture-welcome",
-                        "Welcome to Maverick Mail",
+                        "Welcome to Loopino Mail",
                         '[{"name":"Sender","email":"sender@example.com"},{"name":"Person","email":"person@example.com"}]',
                         now,
-                        "A native Maverick mail workspace with CLI, MCP, references, and local storage.",
+                        "A native Loopino mail workspace with CLI, MCP, references, and local storage.",
                         1,
                         1,
                         '["inbox", "starred"]',
@@ -4085,7 +4085,7 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("writeMailThreadDragData(event.dataTransfer", app_source)
         self.assertIn("event.dataTransfer.setDragImage(dragPreview, 22, 22)", app_source)
         self.assertIn("onDragStart={(event) => handleThreadDragStart(event, thread)}", app_source)
-        self.assertIn("application/x-maverick-mail-thread", drag_source)
+        self.assertIn("application/x-loopino-mail-thread", drag_source)
         self.assertIn("thread_id: thread.id", drag_source)
         self.assertIn("mail-thread-drag-preview__title", drag_source)
         self.assertIn('.thread-row[draggable="true"]', styles)
@@ -4114,7 +4114,7 @@ class MailServiceTest(unittest.TestCase):
         self.assertNotIn("private-email-grid", styles)
         self.assertIn("const PRIMARY_ACTION_LABEL = 'Connect Account';", footer_source)
         self.assertIn("add_account: true", footer_source)
-        self.assertIn("maverick.widget.open-app", footer_source)
+        self.assertIn("loopino.widget.open-app", footer_source)
         self.assertIn("mail-account-modal", app_source)
         self.assertIn("Open OAuth", app_source)
         self.assertIn("Open Vault", app_source)

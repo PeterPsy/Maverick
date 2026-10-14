@@ -4,7 +4,7 @@ import './styles/learning.css';
 import './styles/learning-tickets.css';
 import './styles/speech-settings.css';
 import './styles/navigation.css';
-import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
+import { readLoopinoAppFrameContext } from '@loopino/pwa-cache';
 import { createSpeechSynthesisController } from './speechSynthesisSettings';
 import { createComputerUseController } from './computerUseSettings';
 import { requestPersistenceStatusQuiet } from './persistenceStatus';
@@ -56,7 +56,7 @@ let workspaces: Workspace[] = [];
 let workspaceApps: WorkspaceApp[] = [];
 let persistence: PersistenceStatus | null = null;
 let platformSettings: PlatformSettings | null = null;
-let settingsWorkspaceId = readMaverickAppFrameContext()?.workspaceId || '';
+let settingsWorkspaceId = readLoopinoAppFrameContext()?.workspaceId || '';
 let settingsPanelState = createSettingsPanelState();
 const initialNavigationParams = Object.fromEntries(new URLSearchParams(window.location.search).entries());
 let selectedPageId: SettingsPageId = settingsPageIdFromParams(initialNavigationParams) || DEFAULT_SETTINGS_PAGE_ID;
@@ -169,7 +169,7 @@ function publishSelectedPage(page: SettingsPage) {
   lastPublishedPageId = page.id;
   window.parent.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'settings',
       selection: { page_id: page.id }
     },
@@ -184,7 +184,7 @@ function publishSelectedUser(user: User | undefined) {
   lastPublishedUserId = user.user_id;
   window.parent.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'settings',
       selection: { user_id: user.user_id }
     },
@@ -198,7 +198,7 @@ function publishUserDataChanged() {
   }
   window.parent.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: 'settings',
       resource: 'users'
     },
@@ -396,7 +396,7 @@ function publishRuntimeCleanupChanged(payload: RuntimeCleanupPayload) {
   }
   window.parent.postMessage(
     {
-      type: 'maverick.app.data-changed',
+      type: 'loopino.app.data-changed',
       owner_app_id: 'chat',
       resource: 'threads'
     },
@@ -405,7 +405,7 @@ function publishRuntimeCleanupChanged(payload: RuntimeCleanupPayload) {
   payload.deleted_thread_ids.forEach((threadId) => {
     window.parent.postMessage(
       {
-        type: 'maverick.app.data-changed',
+        type: 'loopino.app.data-changed',
         owner_app_id: 'chat',
         resource: 'threads',
         deleted_thread_id: threadId
@@ -421,7 +421,7 @@ function publishAppDependenciesChanged(consumerAppId: string, dependencies: AppD
   }
   window.parent.postMessage(
     {
-      type: 'maverick.app.dependencies-changed',
+      type: 'loopino.app.dependencies-changed',
       app_id: consumerAppId,
       status: dependencies.status
     },
@@ -431,7 +431,7 @@ function publishAppDependenciesChanged(consumerAppId: string, dependencies: AppD
 
 async function logoutFromSettings() {
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage({ type: 'maverick.shell.logout' }, "*");
+    window.parent.postMessage({ type: 'loopino.shell.logout' }, "*");
     return;
   }
   await logout();

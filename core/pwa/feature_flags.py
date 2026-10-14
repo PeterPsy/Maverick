@@ -9,17 +9,17 @@ import re
 from core.pwa.rollout import pwa_rollout_allows
 
 
-MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2 = "MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2"
-MAVERICK_FEATURE_PWA_DATA_CACHE = "MAVERICK_FEATURE_PWA_DATA_CACHE"
-MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE = "MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE"
-MAVERICK_FEATURE_PWA_APP_CACHE_PREFIX = "MAVERICK_FEATURE_PWA_APP_CACHE_"
+LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2 = "LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2"
+LOOPINO_FEATURE_PWA_DATA_CACHE = "LOOPINO_FEATURE_PWA_DATA_CACHE"
+LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE = "LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE"
+LOOPINO_FEATURE_PWA_APP_CACHE_PREFIX = "LOOPINO_FEATURE_PWA_APP_CACHE_"
 
 _DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
 _ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
 _DEFAULTS = {
-    MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2: True,
-    MAVERICK_FEATURE_PWA_DATA_CACHE: False,
-    MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE: False,
+    LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2: True,
+    LOOPINO_FEATURE_PWA_DATA_CACHE: False,
+    LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE: False,
 }
 
 
@@ -52,13 +52,13 @@ def app_data_cache_enabled(
     """Return whether both the global data-cache gate and one app gate are open."""
     normalized_app_id = re.sub(r"[^A-Za-z0-9]", "_", str(app_id or "").strip()).upper()
     if not normalized_app_id or not _feature_enabled_for_cohort(
-        MAVERICK_FEATURE_PWA_DATA_CACHE,
+        LOOPINO_FEATURE_PWA_DATA_CACHE,
         environment=environment,
         user_id=user_id,
         workspace_id=workspace_id,
     ):
         return False
-    app_flag = f"{MAVERICK_FEATURE_PWA_APP_CACHE_PREFIX}{normalized_app_id}"
+    app_flag = f"{LOOPINO_FEATURE_PWA_APP_CACHE_PREFIX}{normalized_app_id}"
     return _feature_enabled_for_cohort(
         app_flag,
         environment=environment,
@@ -76,10 +76,10 @@ def public_pwa_config(
 ) -> dict[str, object]:
     """Project only redaction-safe browser rollout state for registration/recovery."""
     return {
-        "schema": "maverick.pwa-config.v2",
+        "schema": "loopino.pwa-config.v2",
         "service_worker": {
             "enabled": _feature_enabled_for_cohort(
-                MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2,
+                LOOPINO_FEATURE_PWA_SERVICE_WORKER_V2,
                 environment=environment,
                 user_id=user_id,
                 workspace_id=workspace_id,
@@ -88,13 +88,13 @@ def public_pwa_config(
         },
         "features": {
             "data_cache": _feature_enabled_for_cohort(
-                MAVERICK_FEATURE_PWA_DATA_CACHE,
+                LOOPINO_FEATURE_PWA_DATA_CACHE,
                 environment=environment,
                 user_id=user_id,
                 workspace_id=workspace_id,
             ),
             "storage_file_cache": _feature_enabled_for_cohort(
-                MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE,
+                LOOPINO_FEATURE_PWA_STORAGE_FILE_CACHE,
                 environment=environment,
                 user_id=user_id,
                 workspace_id=workspace_id,

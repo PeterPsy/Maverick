@@ -1,6 +1,6 @@
 # Self-Hosted Evaluation
 
-This document describes the intended first public self-hosted evaluation posture for Maverick.
+This document describes the intended first public self-hosted evaluation posture for Loopino.
 
 It is not a production deployment guide.
 
@@ -34,6 +34,6 @@ If you want a repeatable service-like evaluation environment, use:
 
 - `docs/deployment/systemd_nginx.md`
 - `scripts/deploy/systemd/*`
-- `scripts/deploy/nginx/maverick.example.conf`
+- `scripts/deploy/nginx/loopino.example.conf`
 
 Treat those files as evaluation infrastructure, not as proof of production readiness.

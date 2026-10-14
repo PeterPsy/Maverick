@@ -94,7 +94,7 @@ export function App() {
 
   useEffect(() => {
     void refresh(initialAgentTypeId()).catch((caught: Error) => setError(caught.message));
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'agents' }, '*');
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'agents' }, '*');
   }, []);
 
   useEffect(() => {
@@ -113,13 +113,13 @@ export function App() {
         type?: string;
         dependencies?: AppDependenciesPayload;
       };
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'agents')) {
+      if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'agents')) {
         void handleNavigationParams(payload.params || {});
-      } else if (payload.type === 'maverick.app.dependencies' && payload.app_id === 'agents') {
+      } else if (payload.type === 'loopino.app.dependencies' && payload.app_id === 'agents') {
         void refreshSkills(payload.dependencies).catch((caught: Error) => setError(caught.message));
-      } else if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'agents' && payload.resource === 'configuration') {
+      } else if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'agents' && payload.resource === 'configuration') {
         void refresh(selectedIdRef.current).catch((caught: Error) => setError(caught.message));
-      } else if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === skillProviderAppId && payload.resource === 'skills') {
+      } else if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === skillProviderAppId && payload.resource === 'skills') {
         void refreshSkills().catch((caught: Error) => setError(caught.message));
       }
     }

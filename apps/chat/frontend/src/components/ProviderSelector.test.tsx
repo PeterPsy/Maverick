@@ -33,10 +33,10 @@ const providerOptions: ProviderItem[] = [
     provider_role: "runtime_engine",
     default_model_family: "gemini-3.6-flash",
     workspace_profile_binding_id: "binding-google",
-    execution_family: "maverick_agent",
+    execution_family: "loopino_agent",
     selectable: true,
     provider_detail: "Provider: Google AI Studio · Destination: Google AI Studio API",
-    profile_detail: "Runtime: maverick-tool-loop · google-ai-studio/gemini-3.6-flash",
+    profile_detail: "Runtime: loopino-tool-loop · google-ai-studio/gemini-3.6-flash",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "high", label: "High", description: null },
@@ -50,10 +50,10 @@ const providerOptions: ProviderItem[] = [
     provider_role: "runtime_engine",
     default_model_family: "z-ai/glm-5.3-flash",
     workspace_profile_binding_id: "binding-openrouter",
-    execution_family: "maverick_agent",
+    execution_family: "loopino_agent",
     selectable: true,
     provider_detail: "Provider: OpenRouter · Destination: OpenRouter via Relace",
-    profile_detail: "Runtime: maverick-tool-loop · openrouter/z-ai/glm-5.3-flash",
+    profile_detail: "Runtime: loopino-tool-loop · openrouter/z-ai/glm-5.3-flash",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "max", label: "Maximum", description: null },
@@ -149,7 +149,7 @@ describe("ProviderSelector", () => {
     expect(element.querySelectorAll(".chatapp-provider-menu__meta")).toHaveLength(0);
     expect(element.textContent).not.toContain("Relace");
     expect(element.textContent).not.toContain("Google AI Studio");
-    expect(element.textContent).not.toContain("maverick-tool-loop");
+    expect(element.textContent).not.toContain("loopino-tool-loop");
     expect(element.textContent).not.toContain("Text-only");
   });
 

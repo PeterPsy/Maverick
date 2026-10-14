@@ -29,9 +29,9 @@ class InterAgentApiF4Fixture(AppReferenceApiTestSupport):
         with patch.dict(
             "os.environ",
             {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
             },
         ):
             return bootstrap_platform_state(start_path=repo_root)
@@ -112,7 +112,7 @@ if __name__ == "__main__":
                 name="Chat",
                 version="0.2.0",
                 description="Chat test app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     requires=[
                         build_required_interface_declaration(
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                 name="Agents",
                 version="0.1.0",
                 description="Agents test app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     entrypoints=build_app_entrypoints(backend="backend/app_backend.py"),
                     requires=(
@@ -164,7 +164,7 @@ if __name__ == "__main__":
                 name="Skills",
                 version="0.1.0",
                 description="Skills test app.",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(
                     provides=[
                         build_provided_interface_declaration(
@@ -187,7 +187,7 @@ if __name__ == "__main__":
                 name="Storage",
                 version="0.1.0",
                 description="Workspace files",
-                publisher="maverick",
+                publisher="loopino",
                 contract=build_app_contract(),
             ),
         )

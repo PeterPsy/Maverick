@@ -1,4 +1,4 @@
-"""Data models for the official Maverick app SDK."""
+"""Data models for the official Loopino app SDK."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ AppSdkTargetKind = Literal["workspace_local", "platform"]
 
 @dataclass(frozen=True)
 class AppSdkCreateRequest:
-    """Input for generating one Maverick app source tree."""
+    """Input for generating one Loopino app source tree."""
 
     app_id: str
     template_id: AppSdkTemplateId

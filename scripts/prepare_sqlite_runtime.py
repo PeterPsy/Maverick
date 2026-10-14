@@ -28,7 +28,7 @@ def main() -> None:
     args = parser.parse_args()
     with urllib.request.urlopen(SOURCE_URL, timeout=60) as response:
         archive = response.read(16 * 1024 * 1024)
-    with tempfile.TemporaryDirectory(prefix='maverick-sqlite-build-') as scratch:
+    with tempfile.TemporaryDirectory(prefix='loopino-sqlite-build-') as scratch:
         root = Path(scratch)
         with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
             source = bundle.read('sqlite-amalgamation-3510300/sqlite3.c')

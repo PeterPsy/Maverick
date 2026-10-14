@@ -10,7 +10,7 @@ describe("AppFrameHost shell theme bridge", () => {
     const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
 
     expect(source).toContain("urlWithShellThemeSearchParams");
-    expect(source).toContain("postMaverickShellTheme");
+    expect(source).toContain("postLoopinoShellTheme");
     expect(source).toContain('theme: shellTheme');
   });
 });
@@ -18,7 +18,7 @@ describe("AppFrameHost shell theme bridge", () => {
 describe("AppFrameHost app-scoped runtime remount", () => {
   it("remounts only the owner app after a sidecar runtime change", () => {
     const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
-    expect(source).toContain('"maverick.app.runtime-changed"');
+    expect(source).toContain('"loopino.app.runtime-changed"');
     expect(source).toContain("[eventMountKey]");
     expect(source).toContain("event.owner_app_id");
   });
@@ -41,7 +41,7 @@ describe("AppFrameHost Storage file-cache boundary", () => {
     expect(source).toContain("new StorageFileCacheBroker");
     expect(source).toContain("fileCacheBrokerRef.current?.handleWindowMessage");
     expect(source).toContain("frameRefs.current.storage ?? null");
-    expect(source).toContain("isMaverickFrameMessage");
+    expect(source).toContain("isLoopinoFrameMessage");
     expect(source).toContain("broker.dispose()");
   });
 });
@@ -70,7 +70,7 @@ describe("AppFrameHost structured data-cache boundary", () => {
   it("uses the owner-verified broker as the only structured-cache invalidation path", () => {
     const source = readFileSync(resolve(currentDir, "../AppShell.tsx"), "utf8");
 
-    expect(source).toContain("isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)");
+    expect(source).toContain("isLoopinoOwnerMessage(event, payload.owner_app_id, frameScope)");
     expect(source).not.toContain("shellCacheLifecycle.handleDataChanged(");
   });
 });

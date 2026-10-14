@@ -36,15 +36,15 @@ class SidecarControlError(AppHostingError):
     """Typed failure returned by the live Core control channel."""
 
     def __init__(self, code: str, phase: str) -> None:
-        super().__init__("Live Maverick sidecar control failed.")
+        super().__init__("Live Loopino sidecar control failed.")
         self.code = code
         self.phase = phase
 
 
 def sidecar_control_socket_path(repository_root: Path) -> Path:
     repository = Path(repository_root).resolve(strict=True)
-    configured = os.environ.get("MAVERICK_SIDECAR_CONTROL_SOCKET", "").strip()
-    path = Path(configured) if configured else repository / "tmp/maverick-sidecar-control.sock"
+    configured = os.environ.get("LOOPINO_SIDECAR_CONTROL_SOCKET", "").strip()
+    path = Path(configured) if configured else repository / "tmp/loopino-sidecar-control.sock"
     if not path.is_absolute():
         raise SidecarControlError("runtime_binding_invalid", "sidecar_control_resolve")
     return path
@@ -60,7 +60,7 @@ def start_sidecar_control_server(state, *, shutdown_controller) -> Thread | None
         thread = Thread(
             target=_serve,
             kwargs={"state": state, "path": path, "shutdown_controller": shutdown_controller},
-            name="maverick-sidecar-control",
+            name="loopino-sidecar-control",
             daemon=True,
         )
         _SERVERS[path] = thread

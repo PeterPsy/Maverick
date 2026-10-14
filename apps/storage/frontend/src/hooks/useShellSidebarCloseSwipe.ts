@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from '../lib/sidebarSwipe';
 
-const CLOSE_SIDEBAR_MESSAGE = { type: 'maverick.shell.sidebar.close' };
+const CLOSE_SIDEBAR_MESSAGE = { type: 'loopino.shell.sidebar.close' };
 
 export function useShellSidebarCloseSwipe(enabled: boolean) {
   const startPointRef = useRef<SidebarSwipePoint | null>(null);

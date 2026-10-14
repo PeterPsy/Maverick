@@ -170,7 +170,7 @@ for (const theme of ["dark", "light"]) {
   test(`utility rows stay readable and within a narrow ${theme} viewport`, async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     const composer = await openFixture(page, 320);
-    await page.evaluate((value) => { document.documentElement.dataset.maverickTheme = value; }, theme);
+    await page.evaluate((value) => { document.documentElement.dataset.loopinoTheme = value; }, theme);
     await composer.getByRole("button", { name: "Composer utilities" }).click();
     const panel = composer.getByRole("group", { name: "Composer utility controls" });
     const bounds = (await panel.boundingBox())!;
@@ -186,21 +186,21 @@ for (const theme of ["dark", "light"]) {
       await expect(row.locator(".chatapp-composer-utilities__copy")).toBeVisible();
     }
     await expect(panel.getByRole("button", { name: "Close utilities" })).toBeInViewport();
-    if (process.env.MAVERICK_CHAT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-chat-utilities-${theme}.png` });
+    if (process.env.LOOPINO_CHAT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/loopino-chat-utilities-${theme}.png` });
   });
 }
 
 async function installMobileShellChrome(page: Page) {
   await page.evaluate(() => {
-    document.documentElement.style.setProperty("--maverick-shell-mobile-content-top-offset", "91px");
+    document.documentElement.style.setProperty("--loopino-shell-mobile-content-top-offset", "91px");
     const header = document.createElement("header");
     header.dataset.testid = "shell-chrome";
     header.setAttribute("aria-hidden", "true");
-    header.textContent = "☰  Maverick                       +";
+    header.textContent = "☰  Loopino                       +";
     Object.assign(header.style, {
       position: "fixed", top: "47px", left: "0", right: "0", height: "44px",
       zIndex: "1001", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "var(--maverick-bg)", color: "var(--maverick-text)",
+      background: "var(--loopino-bg)", color: "var(--loopino-text)",
     });
     document.body.appendChild(header);
   });
@@ -212,7 +212,7 @@ for (const width of [320, 390, 1280]) {
     test(`token usage fits ${width}px in ${theme} mode and returns to its trigger`, async ({ page }) => {
       await page.setViewportSize({ width, height: 700 });
       const composer = await openFixture(page, width, false, 1, false, true);
-      await page.evaluate((value) => { document.documentElement.dataset.maverickTheme = value; }, theme);
+      await page.evaluate((value) => { document.documentElement.dataset.loopinoTheme = value; }, theme);
       if (width <= 979) await installMobileShellChrome(page);
       const utilities = composer.getByRole("button", { name: "Composer utilities" });
       if (width <= 720) await utilities.click();
@@ -242,9 +242,9 @@ for (const width of [320, 390, 1280]) {
       await expect(close).toBeFocused();
       await page.keyboard.press("Shift+Tab");
       await expect(close).toBeFocused();
-      if (process.env.MAVERICK_CHAT_PANEL_SCREENSHOTS && width !== 320) {
+      if (process.env.LOOPINO_CHAT_PANEL_SCREENSHOTS && width !== 320) {
         await dialog.locator(".chatapp-usage-modal__context").scrollIntoViewIfNeeded();
-        await page.screenshot({ path: `/tmp/maverick-chat-token-usage-${width}-${theme}.png` });
+        await page.screenshot({ path: `/tmp/loopino-chat-token-usage-${width}-${theme}.png` });
       }
       await page.keyboard.press("Escape");
       await expect(dialog).toBeHidden();

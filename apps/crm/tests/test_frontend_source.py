@@ -35,7 +35,7 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertNotIn('menuOpen', app)
         self.assertNotIn('Open navigation', VIEWS_TSX.read_text(encoding='utf-8'))
         self.assertIn('WorkspaceSidebar', widget)
-        self.assertIn('isExactMaverickParentMessage', widget)
+        self.assertIn('isExactLoopinoParentMessage', widget)
         self.assertIn("view: 'sidebar'", widget)
         self.assertNotIn('window.parent.matchMedia', widget)
 
@@ -48,7 +48,7 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertIn('aria-label="Light mode"', source)
         self.assertIn('aria-label="App switching unavailable"', source)
         self.assertIn('className="crm-public-mobile-header__logo"', source)
-        self.assertIn("maverick:crm-public:theme", source)
+        self.assertIn("loopino:crm-public:theme", source)
         self.assertIn("sidebar-logo.svg", source)
         self.assertIn("sidebar-logo-black.svg", source)
         self.assertNotIn("SidebarAppRail", source)

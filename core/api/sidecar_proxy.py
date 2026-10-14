@@ -134,7 +134,7 @@ def _ensure_sidecar_spawn_threads() -> tuple[Thread, ...]:
         while len(_SIDECAR_SPAWN_THREADS) < _SIDECAR_SPAWN_WORKER_COUNT:
             thread = Thread(
                 target=_sidecar_spawn_worker,
-                name=f"maverick-sidecar-process-owner-{len(_SIDECAR_SPAWN_THREADS) + 1}",
+                name=f"loopino-sidecar-process-owner-{len(_SIDECAR_SPAWN_THREADS) + 1}",
                 daemon=True,
             )
             _SIDECAR_SPAWN_THREADS.append(thread)
@@ -1950,17 +1950,17 @@ def _sidecar_env(
     if set(prepared) & set(env):
         raise AppHostingError("Sidecar host preparation attempted to replace static environment.")
     env.update(prepared)
-    env["MAVERICK_APP_ID"] = app_id
-    env["MAVERICK_WORKSPACE_ID"] = workspace_id
-    env["MAVERICK_SIDECAR_ID"] = sidecar.service_id
-    env["MAVERICK_SIDECAR_PORT"] = str(port)
+    env["LOOPINO_APP_ID"] = app_id
+    env["LOOPINO_WORKSPACE_ID"] = workspace_id
+    env["LOOPINO_SIDECAR_ID"] = sidecar.service_id
+    env["LOOPINO_SIDECAR_PORT"] = str(port)
     if sidecar.model_access is not None:
-        env["MAVERICK_MODEL_ACCESS_STATE"] = (
+        env["LOOPINO_MODEL_ACCESS_STATE"] = (
             "available" if model_access_lease is not None else "unavailable"
         )
         if model_access_lease is not None:
-            env["MAVERICK_MODEL_ACCESS_SOCKET"] = model_access_lease.sandbox_socket_path
-            env["MAVERICK_MODEL_ACCESS_TOKEN"] = model_access_lease.token
+            env["LOOPINO_MODEL_ACCESS_SOCKET"] = model_access_lease.sandbox_socket_path
+            env["LOOPINO_MODEL_ACCESS_TOKEN"] = model_access_lease.token
     return env
 
 

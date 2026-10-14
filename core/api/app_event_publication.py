@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 
 LOGGER = logging.getLogger(__name__)
-ALLOWED_APP_EVENT_TYPES = {"maverick.app.data-changed"}
+ALLOWED_APP_EVENT_TYPES = {"loopino.app.data-changed"}
 
 
 def publish_declared_app_events(
@@ -33,7 +33,7 @@ def publish_declared_app_events(
     for event in events:
         if not isinstance(event, dict):
             continue
-        event_type = str(event.get("type") or "maverick.app.data-changed").strip()
+        event_type = str(event.get("type") or "loopino.app.data-changed").strip()
         resource = str(event.get("resource") or "").strip()
         if event_type not in ALLOWED_APP_EVENT_TYPES:
             LOGGER.warning("Ignoring undeclared app event type `%s` from `%s`.", event_type, app_id)

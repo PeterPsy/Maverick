@@ -13,7 +13,7 @@ on:
         required: true
         type: string
       evidence_json:
-        description: Redaction-reviewed maverick.pwa-cache-device-regression.v1 JSON
+        description: Redaction-reviewed loopino.pwa-cache-device-regression.v1 JSON
         required: false
         type: string
       waiver_json:
@@ -27,7 +27,7 @@ on:
         required: true
         type: string
       evidence_json:
-        description: Redaction-reviewed maverick.pwa-cache-device-regression.v1 JSON
+        description: Redaction-reviewed loopino.pwa-cache-device-regression.v1 JSON
         required: false
         type: string
       waiver_json:

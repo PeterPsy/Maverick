@@ -217,9 +217,9 @@
 }
 
 .folder-lightbox-pill[data-kind="supporting-frontend"] {
-  background: var(--maverick-text-on-accent);
-  border-color: var(--maverick-accent);
-  color: var(--maverick-accent);
+  background: var(--loopino-text-on-accent);
+  border-color: var(--loopino-accent);
+  color: var(--loopino-accent);
 }
 
 .folder-lightbox-footer {
@@ -285,10 +285,10 @@
 
 .folder-lightbox-primary {
   align-items: center;
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
   border: 0;
   border-radius: 14px;
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
   display: inline-flex;
   font-size: 13px;
   font-weight: 400;

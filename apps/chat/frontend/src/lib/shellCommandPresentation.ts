@@ -143,7 +143,7 @@ function gitPresentation(tokens: string[]): CommandPresentation {
 
 function genericCommandPresentation(tokens: string[]): CommandPresentation {
   const executable = executableName(tokens[0] || "command");
-  const displayName = executable === "maverick" ? "Maverick command" : cleanFragment(executable || "command");
+  const displayName = executable === "loopino" ? "Loopino command" : cleanFragment(executable || "command");
   return presentation(10, `Running ${displayName}`, `Ran ${displayName}`, `${capitalize(displayName)} failed`, `Ready to run ${displayName}`);
 }
 

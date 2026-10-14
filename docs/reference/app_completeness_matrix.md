@@ -2,7 +2,7 @@
 
 Date: 2026-04-24
 
-This matrix tracks the repository-wide completeness baseline for first-party Maverick apps. The baseline is intentionally narrower than feature parity: it ensures each app has aligned contract metadata, README coverage, and automated smoke coverage, while documenting intentional omissions instead of leaving them implicit.
+This matrix tracks the repository-wide completeness baseline for first-party Loopino apps. The baseline is intentionally narrower than feature parity: it ensures each app has aligned contract metadata, README coverage, and automated smoke coverage, while documenting intentional omissions instead of leaving them implicit.
 
 | App | README | Smoke Coverage | Contract Notes |
 | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ This matrix tracks the repository-wide completeness baseline for first-party Mav
 | `checklist` | yes | app-local contract tests | Repository reference app for complete workspace-stateful contract coverage. |
 | `crm` | yes | app-local contract tests plus frontend smoke coverage | Forkable source-available platform app with frontend/backend, CLI/MCP, sidebar widget, CRM references, standard view state, SQLite storage, export/import hooks, and optional Mail/Calendar/Storage provider requirements declared. |
 | `developer-kit` | yes | repo-wide baseline | Frontend-only by design; uses the core-owned `/api/app-sdk` surface instead of app-owned backend, CLI, or MCP. |
-| `design-studio` | yes | app-local, ASGI confinement, real OCI/Chromium WP10 | Source-available sandbox app with frontend/backend, CLI/MCP, lifecycle hooks, canonical `design_project` references, Storage import/export, bundled `design-studio-ops`, pinned OpenDesign 0.16.1 OCI import/materialization, isolated browser origin, generic runtime SSE/cancel/recovery bridge, and a redaction-safe 14-scenario product proof plus 24-criterion evidence map. Terminal, Local CLI, host-folder import, and direct provider generation remain intentionally outside the sandbox product boundary; Maverick-wide production blockers remain open. |
+| `design-studio` | yes | app-local, ASGI confinement, real OCI/Chromium WP10 | Source-available sandbox app with frontend/backend, CLI/MCP, lifecycle hooks, canonical `design_project` references, Storage import/export, bundled `design-studio-ops`, pinned OpenDesign 0.16.1 OCI import/materialization, isolated browser origin, generic runtime SSE/cancel/recovery bridge, and a redaction-safe 14-scenario product proof plus 24-criterion evidence map. Terminal, Local CLI, host-folder import, and direct provider generation remain intentionally outside the sandbox product boundary; Loopino-wide production blockers remain open. |
 | `docs-studio` | yes | repo-wide baseline | Documentation workspace app with declared backend, CLI, MCP, references, view state, and docs-owned storage paths. |
 | `document-generator` | yes | repo-wide baseline plus app-local coverage | Bundled `document-generator-docs` skill, generated-document references, Docling-backed Markdown conversion, CLI/MCP descriptor sidecars, and standard job view state are declared. |
 | `dynamic-views` | yes | repo-wide baseline | Bundled `dynamic-views` skill, dynamic-view references, standard library view state, and chat widget are declared. |

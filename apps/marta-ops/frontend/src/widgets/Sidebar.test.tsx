@@ -9,7 +9,7 @@ const socket = vi.hoisted(() => ({
   reconnect: () => {},
 }));
 vi.mock("../api", () => ({ callBackend: backend }));
-vi.mock("@maverick/pwa-cache", async (importActual) => ({
+vi.mock("@loopino/pwa-cache", async (importActual) => ({
   ...(await importActual<object>()),
   connectAppEventSocket: (
     onMessage: typeof socket.onMessage,
@@ -29,7 +29,7 @@ const summary = {
   receivables: 5,
   overdue_payments: 1,
 };
-type ShellWindow = Window & { __MAVERICK_PLATFORM_ORIGIN__?: string };
+type ShellWindow = Window & { __LOOPINO_PLATFORM_ORIGIN__?: string };
 function shellMessage(data: unknown, eventOrigin = origin) {
   fireEvent(
     window,
@@ -42,7 +42,7 @@ function context(
   mobile = false,
 ) {
   shellMessage({
-    type: "maverick.widget.context-changed",
+    type: "loopino.widget.context-changed",
     context: {
       owner_app_id: "marta-ops",
       widget_id: widget,
@@ -54,10 +54,10 @@ function context(
 }
 beforeEach(() => {
   backend.mockReset().mockResolvedValue({ summary });
-  (window as ShellWindow).__MAVERICK_PLATFORM_ORIGIN__ = origin;
+  (window as ShellWindow).__LOOPINO_PLATFORM_ORIGIN__ = origin;
 });
 afterEach(() => {
-  delete (window as ShellWindow).__MAVERICK_PLATFORM_ORIGIN__;
+  delete (window as ShellWindow).__LOOPINO_PLATFORM_ORIGIN__;
   window.history.replaceState({}, "", "/");
 });
 
@@ -76,7 +76,7 @@ it("shows bounded live counts, opens a quick filter and closes the mobile sideba
   fireEvent.click(screen.getByRole("button", { name: /Da approvare/ }));
   expect(post).toHaveBeenCalledWith(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: "marta-ops",
       params: {
         app_page: "deliveries",
@@ -87,12 +87,12 @@ it("shows bounded live counts, opens a quick filter and closes the mobile sideba
     origin,
   );
   expect(post).toHaveBeenCalledWith(
-    { type: "maverick.shell.sidebar.close" },
+    { type: "loopino.shell.sidebar.close" },
     origin,
   );
   backend.mockResolvedValue({ summary: { ...summary, open_tasks: 3 } });
   socket.onMessage({
-    type: "maverick.app.data-changed",
+    type: "loopino.app.data-changed",
     owner_app_id: "marta-ops",
     resource: "state",
   });
@@ -103,7 +103,7 @@ it("keeps the current selection when mobile layout context repeats old route par
   render(<MartaOpsSidebar />);
   context({ app_page: "deliveries", delivery_filter: "approval" });
   shellMessage({
-    type: "maverick.app.selection-changed",
+    type: "loopino.app.selection-changed",
     owner_app_id: "marta-ops",
     selection: {
       app_page: "deliveries",
@@ -122,7 +122,7 @@ it("keeps the current selection when mobile layout context repeats old route par
   ).toBe("false");
   shellMessage(
     {
-      type: "maverick.app.selection-changed",
+      type: "loopino.app.selection-changed",
       owner_app_id: "marta-ops",
       selection: { app_page: "contacts" },
     },
@@ -211,7 +211,7 @@ it("uses the current footer action for clicks and trusted mobile header invokes"
     ).toBe(false),
   );
   const invoke = {
-    type: "maverick.widget.primary-action.invoke",
+    type: "loopino.widget.primary-action.invoke",
     owner_app_id: "marta-ops",
     widget_id: "marta-ops-sidebar-footer",
   };
@@ -222,7 +222,7 @@ it("uses the current footer action for clicks and trusted mobile header invokes"
   shellMessage(invoke);
   expect(post).toHaveBeenCalledWith(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: "marta-ops",
       params: {
         app_page: "contacts",
@@ -236,7 +236,7 @@ it("uses the current footer action for clicks and trusted mobile header invokes"
   fireEvent.click(screen.getByRole("button", { name: "Nuova idea" }));
   expect(post).toHaveBeenLastCalledWith(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: "marta-ops",
       params: {
         app_page: "ideas",

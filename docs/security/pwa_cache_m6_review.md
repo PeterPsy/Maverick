@@ -1,7 +1,7 @@
 # PWA Cache M6 Security Review: XSS And Data Remanence
 
 Status: implementation review completed 2026-09-05. This review covers the M6
-cache boundary only. It does not change Maverick's experimental pre-release
+cache boundary only. It does not change Loopino's experimental pre-release
 posture, approve production data, or satisfy a resource-specific privacy or
 physical-device release gate.
 
@@ -106,7 +106,7 @@ decision approves the specific bounded resources in the completion inventory,
 not arbitrary private payloads. Remaining release conditions are explicit
 rather than waived: current candidate-bound physical Safari/Home Screen/Dock
 evidence, controlled rollout and rollback execution, and
-Maverick's wider production-readiness blockers. The implementation must be
+Loopino's wider production-readiness blockers. The implementation must be
 reviewed again if a new data class, storage namespace, broker action, retrying
 mutation, or persistent telemetry dimension is introduced.
 

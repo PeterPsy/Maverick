@@ -57,7 +57,7 @@ class CodexComputerActor:
         self.cancelled = self.transport.closed
         try:
             initialized = _send_request(self.runtime, "initialize", {
-                "clientInfo": {"name": "maverick-computer-actor", "version": "1.0"},
+                "clientInfo": {"name": "loopino-computer-actor", "version": "1.0"},
                 "capabilities": {"experimentalApi": True},
             }, timeout=20)
             reported_home = str(initialized.get("codexHome") or "")

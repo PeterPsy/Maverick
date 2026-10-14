@@ -19,7 +19,7 @@ function isMobileLayoutViewport() {
 function openChecklistInShell() {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'checklist',
       params: {
         app_page: 'agent-plans'
@@ -28,7 +28,7 @@ function openChecklistInShell() {
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 

@@ -54,16 +54,16 @@ test("updated calendar sheets, long codes and rectangular logos remain visible",
       notifications = rows;
       assert.ok(socket, "Notification event socket is connected");
       socket.send(JSON.stringify({
-          type: "maverick.app.data-changed",
+          type: "loopino.app.data-changed",
           owner_app_id: "chat",
           resource: "notifications",
           workspace_id: "default",
       }));
     };
     const screenshot = async (name) => {
-      if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR)
+      if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR)
         await page.screenshot({
-          path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, name),
+          path: resolve(process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR, name),
         });
     };
     await page.goto(`${origin}/app/canvas`);

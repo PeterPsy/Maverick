@@ -30,7 +30,7 @@ from core.model_access.models import (
 
 class _ForbiddenRuntimeStore:
     def __getattr__(self, name):
-        raise AssertionError(f"model access consulted Maverick runtime state: {name}")
+        raise AssertionError(f"model access consulted Loopino runtime state: {name}")
 
 
 class _ProviderStore:
@@ -197,8 +197,8 @@ class ModelAccessBrokerTests(unittest.TestCase):
         environment = patch.dict(
             os.environ,
             {
-                "MAVERICK_MODEL_ACCESS_CODEX_BIN": str(codex_executable),
-                "MAVERICK_MODEL_ACCESS_CODEX_HOME": str(codex_home),
+                "LOOPINO_MODEL_ACCESS_CODEX_BIN": str(codex_executable),
+                "LOOPINO_MODEL_ACCESS_CODEX_HOME": str(codex_home),
             },
             clear=False,
         )
@@ -251,10 +251,10 @@ class ModelAccessBrokerTests(unittest.TestCase):
         self.assertEqual(payload["object"], "list")
         self.assertEqual(payload["data"], [{"id": "model/exact", "object": "model", "owned_by": "openrouter"}])
 
-    def test_codex_auth_source_ignores_maverick_runtime_homes(self) -> None:
+    def test_codex_auth_source_ignores_loopino_runtime_homes(self) -> None:
         runtime_home = self.root / "workspaces/default/runtime/sessions/private/codex-home/.codex"
-        with patch.dict(os.environ, {"MAVERICK_CODEX_HOME": str(runtime_home)}, clear=False):
-            os.environ.pop("MAVERICK_MODEL_ACCESS_CODEX_HOME", None)
+        with patch.dict(os.environ, {"LOOPINO_CODEX_HOME": str(runtime_home)}, clear=False):
+            os.environ.pop("LOOPINO_MODEL_ACCESS_CODEX_HOME", None)
             resolved = resolve_codex_source_home()
 
         self.assertEqual(resolved, Path.home() / ".codex")
@@ -298,22 +298,22 @@ class ModelAccessBrokerTests(unittest.TestCase):
         executor = _RecordingCliExecutor()
         broker, lease = self._start_broker(cli_executor=executor)
         argv = ("exec", "--json", "--skip-git-repo-check", "--model", "gpt-test")
-        prompt = b"OpenDesign-composed prompt, with no Maverick context.\n"
+        prompt = b"OpenDesign-composed prompt, with no Loopino context.\n"
         response = _request(
             broker.socket_path,
             method="POST",
-            path="/maverick/v1/cli/codex/exec",
+            path="/loopino/v1/cli/codex/exec",
             token=lease.token,
             body=prompt,
             extra_headers={
-                "X-Maverick-Cli-Argv": _encoded_header(json.dumps(argv)),
-                "X-Maverick-Cli-Cwd": _encoded_header("/data/opendesign-native/project"),
+                "X-Loopino-Cli-Argv": _encoded_header(json.dumps(argv)),
+                "X-Loopino-Cli-Cwd": _encoded_header("/data/opendesign-native/project"),
             },
         )
         header, framed = response.split(b"\r\n\r\n", 1)
         frames = _decode_frames(framed)
 
-        self.assertIn(b"application/x-maverick-cli-frames", header)
+        self.assertIn(b"application/x-loopino-cli-frames", header)
         self.assertEqual(executor.requests[0]["argv"], argv)
         self.assertEqual(executor.requests[0]["stdin"], prompt)
         self.assertEqual(executor.requests[0]["cwd"], "/data/opendesign-native/project")
@@ -328,13 +328,13 @@ class ModelAccessBrokerTests(unittest.TestCase):
         response = _request(
             broker.socket_path,
             method="POST",
-            path="/maverick/v1/cli/codex/exec",
+            path="/loopino/v1/cli/codex/exec",
             token=lease.token,
             extra_headers={
-                "X-Maverick-Cli-Argv": _encoded_header(
+                "X-Loopino-Cli-Argv": _encoded_header(
                     '["exec","--json","--model","gpt-other-workspace"]'
                 ),
-                "X-Maverick-Cli-Cwd": _encoded_header(
+                "X-Loopino-Cli-Cwd": _encoded_header(
                     "/data/opendesign-native/project"
                 ),
             },
@@ -495,11 +495,11 @@ class ModelAccessBrokerTests(unittest.TestCase):
         _request(
             broker.socket_path,
             method="POST",
-            path="/maverick/v1/cli/codex/exec",
+            path="/loopino/v1/cli/codex/exec",
             token=lease.token,
             extra_headers={
-                "X-Maverick-Cli-Argv": _encoded_header('["--version"]'),
-                "X-Maverick-Cli-Cwd": _encoded_header("/app"),
+                "X-Loopino-Cli-Argv": _encoded_header('["--version"]'),
+                "X-Loopino-Cli-Cwd": _encoded_header("/app"),
             },
         )
 
@@ -562,11 +562,11 @@ class ModelAccessBrokerTests(unittest.TestCase):
             response = _request(
                 broker.socket_path,
                 method="POST",
-                path="/maverick/v1/cli/codex/exec",
+                path="/loopino/v1/cli/codex/exec",
                 token=lease.token,
                 extra_headers={
-                    "X-Maverick-Cli-Argv": _encoded_header('["--version"]'),
-                    "X-Maverick-Cli-Cwd": _encoded_header("/app"),
+                    "X-Loopino-Cli-Argv": _encoded_header('["--version"]'),
+                    "X-Loopino-Cli-Cwd": _encoded_header("/app"),
                 },
             )
         header, framed = response.split(b"\r\n\r\n", 1)
@@ -587,11 +587,11 @@ class ModelAccessBrokerTests(unittest.TestCase):
         client.sendall(
             _request_bytes(
                 "POST",
-                "/maverick/v1/cli/codex/exec",
+                "/loopino/v1/cli/codex/exec",
                 lease.token,
                 extra_headers={
-                    "X-Maverick-Cli-Argv": _encoded_header('["--version"]'),
-                    "X-Maverick-Cli-Cwd": _encoded_header("/app"),
+                    "X-Loopino-Cli-Argv": _encoded_header('["--version"]'),
+                    "X-Loopino-Cli-Cwd": _encoded_header("/app"),
                 },
             )
         )

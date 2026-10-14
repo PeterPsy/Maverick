@@ -50,7 +50,7 @@ class WorkspaceExportTestCase(unittest.TestCase):
         root = Path(temp_dir)
         (root / "AGENTS.md").write_text("test", encoding="utf-8")
         (root / "pyproject.toml").write_text(
-            '[project]\nname = "maverick"\nversion = "0.1.0"\n',
+            '[project]\nname = "loopino"\nversion = "0.1.0"\n',
             encoding="utf-8",
         )
         for name in ("core", "apps", "workspaces", "docs", "scripts", "tests"):
@@ -63,7 +63,7 @@ class WorkspaceExportTestCase(unittest.TestCase):
             name=app_id.title(),
             version="1.0.0",
             description=f"{app_id} app",
-            publisher="maverick",
+            publisher="loopino",
             contract=contract or build_app_contract(),
         )
         write_app_contract_file(app_root, parsed)

@@ -5,15 +5,15 @@
 @source "../components/AppNotifications.tsx";
 
 @theme inline {
-  --color-background: var(--maverick-bg);
-  --color-foreground: var(--maverick-text);
-  --color-card: var(--maverick-bg-strong);
-  --color-card-foreground: var(--maverick-text);
-  --color-primary: var(--maverick-accent);
-  --color-muted: var(--maverick-surface);
-  --color-muted-foreground: var(--maverick-text-muted);
-  --color-border: var(--maverick-border);
-  --color-ring: var(--maverick-focus);
+  --color-background: var(--loopino-bg);
+  --color-foreground: var(--loopino-text);
+  --color-card: var(--loopino-bg-strong);
+  --color-card-foreground: var(--loopino-text);
+  --color-primary: var(--loopino-accent);
+  --color-muted: var(--loopino-surface);
+  --color-muted-foreground: var(--loopino-text-muted);
+  --color-border: var(--loopino-border);
+  --color-ring: var(--loopino-focus);
 }
 
 :where([data-slot="live-notification-feed"]) :where(*) {

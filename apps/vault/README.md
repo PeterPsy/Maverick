@@ -12,12 +12,12 @@ It does not own secret values. Secret values remain platform-owned control-plane
   - `vault-sidebar-footer` for `base-shell` content kind `shell.sidebar.footer`
 - Backend: none
 - CLI: `vault`, redaction-safe agent operations that diagnose Core Secrets connection issues, plan/explain fixes, and delegate guarded grant creation to core-owned secret surfaces
-- MCP: `maverick_vault`, the same redaction-safe agent operations over MCP
+- MCP: `loopino_vault`, the same redaction-safe agent operations over MCP
 - Skills: bundled `vault-ops` guidance for Core Secrets administration
 
 ## Storage
 
-Vault does not persist app-owned workspace data. It must not write secret values under `workspaces/<workspace_id>/data/vault/`. Maverick may still create the generic `.maverick-app.json` marker in that directory for app installation metadata; that marker is not a Vault data store.
+Vault does not persist app-owned workspace data. It must not write secret values under `workspaces/<workspace_id>/data/vault/`. Loopino may still create the generic `.loopino-app.json` marker in that directory for app installation metadata; that marker is not a Vault data store.
 
 ## Permissions
 

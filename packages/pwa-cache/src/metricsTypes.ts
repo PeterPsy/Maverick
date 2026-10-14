@@ -5,8 +5,8 @@ import type {
 import type { FileCacheTelemetryEvent } from "./fileCacheTypes";
 import type { RetryTelemetryEvent } from "./retryPolicy";
 
-export const PWA_CACHE_METRICS_SCHEMA = "maverick.pwa-cache-metrics.v1";
-export const PWA_CACHE_METRICS_STORAGE_KEY = "maverick.pwa-cache.metrics.v1";
+export const PWA_CACHE_METRICS_SCHEMA = "loopino.pwa-cache-metrics.v1";
+export const PWA_CACHE_METRICS_STORAGE_KEY = "loopino.pwa-cache.metrics.v1";
 
 export const PWA_CACHE_COUNTER_METRICS = [
   "pwa_static_cache_hit",

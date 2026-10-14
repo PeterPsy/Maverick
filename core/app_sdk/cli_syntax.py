@@ -1,4 +1,4 @@
-"""Syntax, help, and argument parsing helpers for the Maverick SDK CLI."""
+"""Syntax, help, and argument parsing helpers for the Loopino SDK CLI."""
 
 from __future__ import annotations
 
@@ -56,93 +56,93 @@ def _help_text(tokens: list[str]) -> str:
     if not topic:
         return _root_help()
     if topic == ["apps"]:
-        return "usage: maverick apps list --json"
+        return "usage: loopino apps list --json"
     if topic == ["core"]:
         return "\n".join(
             [
-                "usage: maverick core {cli|mcp} ...",
-                "       maverick core cli list --json",
-                "       maverick core cli inspect <command_id> --json",
-                "       maverick core cli run <command_id> [--operator] [--arguments-json JSON] [--flag VALUE ...]",
-                "       maverick core mcp list --json",
-                "       maverick core mcp inspect <tool_name> --json",
-                "       maverick core mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
+                "usage: loopino core {cli|mcp} ...",
+                "       loopino core cli list --json",
+                "       loopino core cli inspect <command_id> --json",
+                "       loopino core cli run <command_id> [--operator] [--arguments-json JSON] [--flag VALUE ...]",
+                "       loopino core mcp list --json",
+                "       loopino core mcp inspect <tool_name> --json",
+                "       loopino core mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
             ]
         )
     if topic == ["sdk"]:
         return "\n".join(
             [
-                "usage: maverick sdk {templates|docs} --json",
-                "       maverick sdk templates --json",
-                "       maverick sdk docs --json",
+                "usage: loopino sdk {templates|docs} --json",
+                "       loopino sdk templates --json",
+                "       loopino sdk docs --json",
             ]
         )
     if topic == ["core", "cli"]:
         return "\n".join(
             [
-                "usage: maverick core cli {list|inspect|run} ...",
-                "       maverick core cli list --json",
-                "       maverick core cli inspect <command_id> --json",
-                "       maverick core cli run <command_id> [--operator] [--arguments-json JSON] [--flag VALUE ...]",
+                "usage: loopino core cli {list|inspect|run} ...",
+                "       loopino core cli list --json",
+                "       loopino core cli inspect <command_id> --json",
+                "       loopino core cli run <command_id> [--operator] [--arguments-json JSON] [--flag VALUE ...]",
             ]
         )
     if topic == ["core", "mcp"]:
         return "\n".join(
             [
-                "usage: maverick core mcp {list|inspect|call} ...",
-                "       maverick core mcp list --json",
-                "       maverick core mcp inspect <tool_name> --json",
-                "       maverick core mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
+                "usage: loopino core mcp {list|inspect|call} ...",
+                "       loopino core mcp list --json",
+                "       loopino core mcp inspect <tool_name> --json",
+                "       loopino core mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
             ]
         )
     if topic == ["app"]:
         return "\n".join(
             [
-                "usage: maverick app <app_id> {cli|mcp|frontend} ...",
-                "       maverick app <app_id> cli list --json",
-                "       maverick app <app_id> cli inspect <command_name> --json",
-                "       maverick app <app_id> cli run <command_name> [--arguments-json JSON] [--flag VALUE ...]",
-                "       maverick app <app_id> mcp list --json",
-                "       maverick app <app_id> mcp inspect <tool_name> --json",
-                "       maverick app <app_id> mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
-                "       maverick app <app_id> frontend build --json",
+                "usage: loopino app <app_id> {cli|mcp|frontend} ...",
+                "       loopino app <app_id> cli list --json",
+                "       loopino app <app_id> cli inspect <command_name> --json",
+                "       loopino app <app_id> cli run <command_name> [--arguments-json JSON] [--flag VALUE ...]",
+                "       loopino app <app_id> mcp list --json",
+                "       loopino app <app_id> mcp inspect <tool_name> --json",
+                "       loopino app <app_id> mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
+                "       loopino app <app_id> frontend build --json",
             ]
         )
     if len(topic) == 2 and topic[0] == "app":
         app_id = topic[1]
         return "\n".join(
             [
-                f"usage: maverick app {app_id} {{cli|mcp|frontend}} ...",
-                f"       maverick app {app_id} cli list --json",
-                f"       maverick app {app_id} cli inspect <command_name> --json",
-                f"       maverick app {app_id} cli run <command_name> [--arguments-json JSON] [--flag VALUE ...]",
-                f"       maverick app {app_id} mcp list --json",
-                f"       maverick app {app_id} mcp inspect <tool_name> --json",
-                f"       maverick app {app_id} mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
-                f"       maverick app {app_id} frontend build --json",
+                f"usage: loopino app {app_id} {{cli|mcp|frontend}} ...",
+                f"       loopino app {app_id} cli list --json",
+                f"       loopino app {app_id} cli inspect <command_name> --json",
+                f"       loopino app {app_id} cli run <command_name> [--arguments-json JSON] [--flag VALUE ...]",
+                f"       loopino app {app_id} mcp list --json",
+                f"       loopino app {app_id} mcp inspect <tool_name> --json",
+                f"       loopino app {app_id} mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
+                f"       loopino app {app_id} frontend build --json",
             ]
         )
     if len(topic) == 3 and topic[0] == "app" and topic[2] == "frontend":
         app_id = topic[1]
-        return f"usage: maverick app {app_id} frontend build --json"
+        return f"usage: loopino app {app_id} frontend build --json"
     if len(topic) == 3 and topic[0] == "app" and topic[2] == "cli":
         app_id = topic[1]
         return "\n".join(
             [
-                f"usage: maverick app {app_id} cli {{list|inspect|run}} ...",
-                f"       maverick app {app_id} cli list --json",
-                f"       maverick app {app_id} cli inspect <command_name> --json",
-                f"       maverick app {app_id} cli run <command_name> [--arguments-json JSON] [--flag VALUE ...]",
+                f"usage: loopino app {app_id} cli {{list|inspect|run}} ...",
+                f"       loopino app {app_id} cli list --json",
+                f"       loopino app {app_id} cli inspect <command_name> --json",
+                f"       loopino app {app_id} cli run <command_name> [--arguments-json JSON] [--flag VALUE ...]",
             ]
         )
     if len(topic) == 3 and topic[0] == "app" and topic[2] == "mcp":
         app_id = topic[1]
         return "\n".join(
             [
-                f"usage: maverick app {app_id} mcp {{list|inspect|call}} ...",
-                f"       maverick app {app_id} mcp list --json",
-                f"       maverick app {app_id} mcp inspect <tool_name> --json",
-                f"       maverick app {app_id} mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
+                f"usage: loopino app {app_id} mcp {{list|inspect|call}} ...",
+                f"       loopino app {app_id} mcp list --json",
+                f"       loopino app {app_id} mcp inspect <tool_name> --json",
+                f"       loopino app {app_id} mcp call <tool_name> [--arguments-json JSON] [--flag VALUE ...]",
             ]
         )
     return _root_help()
@@ -150,14 +150,14 @@ def _help_text(tokens: list[str]) -> str:
 def _root_help() -> str:
     return "\n".join(
         [
-            "usage: maverick [--repository-root PATH] {apps|core|app|sdk} ...",
-            "       maverick apps list --json",
-            "       maverick sdk templates --json",
-            "       maverick sdk docs --json",
-            "       maverick core cli list --json",
-            "       maverick core mcp list --json",
-            "       maverick app <app_id> cli list --json",
-            "       maverick app <app_id> mcp list --json",
+            "usage: loopino [--repository-root PATH] {apps|core|app|sdk} ...",
+            "       loopino apps list --json",
+            "       loopino sdk templates --json",
+            "       loopino sdk docs --json",
+            "       loopino core cli list --json",
+            "       loopino core mcp list --json",
+            "       loopino app <app_id> cli list --json",
+            "       loopino app <app_id> mcp list --json",
             "",
             "`--help` is human syntax help. Use `list` and `inspect` for machine-readable discovery.",
         ]

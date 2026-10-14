@@ -38,7 +38,7 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
                 contract["widgets"][0]["host"] = "*"
                 contract_path.write_text(json.dumps(contract))
             app = PlatformAsgiHost(state)
-            platform_host = "maverick.localhost:8000"
+            platform_host = "loopino.localhost:8000"
             platform_origin = f"http://{platform_host}"
             platform_cookie = await self._login(app, host=platform_host)
             parent = await app_frame_fixtures.AppFrameBrowserOriginIntegrationTests._bootstrap_app_frame(
@@ -247,7 +247,7 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
             )
             self.assertEqual(widget_status, 200)
             self.assertIn(b"other-widget", widget_body)
-            self.assertIn(b"maverick.app-frame.loaded", widget_body)
+            self.assertIn(b"loopino.app-frame.loaded", widget_body)
             self.assertIn(parent["origin"].encode(), widget_body)
             self.assertEqual(widget_headers["content-security-policy"], nested_csp)
 

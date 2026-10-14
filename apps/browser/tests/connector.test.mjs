@@ -27,7 +27,7 @@ test("Cancellation waits for the Chrome worker cleanup before claiming the next 
         }
         // A cancellation acknowledgement does not mean video restoration has finished.
         if(message.action === "cancel")result={cancelled:true};
-        dispatch({type:"maverick.browser.response",id:message.id,result});
+        dispatch({type:"loopino.browser.response",id:message.id,result});
       });
     },
   };
@@ -60,12 +60,12 @@ test("Cancellation waits for the Chrome worker cleanup before claiming the next 
   connector=createConnector(()=>{});await connector.start();
   await until(()=>active === "first" && polls.length === 1);
   await nextTurn();
-  dispatch({type:"maverick.browser.wake"});
+  dispatch({type:"loopino.browser.wake"});
   await until(()=>polls.length === 2);
   assert.equal(polls[1].active_operation_id,"first");
   assert.deepEqual(executed,["first"]);
   releaseFirst();await nextTurn();await nextTurn();
-  dispatch({type:"maverick.browser.wake"});
+  dispatch({type:"loopino.browser.wake"});
   await until(()=>completed.length === 1);
   assert.deepEqual(executed,["first","second"]);
   assert.deepEqual(completed[0].result,{text:"next observation"});

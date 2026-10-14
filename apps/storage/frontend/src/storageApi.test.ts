@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PWA_DATA_CACHE_BROKER_ACCEPTED, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST, PWA_DATA_CACHE_BROKER_NETWORK_RESULT, PWA_DATA_CACHE_BROKER_RESULT } from '@maverick/pwa-cache';
+import { PWA_DATA_CACHE_BROKER_ACCEPTED, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST, PWA_DATA_CACHE_BROKER_NETWORK_RESULT, PWA_DATA_CACHE_BROKER_RESULT } from '@loopino/pwa-cache';
 import { CatalogChangedError, searchDriveFiles, renderPreview } from './storageApi';
 import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, folderMediaDownloadUrl, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, localizeDriveFile, LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_BASE64_WRITE_BYTES, moveItemsReferences, previewDriveFile, sanitizeCatalogPayload, startDriveOAuth, STORAGE_CATALOG_REVALIDATED_EVENT, storageBackendEndpoint, storageMediaStreamUrl, syncDriveConnection, trashDriveFile, uploadDriveFile, uploadFile } from './storageApi';
 
@@ -66,7 +66,7 @@ describe('storage api client', () => {
 
     expect(error).toBeInstanceOf(TypeError);
     if (!(error instanceof Error)) throw new Error('Expected malformed JSON to reject.');
-    expect(error.name).not.toBe('MaverickTransportError');
+    expect(error.name).not.toBe('LoopinoTransportError');
   });
 
   it('preserves the catalog distinction between an omitted folder scope and the root folder', async () => {
@@ -103,7 +103,7 @@ describe('storage api client', () => {
         name: 'Plan',
         web_url: 'https://drive.google.com/file/d/file-one/view',
         remote_locator: { drive_file_id: 'provider-private' },
-        local_path: '/srv/maverick/private',
+        local_path: '/srv/loopino/private',
         signed_url: 'https://objects.test/file?X-Amz-Signature=secret',
       }],
       folders: [],
@@ -184,10 +184,10 @@ describe('storage api client', () => {
         });
       },
     };
-    const frameWindow = new EventTarget() as EventTarget & Window & { __MAVERICK_PLATFORM_ORIGIN__: string };
+    const frameWindow = new EventTarget() as EventTarget & Window & { __LOOPINO_PLATFORM_ORIGIN__: string };
     Object.assign(frameWindow, {
-      __MAVERICK_PLATFORM_ORIGIN__: 'https://maverick.test',
-      location: { origin: 'https://af-storage.sidecars.maverick.test', pathname: '/apps/storage/' },
+      __LOOPINO_PLATFORM_ORIGIN__: 'https://loopino.test',
+      location: { origin: 'https://af-storage.sidecars.loopino.test', pathname: '/apps/storage/' },
       parent,
     });
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -247,14 +247,14 @@ describe('storage api client', () => {
   it('starts Drive OAuth with the OAuth client id, client secret, and redirect URL', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ provider: 'google_drive', status: 'not_configured' }), { status: 200 }));
 
-    await startDriveOAuth({ fetchImpl, redirectUri: 'https://maverick.local/apps/storage/oauth/callback' });
+    await startDriveOAuth({ fetchImpl, redirectUri: 'https://loopino.local/apps/storage/oauth/callback' });
 
     expect(fetchImpl).toHaveBeenCalledWith(
       '/api/apps/storage/backend',
       expect.objectContaining({
         body: JSON.stringify({
           action: 'drive_connections.start_oauth',
-          redirect_uri: 'https://maverick.local/apps/storage/oauth/callback',
+          redirect_uri: 'https://loopino.local/apps/storage/oauth/callback',
           _app_secret_request: {
             logical_names: ['google-drive-oauth-client-id', 'google-drive-oauth-client-secret'],
             required: false
@@ -276,7 +276,7 @@ describe('storage api client', () => {
 
     await completeDriveOAuth({
       code: 'auth-code',
-      redirectUri: 'https://maverick.local/apps/storage/oauth/callback',
+      redirectUri: 'https://loopino.local/apps/storage/oauth/callback',
       state: 'drive-state',
     }, { fetchImpl });
 
@@ -288,7 +288,7 @@ describe('storage api client', () => {
           provider: 'google_drive',
           code: 'auth-code',
           state: 'drive-state',
-          redirect_uri: 'https://maverick.local/apps/storage/oauth/callback',
+          redirect_uri: 'https://loopino.local/apps/storage/oauth/callback',
           _app_secret_request: {
             logical_names: ['google-drive-oauth-client-id', 'google-drive-oauth-client-secret'],
             required: true
@@ -308,7 +308,7 @@ describe('storage api client', () => {
 
     await expect(completeDriveOAuth({
       code: 'auth-code',
-      redirectUri: 'https://maverick.local/apps/storage/oauth/callback',
+      redirectUri: 'https://loopino.local/apps/storage/oauth/callback',
       state: 'drive-state',
     }, { fetchImpl })).rejects.toThrow('Google Drive connection failed.');
   });

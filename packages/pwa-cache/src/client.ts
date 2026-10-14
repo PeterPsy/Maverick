@@ -111,7 +111,7 @@ export class PwaCacheClient {
         return;
       }
       const payload = event.data as { entity_id?: unknown; owner_app_id?: unknown; resource?: unknown; type?: unknown };
-      if (payload.type !== "maverick.app.data-changed"
+      if (payload.type !== "loopino.app.data-changed"
           || payload.owner_app_id !== this.appId
           || typeof payload.resource !== "string") {
         return;

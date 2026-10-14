@@ -22,7 +22,7 @@ describe('external URL broker client', () => {
 
   it('posts only absolute HTTP(S) URLs to the parent shell', () => {
     const parent = messageTarget();
-    const currentWindow = { __MAVERICK_PLATFORM_ORIGIN__: 'https://maverick.test' };
+    const currentWindow = { __LOOPINO_PLATFORM_ORIGIN__: 'https://loopino.test' };
 
     expect(requestParentExternalUrl('javascript:alert(1)', { currentWindow, parentWindow: parent.target })).toBe(false);
     expect(requestParentExternalUrl('https://example.com/path', {
@@ -34,13 +34,13 @@ describe('external URL broker client', () => {
 
     expect(parent.messages).toEqual([{
       message: {
-        type: 'maverick.app.external-url',
+        type: 'loopino.app.external-url',
         disposition: 'new-window',
         owner_app_id: 'calendar',
         widget_id: 'calendar-sidebar-footer',
         url: 'https://example.com/path',
       },
-      targetOrigin: 'https://maverick.test',
+      targetOrigin: 'https://loopino.test',
     }]);
   });
 

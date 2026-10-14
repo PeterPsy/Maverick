@@ -14,7 +14,7 @@ from core.api.control_store import ControlStoreSettings, build_control_plane_col
 from core.installation.service import InstallationService
 from core.installation.worker import InstallationWorker
 from core.secrets.store import SecretDocumentStore
-from core.shared.env_file import read_env_file
+from core.shared.env_file import read_env_file, service_env_path
 
 
 def main() -> int:
@@ -22,7 +22,7 @@ def main() -> int:
         print(json.dumps({"error": "root_required"}))
         return 1
     try:
-        os.environ.update(read_env_file(ROOT / ".env"))
+        os.environ.update(read_env_file(service_env_path(ROOT)))
         collections = build_control_plane_collections(ControlStoreSettings.from_environment(repository_root=ROOT))
         service = InstallationService(ROOT, secret_store=SecretDocumentStore(collections.secrets))
         private = service.store.root / "private"

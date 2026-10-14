@@ -11,7 +11,7 @@ import sqlite3
 import sys
 from typing import Any
 
-from app_surface_transport import json_response, run_json_subprocess, run_maverick_app_mcp
+from app_surface_transport import json_response, run_json_subprocess, run_loopino_app_mcp
 from content_store import body_hash
 from database import json_text
 from errors import MemoryValidationError
@@ -29,9 +29,9 @@ def default_storage_preview_surface(data_root: Path, request: dict[str, Any]) ->
     workspace_root = workspace_root_for_data_root(data_root)
     if workspace_root is None:
         raise MemoryValidationError("Memory data_root must live under a workspace data directory for Storage ingestion.")
-    if shutil.which("maverick"):
+    if shutil.which("loopino"):
         return platform_storage_preview(workspace_root, request)
-    if os.environ.get("MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK") != "1":
+    if os.environ.get("LOOPINO_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK") != "1":
         raise MemoryValidationError("Storage MCP surface is unavailable; local Storage preview fallback is disabled.")
     return local_storage_preview(workspace_root, request)
 
@@ -42,7 +42,7 @@ def platform_storage_preview(workspace_root: Path, request: dict[str, Any]) -> d
         for key, value in request.items()
         if key in {"connection_id", "drive_file_id", "stable_storage_file_id", "max_chars", "max_bytes"}
     }
-    completed = run_maverick_app_mcp(
+    completed = run_loopino_app_mcp(
         workspace_root,
         app_id="storage",
         operation="call",

@@ -66,7 +66,7 @@ describe('Live Mail sidebar filtering', () => {
   async function navigate(params: Record<string, unknown>) {
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
       source: window, origin: window.location.origin,
-      data: { type: 'maverick.app.navigate', params },
+      data: { type: 'loopino.app.navigate', params },
     })));
   }
   function rows() { return [...container.querySelectorAll('.thread-title')].map((row) => row.textContent); }
@@ -110,7 +110,7 @@ describe('Live Mail sidebar filtering', () => {
     const scopeKey = await threadScopeKey('A inbox');
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
       source: window, origin: window.location.origin,
-      data: { type: 'maverick.app.data-changed', owner_app_id: 'mail', resource: 'threads', scope_keys: [scopeKey] },
+      data: { type: 'loopino.app.data-changed', owner_app_id: 'mail', resource: 'threads', scope_keys: [scopeKey] },
     })));
     await vi.waitFor(() => expect(vi.mocked(callBackend).mock.calls.filter(([params]) => params.action === 'threads.get')).toHaveLength(1));
     expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(reads);
@@ -137,7 +137,7 @@ describe('Live Mail sidebar filtering', () => {
     const scopeKey = await threadScopeKey(stale.id);
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
       source: window, origin: window.location.origin,
-      data: { type: 'maverick.app.data-changed', owner_app_id: 'mail', resource: 'threads', scope_keys: [scopeKey] },
+      data: { type: 'loopino.app.data-changed', owner_app_id: 'mail', resource: 'threads', scope_keys: [scopeKey] },
     })));
     await vi.waitFor(() => expect(resolve).toBeDefined());
     const button = container.querySelector<HTMLButtonElement>('.thread-read-button')!;
@@ -297,7 +297,7 @@ describe('Live Mail sidebar filtering', () => {
     });
     await act(async () => window.dispatchEvent(new MessageEvent('message', {
       source: window, origin: window.location.origin,
-      data: { type: 'maverick.app.data-changed', owner_app_id: 'mail', resource: 'threads' },
+      data: { type: 'loopino.app.data-changed', owner_app_id: 'mail', resource: 'threads' },
     })));
     expect(rows()).toEqual(['A inbox', 'B inbox']);
     expect(skeleton()).toBeNull();

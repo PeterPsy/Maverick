@@ -17,10 +17,10 @@ from core.recovery.runtime_admission import assess_runtime_session_admission
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-    MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+    LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME,
+    LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
 )
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.errors import RuntimeTurnNotFoundError, RuntimeTurnQueueRejectedError
@@ -55,8 +55,8 @@ def _remote_binding(*, provider_id: str, now: datetime):
         session_id=f"session-{provider_id}",
         workspace_id="workspace-1",
         workspace_binding_id=f"binding-{provider_id}",
-        runtime_engine_id="maverick-tool-loop",
-        adapter_id="maverick-hosted-tool-loop",
+        runtime_engine_id="loopino-tool-loop",
+        adapter_id="loopino-hosted-tool-loop",
         adapter_version="candidate",
         model_provider_id=provider_id,
         model_id="fixture-model",
@@ -108,11 +108,11 @@ class _AttestationStore:
 
 def _remote_environment(provider_id: str) -> dict[str, str]:
     return {
-        MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+        LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
         (
-            MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW
+            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW
             if provider_id == "google-ai-studio"
-            else MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW
+            else LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW
         ): "1",
     }
 
@@ -148,8 +148,8 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
             provider_protocol="antigravity-cli-stream-json",
         )
         environment = {
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: "0",
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: "0",
         }
         with patch.dict("os.environ", environment, clear=True):
             with self.assertRaisesRegex(
@@ -158,7 +158,7 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
             ):
                 require_remote_agentic_session_admission(identity)
 
-        environment[MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW] = "1"
+        environment[LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW] = "1"
         with patch.dict("os.environ", environment, clear=True):
             with self.assertRaisesRegex(
                 AgenticProfileError,
@@ -185,8 +185,8 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
 
     def test_client_fake_declaration_never_authorizes_remote_session(self) -> None:
         environment = {
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
         }
         with patch.dict("os.environ", environment, clear=True):
             with self.assertRaises(AgenticProfileError) as raised:
@@ -203,9 +203,9 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
 
     def test_unknown_hosted_provider_fails_closed_even_when_known_flags_are_on(self) -> None:
         environment = {
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
-            MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "1",
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
+            LOOPINO_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "1",
         }
         with patch.dict("os.environ", environment, clear=True):
             with self.assertRaises(HostedAgenticLoopError) as raised:
@@ -214,8 +214,8 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
 
     def test_attestation_gate_requires_active_matching_workspace_record(self) -> None:
         environment = {
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
-            MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
+            LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            LOOPINO_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
         }
         active = issue_fake_data_attestation(
             workspace_id="workspace-1",

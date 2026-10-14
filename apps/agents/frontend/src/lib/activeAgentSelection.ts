@@ -27,7 +27,7 @@ export function notifyActiveAgentSelection(agentTypeId: string, options: NotifyO
   const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'agents',
       selection: { agent_type_id: normalizedAgentTypeId }
     },
@@ -37,7 +37,7 @@ export function notifyActiveAgentSelection(agentTypeId: string, options: NotifyO
 }
 
 export function agentTypeIdFromSelectionMessage(message: ActiveAgentSelectionMessage, ownerAppId = 'agents'): string {
-  if (message.type !== 'maverick.app.selection-changed' || message.owner_app_id !== ownerAppId) {
+  if (message.type !== 'loopino.app.selection-changed' || message.owner_app_id !== ownerAppId) {
     return '';
   }
   const selection = message.selection;

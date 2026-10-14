@@ -57,7 +57,7 @@ def create_draft(data_root: Path, payload: dict[str, object]) -> dict[str, objec
         )
         db.execute(
             "UPDATE drafts SET reply_message_id = ?, reply_mode = ?, in_reply_to = ?, references_json = ?, outgoing_message_id = ? WHERE id = ?",
-            (context["reply_message_id"], context["reply_mode"], context["in_reply_to"], json.dumps(context["references"]), f"<{uuid4().hex}@maverick.mail>", draft_id),
+            (context["reply_message_id"], context["reply_mode"], context["in_reply_to"], json.dumps(context["references"]), f"<{uuid4().hex}@loopino.mail>", draft_id),
         )
     audit(data_root, "draft.create", "mail_draft", draft_id, {"subject": subject, "workspace_attachments": len(workspace_attachments)})
     return get_draft(data_root, draft_id)

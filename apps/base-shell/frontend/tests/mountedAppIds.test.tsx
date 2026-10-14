@@ -4,12 +4,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useMountedAppIds } from "../src/hooks/useMountedAppIds";
-import { setMaverickFrameOrigin, type MaverickFrameScope } from "../src/iframePolicy";
+import { setLoopinoFrameOrigin, type LoopinoFrameScope } from "../src/iframePolicy";
 
 const scope = { sessionGeneration: "loaded-apps-session", workspaceId: "default" };
-const origin = "https://af-loaded-apps.sidecars.maverick.test";
+const origin = "https://af-loaded-apps.sidecars.loopino.test";
 
-function MountedApps({ frameScope }: { frameScope: MaverickFrameScope | null }) {
+function MountedApps({ frameScope }: { frameScope: LoopinoFrameScope | null }) {
   return <output>{useMountedAppIds(frameScope).join(",")}</output>;
 }
 
@@ -30,7 +30,7 @@ describe("loaded app indicators", () => {
   afterEach(() => {
     act(() => root.unmount());
     for (const frame of frames) {
-      setMaverickFrameOrigin(frame, null, "unused", scope);
+      setLoopinoFrameOrigin(frame, null, "unused", scope);
       frame.remove();
     }
     container.remove();
@@ -40,13 +40,13 @@ describe("loaded app indicators", () => {
     const frame = document.createElement("iframe");
     frames.push(frame);
     document.body.append(frame);
-    act(() => setMaverickFrameOrigin(frame, origin, owner, frameScope));
+    act(() => setLoopinoFrameOrigin(frame, origin, owner, frameScope));
     return frame;
   }
 
   function unmountFrame(frame: HTMLIFrameElement) {
     act(() => {
-      setMaverickFrameOrigin(frame, null, "unused", scope);
+      setLoopinoFrameOrigin(frame, null, "unused", scope);
       frame.remove();
     });
   }

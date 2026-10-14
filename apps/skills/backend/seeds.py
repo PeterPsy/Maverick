@@ -1,10 +1,11 @@
-"""Seed workspace-owned skills from bundled Maverick skill templates."""
+"""Seed workspace-owned skills from bundled Loopino skill templates."""
 
 from __future__ import annotations
 
 from pathlib import Path
 import shutil
 
+from core.apps.builtin_apps import discover_builtin_apps
 from store import ensure_data_root, set_skill_source, skill_dir
 
 
@@ -12,8 +13,14 @@ def source_skill_roots(repository_root: Path) -> list[Path]:
     """Return bundled skill template roots that should be copied into a workspace."""
     roots: list[Path] = []
     apps_root = repository_root / "apps"
+    included = (
+        {spec.app_id for spec in discover_builtin_apps(start_path=repository_root)}
+        if (apps_root / "bootstrap.json").exists() else None
+    )
     if apps_root.is_dir():
         for app_root in sorted(path for path in apps_root.iterdir() if path.is_dir()):
+            if included is not None and app_root.name not in included:
+                continue
             roots.extend(_direct_skill_roots(app_root / "skills"))
     return sorted(roots, key=lambda item: item.name)
 
@@ -26,11 +33,11 @@ def seed_default_skills(data_root: Path, *, repository_root: Path) -> list[str]:
         target_root = skill_dir(data_root, source_root.name)
         if (target_root / "SKILL.md").is_file():
             _copy_missing_template_files(source_root, target_root)
-            set_skill_source(data_root, source_root.name, origin="maverick")
+            set_skill_source(data_root, source_root.name, origin="loopino")
             continue
         target_root.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source_root, target_root)
-        set_skill_source(data_root, source_root.name, origin="maverick")
+        set_skill_source(data_root, source_root.name, origin="loopino")
         seeded.append(source_root.name)
     return seeded
 

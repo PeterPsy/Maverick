@@ -82,7 +82,7 @@ function canRenderDocumentPreview(file: StorageFile) {
 function openStorage(file?: StorageFile) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'storage',
       params: file ? { workspace_relative_path: file.workspace_relative_path } : {}
     },
@@ -103,7 +103,7 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
   const height = Math.min(WIDGET_MAX_HEIGHT_PX, Math.max(WIDGET_MIN_HEIGHT_PX, contentHeight));
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.resize',
+      type: 'loopino.widget.resize',
       owner_app_id: 'storage',
       widget_id: 'file-preview',
       height: `${height}px`,

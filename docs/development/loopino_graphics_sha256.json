@@ -1,0 +1,227 @@
+[
+  {
+    "before": "apps/base-shell/frontend/dist/app-icon-lightcolor.png",
+    "after": "apps/base-shell/frontend/dist/app-icon-lightcolor.png",
+    "sha256": "5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/favicon.ico",
+    "after": "apps/base-shell/frontend/dist/favicon.ico",
+    "sha256": "fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/maverick-logotype.svg",
+    "after": "apps/base-shell/frontend/dist/maverick-logotype.svg",
+    "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/maverick-mark.svg",
+    "after": "apps/base-shell/frontend/dist/maverick-mark.svg",
+    "sha256": "443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/pwa-apple-touch-icon.png",
+    "after": "apps/base-shell/frontend/dist/pwa-apple-touch-icon.png",
+    "sha256": "13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/pwa-logo-192.png",
+    "after": "apps/base-shell/frontend/dist/pwa-logo-192.png",
+    "sha256": "d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/pwa-logo.png",
+    "after": "apps/base-shell/frontend/dist/pwa-logo.png",
+    "sha256": "1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/pwa-maskable-logo.png",
+    "after": "apps/base-shell/frontend/dist/pwa-maskable-logo.png",
+    "sha256": "5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/sidebar-logo-black.svg",
+    "after": "apps/base-shell/frontend/dist/sidebar-logo-black.svg",
+    "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f"
+  },
+  {
+    "before": "apps/base-shell/frontend/dist/sidebar-logo.svg",
+    "after": "apps/base-shell/frontend/dist/sidebar-logo.svg",
+    "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/app-icon-lightcolor.png",
+    "after": "apps/base-shell/frontend/public/app-icon-lightcolor.png",
+    "sha256": "5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/favicon.ico",
+    "after": "apps/base-shell/frontend/public/favicon.ico",
+    "sha256": "fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/maverick-logotype.svg",
+    "after": "apps/base-shell/frontend/public/loopino-logotype.svg",
+    "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/maverick-mark.svg",
+    "after": "apps/base-shell/frontend/public/loopino-mark.svg",
+    "sha256": "443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/pwa-apple-touch-icon.png",
+    "after": "apps/base-shell/frontend/public/pwa-apple-touch-icon.png",
+    "sha256": "13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/pwa-logo-192.png",
+    "after": "apps/base-shell/frontend/public/pwa-logo-192.png",
+    "sha256": "d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/pwa-logo.png",
+    "after": "apps/base-shell/frontend/public/pwa-logo.png",
+    "sha256": "1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/pwa-maskable-logo.png",
+    "after": "apps/base-shell/frontend/public/pwa-maskable-logo.png",
+    "sha256": "5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/sidebar-logo-black.svg",
+    "after": "apps/base-shell/frontend/public/sidebar-logo-black.svg",
+    "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f"
+  },
+  {
+    "before": "apps/base-shell/frontend/public/sidebar-logo.svg",
+    "after": "apps/base-shell/frontend/public/sidebar-logo.svg",
+    "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003"
+  },
+  {
+    "before": "apps/browser/frontend/dist/icon.svg",
+    "after": "apps/browser/frontend/dist/icon.svg",
+    "sha256": "01d0ca6aa8f7ba8b775db6f46b23fdcd214d44dc66db59e7c7fcfe33371343ed"
+  },
+  {
+    "before": "apps/browser/frontend/public/icon.svg",
+    "after": "apps/browser/frontend/public/icon.svg",
+    "sha256": "01d0ca6aa8f7ba8b775db6f46b23fdcd214d44dc66db59e7c7fcfe33371343ed"
+  },
+  {
+    "before": "apps/crm/frontend/dist/assets/sidebar-logo-ChGjrOzk.svg",
+    "after": "apps/crm/frontend/dist/assets/sidebar-logo-ChGjrOzk.svg",
+    "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003"
+  },
+  {
+    "before": "apps/crm/frontend/dist/assets/sidebar-logo-black-Bpsc9PsK.svg",
+    "after": "apps/crm/frontend/dist/assets/sidebar-logo-black-Bpsc9PsK.svg",
+    "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f"
+  },
+  {
+    "before": "apps/fitness-coach/frontend/dist/assets/rest-icon-BGvWVrKM.svg",
+    "after": "apps/fitness-coach/frontend/dist/assets/rest-icon-BGvWVrKM.svg",
+    "sha256": "ddcb40a569bd0cc39475c4430eb9320e288571e73f7cd18526e051b3eb030121"
+  },
+  {
+    "before": "apps/fitness-coach/frontend/src/assets/rest-icon.svg",
+    "after": "apps/fitness-coach/frontend/src/assets/rest-icon.svg",
+    "sha256": "ddcb40a569bd0cc39475c4430eb9320e288571e73f7cd18526e051b3eb030121"
+  },
+  {
+    "before": "apps/openwa/frontend/dist/maverick-icon-compact.png",
+    "after": "apps/openwa/frontend/dist/maverick-icon-compact.png",
+    "sha256": "9e1f9e136254b61f02195a0f8ae9e9491788cc11f566d62fc397277eec87dee4"
+  },
+  {
+    "before": "apps/openwa/frontend/dist/maverick-icon-compact.svg",
+    "after": "apps/openwa/frontend/dist/maverick-icon-compact.svg",
+    "sha256": "fdfe70fe14a68099dcc4eb7dab7099a406ea9147d195c23612e42506bdaf749d"
+  },
+  {
+    "before": "apps/openwa/frontend/public/maverick-icon-compact.png",
+    "after": "apps/openwa/frontend/public/loopino-icon-compact.png",
+    "sha256": "9e1f9e136254b61f02195a0f8ae9e9491788cc11f566d62fc397277eec87dee4"
+  },
+  {
+    "before": "apps/openwa/frontend/public/maverick-icon-compact.svg",
+    "after": "apps/openwa/frontend/public/loopino-icon-compact.svg",
+    "sha256": "fdfe70fe14a68099dcc4eb7dab7099a406ea9147d195c23612e42506bdaf749d"
+  },
+  {
+    "before": "docs/assets/maverick-intro.gif",
+    "after": "docs/assets/loopino-intro.gif",
+    "sha256": "85c3dd5f60bf8590b33120d58a0453f1e50be0a66710d64c719d95783d0e14cd"
+  },
+  {
+    "before": "clients/apple/macos/MaverickMac/Assets/AppIcon.png",
+    "after": "clients/apple/macos/LoopinoMac/Assets/AppIcon.png",
+    "sha256": "b1d9d9aae03ffa92e849bf7ff53d7071f9951b269653237cd87e02b3c716eeb7"
+  },
+  {
+    "before": "clients/apple/macos/MaverickMac/Assets/AppIcon.svg",
+    "after": "clients/apple/macos/LoopinoMac/Assets/AppIcon.svg",
+    "sha256": "25e650b1e7219b1982ae2b0c573ec68a02edb83d4d1df18d6221d7061e1f14bb"
+  },
+  {
+    "before": "clients/apple/macos/MaverickMac/Tests/MaverickMacKitTests/Fixtures/observation-delivery.jpg",
+    "after": "clients/apple/macos/LoopinoMac/Tests/LoopinoMacKitTests/Fixtures/observation-delivery.jpg",
+    "sha256": "e48c2059aba2a4056ed430fd8ffd705537185483f079a29ab15c2f93a21f232a"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/AppIcon.appiconset/imagine_a_film_camera_in_the_style.jpeg",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/AppIcon.appiconset/imagine_a_film_camera_in_the_style.jpeg",
+    "sha256": "0216acdbfa648f2437904d1eaef65f1f2ce197dc5f0f13550efd7847521eaffc"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/cameraAccessIcon.imageset/cameraAccessIcon.png",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/cameraAccessIcon.imageset/cameraAccessIcon.png",
+    "sha256": "eeb24bafbb03a1694bc686e597d5654ea6f082338d720dca95295545abbf8640"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/smartGlassesIcon.imageset/smartGlassesIcon.png",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/smartGlassesIcon.imageset/smartGlassesIcon.png",
+    "sha256": "43c6388351ac61d0464daa63d6639776fd2a6c8eb0ff6b5cbc25960680e6f223"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/soundIcon.imageset/soundIcon.png",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/soundIcon.imageset/soundIcon.png",
+    "sha256": "d5f37d9fbde6461ece2d09ae6b3f2f8af1bd22b9862b8603c75b45366823e703"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/tapIcon.imageset/tapIcon.png",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/tapIcon.imageset/tapIcon.png",
+    "sha256": "20d78d10bc447c8d50e1d96d1834785cc4df5b00892941730f3aab0d6d83e82c"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/videoIcon.imageset/videoIcon.png",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/videoIcon.imageset/videoIcon.png",
+    "sha256": "0bfaab5ab681ddfa476f0c404dd8b389aa1857ee1262c7f8e3019708dd99d555"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/walkingIcon.imageset/walkingIcon.png",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/Assets.xcassets/walkingIcon.imageset/walkingIcon.png",
+    "sha256": "4dec77efc46c627abccf85ad012d8e5846833c1ea290b6f7116ff74a58b18819"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/CameraAccess/TestResources/plant.png",
+    "after": "clients/apple/samples/CameraAccess/CameraAccess/TestResources/plant.png",
+    "sha256": "1191495024d2fb5a16da6ebfb1ef443af875b8aa6c0e9b62e5e28f6f02024d29"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/MaverickDev/Assets.xcassets/AppIcon.appiconset/loopinos-pwa-icon.png",
+    "after": "clients/apple/samples/CameraAccess/LoopinoDev/Assets.xcassets/AppIcon.appiconset/loopino-pwa-icon.png",
+    "sha256": "0e17e6e2363342050dcb0a3b18a3716ecd04961145d54c9983354da3788a2b37"
+  },
+  {
+    "before": "clients/apple/samples/CameraAccess/MaverickDev/Assets.xcassets/LaunchLogo.imageset/loopinos-launch-logo.png",
+    "after": "clients/apple/samples/CameraAccess/LoopinoDev/Assets.xcassets/LaunchLogo.imageset/loopino-launch-logo.png",
+    "sha256": "0e17e6e2363342050dcb0a3b18a3716ecd04961145d54c9983354da3788a2b37"
+  },
+  {
+    "before": "clients/apple/samples/DisplayAccess/DisplayAccess/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+    "after": "clients/apple/samples/DisplayAccess/DisplayAccess/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+    "sha256": "162ca96229c03cc597997c9f2eeccfced7bcb5230bcd70cdc6f558c2ab9cb52e"
+  }
+]

@@ -35,7 +35,7 @@ PUBLIC_STORE_METADATA_KEY = "public_store"
 PUBLIC_APP_UUID_KEY = "public_app_uuid"
 APP_EVENTS_RESULT_KEY = "_app_events"
 MUTATION_REPLAYED_RESULT_KEY = "_mutation_replayed"
-STATE_CHANGED_EVENT = {"type": "maverick.app.data-changed", "resource": "state"}
+STATE_CHANGED_EVENT = {"type": "loopino.app.data-changed", "resource": "state"}
 
 
 class AppStoreValidationError(ValueError):
@@ -51,7 +51,7 @@ def app_events_for_action(
     if action in DATA_CHANGED_ACTIONS and not replayed:
         events.append(STATE_CHANGED_EVENT)
     if action in VIEW_STATE_ACTIONS:
-        events.append({"type": "maverick.app.data-changed", "resource": "view-state"})
+        events.append({"type": "loopino.app.data-changed", "resource": "view-state"})
     if isinstance(result, dict):
         result_events = result.get(APP_EVENTS_RESULT_KEY)
         if isinstance(result_events, list):

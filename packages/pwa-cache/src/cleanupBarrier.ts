@@ -1,6 +1,6 @@
 import type { CacheFilter } from "./types";
 
-const STORAGE_KEY = "maverick-pwa-cache-cleanup-barrier-v1";
+const STORAGE_KEY = "loopino-pwa-cache-cleanup-barrier-v1";
 const inMemoryRecords = new Map<string, BarrierRecord>();
 const memoryOnlyIds = new Set<string>();
 

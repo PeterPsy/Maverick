@@ -810,9 +810,9 @@ describe("ChatComposer reference search", () => {
     await typeInEditor("hello world");
     await selectEditorRange(6, 11);
 
-    await pasteTextInEditor("Maverick");
+    await pasteTextInEditor("Loopino");
 
-    expect(getValue()).toBe("hello Maverick");
+    expect(getValue()).toBe("hello Loopino");
   });
 
   it("undoes and redoes app mention insertion", async () => {
@@ -1024,7 +1024,7 @@ describe("ChatComposer reference search", () => {
   });
 
   it.each(["unknown", "denied"] as const)("shows system privacy guidance for native microphone denial (%s)", async (permission) => {
-    vi.stubGlobal("__maverickNativeLoadingSurface", true);
+    vi.stubGlobal("__loopinoNativeLoadingSurface", true);
     if (permission === "denied") mockMicrophonePermission(permission);
     const { element } = await renderComposer({
       transcriptionProviderAppId: "speech",
@@ -1081,7 +1081,7 @@ describe("ChatComposer reference search", () => {
       await Promise.resolve();
     });
 
-    expect(element.textContent).toContain("Maverick shell is blocking microphone access for Chat");
+    expect(element.textContent).toContain("Loopino shell is blocking microphone access for Chat");
   });
 
   it("shows API status details when microphone transcription fails", async () => {
@@ -1629,7 +1629,7 @@ describe("ChatComposer reference search", () => {
     const { getValue } = await renderComposer({ onReferenceAdd });
     const dataTransfer = new FakeDataTransfer();
     dataTransfer.setData(
-      "application/x-maverick-storage-selection",
+      "application/x-loopino-storage-selection",
       JSON.stringify({
         owner_app_id: "storage",
         files: [
@@ -1684,7 +1684,7 @@ describe("ChatComposer reference search", () => {
     const { getValue } = await renderComposer({ onReferenceAdd });
     const dataTransfer = new FakeDataTransfer();
     dataTransfer.setData(
-      "application/x-maverick-checklist",
+      "application/x-loopino-checklist",
       JSON.stringify({
         checked_count: 3,
         checklist_id: "check_drag123",

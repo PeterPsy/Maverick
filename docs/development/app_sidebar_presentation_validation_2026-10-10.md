@@ -1,4 +1,4 @@
-# Per-app Maverick sidebar presentation
+# Per-app Loopino sidebar presentation
 
 The shell previously opened its detail panel on desktop rail hover/focus for
 every launchable app, regardless of widget declarations. Design Studio declares
@@ -41,7 +41,7 @@ and origin metadata were preserved.
   of fixed spacing on app switches, mobile taps and header-menu dismissal.
   App-frame documents and sidecars are intentionally outside this fixture.
 - Desktop/mobile screenshots were inspected; shell controls fit the viewport.
-- Official `maverick app base-shell frontend build --json` completed with
+- Official `loopino app base-shell frontend build --json` completed with
   TypeScript validation and a frontend refresh event. Committed dist is updated.
 - Unused-import check and `git diff --check` passed.
 

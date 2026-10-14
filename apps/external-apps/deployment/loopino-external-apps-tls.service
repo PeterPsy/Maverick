@@ -1,0 +1,20 @@
+[Unit]
+Description=Loopino External Apps exact-host TLS
+After=network-online.target nginx.service loopino-external-apps.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/loopino-external-apps/tls.py
+User=root
+Group=root
+UMask=0077
+TimeoutStartSec=15min
+MemoryMax=256M
+TasksMax=16
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+# nginx -t checks that its existing PID file can be opened, without changing it.
+ReadWritePaths=/projects/loopino/data/external-apps-tls /projects/loopino/data/external-apps-acme /var/log/nginx /run/nginx.pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

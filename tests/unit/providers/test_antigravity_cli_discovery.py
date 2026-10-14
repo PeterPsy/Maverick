@@ -38,7 +38,7 @@ test "$1" = "models" || exit 90
 test -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" || exit 91
 test -f "$HOME/.gemini/antigravity-cli/settings.json" || exit 92
 test -z "${GEMINI_API_KEY+x}" || exit 93
-test -z "${MAVERICK_PROVIDER_SECRET+x}" || exit 94
+test -z "${LOOPINO_PROVIDER_SECRET+x}" || exit 94
 grep -q modelProvider "$HOME/.gemini/antigravity-cli/settings.json" && exit 95
 printf 'Fetching available models...\\n'
 printf 'gemini-3.8-flash-high\\tGemini 3.8 Flash (High)\\n'

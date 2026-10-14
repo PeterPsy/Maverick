@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
-SPEC = importlib.util.spec_from_file_location("maverick_test_suite", ROOT / "scripts/test_suite.py")
+SPEC = importlib.util.spec_from_file_location("loopino_test_suite", ROOT / "scripts/test_suite.py")
 assert SPEC is not None and SPEC.loader is not None
 test_suite = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = test_suite

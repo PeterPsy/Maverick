@@ -4,7 +4,7 @@
   "name": "Dynamic Views",
   "version": "0.1.0",
   "description": "Persisted custom visual views rendered in chat and reopened from a workspace library.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
@@ -50,7 +50,7 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_dynamic_views",
+      "loopino_dynamic_views",
       "dynamic_views_view_filter",
       "dynamic_views_set_view_filter",
       "dynamic_views_set_custom_view",

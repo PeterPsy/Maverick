@@ -73,7 +73,7 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
 def fetch(url: str, *, allowed_hosts: set[str] | None = None, max_bytes: int = 4*1024*1024,
           method: str = "GET", body: dict | None = None, headers: dict | None = None, timeout: int = 15) -> Response:
     original_host = public_target(url,allowed_hosts)[1]
-    request_headers = {"User-Agent":"Maverick-Connectors/1.0","Accept":"application/json,text/plain,text/html,application/xml","Accept-Encoding":"identity",**(headers or {})}
+    request_headers = {"User-Agent":"Loopino-Connectors/1.0","Accept":"application/json,text/plain,text/html,application/xml","Accept-Encoding":"identity",**(headers or {})}
     payload = json.dumps(body,ensure_ascii=False).encode() if body is not None else None
     if payload is not None:
         request_headers["Content-Type"] = "application/json"

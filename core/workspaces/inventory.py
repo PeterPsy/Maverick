@@ -16,7 +16,7 @@ FILE_INVENTORY_SCHEMA_VERSION = "1"
 
 def inventory_root(workspace_root: Path) -> Path:
     """Return the internal inventory metadata root for one workspace."""
-    return workspace_root / ".maverick"
+    return workspace_root / ".loopino"
 
 
 def inventory_path(workspace_root: Path) -> Path:

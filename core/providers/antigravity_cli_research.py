@@ -141,7 +141,7 @@ def validate_antigravity_research_init(payload, *, workdir: str) -> None:
 
 
 def validate_antigravity_research_step(update) -> None:
-    """Reject non-web operational events before they enter Maverick's transcript."""
+    """Reject non-web operational events before they enter Loopino's transcript."""
     step_type = update.get("step_type") if isinstance(update, dict) else None
     if step_type not in {"user_input", "agent_response", "tool"}:
         raise NativeStructuredCliError("research_runtime_unavailable")

@@ -9,12 +9,12 @@ export async function verifyBackgroundChrome({context,worker,page,connection,run
   await connectorWindow.close();
   const snapshot=await runMcp("browser_snapshot",{});
   const ref=name=>snapshot.elements.find(element=>element.name === name)?.ref;
-  await runMcp("browser_type",{ref:ref("Name"),text:"Works after Maverick closes"});
+  await runMcp("browser_type",{ref:ref("Name"),text:"Works after Loopino closes"});
   await runMcp("browser_click",{ref:ref("Save")});
-  assert.deepEqual(await page.evaluate(()=>window.saved),["Works after Maverick closes"]);
-  assert.equal(context.pages().length,pages-1,"Background commands must not reopen Maverick");
+  assert.deepEqual(await page.evaluate(()=>window.saved),["Works after Loopino closes"]);
+  assert.equal(context.pages().length,pages-1,"Background commands must not reopen Loopino");
   console.log(JSON.stringify({phase:"background-after-close",snapshot:true,type:true,click:true,no_reopened_tabs:true}));
-  // Cover the old 120-second offline boundary with no Maverick document open.
+  // Cover the old 120-second offline boundary with no Loopino document open.
   await new Promise(resolve=>setTimeout(resolve,125000));
   const observed=(await api({action:"companion.overview"})).connections.find(row=>row.session_id === connection.session_id);
   assert.equal(observed.status,"connected");

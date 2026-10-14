@@ -41,13 +41,13 @@ def native_runtime_input(*, session, input_text: str, skills=()) -> str:
         return input_text
     device_use_binding = getattr(session, "device_use_binding", None)
     sections = [
-        "[Maverick runtime context]\n"
+        "[Loopino runtime context]\n"
         "An active workspace is available. Use filesystem tools to inspect it "
         "before reporting whether a repository is available. Full-access mode "
         "permits host paths outside the workspace; sandbox mode is confined to "
         "the workspace. Read applicable AGENTS.md files before changing code. "
-        "The maverick CLI exposes Core and app tools: start with "
-        "`maverick core cli list --json` and `maverick apps list --json`.\n"
+        "The loopino CLI exposes Core and app tools: start with "
+        "`loopino core cli list --json` and `loopino apps list --json`.\n"
         + json.dumps(runtime_environment_context(session, native=True), ensure_ascii=False)
     ]
     filesystem = ConfinedWorkspaceFilesystem(
@@ -90,5 +90,5 @@ def native_runtime_input(*, session, input_text: str, skills=()) -> str:
             "[Additional Mac capability]\n" + planner_device_use_instructions(
                 device_use_binding, computer_execution_mode(session.session_id))
         )
-    sections.append("[Maverick user input]\n" + input_text)
+    sections.append("[Loopino user input]\n" + input_text)
     return "\n\n".join(sections)

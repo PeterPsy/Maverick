@@ -1,4 +1,4 @@
-/* App-owned Maverick tokens, aligned with Storage and Agents. */
+/* App-owned Loopino tokens, aligned with Storage and Agents. */
 :root {
   color-scheme: dark;
   --bg: #070708;
@@ -23,7 +23,7 @@
   background: var(--bg);
   font-synthesis: none;
 }
-:root[data-maverick-theme="light"] {
+:root[data-loopino-theme="light"] {
   color-scheme: light;
   --bg: #f6f6f7;
   --solid: #fff;

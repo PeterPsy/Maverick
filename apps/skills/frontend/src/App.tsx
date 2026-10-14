@@ -132,7 +132,7 @@ export function App() {
   }, [selectedSkillId]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'skills' }, "*");
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'skills' }, "*");
   }, []);
 
   useEffect(() => {
@@ -147,11 +147,11 @@ export function App() {
         resource?: string;
         type?: string;
       };
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'skills')) {
+      if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'skills')) {
         void handleNavigationParams(payload.params || {});
         return;
       }
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'skills' && payload.resource === 'skills') {
+      if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'skills' && payload.resource === 'skills') {
         void refresh(selectedSkillIdRef.current)
           .then((nextSelectedSkillId) => {
             if (nextSelectedSkillId && !hasUnsavedSkillEditsRef.current) {
@@ -185,7 +185,7 @@ export function App() {
   async function saveSkill(edits: SkillEdits) {
     if (!selectedSkill) return;
     if (!selectedSkill.editable) {
-      setError('This skill source is not writable by the Maverick host.');
+      setError('This skill source is not writable by the Loopino host.');
       return;
     }
     setSavingSkill(true);

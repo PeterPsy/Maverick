@@ -36,7 +36,7 @@ def extract_text_from_attachment_snapshot(body: dict[str, Any]) -> dict[str, Any
         raise DocumentValidationError("Invalid attachment bytes.") from error
     if len(raw) > MAX_EXTRACT_FILE_BYTES:
         raise DocumentValidationError("Attachment is too large for text extraction.")
-    with tempfile.TemporaryDirectory(prefix="maverick-attachment-") as directory:
+    with tempfile.TemporaryDirectory(prefix="loopino-attachment-") as directory:
         target = Path(directory) / f"attachment.{file_format}"
         target.write_bytes(raw)
         extraction = _extract_by_format(target, file_format)

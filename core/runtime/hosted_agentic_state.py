@@ -19,7 +19,7 @@ from core.runtime.provider_private_state import (
 )
 from core.runtime.provider_state import ProviderPrivateEnvelope
 from core.runtime.agentic_feature_flags import (
-    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
     require_agentic_feature,
 )
 
@@ -66,7 +66,7 @@ class HostedAgenticStateBridge:
         if state.provider_private_envelope is None:
             return None
         require_agentic_feature(
-            MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+            LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
             "provider_private_state_disabled",
         )
         if not authority.allowed_capabilities.provider_private_state:
@@ -192,7 +192,7 @@ class HostedAgenticStateBridge:
     ) -> ProviderPrivateEnvelope:
         """Stage response state without making it authoritative for continuation."""
         require_agentic_feature(
-            MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+            LOOPINO_FEATURE_PROVIDER_PRIVATE_STATE,
             "provider_private_state_disabled",
         )
         if not authority.allowed_capabilities.provider_private_state:

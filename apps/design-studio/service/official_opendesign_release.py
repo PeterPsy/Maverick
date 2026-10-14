@@ -2,7 +2,7 @@
 
 The OCI manifest digest is the package identity.  Layer application is an
 installation operation: every regular-file byte and symlink target comes from
-the verified upstream layers.  Maverick metadata is written next to ``rootfs``
+the verified upstream layers.  Loopino metadata is written next to ``rootfs``
 and never into the official filesystem.
 """
 
@@ -414,8 +414,8 @@ def build_official_launch_command(
         "OD_BIND_HOST": "127.0.0.1",
         "OD_DATA_DIR": release.data_directory,
         "OD_PORT": str(port),
-        "MAVERICK_OPENDESIGN_MODEL_BRIDGE": bridge_mode,
-        "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE": bridge_mode,
+        "LOOPINO_OPENDESIGN_MODEL_BRIDGE": bridge_mode,
+        "LOOPINO_OPENDESIGN_DELEGATION_BRIDGE": bridge_mode,
     }
     command = [
         bwrap,
@@ -455,27 +455,27 @@ def build_official_launch_command(
                 "--tmpfs",
                 "/run",
                 "--dir",
-                "/run/maverick-python",
+                "/run/loopino-python",
                 "--dir",
-                "/run/maverick-python/lib",
+                "/run/loopino-python/lib",
                 "--dir",
-                "/run/maverick-python/glibc",
+                "/run/loopino-python/glibc",
                 "--dir",
-                "/run/maverick-relay",
+                "/run/loopino-relay",
                 *runtime_mounts,
                 "--bind",
                 str(relay),
-                "/run/maverick-relay",
+                "/run/loopino-relay",
                 "--ro-bind",
                 str(relay_script),
-                "/run/maverick-sidecar-relay.py",
+                "/run/loopino-sidecar-relay.py",
             ]
         )
         launch_command = [
             *relay_python,
-            "/run/maverick-sidecar-relay.py",
+            "/run/loopino-sidecar-relay.py",
             "--relay-socket",
-            "/run/maverick-relay/api.sock",
+            "/run/loopino-relay/api.sock",
             "--secret-fd",
             str(relay_secret_fd),
             "--target-host",
@@ -496,7 +496,7 @@ def build_official_launch_command(
             *release.entrypoint,
             *release.command,
         ]
-        environment["PYTHONHOME"] = "/run/maverick-python"
+        environment["PYTHONHOME"] = "/run/loopino-python"
     for key, value in environment.items():
         command.extend(["--setenv", key, value])
     command.extend(["--chdir", release.working_directory, *launch_command])
@@ -554,22 +554,22 @@ def _disposable_relay_runtime() -> tuple[list[str], list[str], Path]:
     mounts = [
         "--ro-bind",
         str(loader),
-        "/run/maverick-python/ld.so",
+        "/run/loopino-python/ld.so",
         "--ro-bind",
         str(python_binary),
-        "/run/maverick-python/python3",
+        "/run/loopino-python/python3",
         "--ro-bind",
         str(python_stdlib),
-        f"/run/maverick-python/lib/{python_stdlib.name}",
+        f"/run/loopino-python/lib/{python_stdlib.name}",
         "--ro-bind",
         str(shared_libraries),
-        "/run/maverick-python/glibc",
+        "/run/loopino-python/glibc",
     ]
     relay_python = [
-        "/run/maverick-python/ld.so",
+        "/run/loopino-python/ld.so",
         "--library-path",
-        "/run/maverick-python/glibc",
-        "/run/maverick-python/python3",
+        "/run/loopino-python/glibc",
+        "/run/loopino-python/python3",
     ]
     return mounts, relay_python, relay_script.resolve(strict=True)
 

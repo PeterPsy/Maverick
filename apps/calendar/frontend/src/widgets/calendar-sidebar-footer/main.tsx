@@ -2,16 +2,16 @@ import { useCalendarPreferences } from "../../useCalendarPreferences";
 import { t } from "../../preferences";
 import { useEffect, useState } from 'react';
 import {
-  isExactMaverickParentMessage,
+  isExactLoopinoParentMessage,
   isStandaloneWebApp,
   requestParentExternalUrl,
   type ExternalUrlDisposition,
-} from '@maverick/pwa-cache';
+} from '@loopino/pwa-cache';
 import { createRoot } from 'react-dom/client';
 import { CalendarPlus, Plus } from 'lucide-react';
 import { startGoogleOAuth } from '../../api';
 import { notifyCalendarUiStateChanged, writeCalendarUiState, readCalendarUiState } from '../../calendar-ui-state';
-import { calendarOAuthRedirectUri, maverickPlatformOrigin, runtimeAppIdFromPathname } from '../../runtime';
+import { calendarOAuthRedirectUri, loopinoPlatformOrigin, runtimeAppIdFromPathname } from '../../runtime';
 import './styles.css';
 
 const PRIMARY_ACTION_LABEL = 'New event';
@@ -27,17 +27,17 @@ function CalendarSidebarFooterWidget() {
     postPrimaryActionState(appId);
 
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as { owner_app_id?: string; type?: string; widget_id?: string };
       if (payload.owner_app_id !== appId || payload.widget_id !== WIDGET_ID) {
         return;
       }
-      if (payload.type === 'maverick.widget.primary-action.query') {
+      if (payload.type === 'loopino.widget.primary-action.query') {
         postPrimaryActionState(appId);
       }
-      if (payload.type === 'maverick.widget.primary-action.invoke') {
+      if (payload.type === 'loopino.widget.primary-action.invoke') {
         openCreate(appId);
       }
     }
@@ -78,7 +78,7 @@ function openCreate(appId: string) {
 function postPrimaryActionState(appId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.primary-action.state',
+      type: 'loopino.widget.primary-action.state',
       owner_app_id: appId,
       widget_id: WIDGET_ID,
       available: true,
@@ -95,7 +95,7 @@ async function connectAccount(appId: string, setIsConnecting: (value: boolean) =
   setIsConnecting(true);
   setError('');
   try {
-    const started = await startGoogleOAuth(appId, { redirectUri: calendarOAuthRedirectUri(appId, maverickPlatformOrigin()) });
+    const started = await startGoogleOAuth(appId, { redirectUri: calendarOAuthRedirectUri(appId, loopinoPlatformOrigin()) });
     openAuthorizationUrl(started.authorization_url, authorizationWindow, disposition, appId);
   } catch (connectError) {
     closeAuthorizationWindow(authorizationWindow);

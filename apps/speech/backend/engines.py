@@ -116,11 +116,11 @@ def _load_local_speech_env() -> None:
     if _LOCAL_SPEECH_ENV_LOADED:
         return
     _LOCAL_SPEECH_ENV_LOADED = True
-    configured = os.environ.get("MAVERICK_SPEECH_ENV_FILE", "").strip()
+    configured = os.environ.get("LOOPINO_SPEECH_ENV_FILE", "").strip()
     candidates = [Path(configured).expanduser()] if configured else []
     if not configured and not _running_from_app_entrypoint():
         return
-    candidates.append(Path(__file__).resolve().parents[3] / ".maverick" / "speech.env")
+    candidates.append(Path(__file__).resolve().parents[3] / ".loopino" / "speech.env")
     for env_path in candidates:
         if not env_path.is_file():
             continue
@@ -149,7 +149,7 @@ def _apply_speech_env_file(env_path: Path) -> None:
             continue
         key, raw_value = line.split("=", 1)
         key = key.strip()
-        if key != "PATH" and not key.startswith("MAVERICK_SPEECH_"):
+        if key != "PATH" and not key.startswith("LOOPINO_SPEECH_"):
             continue
         value = os.path.expandvars(raw_value.strip().strip("'\""))
         if key == "PATH":
@@ -219,7 +219,7 @@ def run_kokoro_deepinfra(*, text: str, voice: str, language: str, settings: dict
 
 
 def _run_espeak_tts_engine(engine: LocalEngine, *, text: str, voice: str, rate: int) -> bytes:
-    with TemporaryDirectory(prefix="maverick-speech-") as temp_dir:
+    with TemporaryDirectory(prefix="loopino-speech-") as temp_dir:
         output_path = Path(temp_dir) / "speech.wav"
         command = [engine.path, "-w", str(output_path), "-s", str(rate), "-v", voice, "--stdin"]
         result = subprocess.run(command, input=text, check=False, capture_output=True, text=True, timeout=30)
@@ -237,7 +237,7 @@ def _run_piper_tts_engine(engine: LocalEngine, *, text: str, voice: str, data_ro
         raise SpeechProviderUnavailableError(f"Piper voice `{voice}` does not have a configured local model.")
     model_path = str(voice_profile.get("_model_path") or piper_model_path())
     if not model_path:
-        raise SpeechProviderUnavailableError("Piper requires MAVERICK_SPEECH_PIPER_MODEL to point at a local voice model.")
+        raise SpeechProviderUnavailableError("Piper requires LOOPINO_SPEECH_PIPER_MODEL to point at a local voice model.")
     if data_root is not None and persistent_piper_worker_enabled():
         if piper_python_available():
             try:
@@ -246,11 +246,11 @@ def _run_piper_tts_engine(engine: LocalEngine, *, text: str, voice: str, data_ro
                 if strict_piper_worker_enabled():
                     raise SpeechProviderUnavailableError(
                         f"Piper persistent worker failed: {error.__class__.__name__}: {error}. "
-                        "Set MAVERICK_SPEECH_PIPER_WORKER=auto or entrypoint to allow fallback."
+                        "Set LOOPINO_SPEECH_PIPER_WORKER=auto or entrypoint to allow fallback."
                     ) from error
         elif strict_piper_worker_enabled():
             raise SpeechProviderUnavailableError("Piper persistent worker requires the piper-tts Python package.")
-    with TemporaryDirectory(prefix="maverick-speech-") as temp_dir:
+    with TemporaryDirectory(prefix="loopino-speech-") as temp_dir:
         output_path = Path(temp_dir) / "speech.wav"
         command = [engine.path, "--model", model_path, "--output_file", str(output_path)]
         config_path = str(voice_profile.get("_config_path") or piper_config_path())
@@ -308,7 +308,7 @@ def prewarm_local_tts_worker(data_root: Path, engine: LocalEngine, *, voice: str
 
 
 def piper_worker_mode() -> str:
-    return os.environ.get("MAVERICK_SPEECH_PIPER_WORKER", "auto").strip().lower() or "auto"
+    return os.environ.get("LOOPINO_SPEECH_PIPER_WORKER", "auto").strip().lower() or "auto"
 
 
 def piper_python_available() -> bool:
@@ -455,13 +455,13 @@ def stop_piper_workers(data_root: Path) -> dict:
 
 
 def piper_model_path() -> str:
-    model_path = os.environ.get("MAVERICK_SPEECH_PIPER_MODEL", "").strip()
+    model_path = os.environ.get("LOOPINO_SPEECH_PIPER_MODEL", "").strip()
     expanded = Path(model_path).expanduser() if model_path else Path()
     return str(expanded) if model_path and expanded.exists() else ""
 
 
 def piper_config_path() -> str:
-    config_path = os.environ.get("MAVERICK_SPEECH_PIPER_CONFIG", "").strip()
+    config_path = os.environ.get("LOOPINO_SPEECH_PIPER_CONFIG", "").strip()
     expanded = Path(config_path).expanduser() if config_path else Path()
     return str(expanded) if config_path and expanded.exists() else ""
 
@@ -482,17 +482,17 @@ def faster_whisper_available() -> bool:
 
 def faster_whisper_model_ref(settings: dict | None = None) -> str:
     profile = transcription_profile(settings)
-    configured = os.environ.get(f"MAVERICK_SPEECH_FASTER_WHISPER_{profile.upper()}_MODEL", "").strip()
+    configured = os.environ.get(f"LOOPINO_SPEECH_FASTER_WHISPER_{profile.upper()}_MODEL", "").strip()
     if configured:
         return configured
-    global_configured = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL", "").strip()
+    global_configured = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_MODEL", "").strip()
     if global_configured and (profile == DEFAULT_TRANSCRIPTION_PROFILE or faster_whisper_global_model_applies_to_all_profiles()):
         return global_configured
     return transcription_profile_model(settings)
 
 
 def faster_whisper_global_model_applies_to_all_profiles() -> bool:
-    value = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", "").strip().lower()
+    value = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", "").strip().lower()
     return value in {"1", "true", "yes", "on"}
 
 
@@ -506,7 +506,7 @@ def transcription_profile_model(settings: dict | None = None) -> str:
 
 
 def faster_whisper_beam_size(settings: dict | None = None) -> int:
-    configured = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_BEAM_SIZE", "").strip()
+    configured = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_BEAM_SIZE", "").strip()
     if configured:
         try:
             return max(1, int(configured))
@@ -516,23 +516,23 @@ def faster_whisper_beam_size(settings: dict | None = None) -> int:
 
 
 def faster_whisper_device(settings: dict | None = None) -> str:
-    configured = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE", "").strip()
+    configured = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_DEVICE", "").strip()
     if configured:
         return configured
     return TRANSCRIPTION_PROFILE_DEVICE_DEFAULTS.get(transcription_profile(settings), DEFAULT_FASTER_WHISPER_DEVICE)
 
 
 def faster_whisper_compute_type(settings: dict | None = None) -> str:
-    configured = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", "").strip()
+    configured = os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", "").strip()
     if configured:
         return configured
     return TRANSCRIPTION_PROFILE_COMPUTE_TYPE_DEFAULTS.get(transcription_profile(settings), DEFAULT_FASTER_WHISPER_COMPUTE_TYPE)
 
 
 def faster_whisper_initial_prompt() -> str:
-    prompt = os.environ.get("MAVERICK_SPEECH_TRANSCRIPTION_PROMPT", "").strip()
-    glossary = os.environ.get("MAVERICK_SPEECH_TRANSCRIPTION_GLOSSARY", "").strip()
-    glossary_file = os.environ.get("MAVERICK_SPEECH_TRANSCRIPTION_GLOSSARY_FILE", "").strip()
+    prompt = os.environ.get("LOOPINO_SPEECH_TRANSCRIPTION_PROMPT", "").strip()
+    glossary = os.environ.get("LOOPINO_SPEECH_TRANSCRIPTION_GLOSSARY", "").strip()
+    glossary_file = os.environ.get("LOOPINO_SPEECH_TRANSCRIPTION_GLOSSARY_FILE", "").strip()
     if glossary_file:
         try:
             glossary_from_file = Path(glossary_file).expanduser().read_text(encoding="utf-8").strip()
@@ -556,9 +556,9 @@ def faster_whisper_model_label(settings: dict | None = None) -> str:
 
 def faster_whisper_model_source(settings: dict | None = None) -> str:
     profile = transcription_profile(settings)
-    if os.environ.get(f"MAVERICK_SPEECH_FASTER_WHISPER_{profile.upper()}_MODEL", "").strip():
+    if os.environ.get(f"LOOPINO_SPEECH_FASTER_WHISPER_{profile.upper()}_MODEL", "").strip():
         return "profile_env"
-    if os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL", "").strip() and (
+    if os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_MODEL", "").strip() and (
         profile == DEFAULT_TRANSCRIPTION_PROFILE or faster_whisper_global_model_applies_to_all_profiles()
     ):
         return "global_env"
@@ -597,7 +597,7 @@ def _faster_whisper_model_is_local(model_ref: str) -> bool:
 
 
 def resolve_whisper_cpp_binary() -> str:
-    configured = os.environ.get("MAVERICK_SPEECH_WHISPER_CPP_BINARY", "").strip()
+    configured = os.environ.get("LOOPINO_SPEECH_WHISPER_CPP_BINARY", "").strip()
     if configured:
         return configured if Path(configured).exists() else ""
     for name in WHISPER_CPP_BINARY_CANDIDATES:
@@ -608,7 +608,7 @@ def resolve_whisper_cpp_binary() -> str:
 
 
 def whisper_cpp_model_path(settings: dict) -> str:
-    return os.environ.get("MAVERICK_SPEECH_WHISPER_CPP_MODEL", "").strip()
+    return os.environ.get("LOOPINO_SPEECH_WHISPER_CPP_MODEL", "").strip()
 
 
 def whisper_cpp_model_configured() -> bool:
@@ -648,7 +648,7 @@ def transcription_engine_statuses(settings: dict) -> list[dict]:
             "configured": bool(whisper_cpp_model),
             "detail": "whisper.cpp binary and model are configured."
             if whisper_cpp_binary and whisper_cpp_model and Path(whisper_cpp_model).exists()
-            else "Set MAVERICK_SPEECH_WHISPER_CPP_BINARY and MAVERICK_SPEECH_WHISPER_CPP_MODEL to local installation paths.",
+            else "Set LOOPINO_SPEECH_WHISPER_CPP_BINARY and LOOPINO_SPEECH_WHISPER_CPP_MODEL to local installation paths.",
             "binary_configured": bool(whisper_cpp_binary),
             "model_configured": bool(whisper_cpp_model and Path(whisper_cpp_model).exists()),
         },
@@ -689,13 +689,13 @@ def _synthesis_status_cache_key(*, include_paths: bool, settings: dict | None = 
     return (
         include_paths,
         os.environ.get("PATH", ""),
-        os.environ.get("MAVERICK_SPEECH_PIPER_MODEL", ""),
-        os.environ.get("MAVERICK_SPEECH_PIPER_CONFIG", ""),
-        os.environ.get("MAVERICK_SPEECH_PIPER_MODEL_SHA256", ""),
-        os.environ.get("MAVERICK_SPEECH_PIPER_CONFIG_SHA256", ""),
-        os.environ.get("MAVERICK_SPEECH_PIPER_VOICE_ID", ""),
-        os.environ.get("MAVERICK_SPEECH_PIPER_LANGUAGE", ""),
-        os.environ.get("MAVERICK_SPEECH_PIPER_VOICES_JSON", ""),
+        os.environ.get("LOOPINO_SPEECH_PIPER_MODEL", ""),
+        os.environ.get("LOOPINO_SPEECH_PIPER_CONFIG", ""),
+        os.environ.get("LOOPINO_SPEECH_PIPER_MODEL_SHA256", ""),
+        os.environ.get("LOOPINO_SPEECH_PIPER_CONFIG_SHA256", ""),
+        os.environ.get("LOOPINO_SPEECH_PIPER_VOICE_ID", ""),
+        os.environ.get("LOOPINO_SPEECH_PIPER_LANGUAGE", ""),
+        os.environ.get("LOOPINO_SPEECH_PIPER_VOICES_JSON", ""),
         bool(_runtime_secret(settings or {}, "openrouter_api_key")),
         bool(_runtime_secret(settings or {}, "deepinfra_api_key")),
         bool(_runtime_secret(settings or {}, GEMINI_TTS_SECRET)),
@@ -750,7 +750,7 @@ def _synthesis_engine_status(candidate: str, *, include_path: bool) -> dict:
             "configured": bool(voices and any(item.get("model_configured") for item in voices)),
             "detail": "Piper binary and local voice model are configured."
             if configured
-            else "Install piper and set MAVERICK_SPEECH_PIPER_MODEL to a local voice model.",
+            else "Install piper and set LOOPINO_SPEECH_PIPER_MODEL to a local voice model.",
             "binary_configured": bool(path),
             "model_configured": bool(voices and any(item.get("model_configured") for item in voices)),
             "quality_profile": "natural",
@@ -841,9 +841,9 @@ def _english_voice_rank(profile: dict) -> int:
 
 
 def piper_voice_profiles(*, include_paths: bool = False) -> list[dict]:
-    voice_id = os.environ.get("MAVERICK_SPEECH_PIPER_VOICE_ID", "").strip() or "piper-local"
-    language = os.environ.get("MAVERICK_SPEECH_PIPER_LANGUAGE", "").strip() or ""
-    configured = os.environ.get("MAVERICK_SPEECH_PIPER_VOICES_JSON", "").strip()
+    voice_id = os.environ.get("LOOPINO_SPEECH_PIPER_VOICE_ID", "").strip() or "piper-local"
+    language = os.environ.get("LOOPINO_SPEECH_PIPER_LANGUAGE", "").strip() or ""
+    configured = os.environ.get("LOOPINO_SPEECH_PIPER_VOICES_JSON", "").strip()
     if configured:
         try:
             payload = json.loads(configured)
@@ -867,8 +867,8 @@ def piper_voice_profiles(*, include_paths: bool = False) -> list[dict]:
     if include_paths:
         profile["_model_path"] = piper_model_path()
         profile["_config_path"] = piper_config_path()
-        profile["_model_sha256"] = os.environ.get("MAVERICK_SPEECH_PIPER_MODEL_SHA256", "").strip().lower()
-        profile["_config_sha256"] = os.environ.get("MAVERICK_SPEECH_PIPER_CONFIG_SHA256", "").strip().lower()
+        profile["_model_sha256"] = os.environ.get("LOOPINO_SPEECH_PIPER_MODEL_SHA256", "").strip().lower()
+        profile["_config_sha256"] = os.environ.get("LOOPINO_SPEECH_PIPER_CONFIG_SHA256", "").strip().lower()
     return [profile]
 
 
@@ -943,11 +943,11 @@ def tts_engine_cache_fingerprint(engine: LocalEngine, *, voice: str) -> dict:
         fingerprint["voice_id"] = str(profile.get("voice_id") or voice)
         fingerprint["model"] = _file_fingerprint(
             str(profile.get("_model_path") or piper_model_path()),
-            configured_sha256=str(profile.get("_model_sha256") or os.environ.get("MAVERICK_SPEECH_PIPER_MODEL_SHA256", "")),
+            configured_sha256=str(profile.get("_model_sha256") or os.environ.get("LOOPINO_SPEECH_PIPER_MODEL_SHA256", "")),
         )
         fingerprint["config"] = _file_fingerprint(
             str(profile.get("_config_path") or piper_config_path()),
-            configured_sha256=str(profile.get("_config_sha256") or os.environ.get("MAVERICK_SPEECH_PIPER_CONFIG_SHA256", "")),
+            configured_sha256=str(profile.get("_config_sha256") or os.environ.get("LOOPINO_SPEECH_PIPER_CONFIG_SHA256", "")),
         )
     return fingerprint
 
@@ -1246,7 +1246,7 @@ def _run_faster_whisper_worker_job(audio_path: str, *, config: dict, language: s
             if strict_persistent_faster_whisper_worker_enabled():
                 raise SpeechTranscriptionError(
                     f"faster-whisper persistent worker failed: {fallback_reason}. "
-                    "Set MAVERICK_SPEECH_FASTER_WHISPER_WORKER=auto or entrypoint to allow fallback."
+                    "Set LOOPINO_SPEECH_FASTER_WHISPER_WORKER=auto or entrypoint to allow fallback."
                 ) from error
     payload = _run_entrypoint_faster_whisper_worker_job(audio_path, config=config, language=language)
     if fallback_reason and payload.get("ok") and isinstance(payload.get("result"), dict):
@@ -1282,7 +1282,7 @@ def _run_entrypoint_faster_whisper_worker_job(audio_path: str, *, config: dict, 
 
 
 def faster_whisper_worker_mode() -> str:
-    return os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_WORKER", "auto").strip().lower() or "auto"
+    return os.environ.get("LOOPINO_SPEECH_FASTER_WHISPER_WORKER", "auto").strip().lower() or "auto"
 
 
 def persistent_faster_whisper_worker_enabled() -> bool:
@@ -1829,7 +1829,7 @@ def _transcribe_with_whisper_cpp(audio_path: Path, *, settings: dict, language: 
     model_path = whisper_cpp_model_path(settings)
     if not binary or not model_path or not Path(model_path).exists():
         raise SpeechProviderUnavailableError("whisper.cpp requires a binary and model path.")
-    with TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
+    with TemporaryDirectory(prefix="loopino-speech-stt-") as temp_dir:
         output_prefix = Path(temp_dir) / "transcript"
         command = [binary, "-m", model_path, "-f", str(audio_path), "-otxt", "-of", str(output_prefix)]
         if language:

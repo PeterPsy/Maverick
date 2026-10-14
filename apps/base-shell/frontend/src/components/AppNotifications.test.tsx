@@ -11,9 +11,9 @@ const transport = vi.hoisted(() => ({
   reconnect: () => {},
   visibility: (_visible: boolean) => {},
 }));
-vi.mock("@maverick/pwa-cache", () => ({
-  maverickAppIsVisible: () => transport.visible,
-  observeMaverickVisibility: (callback: typeof transport.visibility) => {
+vi.mock("@loopino/pwa-cache", () => ({
+  loopinoAppIsVisible: () => transport.visible,
+  observeLoopinoVisibility: (callback: typeof transport.visibility) => {
     transport.visibility = callback;
     callback(transport.visible);
     return () => {};
@@ -473,7 +473,7 @@ describe("App notification inbox", () => {
     );
     await flush();
     transport.event({
-      type: "maverick.app.data-changed",
+      type: "loopino.app.data-changed",
       owner_app_id: "calendar",
       resource: "notifications",
       workspace_id: "other",
@@ -482,7 +482,7 @@ describe("App notification inbox", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     for (let i = 0; i < 3; i++)
       transport.event({
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
         owner_app_id: "calendar",
         resource: "notifications",
         workspace_id: "default",

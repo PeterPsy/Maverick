@@ -32,7 +32,7 @@ def start_runtime_session_root_purge_scheduler(
     thread = Thread(
         target=_run_runtime_session_root_purge_scheduler,
         args=(state, interval, initial_delay, stop),
-        name="maverick-runtime-session-root-purge",
+        name="loopino-runtime-session-root-purge",
         daemon=True,
     )
     thread.start()
@@ -126,7 +126,7 @@ def _run_runtime_session_root_purge_scheduler(
 def _purge_interval_seconds(interval_seconds: float | None) -> float:
     if interval_seconds is not None:
         return max(0.1, float(interval_seconds))
-    raw = os.environ.get("MAVERICK_RUNTIME_SESSION_ROOT_PURGE_INTERVAL_SECONDS", "").strip()
+    raw = os.environ.get("LOOPINO_RUNTIME_SESSION_ROOT_PURGE_INTERVAL_SECONDS", "").strip()
     if not raw:
         return DEFAULT_RUNTIME_SESSION_ROOT_PURGE_INTERVAL_SECONDS
     try:

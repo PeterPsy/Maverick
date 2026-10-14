@@ -176,4 +176,4 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     """Notify mounted clients after app-owned state changes."""
     if action.strip().lower() not in MUTATING_ACTIONS:
         return []
-    return [{"type": "maverick.app.data-changed", "owner_app_id": "marta-ops", "resource": "state"}]
+    return [{"type": "loopino.app.data-changed", "owner_app_id": "marta-ops", "resource": "state"}]

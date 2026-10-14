@@ -1,4 +1,4 @@
-const STORAGE_PREFIX = "maverick.chat.composerDraft.v1:";
+const STORAGE_PREFIX = "loopino.chat.composerDraft.v1:";
 const MAX_DRAFT_CHARS = 64 * 1024;
 const MAX_DRAFTS = 20;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;

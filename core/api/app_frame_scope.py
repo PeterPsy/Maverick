@@ -6,10 +6,10 @@ import re
 from typing import Any, Mapping, MutableMapping
 
 
-APP_FRAME_PROXY_SCOPE_KEY = "maverick.app_frame_proxy"
-APP_FRAME_APP_ID_SCOPE_KEY = "maverick.app_frame_app_id"
-APP_FRAME_MOUNT_APP_ID_SCOPE_KEY = "maverick.app_frame_mount_app_id"
-APP_FRAME_ORIGIN_SCOPE_KEY = "maverick.app_frame_origin"
+APP_FRAME_PROXY_SCOPE_KEY = "loopino.app_frame_proxy"
+APP_FRAME_APP_ID_SCOPE_KEY = "loopino.app_frame_app_id"
+APP_FRAME_MOUNT_APP_ID_SCOPE_KEY = "loopino.app_frame_mount_app_id"
+APP_FRAME_ORIGIN_SCOPE_KEY = "loopino.app_frame_origin"
 APP_FRAME_OWNER_MISMATCH_ERROR = "app_frame_owner_mismatch"
 
 _APP_DOCUMENT_PATH = re.compile(r"^/apps/([^/]+)(?:/|$)")

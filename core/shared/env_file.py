@@ -1,8 +1,18 @@
-"""Small helpers for Maverick service environment files."""
+"""Small helpers for Loopino service environment files."""
 
 from __future__ import annotations
 
 from pathlib import Path
+import os
+
+
+def service_env_path(repository_root: Path) -> Path:
+    """Resolve the hosted service environment shared by CLI and host workers."""
+    configured = os.environ.get("LOOPINO_SERVICE_ENV_FILE", "").strip()
+    path = Path(configured) if configured else repository_root / ".env.loopino"
+    if path.parent != repository_root or any(p.is_symlink() for p in (path, *path.parents)):
+        raise ValueError("The service environment must be a direct installation-owned file without symlinks")
+    return path
 
 
 def read_env_file(path: Path) -> dict[str, str]:

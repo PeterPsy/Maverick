@@ -4,8 +4,8 @@ import { posix, relative, resolve, sep } from "node:path";
 
 import { validateHtmlAssetReferences } from "./frontend-html-asset-references.mjs";
 
-export const MAVERICK_FRONTEND_ASSET_MANIFEST = "maverick-frontend-assets.json";
-export const MAVERICK_FRONTEND_ASSET_SCHEMA = "maverick.frontend-assets.v2";
+export const LOOPINO_FRONTEND_ASSET_MANIFEST = "loopino-frontend-assets.json";
+export const LOOPINO_FRONTEND_ASSET_SCHEMA = "loopino.frontend-assets.v2";
 
 function sha256(body) {
   return createHash("sha256").update(body).digest("hex");
@@ -39,7 +39,7 @@ function recordFor(outDir, path) {
 
 function canonicalBuildPayload({ entrypoints, immutable, navigationFallback = null, precache = null, revalidated }) {
   const payload = {
-    schema: MAVERICK_FRONTEND_ASSET_SCHEMA,
+    schema: LOOPINO_FRONTEND_ASSET_SCHEMA,
     entrypoints,
     immutable,
     revalidated,
@@ -111,14 +111,14 @@ function precacheRecords({ base, immutable, options, recordsByPath }) {
       url.startsWith("/ws/") ||
       segments.some((segment) => segment === "backend" || segment === "sidecar")
     ) {
-      throw new Error(`Maverick precache URL is unsafe: ${url}`);
+      throw new Error(`Loopino precache URL is unsafe: ${url}`);
     }
     const record = recordsByPath.get(path);
     if (!record) {
-      throw new Error(`Maverick precache file is missing: ${path}`);
+      throw new Error(`Loopino precache file is missing: ${path}`);
     }
     if (byUrl.has(url) && byUrl.get(url).path !== path) {
-      throw new Error(`Maverick precache URL maps to multiple files: ${url}`);
+      throw new Error(`Loopino precache URL maps to multiple files: ${url}`);
     }
     byUrl.set(url, { url, path, sha256: record.sha256, size_bytes: record.size_bytes });
   }
@@ -129,23 +129,23 @@ function injectServiceWorker({ buildId, immutable, navigationFallbackUrl, outDir
   const path = resolve(outDir, serviceWorkerPath);
   const source = readFileSync(path, "utf8");
   const replacements = {
-    __MAVERICK_BUILD_ID__: buildId,
-    __MAVERICK_IMMUTABLE_ASSETS__: JSON.stringify(
+    __LOOPINO_BUILD_ID__: buildId,
+    __LOOPINO_IMMUTABLE_ASSETS__: JSON.stringify(
       immutable.map((record) => ({
         url: record.path,
         sha256: record.sha256,
         size_bytes: record.size_bytes,
       })),
     ),
-    __MAVERICK_PRECACHE_MANIFEST__: JSON.stringify(precache),
+    __LOOPINO_PRECACHE_MANIFEST__: JSON.stringify(precache),
   };
   if (navigationFallbackUrl !== null) {
-    replacements.__MAVERICK_NAVIGATION_FALLBACK_URL__ = JSON.stringify(navigationFallbackUrl);
+    replacements.__LOOPINO_NAVIGATION_FALLBACK_URL__ = JSON.stringify(navigationFallbackUrl);
   }
   let generated = source;
   for (const [token, value] of Object.entries(replacements)) {
     if (!generated.includes(token)) {
-      throw new Error(`Maverick service worker token is missing: ${token}`);
+      throw new Error(`Loopino service worker token is missing: ${token}`);
     }
     generated = generated.split(token).join(value);
   }
@@ -153,18 +153,18 @@ function injectServiceWorker({ buildId, immutable, navigationFallbackUrl, outDir
 }
 
 /**
- * Emit Maverick's verified asset manifest from Rollup's actual output graph.
+ * Emit Loopino's verified asset manifest from Rollup's actual output graph.
  *
  * Only Rollup/Vite outputs produced through a naming template containing the
  * real `[hash]` placeholder are classified immutable. Files copied from
  * `publicDir`, explicitly named outputs, HTML entrypoints, workers, and other
  * semantic names remain revalidated even when their filename resembles a hash.
  */
-export function maverickFrontendAssets(options = {}) {
+export function loopinoFrontendAssets(options = {}) {
   let resolvedConfig;
   const immutableRollupOutputs = new Set();
   return {
-    name: "maverick-frontend-assets",
+    name: "loopino-frontend-assets",
     apply: "build",
     enforce: "post",
     configResolved(config) {
@@ -184,11 +184,11 @@ export function maverickFrontendAssets(options = {}) {
     closeBundle() {
       const outDir = resolve(resolvedConfig.root, resolvedConfig.build.outDir);
       const paths = filesBelow(outDir).filter(
-        (path) => path !== MAVERICK_FRONTEND_ASSET_MANIFEST && !path.endsWith(".map"),
+        (path) => path !== LOOPINO_FRONTEND_ASSET_MANIFEST && !path.endsWith(".map"),
       );
       const entrypoints = paths.filter((path) => path.endsWith(".html"));
       if (entrypoints.length === 0) {
-        throw new Error("Maverick frontend builds require at least one HTML entrypoint.");
+        throw new Error("Loopino frontend builds require at least one HTML entrypoint.");
       }
       validateHtmlAssetReferences({
         base: resolvedConfig.base,
@@ -209,10 +209,10 @@ export function maverickFrontendAssets(options = {}) {
         ? null
         : precache.find(({ path }) => path === navigationFallback) || null;
       if (navigationFallback !== null && !entrypoints.includes(navigationFallback)) {
-        throw new Error(`Maverick navigation fallback is not an HTML entrypoint: ${navigationFallback}`);
+        throw new Error(`Loopino navigation fallback is not an HTML entrypoint: ${navigationFallback}`);
       }
       if (navigationFallback !== null && navigationFallbackRecord === null) {
-        throw new Error(`Maverick navigation fallback is not selected for precache: ${navigationFallback}`);
+        throw new Error(`Loopino navigation fallback is not selected for precache: ${navigationFallback}`);
       }
       // The generated worker embeds buildId, so hashing its final bytes would
       // be circular. Hash its placeholder bytes plus the selected precache
@@ -237,7 +237,7 @@ export function maverickFrontendAssets(options = {}) {
         ({ immutable, revalidated } = recordsForPaths(outDir, paths, immutableRollupOutputs));
       }
       const payload = {
-        schema: MAVERICK_FRONTEND_ASSET_SCHEMA,
+        schema: LOOPINO_FRONTEND_ASSET_SCHEMA,
         build_id: buildId,
         entrypoints,
         immutable,
@@ -249,7 +249,7 @@ export function maverickFrontendAssets(options = {}) {
       if (precache.length > 0) {
         payload.precache = precache;
       }
-      writeFileSync(resolve(outDir, MAVERICK_FRONTEND_ASSET_MANIFEST), `${JSON.stringify(payload, null, 2)}\n`);
+      writeFileSync(resolve(outDir, LOOPINO_FRONTEND_ASSET_MANIFEST), `${JSON.stringify(payload, null, 2)}\n`);
     },
   };
 }

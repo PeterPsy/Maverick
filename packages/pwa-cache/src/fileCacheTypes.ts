@@ -2,13 +2,13 @@ import type {
   AccessLease,
   CacheCleanupResult,
   CachePrincipal,
-  MaverickDataClass,
-  MaverickProvenance,
+  LoopinoDataClass,
+  LoopinoProvenance,
   StorageQuotaAdapter,
 } from "./types";
 
 export const PWA_FILE_CACHE_SCHEMA_VERSION = 2;
-export const PWA_FILE_CACHE_POLICY_REVISION = "maverick.local-persistence-policy.v2";
+export const PWA_FILE_CACHE_POLICY_REVISION = "loopino.local-persistence-policy.v2";
 export const DEFAULT_PWA_FILE_CACHE_MAX_ENTRY_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_PWA_FILE_CACHE_SCOPE_BUDGET_BYTES = 128 * 1024 * 1024;
 export const DEFAULT_PWA_FILE_CACHE_GLOBAL_BUDGET_BYTES = 256 * 1024 * 1024;
@@ -18,11 +18,11 @@ export type FileCacheState = "writing" | "ready" | "invalid" | "error";
 export type FileCacheDescriptor = {
   cacheApproved?: boolean;
   contentType: string;
-  dataClass: MaverickDataClass;
+  dataClass: LoopinoDataClass;
   expectedSha256?: string;
   fileId: string;
   privacyApproved?: boolean;
-  provenance: MaverickProvenance;
+  provenance: LoopinoProvenance;
   regulatedAllowlisted?: boolean;
   sizeBytes: number;
   sourceVersion: string;
@@ -33,7 +33,7 @@ export type FileCacheRecord = CachePrincipal & {
   cachedAt: number;
   cleanupEpoch: number;
   contentType: string;
-  dataClass: MaverickDataClass;
+  dataClass: LoopinoDataClass;
   etag: string;
   fileId: string;
   key: string;
@@ -41,7 +41,7 @@ export type FileCacheRecord = CachePrincipal & {
   lastVerifiedAt: number;
   opfsPath: string;
   policyRevision: typeof PWA_FILE_CACHE_POLICY_REVISION;
-  provenance: MaverickProvenance;
+  provenance: LoopinoProvenance;
   schemaVersion: typeof PWA_FILE_CACHE_SCHEMA_VERSION;
   sha256: string;
   sizeBytes: number;

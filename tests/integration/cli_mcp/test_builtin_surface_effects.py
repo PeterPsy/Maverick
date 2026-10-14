@@ -246,7 +246,7 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                 next(
                     item
                     for item in discovered_mcp
-                    if item["tool_name"] == "app.storage.maverick_storage"
+                    if item["tool_name"] == "app.storage.loopino_storage"
                 ),
             )
             cli_arguments = {
@@ -254,7 +254,7 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                 "arguments": {"action": "catalog"},
             }
             mcp_arguments = {
-                "tool_name": "app.storage.maverick_storage",
+                "tool_name": "app.storage.loopino_storage",
                 "arguments": {"action": "catalog"},
             }
             self.assertTrue(
@@ -309,7 +309,7 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                 context=cli_context,
             )
             mcp_result = McpRunner(mcp).call_tool(
-                tool_name="app.storage.maverick_storage",
+                tool_name="app.storage.loopino_storage",
                 arguments={"action": "catalog"},
                 context=mcp_context,
             )

@@ -20,14 +20,14 @@ try {
   const worker=context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
   const extensionId=worker.url().split("/")[2];
   const browser=await context.browser().newBrowserCDPSession();
-  for(const url of ["chrome://extensions/","https://maverick-fixture.test/app/browser","https://www.instagram.com/fixture_user/"]) {
+  for(const url of ["chrome://extensions/","https://loopino-fixture.test/app/browser","https://www.instagram.com/fixture_user/"]) {
     await page.goto(url);await page.bringToFront();
     const popup=await openActionPopup(browser,extensionId,page.url());
     const result=await popup.evaluate("({disabled:document.querySelector('#share').disabled,hidden:document.querySelector('#share').hidden,title:document.querySelector('#tab-title').textContent,stop:document.querySelector('#stop').hidden})");
     assert.equal(result.disabled,true);assert.equal(result.hidden,true);assert.equal(result.stop,true);
     assert.equal(result.title,"A tab for your agent");
     assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
-    assert.equal(await popup.evaluate("document.querySelector('#connector').value"),"https://maverick.loopino.ai/app/browser?connector=1");
+    assert.equal(await popup.evaluate("document.querySelector('#connector').value"),"https://loopino.giuntitrail.com/app/browser?connector=1");
     for(const theme of ["dark","light"]) {
       await popup.send("Emulation.setEmulatedMedia",{features:[{name:"prefers-color-scheme",value:theme}]});
       await new Promise(resolve=>setTimeout(resolve,300));
@@ -35,7 +35,7 @@ try {
       assert.equal(layout.scheme,theme);assert.equal(layout.overflow,false);assert(layout.height<600);
       assert.equal(layout.button,theme === "dark" ? "rgb(255, 255, 255)" : "rgb(17, 24, 39)");
       const shot=await popup.send("Page.captureScreenshot",{format:"png"});
-      writeFileSync(path.join(tmpdir(),`maverick-companion-popup-${theme}.png`),Buffer.from(shot.data,"base64"));
+      writeFileSync(path.join(tmpdir(),`loopino-companion-popup-${theme}.png`),Buffer.from(shot.data,"base64"));
     }
     await popup.evaluate("document.querySelector('.settings').open=true;document.querySelector('.help').open=true;document.querySelector('#connector').focus();true");
     assert.equal(await popup.evaluate("getComputedStyle(document.querySelector('#connector')).outlineStyle"),"solid");
@@ -51,9 +51,9 @@ try {
   const agentPopup=await openActionPopup(browser,extensionId,agent.url());
   assert.equal(await agentPopup.evaluate("document.querySelector('#share').disabled"),false);
   assert.equal(await agentPopup.evaluate("document.querySelector('#share-label').textContent"),'Connect agent tab');
-  assert.equal(await agentPopup.evaluate("document.querySelector('#connector').value"),"https://maverick.loopino.ai/app/browser?connector=1");
+  assert.equal(await agentPopup.evaluate("document.querySelector('#connector').value"),"https://loopino.giuntitrail.com/app/browser?connector=1");
   assert.equal(await worker.evaluate(()=>chrome.permissions.contains({origins:["https://www.instagram.com/*"]})),false);
-  await agentPopup.evaluate("document.querySelector('#connector').value='https://maverick-fixture.test/apps/browser/';document.querySelector('#share').click();true");
+  await agentPopup.evaluate("document.querySelector('#connector').value='https://loopino-fixture.test/apps/browser/';document.querySelector('#share').click();true");
   assert.match(await agentPopup.evaluate("document.querySelector('#status').textContent"),/Connection settings/u);
   assert.equal((await worker.evaluate(()=>chrome.storage.session.get('binding'))).binding,undefined);
   await agentPopup.close();
@@ -67,7 +67,7 @@ try {
   for(const theme of ["dark","light"]) {
     await agent.emulateMedia({colorScheme:theme});await agent.setViewportSize({width:390,height:844});
     assert.equal(await agent.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-    await agent.screenshot({path:path.join(tmpdir(),`maverick-agent-start-${theme}.png`)});
+    await agent.screenshot({path:path.join(tmpdir(),`loopino-agent-start-${theme}.png`)});
   }
   console.log("Companion popup passed: agent-only setup from Chrome/platform pages, existing empty-tab reuse, native dark/light popup, settings focus/overflow, 390px landing, preconfigured address and invalid-address guidance.");
 } finally {if(context)await context.close();rmSync(temporary,{recursive:true,force:true});}

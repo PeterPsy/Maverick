@@ -103,7 +103,7 @@ class RuntimeApiTokenRecoveryTest(unittest.TestCase):
         )
         with patch.dict(
             "os.environ",
-            {"MAVERICK_RUNTIME_API_SECRET": "runtime-token-test-secret"},
+            {"LOOPINO_RUNTIME_API_SECRET": "runtime-token-test-secret"},
             clear=True,
         ):
             token = issue_workspace_api_token(
@@ -132,7 +132,7 @@ class RuntimeApiTokenRecoveryTest(unittest.TestCase):
         store.save_turn(replace(turn, status="completed", completed_at=NOW))
         with patch.dict(
             "os.environ",
-            {"MAVERICK_RUNTIME_API_SECRET": "runtime-token-test-secret"},
+            {"LOOPINO_RUNTIME_API_SECRET": "runtime-token-test-secret"},
             clear=True,
         ):
             token = issue_workspace_api_token(
@@ -157,7 +157,7 @@ class RuntimeApiTokenRecoveryTest(unittest.TestCase):
         store, session, turn = self._turn_store()
         with patch.dict(
             "os.environ",
-            {"MAVERICK_RUNTIME_API_SECRET": "runtime-token-test-secret"},
+            {"LOOPINO_RUNTIME_API_SECRET": "runtime-token-test-secret"},
             clear=True,
         ):
             token = issue_workspace_api_token(
@@ -210,7 +210,7 @@ class RuntimeApiTokenRecoveryTest(unittest.TestCase):
         store.insert_session(session)
         with patch.dict(
             "os.environ",
-            {"MAVERICK_RUNTIME_API_SECRET": "runtime-token-test-secret"},
+            {"LOOPINO_RUNTIME_API_SECRET": "runtime-token-test-secret"},
             clear=True,
         ):
             token = issue_workspace_api_token(

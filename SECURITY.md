@@ -1,6 +1,6 @@
 # Security Policy
 
-Maverick is experimental software. Do not expose it to the public internet or store production secrets in it until the documented hardening work is complete.
+Loopino is experimental software. Do not expose it to the public internet or store production secrets in it until the documented hardening work is complete.
 
 For a compact boundary overview, read `docs/security/threat_model.md`. For the current production-use limitations, read `docs/security/production_readiness.md`.
 
@@ -26,7 +26,7 @@ Include:
 
 ## Current Security Status
 
-Maverick is not production-safe for sensitive data on an internet-connected host.
+Loopino is not production-safe for sensitive data on an internet-connected host.
 
 Known launch blockers currently include:
 
@@ -67,12 +67,12 @@ Out of scope for the experimental pre-release:
 
 - reports that require already having local administrator access to the same machine
 - denial-of-service issues without a security boundary impact
-- findings against private deployments not running public Maverick code
+- findings against private deployments not running public Loopino code
 - social engineering against maintainers
 
 ## Security Posture
 
-Maverick's intended security model is stricter than a personal-assistant trust model:
+Loopino's intended security model is stricter than a personal-assistant trust model:
 
 - non-default workspaces must be sandbox-first
 - workspace roots are tenant boundaries
@@ -121,9 +121,9 @@ by a reserved ASGI host router, never by platform-route fallthrough. Core owns
 one-shot hashed tickets, distinct host-only sessions, actor/workspace/app/
 generation/process binding, expiry/rotation/revocation, unsafe-request Origin
 and Fetch Metadata checks, response filtering, CSP, no-referrer/no-store
-headers, and redaction-safe audit records. Maverick cookies and sidecar
+headers, and redaction-safe audit records. Loopino cookies and sidecar
 technical tokens are not forwarded. This closes the browser-origin boundary
-for the declared sidecar profile; it does not change Maverick's broader
+for the declared sidecar profile; it does not change Loopino's broader
 pre-release status or the remaining blockers in
 `docs/security/production_readiness.md`.
 

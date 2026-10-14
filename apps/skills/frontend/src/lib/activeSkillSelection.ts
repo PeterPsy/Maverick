@@ -29,7 +29,7 @@ export function notifyActiveSkillSelection(skillId: string, options: NotifyOptio
   const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
-      type: 'maverick.app.selection-changed',
+      type: 'loopino.app.selection-changed',
       owner_app_id: 'skills',
       selection: { skill_id: normalizedSkillId }
     },
@@ -39,7 +39,7 @@ export function notifyActiveSkillSelection(skillId: string, options: NotifyOptio
 }
 
 export function skillIdFromSelectionMessage(payload: ActiveSkillSelectionMessage) {
-  if (payload.type !== 'maverick.app.selection-changed' || payload.owner_app_id !== 'skills') {
+  if (payload.type !== 'loopino.app.selection-changed' || payload.owner_app_id !== 'skills') {
     return '';
   }
   const value = payload.selection && typeof payload.selection.skill_id === 'string' ? payload.selection.skill_id.trim() : '';

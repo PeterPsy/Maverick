@@ -1,6 +1,6 @@
 # Changelog
 
-Maverick has not published a stable release yet.
+Loopino has not published a stable release yet.
 
 ## Unreleased
 

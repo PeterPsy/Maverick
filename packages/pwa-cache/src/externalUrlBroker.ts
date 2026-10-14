@@ -29,7 +29,7 @@ export function requestParentExternalUrl(value: unknown, options: ExternalUrlReq
   const parentWindow = options.parentWindow ?? (typeof window === 'undefined' ? null : window.parent);
   if (!parentWindow || parentWindow === currentWindow) return false;
   const message: Record<string, string> = {
-    type: 'maverick.app.external-url',
+    type: 'loopino.app.external-url',
     disposition: options.disposition || 'new-window',
     url,
   };
@@ -50,8 +50,8 @@ function absoluteHttpUrl(value: unknown): string | null {
 }
 
 function platformOrigin(currentWindow: unknown): string | null {
-  const value = (currentWindow as { __MAVERICK_PLATFORM_ORIGIN__?: unknown } | null)
-    ?.__MAVERICK_PLATFORM_ORIGIN__;
+  const value = (currentWindow as { __LOOPINO_PLATFORM_ORIGIN__?: unknown } | null)
+    ?.__LOOPINO_PLATFORM_ORIGIN__;
   if (typeof value !== 'string') return null;
   try {
     const url = new URL(value);

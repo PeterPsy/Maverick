@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { ChatThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
-import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
+import { applyInitialLoopinoTheme, listenForLoopinoThemeMessages } from "../../lib/shellTheme";
 import {
   CHAT_SIDEBAR_SELECTION_CANCEL_DELETE,
   CHAT_SIDEBAR_SELECTION_CONFIRM_DELETE,
@@ -16,8 +16,8 @@ import {
 import "./styles.css";
 import { ChatSelectionActions } from "./ChatSelectionActions";
 
-applyInitialMaverickTheme();
-listenForMaverickThemeMessages();
+applyInitialLoopinoTheme();
+listenForLoopinoThemeMessages();
 
 const DEFAULT_APP_ID = "chat";
 const PRIMARY_ACTION_LABEL = "New chat";
@@ -29,7 +29,7 @@ const WIDGET_ID = "chat-sidebar-footer";
 function notifyShell(appId: string, projectId: string | null) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.open-app",
+      type: "loopino.widget.open-app",
       app_id: appId,
       params: {
         new_chat: true,
@@ -123,7 +123,7 @@ function ChatSidebarFooterWidget() {
       if (
         payload.owner_app_id === appId &&
         payload.widget_id === WIDGET_ID &&
-        payload.type === "maverick.widget.primary-action.query"
+        payload.type === "loopino.widget.primary-action.query"
       ) {
         postPrimaryActionStateWithLabel(appId, primaryActionAvailable, primaryActionLabel);
         return;
@@ -131,7 +131,7 @@ function ChatSidebarFooterWidget() {
       if (
         payload.owner_app_id === appId &&
         payload.widget_id === WIDGET_ID &&
-        payload.type === "maverick.widget.primary-action.invoke"
+        payload.type === "loopino.widget.primary-action.invoke"
       ) {
         if (hasSelectedThreads) {
           requestDeleteConfirmation();
@@ -143,7 +143,7 @@ function ChatSidebarFooterWidget() {
         return;
       }
       if (
-        (payload.type === "maverick.chat.active-thread-changed" || payload.type === "maverick.widget.data-changed") &&
+        (payload.type === "loopino.chat.active-thread-changed" || payload.type === "loopino.widget.data-changed") &&
         payload.owner_app_id === appId
       ) {
         setActiveThreadId(payload.active_thread_id || null);
@@ -211,7 +211,7 @@ function ChatSidebarFooterWidget() {
 function postPrimaryActionStateWithLabel(appId: string, available: boolean, label: string) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.primary-action.state",
+      type: "loopino.widget.primary-action.state",
       owner_app_id: appId,
       widget_id: WIDGET_ID,
       available,
@@ -224,7 +224,7 @@ function postPrimaryActionStateWithLabel(appId: string, available: boolean, labe
 function postWidgetHeight(appId: string, height: string) {
   window.parent?.postMessage(
     {
-      type: "maverick.widget.resize",
+      type: "loopino.widget.resize",
       owner_app_id: appId,
       widget_id: WIDGET_ID,
       height,

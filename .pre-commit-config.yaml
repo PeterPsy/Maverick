@@ -13,8 +13,8 @@ repos:
       - id: gitleaks
   - repo: local
     hooks:
-      - id: maverick-unused-imports
-        name: Maverick unused import check
+      - id: loopino-unused-imports
+        name: Loopino unused import check
         entry: python3 scripts/check_unused_imports.py
         language: system
         pass_filenames: false

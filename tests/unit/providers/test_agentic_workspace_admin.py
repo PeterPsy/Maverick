@@ -28,7 +28,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
         root = make_temp_repo_root(self)
         with mock.patch.dict(
             os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
             clear=False,
         ):
             self.state = bootstrap_platform_state(
@@ -97,7 +97,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                     self.state.provider_registry,
                     workspace_id="default",
                     provider_id="codex",
-                    model_id="gpt-5.6-sol",
+                    model_id="gpt-6.1-sol",
                     model_reasoning_effort="high",
                     now=NOW,
                 )

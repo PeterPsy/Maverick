@@ -65,7 +65,7 @@ def handle_payload(payload: dict) -> dict | None:
             allow_platform_secret_writes=True,
             media_route=media_route,
             media_request_method=str(payload.get("method") or "GET").upper(),
-            streaming_response_supported=media_route and str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1",
+            streaming_response_supported=media_route and str(payload.get("stream_response_protocol") or "") == "loopino.backend.stream.v1",
         )
     except StorageConflictError as error:
         return _response(409, conflict_error_payload(error))
@@ -75,7 +75,7 @@ def handle_payload(payload: dict) -> dict | None:
         return _response(400, validation_error_payload(error))
     app_events = app_events_for_result(action, result) if status_code < 400 else []
     stream_plan = result.pop("drive_stream", None)
-    if isinstance(stream_plan, dict) and media_route and str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1":
+    if isinstance(stream_plan, dict) and media_route and str(payload.get("stream_response_protocol") or "") == "loopino.backend.stream.v1":
         stream_response = result.pop("stream_response", None)
         if not isinstance(stream_response, dict):
             return _response(500, {"error": "stream_response_missing"})

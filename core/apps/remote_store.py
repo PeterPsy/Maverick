@@ -27,14 +27,14 @@ from core.workspaces.service import ensure_workspace_layout
 from core.workspaces.store import WorkspaceStore
 
 
-DEFAULT_PUBLIC_CATALOG_URL = "https://maverick-app-store.versy.ai"
+DEFAULT_PUBLIC_CATALOG_URL = "https://loopino.giuntitrail.com/catalog"
 REMOTE_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 MAX_REMOTE_ARTIFACT_BYTES = 50 * 1024 * 1024
 
 
 @dataclass(frozen=True)
 class RemoteAppVersion:
-    """Version metadata returned by a Maverick app catalog."""
+    """Version metadata returned by a Loopino app catalog."""
 
     app_id: str
     version: str
@@ -71,7 +71,7 @@ def catalog_base_url(base_url: str | None = None) -> str:
 
 
 def fetch_remote_catalog(base_url: str | None = None) -> dict[str, Any]:
-    """Fetch the public app catalog from a configured Maverick App Store."""
+    """Fetch the public app catalog from a configured Loopino App Store."""
     resolved_base_url = catalog_base_url(base_url)
     return _read_url_json(urljoin(resolved_base_url.rstrip("/") + "/", "api/apps"))
 
@@ -114,7 +114,7 @@ def _validated_artifact_url(base_url: str, artifact_url: str) -> str:
         raise AppLifecycleError("Remote app artifact URL must use https.")
     if not parsed_artifact.netloc:
         raise AppLifecycleError("Remote app artifact URL must be absolute.")
-    allowed_hosts = {host.strip().lower() for host in str(os.environ.get("MAVERICK_APP_STORE_ARTIFACT_HOSTS") or "").split(",") if host.strip()}
+    allowed_hosts = {host.strip().lower() for host in str(os.environ.get("LOOPINO_APP_STORE_ARTIFACT_HOSTS") or "").split(",") if host.strip()}
     base_host = parsed_base.netloc.lower()
     artifact_host = parsed_artifact.netloc.lower()
     if artifact_host != base_host and artifact_host not in allowed_hosts:
@@ -124,7 +124,7 @@ def _validated_artifact_url(base_url: str, artifact_url: str) -> str:
 
 def _allows_insecure_loopback_artifact(parsed_artifact) -> bool:
     return (
-        os.environ.get("MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS") == "1"
+        os.environ.get("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS") == "1"
         and parsed_artifact.scheme == "http"
         and parsed_artifact.hostname in {"127.0.0.1", "localhost", "::1"}
     )
@@ -166,7 +166,7 @@ def stage_remote_app_bundle(
     if bundles_root != bundle_root and bundles_root not in bundle_root.parents:
         raise AppLifecycleError("Remote bundle path escapes the external app bundle root.")
     bundle_root.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="maverick-app-store-") as temp:
+    with tempfile.TemporaryDirectory(prefix="loopino-app-store-") as temp:
         temp_root = Path(temp)
         archive_path = temp_root / "artifact.tar.gz"
         archive_bytes = _read_url_bytes(resolved.artifact_url, timeout_seconds=60, max_bytes=MAX_REMOTE_ARTIFACT_BYTES)

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {createConnectorSession} from "./connector-session.mjs";
 
 function fixture() {
-  let b={sharingId:"selected",connectorFrameOrigin:"https://af-selected.sidecars.maverick.test"},saved={};
+  let b={sharingId:"selected",connectorFrameOrigin:"https://af-selected.sidecars.loopino.test"},saved={};
   const chrome={storage:{session:{async get(){return structuredClone(saved);},async set(value){saved={...saved,...structuredClone(value)};},async remove(key){delete saved[key];}}}};
   return {session:createConnectorSession(chrome,async()=>b),binding:()=>b,replace:value=>{b=value;},saved:()=>saved};
 }
@@ -22,7 +22,7 @@ test("a reloaded exact-origin document resumes credentials and one completion wi
 
 test("sharing replacement, another principal origin and invalid credentials cannot restore a lease",async()=>{
   const f=fixture(),b=f.binding();await f.session.save(b,lease);
-  await assert.rejects(f.session.read({...b,connectorFrameOrigin:"https://af-other.sidecars.maverick.test"}),/principal_changed/u);
+  await assert.rejects(f.session.read({...b,connectorFrameOrigin:"https://af-other.sidecars.loopino.test"}),/principal_changed/u);
   await assert.rejects(f.session.save(b,{...lease,connector_secret:"short"}),/invalid_connector_lease/u);
   f.replace({...b,sharingId:"replaced"});await assert.rejects(f.session.read(b),/sharing_revoked/u);
   assert.equal((await f.session.read(f.binding())).lease,null);

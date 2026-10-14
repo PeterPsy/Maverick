@@ -1,6 +1,6 @@
 # Connectors
 
-Connectors is a backend-only Maverick app for agents to read platform content
+Connectors is a backend-only Loopino app for agents to read platform content
 and keep private, refreshable collections. Instagram is the primary source.
 Agents use the declared CLI/MCP tools and bundled skill. The app stays installed
 and enabled without a frontend, shell sidebar or launchable rail shortcut.
@@ -58,9 +58,9 @@ a single export supports at most 5,000 items.
 ## Agent operations
 
 ```bash
-maverick app platform-connectors mcp list --json
-maverick app platform-connectors mcp inspect connectors_run_start --json
-maverick app platform-connectors cli inspect platform-connectors --json
+loopino app platform-connectors mcp list --json
+loopino app platform-connectors mcp inspect connectors_run_start --json
+loopino app platform-connectors cli inspect platform-connectors --json
 ```
 
 Start with `connectors_connections_refresh` and `connectors_status`. Start a read
@@ -75,7 +75,7 @@ Created through the official SDK, the app is installation-level source under
 `apps/platform-connectors`:
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-id platform-connectors --app-root /home/ubuntu/projects/maverick-v3/apps/platform-connectors --workspace default --json
+loopino core cli run core.app-sdk.validate --app-id platform-connectors --app-root /projects/loopino/apps/platform-connectors --workspace default --json
 ```
 
 Install/upgrade hooks initialize SQLite and install `yt-dlp[default]==2026.8.19`

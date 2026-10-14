@@ -7,7 +7,7 @@ import { mergeRuntimeEvents } from './runtimeEvents';
 import { clearTranscriptProjectionCache, eventsToMessages } from './transcript';
 
 // Opt-in, isolated CPU probe; never a substitute for mounted browser/device traces.
-it.skipIf(!process.env.MAVERICK_PERFORMANCE_PROBE)('measures live updates over 100/1000/5000 messages', () => {
+it.skipIf(!process.env.LOOPINO_PERFORMANCE_PROBE)('measures live updates over 100/1000/5000 messages', () => {
   const results = [];
   for (const messages of [100, 1000, 5000]) {
     clearTranscriptProjectionCache();
@@ -33,5 +33,5 @@ it.skipIf(!process.env.MAVERICK_PERFORMANCE_PROBE)('measures live updates over 1
     times.sort((a, b) => a - b);
     results.push({ messages, requests: 500, warmup: 5, median_ms: times[250], p95_ms: times[474], max_ms: times.at(-1), cpu_us: cpu.user + cpu.system });
   }
-  writeFileSync(resolve(process.env.MAVERICK_PERFORMANCE_PROBE!), JSON.stringify({ scope: 'isolated-transcript-merge-and-projection', results }, null, 2));
+  writeFileSync(resolve(process.env.LOOPINO_PERFORMANCE_PROBE!), JSON.stringify({ scope: 'isolated-transcript-merge-and-projection', results }, null, 2));
 }, 120_000);

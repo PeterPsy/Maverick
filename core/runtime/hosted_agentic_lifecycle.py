@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from core.runtime.lifecycle_service_children import transition_runtime_session
 
 
-_HOSTED_RUNTIME_ENGINE_ID = "maverick-tool-loop"
-_HOSTED_ADAPTER_ID = "maverick-hosted-tool-loop"
+_HOSTED_RUNTIME_ENGINE_ID = "loopino-tool-loop"
+_HOSTED_ADAPTER_ID = "loopino-hosted-tool-loop"
 
 
 @dataclass(frozen=True)

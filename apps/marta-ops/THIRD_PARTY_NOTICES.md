@@ -4,7 +4,7 @@ Marta Ops adapts the Kanban component structure and phase grouping from Marmelab
 
 Source: https://github.com/marmelab/atomic-crm/tree/a863e2a084fae8c7adf7a2efc547ad7ce38e699b
 
-Adapted files: `deals/stages.ts`, `deals/DealListContent.tsx`, `deals/DealColumn.tsx`, and `deals/DealCard.tsx`. Contact details, notes/timeline and task completion follow the corresponding Atomic CRM user flows with an independent Maverick backend and app-owned components.
+Adapted files: `deals/stages.ts`, `deals/DealListContent.tsx`, `deals/DealColumn.tsx`, and `deals/DealCard.tsx`. Contact details, notes/timeline and task completion follow the corresponding Atomic CRM user flows with an independent Loopino backend and app-owned components.
 
 The MIT License (MIT)
 

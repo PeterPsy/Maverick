@@ -1,4 +1,4 @@
-"""Bootstrap OpenDesign onto an available Maverick native model profile."""
+"""Bootstrap OpenDesign onto an available Loopino native model profile."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def bootstrap_native_profile(
     """Replace only an unset or unusable cloud selection through public APIs.
 
     OpenDesign 0.21 recommends its AMR cloud agent during onboarding. The
-    Maverick sidecar intentionally exposes no Vela binary or cloud identity;
+    Loopino sidecar intentionally exposes no Vela binary or cloud identity;
     it exposes supported local profiles instead. Explicit non-cloud choices
     are preserved.
     """

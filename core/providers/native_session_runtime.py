@@ -52,7 +52,7 @@ class NativeSessionRuntime:
         self._lock = Lock()
         self._shutdown = None
         self.loop = asyncio.new_event_loop()
-        self.thread = Thread(target=self._run, name=f"maverick-native-{session_id}")
+        self.thread = Thread(target=self._run, name=f"loopino-native-{session_id}")
         try:
             self.thread.start()
         except BaseException:

@@ -1,6 +1,6 @@
 export { readCacheModelJson, type ReadModelRequest } from "./readModelRetry";
-export { maverickAppIsVisible, observeMaverickVisibility } from './appVisibility';
-export { startMaverickReferencePointerDrag, type MaverickDragReference } from './referencePointerDrag';
+export { loopinoAppIsVisible, observeLoopinoVisibility } from './appVisibility';
+export { startLoopinoReferencePointerDrag, type LoopinoDragReference } from './referencePointerDrag';
 export {
   isStandaloneWebApp,
   requestParentExternalUrl,
@@ -15,8 +15,8 @@ export {
   createPwaCacheHost,
 } from "./client";
 export {
-  readMaverickAppFrameContext,
-  type MaverickAppFrameContext,
+  readLoopinoAppFrameContext,
+  type LoopinoAppFrameContext,
 } from "./appFrameContext";
 export { clearPwaDataCache, readPwaCacheDiagnostics } from "./diagnostics";
 export {
@@ -38,7 +38,7 @@ export {
   PwaFileCacheHost,
   createPwaFileCacheHost,
 } from "./fileCache";
-export { MaverickFileHttpError } from "./fileCacheNetwork";
+export { LoopinoFileHttpError } from "./fileCacheNetwork";
 export {
   PWA_CACHE_OPERATIONS_ACCEPTED,
   PWA_CACHE_OPERATIONS_REQUEST,
@@ -82,7 +82,7 @@ export {
   isParentDataCacheInvalidateMessage,
   isParentDataCacheNetworkResultMessage,
   isParentDataCacheOpenMessage,
-  isExactMaverickParentMessage,
+  isExactLoopinoParentMessage,
   readThroughParentDataCache,
   serializeParentDataCacheError,
   type ParentDataCacheAcceptedMessage,
@@ -162,8 +162,8 @@ export {
   type CacheTelemetry,
   type CacheTelemetryEvent,
   type LocalPersistencePolicy,
-  type MaverickDataClass,
-  type MaverickProvenance,
+  type LoopinoDataClass,
+  type LoopinoProvenance,
   type PwaCacheClientOptions,
   type ResourceCachePolicy,
   type StorageEstimate,
@@ -206,5 +206,5 @@ export { displayRecord, displayFields, displayList, displayStrings } from "./rea
 export { projectDisplayModel, type DisplayModelSchema } from "./displayModelSchema";
 export { readAppCachePages } from './appReadModelPages';
 export { connectAppEventSocket } from "./appEventSocket";
-export { registerMaverickAppHibernation, preventMaverickAppHibernation, appSnapshotBytes, MAX_APP_SNAPSHOT_BYTES } from './appHibernation';
-export type { MaverickAppSnapshot, MaverickResumeParams } from './appHibernation';
+export { registerLoopinoAppHibernation, preventLoopinoAppHibernation, appSnapshotBytes, MAX_APP_SNAPSHOT_BYTES } from './appHibernation';
+export type { LoopinoAppSnapshot, LoopinoResumeParams } from './appHibernation';

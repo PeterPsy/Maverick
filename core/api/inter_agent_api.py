@@ -1545,7 +1545,7 @@ def _start_inter_agent_execution_worker(
         except Exception:
             return
 
-    Thread(target=worker, name=f"maverick-inter-agent-run-{run_id}", daemon=True).start()
+    Thread(target=worker, name=f"loopino-inter-agent-run-{run_id}", daemon=True).start()
 
 
 def _approval_resolver_role_ids(state: PlatformState, context: RequestSession, run) -> list[str]:

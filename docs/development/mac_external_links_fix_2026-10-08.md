@@ -2,17 +2,17 @@
 
 Shell commit: `975e1327` (`design`, pushed).
 Native implementation: `abeae97`; test-fixture correction: `286380e`
-(`maverick-integration`, pushed).
+(`loopino-integration`, pushed).
 Installed native source revision: `286380ef004f32f0025fd8e4bc990071b67cb400`.
 
 The Storage sidebar account button opens `about:blank` before awaiting its OAuth
-URL. MaverickMac had no `WKUIDelegate` to create that receiver, and its main-frame
+URL. LoopinoMac had no `WKUIDelegate` to create that receiver, and its main-frame
 navigation policy cancelled every external destination while clearing Device Use.
 Those two native behaviors explain the difference from the working browser UI.
 
 External HTTP(S) navigation now opens the default system browser. The shell's
 existing validated app/widget broker first uses a platform-main-frame-only
-`maverickExternalURL` handler, avoiding a duplicate launch from the null return of
+`loopinoExternalURL` handler, avoiding a duplicate launch from the null return of
 `noopener` followed by browser fallback. Native WebKit also handles blank-target
 links, clicked iframe links and the asynchronous Storage popup. Receivers have no
 native handlers, never load external documents and are released after handoff or
@@ -42,5 +42,5 @@ The relevant implementation and test files were unchanged by this repair.
 The real WebKit regression tests capture the system-opener effect; they verify
 the destination and exactly one handoff while preserving the shell. They do not
 complete a live Google consent flow or change account connections. OAuth remains
-in the system browser's session and uses the existing authenticated Maverick
+in the system browser's session and uses the existing authenticated Loopino
 callback; native cookies are never transferred.

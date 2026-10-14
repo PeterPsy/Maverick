@@ -1,52 +1,52 @@
 :root {
   color-scheme: dark;
-  font-family: var(--maverick-font);
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-bg-strong: rgba(12, 12, 14, 0.58);
-  --maverick-surface: rgba(12, 12, 14, 0.58);
-  --maverick-surface-soft: rgba(255, 255, 255, 0.065);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.1);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-glass-highlight:
+  font-family: var(--loopino-font);
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-bg-strong: rgba(12, 12, 14, 0.58);
+  --loopino-surface: rgba(12, 12, 14, 0.58);
+  --loopino-surface-soft: rgba(255, 255, 255, 0.065);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-border: rgba(255, 255, 255, 0.1);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-glass-surface: rgba(12, 12, 14, 0.58);
+  --loopino-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
     linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.64);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-strong: #ffffff;
-  --maverick-accent-muted: rgba(255, 255, 255, 0.72);
-  --maverick-accent-soft: rgba(255, 255, 255, 0.12);
-  --maverick-accent-hover: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-danger: #ff4d8d;
-  --maverick-focus: rgba(255, 255, 255, 0.32);
-  --maverick-shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.22);
-  --maverick-shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.34);
-  --maverick-card-radius: 22px;
-  --maverick-control-radius: 18px;
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
-  --store-bg: var(--maverick-bg);
-  --store-panel: var(--maverick-glass-surface);
+  --loopino-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.64);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-accent-strong: #ffffff;
+  --loopino-accent-muted: rgba(255, 255, 255, 0.72);
+  --loopino-accent-soft: rgba(255, 255, 255, 0.12);
+  --loopino-accent-hover: rgba(255, 255, 255, 0.18);
+  --loopino-text-on-accent: #0a0a0b;
+  --loopino-danger: #ff4d8d;
+  --loopino-focus: rgba(255, 255, 255, 0.32);
+  --loopino-shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.22);
+  --loopino-shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.34);
+  --loopino-card-radius: 22px;
+  --loopino-control-radius: 18px;
+  --loopino-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --store-bg: var(--loopino-bg);
+  --store-panel: var(--loopino-glass-surface);
   --store-panel-solid: rgb(12, 12, 14);
-  --store-panel-soft: var(--maverick-surface-soft);
-  --store-panel-hover: var(--maverick-surface-hover);
-  --store-border: var(--maverick-border);
-  --store-border-strong: var(--maverick-border-strong);
-  --store-text: var(--maverick-text);
-  --store-muted: var(--maverick-text-muted);
-  --store-soft: var(--maverick-text-soft);
-  --store-blue: var(--maverick-accent);
-  --store-red: var(--maverick-danger);
+  --store-panel-soft: var(--loopino-surface-soft);
+  --store-panel-hover: var(--loopino-surface-hover);
+  --store-border: var(--loopino-border);
+  --store-border-strong: var(--loopino-border-strong);
+  --store-text: var(--loopino-text);
+  --store-muted: var(--loopino-text-muted);
+  --store-soft: var(--loopino-text-soft);
+  --store-blue: var(--loopino-accent);
+  --store-red: var(--loopino-danger);
   --store-status-bg: rgba(255, 255, 255, 0.09);
   --store-status-border: rgba(255, 255, 255, 0.18);
   --store-status-text: var(--store-text);
-  --store-shadow: var(--maverick-glass-edge), 0 24px 80px rgba(0, 0, 0, 0.36);
+  --store-shadow: var(--loopino-glass-edge), 0 24px 80px rgba(0, 0, 0, 0.36);
   background: var(--store-bg);
   color: var(--store-text);
 }
@@ -116,7 +116,7 @@ select:disabled {
   margin: 0 auto;
   width: min(100%, 1440px);
   max-width: 1440px;
-  padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 24px) 24px 64px;
+  padding: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 24px) 24px 64px;
 }
 
 .app-row-icon {
@@ -233,7 +233,7 @@ h3 {
 
 .detail-header p {
   max-width: 760px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   line-height: 1.45;
 }
 
@@ -246,7 +246,7 @@ h3 {
 .feature-card {
   aspect-ratio: 1.18;
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-card-radius);
+  border-radius: var(--loopino-card-radius);
   box-shadow: var(--store-shadow);
   color: var(--store-text);
   display: flex;
@@ -261,19 +261,19 @@ h3 {
 .feature-card--1 {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(12, 12, 14, 0.7) 58%, rgba(12, 12, 14, 0.95)),
-    var(--maverick-glass-highlight);
+    var(--loopino-glass-highlight);
 }
 
 .feature-card--2 {
   background:
     linear-gradient(145deg, rgba(255, 77, 141, 0.22), rgba(12, 12, 14, 0.7) 62%, rgba(12, 12, 14, 0.95)),
-    var(--maverick-glass-highlight);
+    var(--loopino-glass-highlight);
 }
 
 .feature-card--3 {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.17), rgba(12, 12, 14, 0.7) 58%, rgba(12, 12, 14, 0.95)),
-    var(--maverick-glass-highlight);
+    var(--loopino-glass-highlight);
 }
 
 .feature-card--empty {
@@ -308,10 +308,10 @@ h3 {
 
 .feature-link {
   align-self: flex-start;
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
   border: 0;
   border-radius: 999px;
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
   font-weight: 400;
   min-height: 34px;
   padding: 0 14px;
@@ -373,7 +373,7 @@ h3 {
 .app-modal__field textarea {
   background: var(--store-panel);
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   color: var(--store-text);
   min-height: 38px;
   padding: 8px 10px;
@@ -386,8 +386,8 @@ h3 {
 .quick-links {
   background: var(--store-panel);
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-card-radius);
-  box-shadow: var(--maverick-glass-edge);
+  border-radius: var(--loopino-card-radius);
+  box-shadow: var(--loopino-glass-edge);
   padding: 18px;
   position: sticky;
   top: 86px;
@@ -402,7 +402,7 @@ h3 {
 .quick-link {
   background: var(--store-panel-soft);
   border: 1px solid transparent;
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   color: var(--store-text);
   font-weight: 400;
   min-height: 38px;
@@ -470,7 +470,7 @@ h3 {
 
 .store-loading-skeleton__button,
 .store-loading-skeleton__icon {
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .store-loading-skeleton__line::after,
@@ -585,7 +585,7 @@ h3 {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--maverick-card-radius);
+  border-radius: var(--loopino-card-radius);
   display: flex;
   gap: 14px;
   min-height: 76px;
@@ -601,22 +601,22 @@ h3 {
 }
 
 .app-row-icon {
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
   border-radius: 15px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   height: 46px;
   width: 46px;
 }
 
 .app-row-icon.is-glyph {
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .app-row-icon.is-glyph.is-non-launchable,
 .app-row-icon.is-glyph.is-supporting-frontend {
-  background: var(--maverick-text-on-accent);
-  border: 1px solid var(--maverick-accent);
-  color: var(--maverick-accent);
+  background: var(--loopino-text-on-accent);
+  border: 1px solid var(--loopino-accent);
+  color: var(--loopino-accent);
 }
 
 .app-row-icon.is-image {
@@ -712,7 +712,7 @@ h3 {
 .app-row-menu-panel {
   background: var(--store-panel-solid);
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   box-shadow: 0 18px 54px rgba(0, 0, 0, 0.18);
   display: grid;
   gap: 4px;
@@ -879,14 +879,14 @@ h3 {
 .management-panel {
   background: var(--store-panel);
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-card-radius);
-  box-shadow: var(--maverick-glass-edge);
+  border-radius: var(--loopino-card-radius);
+  box-shadow: var(--loopino-glass-edge);
   padding: 18px;
 }
 
 .empty-state {
   border: 1px dashed var(--store-border-strong);
-  border-radius: var(--maverick-card-radius);
+  border-radius: var(--loopino-card-radius);
   color: var(--store-muted);
   grid-column: 1 / -1;
   line-height: 1.45;
@@ -902,10 +902,10 @@ h3 {
 }
 
 .public-request-lookup button {
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
   border: 0;
-  border-radius: var(--maverick-control-radius);
-  color: var(--maverick-text-on-accent);
+  border-radius: var(--loopino-control-radius);
+  color: var(--loopino-text-on-accent);
   font-weight: 400;
   min-height: 38px;
   padding: 0 14px;
@@ -929,7 +929,7 @@ h3 {
 .app-modal {
   background: var(--store-panel-solid);
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-card-radius);
+  border-radius: var(--loopino-card-radius);
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.22);
   display: grid;
   gap: 16px;
@@ -971,7 +971,7 @@ h3 {
 .app-modal__readonly {
   background: var(--store-panel-soft);
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   color: var(--store-text);
   font-weight: 500;
   line-height: 1.45;
@@ -983,7 +983,7 @@ h3 {
 .app-modal__segmented {
   background: var(--store-panel-soft);
   border: 1px solid var(--store-border);
-  border-radius: var(--maverick-control-radius);
+  border-radius: var(--loopino-control-radius);
   display: grid;
   gap: 4px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -993,15 +993,15 @@ h3 {
 .app-modal__segmented button {
   background: transparent;
   border: 0;
-  border-radius: calc(var(--maverick-control-radius) - 4px);
+  border-radius: calc(var(--loopino-control-radius) - 4px);
   color: var(--store-muted);
   min-height: 34px;
 }
 
 .app-modal__segmented button[data-active="true"] {
-  background: var(--maverick-accent);
+  background: var(--loopino-accent);
   box-shadow: none;
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .app-modal__actions {
@@ -1027,8 +1027,8 @@ h3 {
 }
 
 .app-modal__button[data-intent="primary"] {
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
+  background: var(--loopino-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .app-modal__button[data-intent="danger"] {
@@ -1082,7 +1082,7 @@ h3 {
 
 @media (max-width: 720px) {
   .store-shell {
-    padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 16px) 14px 48px;
+    padding: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 16px) 14px 48px;
   }
 
   .detail-header h2 {

@@ -10,7 +10,7 @@ import './public.css';
 
 type PublicTheme = 'dark' | 'light';
 
-const PUBLIC_THEME_KEY = 'maverick:crm-public:theme';
+const PUBLIC_THEME_KEY = 'loopino:crm-public:theme';
 
 function readPublicTheme(): PublicTheme {
   try {
@@ -29,7 +29,7 @@ export function PublicNavigation({ view, navigate }: { view: ViewId; navigate: (
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.documentElement.dataset.maverickTheme = theme;
+    document.documentElement.dataset.loopinoTheme = theme;
     document.documentElement.style.colorScheme = theme;
     try { window.localStorage.setItem(PUBLIC_THEME_KEY, theme); } catch { /* See readPublicTheme. */ }
   }, [theme]);
@@ -50,7 +50,7 @@ export function PublicNavigation({ view, navigate }: { view: ViewId; navigate: (
           <ContactRound aria-hidden="true" />
         </button>
       </div>
-      <img alt="Maverick" className="crm-public-mobile-header__logo" src={theme === 'light' ? sidebarLogoLight : sidebarLogoDark} />
+      <img alt="Loopino" className="crm-public-mobile-header__logo" src={theme === 'light' ? sidebarLogoLight : sidebarLogoDark} />
       <div className="crm-public-mobile-header__actions">
         <button className="crm-public-mobile-header__button" aria-label="Create unavailable" disabled type="button">
           <Plus aria-hidden="true" />

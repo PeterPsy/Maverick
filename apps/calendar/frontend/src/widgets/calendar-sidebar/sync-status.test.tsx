@@ -6,7 +6,7 @@ import { SyncDetails, SyncSummary, syncPresentation } from './sync-status';
 afterEach(() => localStorage.clear());
 
 function english() {
-  localStorage.setItem('maverick.calendar.preferences', JSON.stringify({ locale: 'en-US' }));
+  localStorage.setItem('loopino.calendar.preferences', JSON.stringify({ locale: 'en-US' }));
 }
 
 it('turns provider statuses into readable labels without hiding incomplete or failed syncs', () => {
@@ -23,7 +23,7 @@ it('turns provider statuses into readable labels without hiding incomplete or fa
 });
 
 it('uses the Calendar language and safely handles absent or invalid dates', () => {
-  localStorage.setItem('maverick.calendar.preferences', JSON.stringify({ locale: 'it-IT' }));
+  localStorage.setItem('loopino.calendar.preferences', JSON.stringify({ locale: 'it-IT' }));
   const markup = renderToStaticMarkup(<SyncSummary status={{ status: 'ok', last_sync_at: 'not-a-date' }} showTime />);
   expect(markup).toContain('Sincronizzato');
   expect(markup).not.toContain('Invalid Date');

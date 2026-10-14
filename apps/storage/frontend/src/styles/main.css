@@ -3,29 +3,29 @@
 
 :root {
   color-scheme: dark;
-  --storage-bg: var(--maverick-bg);
-  --storage-bg-strong: var(--maverick-bg-strong);
-  --storage-surface: var(--maverick-glass-surface);
-  --storage-surface-muted: var(--maverick-surface);
-  --storage-surface-hover: var(--maverick-surface-hover);
+  --storage-bg: var(--loopino-bg);
+  --storage-bg-strong: var(--loopino-bg-strong);
+  --storage-surface: var(--loopino-glass-surface);
+  --storage-surface-muted: var(--loopino-surface);
+  --storage-surface-hover: var(--loopino-surface-hover);
   --storage-preview: rgba(12, 12, 14, 0.72);
-  --storage-border: var(--maverick-border);
-  --storage-border-strong: var(--maverick-border-strong);
-  --storage-text: var(--maverick-text);
-  --storage-muted: var(--maverick-text-muted);
-  --storage-soft: var(--maverick-text-soft);
-  --storage-accent: var(--maverick-accent);
-  --storage-accent-strong: var(--maverick-accent);
-  --storage-accent-soft: var(--maverick-accent-soft);
-  --storage-focus: var(--maverick-accent);
-  --storage-success: var(--maverick-success);
+  --storage-border: var(--loopino-border);
+  --storage-border-strong: var(--loopino-border-strong);
+  --storage-text: var(--loopino-text);
+  --storage-muted: var(--loopino-text-muted);
+  --storage-soft: var(--loopino-text-soft);
+  --storage-accent: var(--loopino-accent);
+  --storage-accent-strong: var(--loopino-accent);
+  --storage-accent-soft: var(--loopino-accent-soft);
+  --storage-focus: var(--loopino-accent);
+  --storage-success: var(--loopino-success);
   --storage-success-soft: rgba(159, 240, 202, 0.13);
-  --storage-danger: var(--maverick-danger);
+  --storage-danger: var(--loopino-danger);
   --storage-danger-soft: rgba(255, 179, 191, 0.12);
-  --storage-shadow: var(--maverick-glass-edge);
+  --storage-shadow: var(--loopino-glass-edge);
   background: var(--storage-bg);
   color: var(--storage-text);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
 }
 
 * {
@@ -121,7 +121,7 @@ p {
 }
 
 .storage-shell {
-  --storage-shell-top-offset: var(--maverick-shell-mobile-content-top-offset, 0px);
+  --storage-shell-top-offset: var(--loopino-shell-mobile-content-top-offset, 0px);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
@@ -159,7 +159,7 @@ p {
 .primary-action,
 .rename-group button {
   background: linear-gradient(135deg, var(--storage-accent), var(--storage-accent-strong));
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
   padding: 0 14px;
 }
 
@@ -404,7 +404,7 @@ p {
 }
 
 .collection-view-tab.selected {
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .collection-view-tab-active {
@@ -1019,7 +1019,7 @@ h3 {
 .storage-selection-toggle.selected {
   border-color: var(--storage-accent);
   background: var(--storage-accent);
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
 }
 
 .storage-selection-toggle:disabled {
@@ -1134,7 +1134,7 @@ h3 {
   border: 1px solid rgba(255, 255, 255, 0.46);
   border-radius: 999px;
   background: var(--storage-accent);
-  color: var(--maverick-text-on-accent);
+  color: var(--loopino-text-on-accent);
   padding: 0 0.32rem;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
   font-size: 0.68rem;
@@ -1405,7 +1405,7 @@ h3 {
   min-width: 0;
   border: 1px solid var(--storage-border-strong);
   border-radius: 14px;
-  background: var(--maverick-glass-highlight), var(--storage-surface);
+  background: var(--loopino-glass-highlight), var(--storage-surface);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58);
   padding: 16px;
   backdrop-filter: blur(26px);
@@ -1470,7 +1470,7 @@ h3 {
   min-width: 0;
   border: 1px solid var(--storage-border-strong);
   border-radius: 14px;
-  background: var(--maverick-glass-highlight), var(--storage-surface);
+  background: var(--loopino-glass-highlight), var(--storage-surface);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.56);
   overflow: auto;
   padding: 16px;

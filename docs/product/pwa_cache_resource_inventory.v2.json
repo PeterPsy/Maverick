@@ -1,6 +1,6 @@
 {
-  "schema": "maverick.pwa-cache-resource-inventory.v2",
-  "policy_revision": "maverick.local-persistence-policy.v2",
+  "schema": "loopino.pwa-cache-resource-inventory.v2",
+  "policy_revision": "loopino.local-persistence-policy.v2",
   "resource_schema_revision_required": true,
   "private_app_origin_boundary": "isolated_origin_and_exact_frame_parent_broker",
   "canonical_data_class_source": "core.providers.agentic_models.RuntimeDataClass",
@@ -29,7 +29,7 @@
       "max_entry_bytes": 8388608,
       "max_scope_bytes": 33554432,
       "invalidation": "service-worker build activation",
-      "data_event": "maverick.app.frontend-changed",
+      "data_event": "loopino.app.frontend-changed",
       "rollout": "M2"
     },
     {
@@ -71,7 +71,7 @@
       "revision": "required before persistent rollout",
       "max_entry_bytes": 65536,
       "max_scope_bytes": 131072,
-      "invalidation": "maverick.app.data-changed:pinned-apps",
+      "invalidation": "loopino.app.data-changed:pinned-apps",
       "data_event": "pinned-apps",
       "rollout": "not persistent in M0-M2"
     },
@@ -544,10 +544,11 @@
     },
     {
       "app_ids": [
-        "vault",
         "browser",
+        "openwa",
+        "senses",
         "speech",
-        "senses"
+        "vault"
       ],
       "resource": "secrets-sessions-audio-and-ephemeral-sensor-state",
       "owner": "each owning app",
@@ -580,7 +581,7 @@
       "max_entry_bytes": 8388608,
       "max_scope_bytes": 33554432,
       "invalidation": "frontend build id",
-      "data_event": "maverick.app.frontend-changed",
+      "data_event": "loopino.app.frontend-changed",
       "rollout": "static assets only"
     },
     {

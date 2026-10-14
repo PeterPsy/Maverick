@@ -24,7 +24,7 @@ BASE = datetime(2026, 7, 3, 12, 0, tzinfo=UTC)
 class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
     def test_reports_separate_provider_startup_spans(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-spans", runtime_mode="agentic", provider_id="codex")
             events = _turn_events("sess-spans", "turn-spans", BASE, provider_id="codex")
             events.extend(
@@ -140,7 +140,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_reports_aggregated_hot_path_metrics_without_started_events(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-aggregated", runtime_mode="agentic", provider_id="codex")
             turn_id = "turn-aggregated"
             _write_events(
@@ -248,7 +248,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_groups_codex_cold_warm_and_plain_hosted_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-codex", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,
@@ -318,7 +318,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_calculates_worker_reference_and_provider_input_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-refs", runtime_mode="agentic", provider_id="codex")
             turn_id = "turn-refs"
             _write_events(
@@ -567,7 +567,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_reads_history_and_deduplicates_tail_events(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-history", runtime_mode="agentic", provider_id="codex")
             events = _turn_events("sess-history", "turn-1", BASE, provider_id="codex")
             _write_events(root, "default", "sess-history", events[-2:])
@@ -582,7 +582,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_since_filters_on_turn_anchor_without_reclassifying_warm_turn_as_cold(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-codex", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,
@@ -606,7 +606,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_associates_completed_session_prewarm_with_next_turn(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-prewarm", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,
@@ -642,7 +642,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_ignores_session_prewarm_older_than_association_window(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-stale-prewarm", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,
@@ -673,7 +673,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_ignores_corrupt_turn_scoped_prewarm_total(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-corrupt-prewarm", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,
@@ -699,7 +699,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_keeps_long_prewarm_total_from_corrected_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-long-prewarm", runtime_mode="agentic", provider_id="codex")
             events = _turn_events(
                 "sess-long-prewarm",
@@ -724,7 +724,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_reports_prepared_ready_as_explicit_overlapping_cohort(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-prepared", runtime_mode="agentic", provider_id="codex")
             events = _turn_events("sess-prepared", "turn-prepared", BASE, provider_id="codex")
             receive = next(event for event in events if event["event_type"] == "runtime.turn.receive_to_queued")
@@ -739,7 +739,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
     def test_does_not_reuse_completed_session_prewarm_already_reported_by_turn_wait(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "maverick"
+            root = Path(temp_dir) / "loopino"
             _write_session(root, "default", "sess-prewarm", runtime_mode="agentic", provider_id="codex")
             _write_events(
                 root,

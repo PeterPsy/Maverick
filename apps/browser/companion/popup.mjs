@@ -23,7 +23,7 @@ try {
   const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
   selected = selectedAgentTab(tab, chrome.runtime.getURL("agent-tab.html"), agentTab);
   document.querySelector("#tab-title").textContent = selected.reconnect ? selected.title : "Your agent’s browser";
-  document.querySelector("#tab-url").textContent = selected.url || "Starts empty. Maverick chooses pages when you ask.";
+  document.querySelector("#tab-url").textContent = selected.url || "Starts empty. Loopino chooses pages when you ask.";
   document.querySelector("#share-label").textContent = selected.reconnect ? "Reconnect agent tab" : "Connect agent tab";
   share.hidden = false; share.disabled = false;
   openAgent.hidden = true;
@@ -36,11 +36,11 @@ share.onclick = async () => {
   share.setAttribute("aria-busy", "true");
   try {
     const url = connectorUrl(input.value);
-    report("Allow Chrome access if asked. Connecting to Maverick…");
+    report("Allow Chrome access if asked. Connecting to Loopino…");
     // Send before any await. The worker retains the transaction if this popup closes.
     const result = await chrome.runtime.sendMessage({target: "worker", action: "share", tabId: selected.id, url: url.href, agentTab: true, reuseConnector: document.querySelector("#reuse").checked});
     if (result?.error) throw new Error(result.detail || result.error);
-    report(result.background ? "Connected in background. Keep the agent tab open; Maverick can stay closed." : "Connecting in Maverick. Sign in there if asked; once connected, you can close that Maverick tab. Keep the agent tab open.");
+    report(result.background ? "Connected in background. Keep the agent tab open; Loopino can stay closed." : "Connecting in Loopino. Sign in there if asked; once connected, you can close that Loopino tab. Keep the agent tab open.");
     document.querySelector("#stop").hidden = false;
   } catch (error) { report(setupError(error), "error"); }
   finally { share.disabled = false; share.removeAttribute("aria-busy"); }

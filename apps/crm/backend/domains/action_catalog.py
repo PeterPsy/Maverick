@@ -250,7 +250,7 @@ WRITE_ACTIONS = {
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action in WRITE_ACTIONS:
         resource = "view-state" if "view" in action or "custom_view" in action else "records"
-        return [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": resource}]
+        return [{"type": "loopino.app.data-changed", "owner_app_id": "crm", "resource": resource}]
     return []
 
 

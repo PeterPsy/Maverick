@@ -4,7 +4,7 @@ Date: 2026-10-14
 
 ## Source ownership
 
-All first-party source for this installation belongs to the Maverick repository
+All first-party source for this installation belongs to the Loopino repository
 on `design`. GitHub Actions and Marta Ops were promoted through the authenticated
 App Store from `workspaces/default/apps/` to root `apps/`. Both are
 `source_available` / `forkable` platform sources. CRM, Mail, and the other shared

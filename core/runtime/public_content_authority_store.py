@@ -276,7 +276,7 @@ def _audit_id(record, action: str) -> str:
         NAMESPACE_URL,
         ":".join(
             (
-                "maverick-runtime-public-content-authority",
+                "loopino-runtime-public-content-authority",
                 record.workspace_id,
                 record.classification_id,
                 str(record.revision),

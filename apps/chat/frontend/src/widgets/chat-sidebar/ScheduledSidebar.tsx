@@ -20,7 +20,7 @@ export function ScheduledSidebar({ mobile }: { mobile: boolean }) {
     && `${task.title} ${task.instructions}`.toLowerCase().includes(query.trim().toLowerCase()));
   function open(page: string) {
     notifyShell(undefined, { app_page: page });
-    if (mobile) window.parent.postMessage({ type: "maverick.shell.sidebar.close" }, "*");
+    if (mobile) window.parent.postMessage({ type: "loopino.shell.sidebar.close" }, "*");
   }
   return <section className="bs-chat-sidebar-block bs-chat-sidebar-block--tasks scheduled-sidebar" aria-label="Scheduled tasks">
     <SidebarNav

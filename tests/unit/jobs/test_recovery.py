@@ -44,11 +44,11 @@ class JobRecoveryIntegrationTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository_root = _repository_root(Path(temporary_directory))
             environment = {
-                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                "MAVERICK_ADMIN_USERNAME": "admin",
-                "MAVERICK_ADMIN_PASSWORD": "maverick",
-                "MAVERICK_CONTROL_STORE": "json",
-                "MAVERICK_JSON_CONTROL_STORE_ROOT": str(repository_root / "data" / "control-plane" / "json"),
+                "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "LOOPINO_ADMIN_USERNAME": "admin",
+                "LOOPINO_ADMIN_PASSWORD": "loopino",
+                "LOOPINO_CONTROL_STORE": "json",
+                "LOOPINO_JSON_CONTROL_STORE_ROOT": str(repository_root / "data" / "control-plane" / "json"),
             }
             with patch.dict("os.environ", environment):
                 state = bootstrap_platform_state(start_path=repository_root, install_builtin_apps=False)
@@ -86,7 +86,7 @@ class JobRecoveryIntegrationTestCase(unittest.TestCase):
 
 
 def _repository_root(temporary_root: Path) -> Path:
-    repository_root = temporary_root / "maverick"
+    repository_root = temporary_root / "loopino"
     for name in ("core", "apps", "workspaces", "scripts", "docs"):
         (repository_root / name).mkdir(parents=True, exist_ok=True)
     (repository_root / "AGENTS.md").write_text("", encoding="utf-8")

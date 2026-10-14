@@ -141,7 +141,7 @@ export function validateHtmlAssetReferences({ base, entrypoints, outDir, paths }
       `${left.entrypoint}\0${left.reference}`.localeCompare(`${right.entrypoint}\0${right.reference}`)
     ))[0];
     throw new Error(
-      `Maverick HTML asset reference is missing from build output: ${entrypoint} -> ${reference} (${artifactPath})`,
+      `Loopino HTML asset reference is missing from build output: ${entrypoint} -> ${reference} (${artifactPath})`,
     );
   }
 }

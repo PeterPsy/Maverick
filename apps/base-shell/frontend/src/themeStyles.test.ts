@@ -14,7 +14,7 @@ describe("base shell light theme surfaces", () => {
     styleElement?.remove();
     styleElement = null;
     document.body.replaceChildren();
-    delete document.documentElement.dataset.maverickTheme;
+    delete document.documentElement.dataset.loopinoTheme;
     delete document.documentElement.dataset.theme;
     document.documentElement.removeAttribute("style");
   });
@@ -43,19 +43,19 @@ describe("base shell light theme surfaces", () => {
   it("routes shell fade and overlay selectors through semantic tokens", () => {
     const styles = readStyleFile(resolve(currentDir, "styles/main.css"));
 
-    expect(cssBlock(styles, ".bs-sidebar__details::before")).toContain("background: var(--maverick-scroll-fade-top);");
-    expect(cssBlock(styles, ".bs-sidebar__details::after")).toContain("background: var(--maverick-scroll-fade-bottom);");
-    expect(cssBlock(styles, ".bs-shell.is-mobile-layout::before")).toContain("background: var(--maverick-mobile-safe-area-fade);");
-    expect(cssBlock(styles, ".bs-app-grid-panel,\n.bs-empty-panel")).toContain("background: var(--maverick-panel-gradient);");
+    expect(cssBlock(styles, ".bs-sidebar__details::before")).toContain("background: var(--loopino-scroll-fade-top);");
+    expect(cssBlock(styles, ".bs-sidebar__details::after")).toContain("background: var(--loopino-scroll-fade-bottom);");
+    expect(cssBlock(styles, ".bs-shell.is-mobile-layout::before")).toContain("background: var(--loopino-mobile-safe-area-fade);");
+    expect(cssBlock(styles, ".bs-app-grid-panel,\n.bs-empty-panel")).toContain("background: var(--loopino-panel-gradient);");
   });
 
   it("uses branded loading surfaces before application CSS is available", () => {
     const styles = readStyleFile(resolve(currentDir, "styles/main.css"));
     const index = readFileSync(resolve(currentDir, "../index.html"), "utf8");
 
-    expect(styles).not.toContain("--maverick-loading-accent");
-    expect(styles).toMatch(/\.bs-shell-pending-indicator__icon\s*{[^}]*color:\s*var\(--maverick-text\);/);
-    expect(index).toContain('id="maverick-first-paint"');
+    expect(styles).not.toContain("--loopino-loading-accent");
+    expect(styles).toMatch(/\.bs-shell-pending-indicator__icon\s*{[^}]*color:\s*var\(--loopino-text\);/);
+    expect(index).toContain('id="loopino-first-paint"');
     expect(index).toContain("background: #070708;");
   });
 });
@@ -82,7 +82,7 @@ function cssBlock(styles: string, selector: string): string {
 }
 
 function applyRootTheme(theme: "dark" | "light"): void {
-  document.documentElement.dataset.maverickTheme = theme;
+  document.documentElement.dataset.loopinoTheme = theme;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 }

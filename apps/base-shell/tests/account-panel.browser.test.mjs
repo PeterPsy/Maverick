@@ -38,7 +38,7 @@ test("account panel supports desktop, mobile, keyboard and separated Google/logo
     await panel.getByRole("button", { name: "App access", exact: true }).click();
     assert.equal(await panel.getByRole("checkbox", { name: "Use secondary@example.com in this workspace" }).isChecked(), true);
     assert.equal(await panel.getByRole("checkbox", { name: "Allow Calendar to use Google" }).isChecked(), true);
-    if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: "/tmp/maverick-account-panel-desktop.png" });
+    if (process.env.LOOPINO_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: "/tmp/loopino-account-panel-desktop.png" });
     await panel.getByRole("button", { name: "Servers", exact: true }).click();
     await panel.getByLabel("Name", { exact: true }).fill("GiuntiTrail");
     await panel.getByLabel("Server address", { exact: true }).fill("http://trail.example");
@@ -74,12 +74,12 @@ test("account panel supports desktop, mobile, keyboard and separated Google/logo
     assert.equal(await sectionPicker.locator("option").count(), 6);
     const pickerBox = await sectionPicker.boundingBox();
     assert.ok(pickerBox.height >= 44 && pickerBox.x + pickerBox.width <= 390);
-    if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await phone.screenshot({ path: "/tmp/maverick-account-panel-profile-mobile.png" });
+    if (process.env.LOOPINO_ACCOUNT_PANEL_SCREENSHOTS) await phone.screenshot({ path: "/tmp/loopino-account-panel-profile-mobile.png" });
     await sectionPicker.selectOption("servers");
     const overflow = await mobilePanel.evaluate(element => element.scrollWidth > element.clientWidth);
     assert.equal(overflow, false);
-    if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) {
-      await phone.screenshot({ path: "/tmp/maverick-account-panel-mobile.png" });
+    if (process.env.LOOPINO_ACCOUNT_PANEL_SCREENSHOTS) {
+      await phone.screenshot({ path: "/tmp/loopino-account-panel-mobile.png" });
     }
     await phone.setViewportSize({ width: 320, height: 568 });
     for (const section of ["profile", "google", "access", "servers", "logout"]) {
@@ -87,7 +87,7 @@ test("account panel supports desktop, mobile, keyboard and separated Google/logo
       assert.equal(await mobilePanel.evaluate(element => Array.from(element.querySelectorAll(".bs-connected-accounts__body, .bs-connected-accounts__account")).some(node => node.scrollWidth > node.clientWidth)), false);
       const closeBox = await mobilePanel.getByRole("button", { name: "Close account panel" }).boundingBox();
       assert.ok(closeBox.y >= 59 && closeBox.x + closeBox.width <= 320);
-      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS && section === "google") await phone.screenshot({ path: "/tmp/maverick-account-panel-accounts-narrow.png" });
+      if (process.env.LOOPINO_ACCOUNT_PANEL_SCREENSHOTS && section === "google") await phone.screenshot({ path: "/tmp/loopino-account-panel-accounts-narrow.png" });
     }
     assert.deepEqual(errors, []);
     await mobile.close();

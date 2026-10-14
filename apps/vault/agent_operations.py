@@ -384,7 +384,7 @@ def _grant_arguments_for_issue(issue: dict[str, Any]) -> dict[str, Any]:
         "app_id": _dict(issue.get("app")).get("id"),
         "logical_name": _dict(issue.get("logical_need")).get("name"),
         "actions": recommended.get("actions") or ["app.backend"],
-        "target_patterns": recommended.get("target_patterns") or ["maverick://app.backend/*"],
+        "target_patterns": recommended.get("target_patterns") or ["loopino://app.backend/*"],
         "reason": recommended.get("reason") or "Created from Vault agent plan.",
     }
     if first.get("secret_id"):

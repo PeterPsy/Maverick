@@ -4,7 +4,7 @@ import {
   PWA_DATA_CACHE_BROKER_NETWORK_REQUEST,
   PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
   PWA_DATA_CACHE_BROKER_RESULT
-} from '@maverick/pwa-cache';
+} from '@loopino/pwa-cache';
 import {
   clearMediaThumbPreviewFrameCache,
   mediaThumbPreviewFrameKey,
@@ -32,11 +32,11 @@ function storageMock(initial: Record<string, string> = {}) {
 }
 
 function stubFrame(parent: Pick<Window, 'postMessage'>) {
-  const frameWindow = new EventTarget() as EventTarget & Window & { __MAVERICK_PLATFORM_ORIGIN__: string };
+  const frameWindow = new EventTarget() as EventTarget & Window & { __LOOPINO_PLATFORM_ORIGIN__: string };
   Object.assign(frameWindow, {
-    __MAVERICK_PLATFORM_ORIGIN__: 'https://maverick.test',
+    __LOOPINO_PLATFORM_ORIGIN__: 'https://loopino.test',
     location: {
-      origin: 'https://fitness-coach.sidecars.maverick.test',
+      origin: 'https://fitness-coach.sidecars.loopino.test',
       pathname: '/apps/fitness-coach/'
     },
     parent

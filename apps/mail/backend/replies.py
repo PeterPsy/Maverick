@@ -54,4 +54,4 @@ def set_conversation_headers(message, draft):
         message["In-Reply-To"] = str(draft["in_reply_to"])
     if draft.get("references"):
         message["References"] = " ".join(draft["references"])
-    message["Message-ID"] = str(draft.get("outgoing_message_id") or f"<{draft['id']}@maverick.mail>")
+    message["Message-ID"] = str(draft.get("outgoing_message_id") or f"<{draft['id']}@loopino.mail>")

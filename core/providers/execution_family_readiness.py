@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from core.providers.errors import ProviderNotFoundError
 from core.providers.execution_families import (
-    MAVERICK_AGENT_EXECUTION_FAMILY,
+    LOOPINO_AGENT_EXECUTION_FAMILY,
     NATIVE_AGENT_EXECUTION_FAMILY,
     effective_agentic_execution_family,
 )
@@ -43,7 +43,7 @@ def inspect_agentic_family_readiness(
     )
     if family == NATIVE_AGENT_EXECUTION_FAMILY:
         return _native_readiness(definition=definition, registry=registry)
-    if family == MAVERICK_AGENT_EXECUTION_FAMILY:
+    if family == LOOPINO_AGENT_EXECUTION_FAMILY:
         return AgenticFamilyReadiness(family, "complete", None)
     return AgenticFamilyReadiness(family, "incomplete", "execution_family_unclassified")
 

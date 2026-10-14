@@ -12,7 +12,7 @@ import time
 from local_gateway import APP_ROOT, DATA_ROOT, SOURCE_ROOT
 from gateway import GatewayError, check_readiness
 
-NAME = 'maverick-openwa-default'
+NAME = 'loopino-openwa-default'
 APP_DATA = DATA_ROOT.parent
 SUPERVISOR = APP_DATA / 'supervisor'
 CONTROL = APP_DATA / 'provider-control.json'

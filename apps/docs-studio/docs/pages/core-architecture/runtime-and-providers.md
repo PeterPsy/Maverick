@@ -29,10 +29,10 @@ runtime/sessions/<runtime_session_id>/
 
 | Concept | Owner | Purpose |
 | --- | --- | --- |
-| Runtime session | Maverick core | Workspace-scoped lifecycle container |
-| Runtime turn | Maverick core | One submitted unit of work |
+| Runtime session | Loopino core | Workspace-scoped lifecycle container |
+| Runtime turn | Loopino core | One submitted unit of work |
 | Provider thread | Provider adapter | Backend-specific conversation state |
-| Runtime event | Maverick core | Observable execution timeline |
+| Runtime event | Loopino core | Observable execution timeline |
 
 ## Skill materialization
 

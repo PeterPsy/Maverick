@@ -4,12 +4,12 @@ import { GoogleAuthError, runGoogleFlow } from "./googleAuth";
 
 describe("Google browser transport", () => {
   const flowId = "a".repeat(64);
-  const browserUrl = "https://maverick.example/?google_handoff=1#" + "s".repeat(43) + "." + "h".repeat(64);
+  const browserUrl = "https://loopino.example/?google_handoff=1#" + "s".repeat(43) + "." + "h".repeat(64);
   const postMessage = vi.fn();
   const post = vi.fn();
   beforeEach(() => {
-    vi.useFakeTimers(); window.location.href = "https://maverick.example/";
-    vi.stubGlobal("webkit", { messageHandlers: { maverickExternalURL: { postMessage } } });
+    vi.useFakeTimers(); window.location.href = "https://loopino.example/";
+    vi.stubGlobal("webkit", { messageHandlers: { loopinoExternalURL: { postMessage } } });
     postMessage.mockResolvedValue(true);
     post.mockImplementation(async (path: string) => path.endsWith("/start") ? { browser_url: browserUrl, flow_id: flowId } : { status: "completed" });
   });
@@ -52,7 +52,7 @@ describe("Google browser transport", () => {
     const result = runGoogleFlow("connect", [], post);
     const rejected = expect(result).rejects.toMatchObject({ name: "AbortError" });
     await vi.advanceTimersByTimeAsync(1);
-    window.dispatchEvent(new Event("maverick.server-will-change"));
+    window.dispatchEvent(new Event("loopino.server-will-change"));
     await rejected;
     expect(post).toHaveBeenLastCalledWith("/api/auth/google/cancel", { flow_id: flowId });
     await vi.advanceTimersByTimeAsync(5000);
@@ -60,7 +60,7 @@ describe("Google browser transport", () => {
   });
 
   it("refuses a launch on another origin before calling the native bridge", async () => {
-    post.mockResolvedValueOnce({ browser_url: browserUrl.replace("maverick.example", "evil.example"), flow_id: flowId });
+    post.mockResolvedValueOnce({ browser_url: browserUrl.replace("loopino.example", "evil.example"), flow_id: flowId });
     await expect(runGoogleFlow("connect", [], post)).rejects.toBeInstanceOf(GoogleAuthError);
     expect(postMessage).not.toHaveBeenCalled();
   });
@@ -81,7 +81,7 @@ describe("Google browser transport", () => {
   });
 
   it("reports older Mac clients clearly without losing the flow cookie", async () => {
-    vi.stubGlobal("webkit", { messageHandlers: { maverickDeviceUse: {} } });
+    vi.stubGlobal("webkit", { messageHandlers: { loopinoDeviceUse: {} } });
     await expect(runGoogleFlow("connect", [], post)).rejects.toMatchObject({ code: "google_native_update_required" });
     expect(post).not.toHaveBeenCalled();
   });

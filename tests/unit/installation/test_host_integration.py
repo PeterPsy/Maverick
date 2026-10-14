@@ -40,16 +40,16 @@ class HostIntegrationTests(unittest.TestCase):
     def test_fresh_installer_renders_worker_without_legacy_domain_placeholders(self):
         config = _make_config(Path(__file__).resolve().parents[3])
         rendered = render_install_plan(config)
-        self.assertIn(config.systemd_dir / 'maverick-installation.timer', rendered)
-        self.assertNotIn(config.systemd_dir / 'maverick-wildcard-tls.service', rendered)
-        unit = rendered[config.systemd_dir / 'maverick-installation.service']
+        self.assertIn(config.systemd_dir / 'loopino-installation.timer', rendered)
+        self.assertNotIn(config.systemd_dir / 'loopino-wildcard-tls.service', rendered)
+        unit = rendered[config.systemd_dir / 'loopino-installation.service']
         self.assertIn('installation_worker.py', unit)
         self.assertNotIn('{{', unit)
 
     def test_migrated_host_runs_completion_outside_the_chroot(self):
-        unit = render_service(Path('/opt/maverick'), root_directory='/srv/migration/root')
+        unit = render_service(Path('/projects/loopino'), root_directory='/srv/migration/root')
         self.assertIn('RootDirectoryStartOnly=yes', unit)
-        self.assertIn('ExecStartPost=/usr/bin/python3 /srv/migration/root/opt/maverick/scripts/deploy/installation_after_tick.py', unit)
+        self.assertIn('ExecStartPost=/usr/bin/python3 /srv/migration/root/projects/loopino/scripts/deploy/installation_after_tick.py', unit)
 
     def test_staging_a_new_hostname_preserves_the_active_virtual_host(self):
         with tempfile.TemporaryDirectory() as folder:

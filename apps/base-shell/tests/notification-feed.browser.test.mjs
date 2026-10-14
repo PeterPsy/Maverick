@@ -122,10 +122,10 @@ test(
         }),
         ["16px", "12px", "rgb(23, 23, 23)"],
       );
-      if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR)
+      if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR)
         await page.screenshot({
           path: resolve(
-            process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR,
+            process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR,
             "notification-feed-desktop-dark.png",
           ),
         });
@@ -143,7 +143,7 @@ test(
       assert.equal(await feed.locator("[data-unread]").count(), 0);
       await page.keyboard.press("Escape");
       await page
-        .getByRole("button", { name: "Controlli Maverick", exact: true })
+        .getByRole("button", { name: "Controlli Loopino", exact: true })
         .hover();
       await page
         .getByRole("button", { name: "Light mode", exact: true })
@@ -160,10 +160,10 @@ test(
         ),
         "rgb(255, 255, 255)",
       );
-      if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR)
+      if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR)
         await page.screenshot({
           path: resolve(
-            process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR,
+            process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR,
             "notification-feed-desktop-light.png",
           ),
         });
@@ -217,10 +217,10 @@ test(
         1,
         "Code digits stay on one row at 320px",
       );
-      if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR)
+      if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR)
         await mobilePage.screenshot({
           path: resolve(
-            process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR,
+            process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR,
             "notification-feed-mobile.png",
           ),
         });

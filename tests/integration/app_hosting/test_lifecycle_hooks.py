@@ -174,7 +174,7 @@ class TestAppHooksAndUpgrades(AppHostingTestBase):
             self.assertEqual(result.binding.active_version, "2.0.0")
             self.assertTrue((upgraded_root / "upgrade-ran.txt").exists())
             self.assertTrue((upgraded_root / "migrate-ran.txt").exists())
-            metadata = (repo_root / "workspaces" / "default" / "data" / "reports" / ".maverick-app.json").read_text(
+            metadata = (repo_root / "workspaces" / "default" / "data" / "reports" / ".loopino-app.json").read_text(
                 encoding="utf-8"
             )
             self.assertIn('"data_schema_version": "2"', metadata)

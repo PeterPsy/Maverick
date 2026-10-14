@@ -17,24 +17,24 @@ test("Instagram scope excludes credentials, login, redirects and URL normalizati
   for(const url of ["https://www.instagram.com/accounts/login/","https://www.instagram.com/direct/","https://evil.test/marta/","https://secret@www.instagram.com/marta/","https://www.instagram.com/marta/../accounts/","https://www.instagram.com/%61pi/"," https://www.instagram.com/marta/","https://www.instagram.com/marta//"])assert.throws(()=>platformUrl(url),undefined,url);
 });
 test("Connector is restricted to the selected secure Browser window",()=>{
-  const url=connectorUrl("https://maverick.test/app/browser?connector=1");
-  assert.equal(connectorUrl("https://maverick.test/app/browser?secret=discard").search,"?connector=1");
+  const url=connectorUrl("https://loopino.test/app/browser?connector=1");
+  assert.equal(connectorUrl("https://loopino.test/app/browser?secret=discard").search,"?connector=1");
   const b={connectorTabId:10,origin:url.origin,path:url.pathname};
   assert(sameConnector({id:10,url:url.href},b));assert(!sameConnector({id:11,url:url.href},b));assert(!sameConnector({id:10,url:"https://evil.test/app/browser?connector=1"},b));
   for (const path of ["/app/browser", "/app/chat", "/app/storage/folder", "/"]) assert(sameConnector({id:10,url:`${url.origin}${path}`},b), `Shell navigation must retain the bridge: ${path}`);
   for (const path of ["/apps/browser/", "/api/apps/browser/backend", "/login"]) assert(!sameConnector({id:10,url:`${url.origin}${path}`},b));
-  for(const url of ["https://maverick.test/apps/browser/?connector=1","https://maverick.test/apps/chat/","http://maverick.test/app/browser","https://user:pass@maverick.test/app/browser"])assert.throws(()=>connectorUrl(url));
+  for(const url of ["https://loopino.test/apps/browser/?connector=1","https://loopino.test/apps/chat/","http://loopino.test/app/browser","https://user:pass@loopino.test/app/browser"])assert.throws(()=>connectorUrl(url));
 });
 test("Connector commands require the exact isolated Browser document in the selected shell window",()=>{
-  const url=connectorUrl("https://maverick.test/app/browser?connector=1");
-  assert.deepEqual(connectorOrigins(url),["https://maverick.test/*","https://*.sidecars.maverick.test/*"]);
-  const frameUrl="https://af-0123456789abcdef01234567.sidecars.maverick.test/apps/browser/";
+  const url=connectorUrl("https://loopino.test/app/browser?connector=1");
+  assert.deepEqual(connectorOrigins(url),["https://loopino.test/*","https://*.sidecars.loopino.test/*"]);
+  const frameUrl="https://af-0123456789abcdef01234567.sidecars.loopino.test/apps/browser/";
   const b={connectorTabId:10,origin:url.origin,path:url.pathname,connectorFrameId:3,connectorDocumentId:"fresh-document",connectorFrameOrigin:new URL(frameUrl).origin};
   const sender={tab:{id:10,url:url.href},url:frameUrl,frameId:3,documentId:"fresh-document"};
   assert(sameConnectorFrame(sender,b));
   assert(sameConnectorFrame({...sender,tab:{id:10,url:`${url.origin}/app/chat`}},b));
-  for(const change of [{frameId:0},{documentId:"old-document"},{url:frameUrl.replace("browser/","chat/")},{tab:{id:11,url:url.href}},{url:frameUrl.replace("maverick.test","evil.test")}])assert(!sameConnectorFrame({...sender,...change},b));
-  assert(!connectorFrameUrl("https://maverick.test/apps/browser/",url.origin));
+  for(const change of [{frameId:0},{documentId:"old-document"},{url:frameUrl.replace("browser/","chat/")},{tab:{id:11,url:url.href}},{url:frameUrl.replace("loopino.test","evil.test")}])assert(!sameConnectorFrame({...sender,...change},b));
+  assert(!connectorFrameUrl("https://loopino.test/apps/browser/",url.origin));
 });
 test("Fixed command surface rejects scripts, selectors and excessive media duration",()=>{
   for(const command of [{action:"click",parameters:{}},{action:"content.read",parameters:{script:"document.cookie"}},{action:"scroll",parameters:{selector:"body"}},{action:"video.analyze",parameters:{max_seconds:181}},{action:"screenshot",parameters:{full_page:true}}])assert.throws(()=>boundedCommand({operation_id:"one",...command}));

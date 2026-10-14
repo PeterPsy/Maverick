@@ -41,7 +41,7 @@ def start_prepared_session_cleanup_scheduler(
     thread = Thread(
         target=_run_prepared_session_cleanup_scheduler,
         args=(state, interval, initial_delay, stop),
-        name="maverick-prepared-session-cleanup",
+        name="loopino-prepared-session-cleanup",
         daemon=True,
     )
     thread.start()
@@ -163,7 +163,7 @@ def _run_prepared_session_cleanup_scheduler(
 def _cleanup_interval_seconds(interval_seconds: float | None) -> float:
     if interval_seconds is not None:
         return max(1.0, float(interval_seconds))
-    raw = os.environ.get("MAVERICK_PREPARED_SESSION_CLEANUP_INTERVAL_SECONDS", "").strip()
+    raw = os.environ.get("LOOPINO_PREPARED_SESSION_CLEANUP_INTERVAL_SECONDS", "").strip()
     if not raw:
         return DEFAULT_PREPARED_SESSION_CLEANUP_INTERVAL_SECONDS
     try:

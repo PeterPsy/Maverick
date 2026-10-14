@@ -13,6 +13,7 @@ import tempfile
 from uuid import uuid4
 
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
+from core.providers.source_homes import antigravity_source_home
 
 
 ANTIGRAVITY_OAUTH_TOKEN_FILENAME = "antigravity-oauth-token"
@@ -24,7 +25,7 @@ ANTIGRAVITY_RUNTIME_SETTINGS = {
     "toolPermission": "proceed-in-sandbox",
     "artifactReviewPolicy": "asks-for-review",
     "permissions": {
-        "allow": ["command(maverick)", "unsandboxed(maverick)"],
+        "allow": ["command(loopino)", "unsandboxed(loopino)"],
     },
 }
 ANTIGRAVITY_SKILL_MAX_FILES = 256
@@ -34,15 +35,15 @@ ANTIGRAVITY_SKILL_MAX_BYTES = 8 * 1024 * 1024
 def resolve_antigravity_source_home(
     configured_home: str | Path | None = None,
 ) -> Path:
-    """Resolve the operator-managed Antigravity profile without reading it."""
+    """Resolve the installation's Antigravity profile without reading it."""
     configured = str(
         configured_home
-        or os.environ.get("MAVERICK_ANTIGRAVITY_HOME")
+        or os.environ.get("LOOPINO_ANTIGRAVITY_HOME")
         or ""
     ).strip()
     if configured:
         return Path(configured).expanduser()
-    return Path.home() / ANTIGRAVITY_PROFILE_RELATIVE_PATH
+    return antigravity_source_home()
 
 
 def prepare_antigravity_runtime_home(
@@ -83,7 +84,7 @@ def prepare_antigravity_runtime_mcp_config(
     servers = {}
     if device_use:
         servers["device_use"] = {
-            "command": "maverick-device-use-mcp",
+            "command": "loopino-device-use-mcp",
         }
     _write_private_json(config_dir / "mcp_config.json", {"mcpServers": servers})
 

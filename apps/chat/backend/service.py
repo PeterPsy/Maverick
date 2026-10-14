@@ -36,9 +36,9 @@ VIEW_STATE_ACTIONS = {
 
 def app_events_for_action(action: str) -> list[dict]:
     if action in DATA_CHANGED_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "resource": "projects"}]
+        return [{"type": "loopino.app.data-changed", "resource": "projects"}]
     if action in VIEW_STATE_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+        return [{"type": "loopino.app.data-changed", "resource": "view-state"}]
     return []
 
 

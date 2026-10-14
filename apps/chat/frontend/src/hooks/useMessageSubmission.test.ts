@@ -81,7 +81,7 @@ describe("runtimeSessionOptionsForNewChat", () => {
       },
       deviceUseActivationId: "01234567-89ab-cdef-0123-456789abcdef",
       draftChat: null,
-      systemPrompt: "Use Maverick apps and the Mac",
+      systemPrompt: "Use Loopino apps and the Mac",
     });
 
     expect(options).toMatchObject({
@@ -96,7 +96,7 @@ describe("runtimeSessionOptionsForNewChat", () => {
       reasoning_effort: "max",
       device_use_activation_id: "01234567-89ab-cdef-0123-456789abcdef",
     });
-    expect(options.system_prompt).toBe("Use Maverick apps and the Mac");
+    expect(options.system_prompt).toBe("Use Loopino apps and the Mac");
     expect(options.skill_catalog_app_id).toBe("skills");
   });
 

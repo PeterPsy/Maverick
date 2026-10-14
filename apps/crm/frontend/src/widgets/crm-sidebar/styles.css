@@ -2,23 +2,23 @@
 
 :root {
   color-scheme: dark;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.64);
-  --maverick-text-on-accent: #09090b;
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-accent: #ffffff;
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.64);
+  --loopino-text-on-accent: #09090b;
+  --loopino-border: rgba(255, 255, 255, 0.08);
+  --loopino-border-strong: rgba(255, 255, 255, 0.14);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-accent: #ffffff;
   font-family: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
 html, body, #crm-sidebar-root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { background: transparent; color: var(--maverick-text); }
+body { background: transparent; color: var(--loopino-text); }
 button { color: inherit; font: inherit; cursor: pointer; }
-button:focus-visible, summary:focus-visible { outline: 2px solid var(--maverick-accent); outline-offset: 3px; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--loopino-accent); outline-offset: 3px; }
 
 .crm-sidebar-widget {
   /* Keep content reachable below the shell-owned workspace selector and footer. */

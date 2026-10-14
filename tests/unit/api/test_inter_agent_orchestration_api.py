@@ -279,7 +279,7 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
                 cookie=cookie,
             )
             with (
-                patch.dict("os.environ", {"MAVERICK_FEATURE_GROUP_CHAT": "1"}),
+                patch.dict("os.environ", {"LOOPINO_FEATURE_GROUP_CHAT": "1"}),
                 patch("core.api.inter_agent_api._start_orchestrated_execution_worker"),
             ):
                 enabled_status, enabled_payload, _headers = self._invoke(
@@ -291,6 +291,6 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
                 )
 
             self.assertEqual(disabled_status, 400)
-            self.assertIn("MAVERICK_FEATURE_GROUP_CHAT=1", disabled_payload["detail"])
+            self.assertIn("LOOPINO_FEATURE_GROUP_CHAT=1", disabled_payload["detail"])
             self.assertEqual(enabled_status, 202)
             self.assertEqual(enabled_payload["run"]["orchestration_policy"], "group_chat")

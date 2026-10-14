@@ -39,7 +39,7 @@
   gap: .5rem;
   align-items: center;
   z-index: 40;
-  background: var(--maverick-bg);
+  background: var(--loopino-bg);
   border-radius: 18px;
   padding: .25rem .5rem;
   font-size: .8rem;
@@ -86,11 +86,11 @@
   display: grid;
   height: 100%;
   place-items: center;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .chat-floating-thread-menu__trigger:focus-visible, .chat-floating-widget-shell__button:focus-visible, .chat-floating-widget-launcher:focus-visible, .chat-floating-widget-shell__source-badge:focus-visible {
-  outline: 2px solid var(--maverick-text);
+  outline: 2px solid var(--loopino-text);
   outline-offset: -2px;
 }
 

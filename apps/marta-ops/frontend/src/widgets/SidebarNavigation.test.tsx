@@ -52,23 +52,23 @@ vi.mock("../api", () => ({
     },
   }),
 }));
-vi.mock("@maverick/pwa-cache", async (importActual) => ({
+vi.mock("@loopino/pwa-cache", async (importActual) => ({
   ...(await importActual<object>()),
   connectAppEventSocket: () => vi.fn(),
 }));
 
 const origin = "https://shell.example.test";
-type ShellWindow = Window & { __MAVERICK_PLATFORM_ORIGIN__?: string };
+type ShellWindow = Window & { __LOOPINO_PLATFORM_ORIGIN__?: string };
 
 beforeEach(() => {
-  (window as ShellWindow).__MAVERICK_PLATFORM_ORIGIN__ = origin;
+  (window as ShellWindow).__LOOPINO_PLATFORM_ORIGIN__ = origin;
   // WidgetSlot only routes widget.open-app; AppFrameHost rejects app.open-app
   // from widget frames. Relay accepted widget requests into the real app.
   vi.spyOn(window, "postMessage").mockImplementation((message) => {
     const data =
-      message.type === "maverick.widget.open-app"
-        ? { ...message, type: "maverick.app.navigate" }
-        : message.type === "maverick.app.selection-changed"
+      message.type === "loopino.widget.open-app"
+        ? { ...message, type: "loopino.app.navigate" }
+        : message.type === "loopino.app.selection-changed"
           ? message
           : null;
     if (data)
@@ -78,7 +78,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
-  delete (window as ShellWindow).__MAVERICK_PLATFORM_ORIGIN__;
+  delete (window as ShellWindow).__LOOPINO_PLATFORM_ORIGIN__;
 });
 
 async function mount() {

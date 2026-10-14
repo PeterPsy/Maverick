@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
+import { isExactLoopinoParentMessage } from "@loopino/pwa-cache";
 import { scheduledChatAction, type ScheduledChat, type ScheduledChatSummary } from "../api/scheduledChats";
 
 export function useScheduledChats(chatId: string | null) {
@@ -39,13 +39,13 @@ export function useScheduledChats(chatId: string | null) {
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
-      if (isExactMaverickParentMessage(event) && event.data?.type === "maverick.widget.context-changed") {
+      if (isExactLoopinoParentMessage(event) && event.data?.type === "loopino.widget.context-changed") {
         generation.current += 1; refreshAbort.current?.abort();
         setChat(null); setChats([]); setLoading(true); setError(null);
         void refresh();
         return;
       }
-      if (isExactMaverickParentMessage(event) && event.data?.type === "maverick.app.data-changed"
+      if (isExactLoopinoParentMessage(event) && event.data?.type === "loopino.app.data-changed"
         && event.data.owner_app_id === "chat" && event.data.resource === "scheduled-chats") void refresh();
     }
     function onResume() { if (!document.hidden) void refresh(); }

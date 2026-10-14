@@ -19,8 +19,8 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       const context = await browser.newContext({ viewport, serviceWorkers: "block", reducedMotion, colorScheme: "light" });
       await context.addInitScript(() => {
         window.webkit = { messageHandlers: {
-          maverickExternalURL: { postMessage: async () => true },
-          maverickServers: { postMessage: async () => ({ profiles: [{ id: "current", name: "This Maverick", origin: location.origin, current: true }] }) },
+          loopinoExternalURL: { postMessage: async () => true },
+          loopinoServers: { postMessage: async () => ({ profiles: [{ id: "current", name: "This Loopino", origin: location.origin, current: true }] }) },
         } };
       });
       await context.route("**/api/session", route => route.fulfill({ json: { authenticated: false } }));
@@ -45,7 +45,7 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       const errors = [];
       page.on("pageerror", error => errors.push(error.message));
       await page.goto(origin);
-      await page.getByRole("heading", { name: "Maverick was waiting for you." }).waitFor();
+      await page.getByRole("heading", { name: "Loopino was waiting for you." }).waitFor();
       const google = page.getByRole("button", { name: "Continue with Google", exact: true });
       await google.waitFor({ state: "visible" });
       assert.equal(await page.getByRole("list", { name: "Google services requested at sign-in" }).getByRole("listitem").count(), 3);
@@ -63,7 +63,7 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       if (reducedMotion === "no-preference") await page.locator(".bs-login-paper-bg canvas").waitFor({ state: "visible" });
       else assert.equal(await page.locator(".bs-login-paper-bg canvas").count(), 0);
       const screenshotSuffix = `${viewport.width}${reducedMotion === "no-preference" ? "-animated" : ""}`;
-      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-login-${screenshotSuffix}.png`, fullPage: true });
+      if (process.env.LOOPINO_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/loopino-login-${screenshotSuffix}.png`, fullPage: true });
       // Verify the animated shader, then keep software rendering out of interaction timings.
       if (reducedMotion === "no-preference") {
         await page.emulateMedia({ reducedMotion: "reduce" });
@@ -92,7 +92,7 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       await panel.getByLabel("Server address", { exact: true }).fill("http://offline.example");
       await panel.getByRole("button", { name: "Add server", exact: true }).click();
       await panel.getByRole("alert").filter({ hasText: "HTTPS" }).waitFor();
-      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-servers-${viewport.width}.png` });
+      if (process.env.LOOPINO_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/loopino-servers-${viewport.width}.png` });
       await page.keyboard.press("Escape");
       await panel.waitFor({ state: "hidden" });
       await page.waitForFunction(() => document.activeElement?.matches(".bs-login__server"));
@@ -105,7 +105,7 @@ test("login requests app services, recovers cancelled consent and fits desktop/m
       assert.equal(await page.getByLabel("Password", { exact: true }).getAttribute("type"), "text");
       await page.getByRole("button", { name: "Hide password", exact: true }).click();
       assert.equal(await page.getByLabel("Password", { exact: true }).getAttribute("type"), "password");
-      if (process.env.MAVERICK_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/maverick-login-password-${screenshotSuffix}.png`, fullPage: true });
+      if (process.env.LOOPINO_ACCOUNT_PANEL_SCREENSHOTS) await page.screenshot({ path: `/tmp/loopino-login-password-${screenshotSuffix}.png`, fullPage: true });
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await page.getByRole("alert").filter({ hasText: "Invalid credentials" }).waitFor();
       assert.deepEqual(passwordLogin, { username: "admin", password: "fixture-password" });

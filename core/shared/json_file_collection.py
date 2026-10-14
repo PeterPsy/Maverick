@@ -15,7 +15,7 @@ import tempfile
 from typing import Any
 
 
-DATETIME_MARKER = "__maverick_datetime__"
+DATETIME_MARKER = "__loopino_datetime__"
 COLLECTION_FILE_MODE = 0o660
 COLLECTION_DIRECTORY_MODE = 0o2770
 

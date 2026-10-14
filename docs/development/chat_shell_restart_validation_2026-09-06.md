@@ -3,7 +3,7 @@
 ## Scope and operational state
 
 The authorized Core restart completed at 06:38:07 UTC on 2026-09-06
-(`maverick-core.service`, PID 2805199). `/health` returns HTTP 200.
+(`loopino-core.service`, PID 2805199). `/health` returns HTTP 200.
 The session-owned Gemini ACP lifecycle from `0ef4940f` is now loaded. That
 commit did not change Base Shell, Chat, or the PWA SDK. Hosted API profiles
 remain disabled in this historical verification.
@@ -183,7 +183,7 @@ and does not require another Core restart.
 
 The official Chat frontend build published the project-recovery hook with
 build ID `608bfc7abee8eff905a8cdea279912280e2bab6371f7eb75a174f42083f61876`,
-emitting the normal `maverick.app.frontend-changed` event for mounted clients.
+emitting the normal `loopino.app.frontend-changed` event for mounted clients.
 The published artifacts also passed the disposable Core/browser smoke again:
 all fixture pins and the named project rendered on cold and service-worker-
 controlled warm loads. Post-build `/health` and the read-only Codex compatibility

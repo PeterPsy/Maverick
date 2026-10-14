@@ -38,7 +38,7 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(result["items"][1]["text"],"Observed reply")
         self.assertTrue(all(call.kwargs["allowed_hosts"]=={"api.github.com"} for call in mocked.call_args_list))
         with patch("github_source.fetch",return_value=response({"items":[{"html_url":"https://github.com/org/repo","full_name":"org/repo","description":"Summary"}],"total_count":100})):
-            result=read_github("search",{"query":"maverick","max_items":3})
+            result=read_github("search",{"query":"loopino","max_items":3})
         self.assertTrue(result["truncated"])
         self.assertFalse(result["items"][0]["content_observed"])
 

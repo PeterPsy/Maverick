@@ -1,4 +1,4 @@
-import { readCacheModelJson, readThroughParentDataCache } from '@maverick/pwa-cache';
+import { readCacheModelJson, readThroughParentDataCache } from '@loopino/pwa-cache';
 import { sanitizeCatalog } from './catalogReadModel.js';
 
 export async function requestJson(url, options = {}) {
@@ -12,7 +12,7 @@ export async function requestJson(url, options = {}) {
   } catch (error) {
     if (options.signal?.aborted) throw error;
     const transport = new Error('App Store transport failed.', { cause: error });
-    transport.name = 'MaverickTransportError';
+    transport.name = 'LoopinoTransportError';
     throw transport;
   }
   let payload = {};
@@ -51,7 +51,7 @@ export async function loadCachedCatalog() {
 export class AppStoreHttpError extends Error {
   constructor(message, response) {
     super(message);
-    this.name = 'MaverickHttpError';
+    this.name = 'LoopinoHttpError';
     this.status = response.status;
     this.retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
   }

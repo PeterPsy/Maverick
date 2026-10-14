@@ -32,11 +32,11 @@ class ControlStoreSettingsTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = ControlStoreSettings.from_environment(
                 repository_root=Path(temp_dir),
-                environment={"MAVERICK_MONGODB_URI": "mongodb://127.0.0.1:27017/maverick"},
+                environment={"LOOPINO_MONGODB_URI": "mongodb://127.0.0.1:27017/loopino"},
             )
 
             self.assertEqual(settings.kind, "mongo")
-            self.assertEqual(settings.mongo_database, "maverick")
+            self.assertEqual(settings.mongo_database, "loopino")
 
     def test_json_control_store_can_use_configured_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -44,8 +44,8 @@ class ControlStoreSettingsTestCase(unittest.TestCase):
             settings = ControlStoreSettings.from_environment(
                 repository_root=repository_root,
                 environment={
-                    "MAVERICK_CONTROL_STORE": "json",
-                    "MAVERICK_JSON_CONTROL_STORE_ROOT": "control-db",
+                    "LOOPINO_CONTROL_STORE": "json",
+                    "LOOPINO_JSON_CONTROL_STORE_ROOT": "control-db",
                 },
             )
             collections = build_control_plane_collections(settings)
@@ -61,23 +61,23 @@ class ControlStoreSettingsTestCase(unittest.TestCase):
             settings = ControlStoreSettings.from_environment(
                 repository_root=Path(temp_dir),
                 environment={
-                    "MAVERICK_CONTROL_STORE": "mongodb",
-                    "MAVERICK_MONGODB_URI": "mongodb://127.0.0.1:27017/maverick_from_uri",
+                    "LOOPINO_CONTROL_STORE": "mongodb",
+                    "LOOPINO_MONGODB_URI": "mongodb://127.0.0.1:27017/loopino_from_uri",
                 },
             )
 
             self.assertEqual(settings.kind, "mongo")
-            self.assertEqual(settings.mongo_uri, "mongodb://127.0.0.1:27017/maverick_from_uri")
-            self.assertEqual(settings.mongo_database, "maverick_from_uri")
+            self.assertEqual(settings.mongo_uri, "mongodb://127.0.0.1:27017/loopino_from_uri")
+            self.assertEqual(settings.mongo_database, "loopino_from_uri")
 
     def test_explicit_mongo_database_overrides_uri_database(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = ControlStoreSettings.from_environment(
                 repository_root=Path(temp_dir),
                 environment={
-                    "MAVERICK_CONTROL_STORE": "mongo",
-                    "MAVERICK_MONGODB_URI": "mongodb://127.0.0.1:27017/ignored",
-                    "MAVERICK_MONGODB_DATABASE": "configured",
+                    "LOOPINO_CONTROL_STORE": "mongo",
+                    "LOOPINO_MONGODB_URI": "mongodb://127.0.0.1:27017/ignored",
+                    "LOOPINO_MONGODB_DATABASE": "configured",
                 },
             )
 
@@ -88,24 +88,24 @@ class ControlStoreSettingsTestCase(unittest.TestCase):
             settings = ControlStoreSettings.from_environment(
                 repository_root=Path(temp_dir),
                 environment={
-                    "MAVERICK_CONTROL_STORE": "mongo",
-                    "MAVERICK_MONGODB_URI": "mongodb://127.0.0.1:27017/maverick",
-                    "MAVERICK_MONGODB_USERNAME": "maverick",
-                    "MAVERICK_MONGODB_PASSWORD_REF": "platform:secret-alias/mongodb-password",
+                    "LOOPINO_CONTROL_STORE": "mongo",
+                    "LOOPINO_MONGODB_URI": "mongodb://127.0.0.1:27017/loopino",
+                    "LOOPINO_MONGODB_USERNAME": "loopino",
+                    "LOOPINO_MONGODB_PASSWORD_REF": "platform:secret-alias/mongodb-password",
                 },
             )
 
             self.assertEqual(settings.kind, "mongo")
-            self.assertEqual(settings.mongo_username, "maverick")
+            self.assertEqual(settings.mongo_username, "loopino")
             self.assertEqual(settings.mongo_password_ref, "platform:secret-alias/mongodb-password")
             self.assertNotIn("@", settings.mongo_uri or "")
 
     def test_unknown_control_store_kind_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaisesRegex(RuntimeError, "Unsupported MAVERICK_CONTROL_STORE"):
+            with self.assertRaisesRegex(RuntimeError, "Unsupported LOOPINO_CONTROL_STORE"):
                 ControlStoreSettings.from_environment(
                     repository_root=Path(temp_dir),
-                    environment={"MAVERICK_CONTROL_STORE": "postgres"},
+                    environment={"LOOPINO_CONTROL_STORE": "postgres"},
                 )
 
 

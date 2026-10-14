@@ -1,15 +1,15 @@
 import { createRoot } from "react-dom/client";
 import {
-  applyInitialMaverickTheme,
-  listenForMaverickThemeMessages,
+  applyInitialLoopinoTheme,
+  listenForLoopinoThemeMessages,
 } from "../../lib/shellTheme";
 import { ChatConversationPanel } from "./ChatConversationPanel";
 import "./styles.css";
 import { useChatSidebarState } from "./useChatSidebarState";
 import { ScheduledSidebar } from "./ScheduledSidebar";
 
-applyInitialMaverickTheme();
-listenForMaverickThemeMessages();
+applyInitialLoopinoTheme();
+listenForLoopinoThemeMessages();
 
 function ChatSidebarWidget() {
   const sidebar = useChatSidebarState();

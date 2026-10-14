@@ -21,7 +21,7 @@ export class MutationRetryHttpError extends Error {
 export class MutationRetryTransportError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
-    this.name = "MaverickTransportError";
+    this.name = "LoopinoTransportError";
   }
 }
 

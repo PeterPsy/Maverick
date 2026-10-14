@@ -3,9 +3,9 @@ import { t } from "@/preferences";
 import { FindTime } from "./find-time";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  isExactMaverickParentMessage,
-  observeMaverickVisibility,
-} from "@maverick/pwa-cache";
+  isExactLoopinoParentMessage,
+  observeLoopinoVisibility,
+} from "@loopino/pwa-cache";
 import {
   CALENDAR_UI_STATE_CHANGED_EVENT,
   CALENDAR_UI_STATE_RESOURCE,
@@ -154,7 +154,7 @@ export function CalendarEventOverlay({
     )
       return;
     let controller: AbortController | undefined;
-    const stop = observeMaverickVisibility((visible) => {
+    const stop = observeLoopinoVisibility((visible) => {
       controller?.abort();
       if (!visible) return;
       setLoadingDetails(true);
@@ -248,7 +248,7 @@ export function CalendarEventOverlay({
 
     function handleShellMessage(event: MessageEvent) {
       if (
-        !isExactMaverickParentMessage(event) ||
+        !isExactLoopinoParentMessage(event) ||
         !event.data ||
         typeof event.data !== "object"
       ) {
@@ -260,7 +260,7 @@ export function CalendarEventOverlay({
         type?: string;
       };
       if (
-        payload.type === "maverick.app.data-changed" &&
+        payload.type === "loopino.app.data-changed" &&
         payload.owner_app_id === runtimeAppId &&
         payload.resource === CALENDAR_UI_STATE_RESOURCE
       ) {

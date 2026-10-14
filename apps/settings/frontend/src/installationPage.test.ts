@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mountInstallation } from '../../../../packages/installation-ui/src/view';
 import { clearSettingsDomCache, patchSettingsDom } from './settingsDom';
 
-const inspection = { configuration: { hostname: 'maverick.example.com', public_url: 'https://maverick.example.com', target_ip: '8.8.8.8', generation: 0, managed: true },
+const inspection = { configuration: { hostname: 'loopino.example.com', public_url: 'https://loopino.example.com', target_ip: '8.8.8.8', generation: 0, managed: true },
   dns_credentials: [{ label: 'Cloudflare DNS', ref: 'platform:secrets/token' }], requirements: [], configured: true,
   worker: { state: 'healthy', public_ip: '8.8.8.8', checked_at: new Date().toISOString() } };
 let root: HTMLElement;
@@ -19,7 +19,7 @@ it('keeps the installation island and address draft during unrelated Settings re
   patchSettingsDom(root, html);
   const island = root.querySelector<HTMLElement>('#installation-root')!;
   view = mountInstallation(island);
-  await vi.waitFor(() => expect(island.querySelector<HTMLInputElement>('[name=address]')!.value).toBe('maverick.example.com'));
+  await vi.waitFor(() => expect(island.querySelector<HTMLInputElement>('[name=address]')!.value).toBe('loopino.example.com'));
   const input = island.querySelector<HTMLInputElement>('[name=address]')!;
   input.value = 'new.example.com'; input.focus(); input.dispatchEvent(new Event('input', { bubbles: true }));
   patchSettingsDom(root, html);
@@ -41,7 +41,7 @@ it('sends a pasted credential only to Core Secrets and keeps its value out of th
   fetchMock.mockImplementation(async (url) => new Response(JSON.stringify(String(url) === '/api/secrets' ? { secret: { secret_id: 'saved-token' } } : inspection), { status: 200 }));
   const storage = vi.spyOn(Storage.prototype, 'setItem');
   view = mountInstallation(root);
-  await vi.waitFor(() => expect(root.querySelector('[data-installation-overview]')?.textContent).toContain('maverick.example.com'));
+  await vi.waitFor(() => expect(root.querySelector('[data-installation-overview]')?.textContent).toContain('loopino.example.com'));
   root.querySelector<HTMLInputElement>('[data-installation-token]')!.value = 'private-test-token';
   root.querySelector<HTMLButtonElement>('[data-installation-action=save-token]')!.click();
   await vi.waitFor(() => expect(root.querySelector<HTMLInputElement>('[data-installation-token]')!.value).toBe(''));

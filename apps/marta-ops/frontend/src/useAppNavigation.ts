@@ -84,7 +84,7 @@ export function useAppNavigation(appId: string) {
 
   useEffect(() => {
     postToShell({
-      type: "maverick.app.selection-changed",
+      type: "loopino.app.selection-changed",
       owner_app_id: appId,
       selection: {
         app_page: view,

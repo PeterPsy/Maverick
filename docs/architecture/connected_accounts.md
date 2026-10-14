@@ -13,7 +13,7 @@ workspace or app inventory. Installations with no such apps use identity-only
 login. The screen lists the requested services before continuing; Google consent
 still controls the scopes actually granted. Password users can link Google from
 Connected accounts, where service selection remains explicit. An authenticated
-link establishes the Google subject's association with the Maverick user. Email
+link establishes the Google subject's association with the Loopino user. Email
 equality alone never links an existing account. New Google registrations create
 ordinary members without workspace membership; an administrator assigns access.
 No Google flow grants platform administration or workspace membership.
@@ -35,13 +35,13 @@ OAuth uses server-side authorization-code exchange, PKCE, a browser-bound,
 single-use, expiring state, and verified OpenID claims. Only actually granted
 scopes are stored. Login sessions retain the existing platform cookie lifecycle.
 Google sign-in and API consent are distinct authorities. OAuth client references
-are configured with `MAVERICK_GOOGLE_CLIENT_ID_REF` and
-`MAVERICK_GOOGLE_CLIENT_SECRET_REF`; defaults are Core Secrets aliases
+are configured with `LOOPINO_GOOGLE_CLIENT_ID_REF` and
+`LOOPINO_GOOGLE_CLIENT_SECRET_REF`; defaults are Core Secrets aliases
 `google-oauth-client-id` and `google-oauth-client-secret`. Configure
-`MAVERICK_GOOGLE_REDIRECT_URI` as the exact registered HTTPS callback ending in
+`LOOPINO_GOOGLE_REDIRECT_URI` as the exact registered HTTPS callback ending in
 `/api/auth/google/callback` (localhost HTTP is permitted for development).
 No credentials are stored in environment variables, app state, or browser data.
-`MAVERICK_GOOGLE_ALLOW_REGISTRATION=0` limits sign-in to identities that have
+`LOOPINO_GOOGLE_ALLOW_REGISTRATION=0` limits sign-in to identities that have
 already been linked; the default allows member registrations awaiting workspace
 assignment. Enable the Calendar, Gmail and Drive APIs in the selected Google
 project and register the callback on a Web application OAuth client. The client
@@ -120,7 +120,7 @@ Google authority; a background job must supply a trusted owning user context.
 
 Web and installed PWA clients use ordinary browser OAuth. Native Mac and iOS/iPadOS
 clients launch the system browser through the trusted top-level
-`maverickExternalURL` bridge. `/api/auth/google/start` with transport
+`loopinoExternalURL` bridge. `/api/auth/google/start` with transport
 `system-browser` creates an expiring, one-use handoff. Its authority travels in
 the URL fragment, which the shell removes before rendering or requesting data.
 The browser posts it to `/api/auth/google/handoff` and receives its own HttpOnly
@@ -129,10 +129,10 @@ with native webviews.
 
 For account linking, Core revalidates the original user's session generation,
 active user and workspace membership through the canonical session resolver,
-even if the system browser is signed into another Maverick user. Google callbacks
-never replace that browser's Maverick login. The original webview polls
+even if the system browser is signed into another Loopino user. Google callbacks
+never replace that browser's Loopino login. The original webview polls
 `/api/auth/google/result`, protected by its separate HttpOnly initiating cookie.
-Only that webview can consume the result and receive a Maverick login cookie.
+Only that webview can consume the result and receive a Loopino login cookie.
 Neither raw session IDs nor provider tokens are passed through URLs or JavaScript.
 Cancellation, provider errors and expiry release the shell's pending controls;
 an unsuccessful server switch also releases an interrupted Google flow without
@@ -157,9 +157,9 @@ client ID and secret aliases; do not rename aliases that existing apps use. For
 example, installations already using the Gmail client for all three apps can set:
 
 ```text
-MAVERICK_GOOGLE_CLIENT_ID_REF=platform:secret-alias/gmail-oauth-client-id
-MAVERICK_GOOGLE_CLIENT_SECRET_REF=platform:secret-alias/gmail-oauth-client-secret
-MAVERICK_GOOGLE_REDIRECT_URI=https://<platform-host>/api/auth/google/callback
+LOOPINO_GOOGLE_CLIENT_ID_REF=platform:secret-alias/gmail-oauth-client-id
+LOOPINO_GOOGLE_CLIENT_SECRET_REF=platform:secret-alias/gmail-oauth-client-secret
+LOOPINO_GOOGLE_REDIRECT_URI=https://<platform-host>/api/auth/google/callback
 ```
 
 Register that exact callback on the selected Google Cloud client. A public status
@@ -176,7 +176,7 @@ granting Google consent and never prints credentials or authorization URLs.
 For the final end-to-end check, an existing password user opens Connected accounts,
 approves the chosen Google services, and returns to the shell. The selected account
 must appear in Calendar, Mail and Storage for the approved services without app
-OAuth prompts. A later Google login must resolve to that same Maverick user.
+OAuth prompts. A later Google login must resolve to that same Loopino user.
 Disconnecting or disabling an app should be checked with a dedicated test account
 to avoid disrupting existing personal connections.
 
@@ -211,7 +211,7 @@ Google subject. Conditional metadata writes cannot overwrite a concurrent
 disconnect or OAuth update. Profile metadata never includes provider credentials.
 Calendar, Mail and Storage project this display field into their own connection
 records; Mail includes it in the bounded mailbox read model. The shared
-`@maverick/account-avatar` browser component shows circular photos in account
+`@loopino/account-avatar` browser component shows circular photos in account
 sidebar rows and the shell's Connected accounts panel, accepts HTTPS Google image
 hosts only, sends no referrer and keeps the owning app's icon when the photo is
 missing, loading or fails. Switching accounts does not retain another account's
@@ -236,7 +236,7 @@ viewport. The panel remembers its last section per signed-in user and origin.
 Keyboard dismissal returns to the launcher; an open panel prevents the hover
 sidebar from closing underneath it.
 
-Profile displays the authenticated Maverick identity, current server and
+Profile displays the authenticated Loopino identity, current server and
 workspace. User records have a backward-compatible optional `avatar_url` from a
 verified Google login identity; initials remain the fallback. Connecting a Google
 service account never initializes or replaces the personal avatar. A new Google
@@ -269,4 +269,4 @@ not delete that destination's cookies.
 No server cloning, data migration or installation synchronization occurs in this
 flow. Each installation requires its own configured Google callback URI.
 Native implementation and offline entry points are documented in
-`docs/maverick-macos-device-use.md` in the companion repository.
+`docs/loopino-macos-device-use.md` in the companion repository.

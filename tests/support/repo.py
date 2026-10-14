@@ -36,7 +36,7 @@ def make_temp_repo_root(test_case: unittest.TestCase, *, include_core: bool = Fa
 
     temp_dir = tempfile.TemporaryDirectory()
     test_case.addCleanup(temp_dir.cleanup)
-    repo_root = Path(temp_dir.name) / "maverick"
+    repo_root = Path(temp_dir.name) / "loopino"
     for name in ("apps", "workspaces", "scripts"):
         (repo_root / name).mkdir(parents=True, exist_ok=True)
     (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -150,8 +150,8 @@ def write_synthetic_platform_app(
         (dist_root / "assets" / asset_name).write_text(
             (
                 f"const syntheticAppId = {app_id!r};\n"
-                "window.__maverickSyntheticApps = window.__maverickSyntheticApps || {};\n"
-                "window.__maverickSyntheticApps[syntheticAppId] = {\n"
+                "window.__loopinoSyntheticApps = window.__loopinoSyntheticApps || {};\n"
+                "window.__loopinoSyntheticApps[syntheticAppId] = {\n"
                 "  mounted: true,\n"
                 "  source: 'tests.support.repo.write_synthetic_platform_app'\n"
                 "};\n"

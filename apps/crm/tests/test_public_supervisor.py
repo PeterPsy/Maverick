@@ -12,7 +12,7 @@ import crm_public_supervisor as supervisor
 
 class SupervisorAuthorityTest(unittest.TestCase):
     def setUp(self):
-        self.config = {'workspace_id': 'test-public', 'installation_domain': 'maverick.example.test'}
+        self.config = {'workspace_id': 'test-public', 'installation_domain': 'loopino.example.test'}
         self.data = ROOT / 'workspaces/test-public/data/crm'
         self.binding = SimpleNamespace(status='enabled', source_kind='platform', data_root=str(self.data))
         self.apps = Mock(get_workspace_app_binding=Mock(return_value=self.binding))
@@ -21,7 +21,7 @@ class SupervisorAuthorityTest(unittest.TestCase):
         self.stack = []
         for name, result in (
             ('resolve_workspace_app_surface', (ROOT / 'apps/crm', None)),
-            ('deployment', {'hostname': 'crm.apps.maverick.example.test'}),
+            ('deployment', {'hostname': 'crm.apps.loopino.example.test'}),
             ('settings', {'enabled': True, 'access': 'read-only', 'revision': 1}),
         ):
             p = patch.object(supervisor, name, return_value=result)

@@ -8,7 +8,7 @@ export const EXECUTION_FAMILY_CATALOG: readonly ExecutionFamilyDefinition[] = [
     workspace_actions: true
   },
   {
-    family_id: 'maverick_agent',
+    family_id: 'loopino_agent',
     label: 'API models',
     description: 'Models running through a provider API.',
     workspace_actions: true

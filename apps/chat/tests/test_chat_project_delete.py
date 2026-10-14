@@ -26,7 +26,7 @@ from chat_state import create_project, normalize_state  # noqa: E402
 
 class ChatProjectDeleteTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.env = patch.dict(os.environ, {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"})
+        self.env = patch.dict(os.environ, {"LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1"})
         self.env.start()
         self.addCleanup(self.env.stop)
 
@@ -59,8 +59,8 @@ class ChatProjectDeleteTests(unittest.TestCase):
                     "CONTENT_LENGTH": str(len(payload)),
                     "CONTENT_TYPE": "application/json",
                     "QUERY_STRING": "",
-                    "HTTP_HOST": "maverick.test",
-                    **({"HTTP_ORIGIN": "http://maverick.test"} if method.upper() not in {"GET", "HEAD", "OPTIONS"} else {}),
+                    "HTTP_HOST": "loopino.test",
+                    **({"HTTP_ORIGIN": "http://loopino.test"} if method.upper() not in {"GET", "HEAD", "OPTIONS"} else {}),
                     "wsgi.input": BytesIO(payload),
                     **({"HTTP_COOKIE": cookie} if cookie else {}),
                 },
@@ -82,8 +82,8 @@ class ChatProjectDeleteTests(unittest.TestCase):
     def login(self, app) -> str:
         return self.login_as(
             app,
-            username=os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-            password=os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+            username=os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+            password=os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
         )
 
     def create_project(self, app, cookie: str, name: str) -> str:

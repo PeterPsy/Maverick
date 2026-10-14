@@ -15,18 +15,18 @@ def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
     tool_name = str(payload.get("tool_name") or "")
-    if tool_name != "maverick_vault":
+    if tool_name != "loopino_vault":
         result = {
             "status_code": 404,
             "error": "unsupported_vault_tool",
-            "detail": "Vault exposes only the maverick_vault redaction-safe agent operations tool.",
+            "detail": "Vault exposes only the loopino_vault redaction-safe agent operations tool.",
             "redaction_safe": True,
         }
     else:
         action = str(arguments.get("action") or "manifest").strip()
         result = handle_operation(payload, action=action)
         result["tool_name"] = tool_name
-        result["supported_tools"] = ["maverick_vault"]
+        result["supported_tools"] = ["loopino_vault"]
     print(json.dumps(result, ensure_ascii=False))
 
 

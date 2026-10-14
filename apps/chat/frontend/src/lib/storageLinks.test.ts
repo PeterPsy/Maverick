@@ -10,19 +10,19 @@ describe("storage link helpers", () => {
   it("normalizes absolute filesystem links without exposing host roots", () => {
     expect(
       workspaceStoragePathFromTarget(
-        "/home/ubuntu/projects/maverick-v3/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1",
+        "/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1",
       ),
     ).toBe("storage/generated/agents-cli-mcp-speed-report.md");
   });
 
   it("normalizes hosted workspace storage URLs", () => {
-    expect(workspaceStoragePathFromTarget("https://maverick.test/workspaces/default/storage/generated/final%20report.pdf")).toBe(
+    expect(workspaceStoragePathFromTarget("https://loopino.test/workspaces/default/storage/generated/final%20report.pdf")).toBe(
       "storage/generated/final report.pdf",
     );
   });
 
   it("rejects non-storage and traversal links", () => {
-    expect(workspaceStoragePathFromTarget("/home/ubuntu/projects/maverick-v3/workspaces/default/tmp/report.md")).toBe("");
+    expect(workspaceStoragePathFromTarget("/projects/loopino/workspaces/default/tmp/report.md")).toBe("");
     expect(workspaceStoragePathFromTarget("storage/generated/../secret.md")).toBe("");
   });
 

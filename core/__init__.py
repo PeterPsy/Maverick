@@ -1,1 +1,1 @@
-"""Maverick core package."""
+"""Loopino core package."""

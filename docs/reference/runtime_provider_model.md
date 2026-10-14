@@ -15,8 +15,8 @@ redaction-safe metadata.
 
 | Family | Loop owner | Workspace actions |
 | --- | --- | --- |
-| `native_agent` | Native structured runtime | Yes, under Maverick supervision |
-| `maverick_agent` | Maverick Core | Yes, through Core tools |
+| `native_agent` | Native structured runtime | Yes, under Loopino supervision |
+| `loopino_agent` | Loopino Core | Yes, through Core tools |
 
 Family is derived from the runtime implementation. It is not profile rollout
 state and is not stored in `RuntimeExecutionBinding`.
@@ -89,12 +89,12 @@ projected as one stable model choice with those values as reasoning efforts.
 At launch the selected effort resolves back to the matching authenticated CLI
 catalog alias.
 
-Native CLI engines share one execution contract. In sandbox mode Maverick
+Native CLI engines share one execution contract. In sandbox mode Loopino
 confines the process and dependencies while leaving the selected workspace
 writable. In full-access mode it launches the reviewed CLI directly with that
 CLI's non-interactive permission bypass. The provider home remains private in
 both modes. Native runtimes own their structured tool surface, so an empty
-Maverick hosted-tool handle list does not erase their declared CLI, filesystem,
+Loopino hosted-tool handle list does not erase their declared CLI, filesystem,
 shell, or MCP capabilities.
 Antigravity skills are mounted from its private canonical config tree; the
 CLI-managed compatibility alias is accepted only when it resolves back to that
@@ -105,9 +105,9 @@ catalog that Codex discovers natively. Both use the same enabled,
 session-allowed skill resolver; an implicit session does not require a user
 skill invocation to receive its catalog.
 
-## Hosted Maverick agents
+## Hosted Loopino agents
 
-OpenRouter GLM and OpenRouter DeepSeek Flash Latest are `maverick_agent`
+OpenRouter GLM and OpenRouter DeepSeek Flash Latest are `loopino_agent`
 configs. Core owns their tool loop, context, accounting, provider-private state
 and recovery. Each config declares its exact endpoint, provider/model protocol,
 route and reasoning. Google AI Studio is not published as an API-agent choice;

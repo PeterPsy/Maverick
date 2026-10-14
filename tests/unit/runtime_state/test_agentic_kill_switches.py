@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from core.runtime.agentic_feature_flags import MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME
+from core.runtime.agentic_feature_flags import LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_events import RuntimeExecutionEvent
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
@@ -20,7 +20,7 @@ class AgenticKillSwitchTest(unittest.TestCase):
 
         with patch.dict(
             "os.environ",
-            {MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "0"},
+            {LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME: "0"},
             clear=False,
         ):
             result = execute_runtime_turn(

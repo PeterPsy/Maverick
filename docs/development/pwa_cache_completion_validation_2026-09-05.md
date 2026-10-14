@@ -96,7 +96,7 @@ again to these suite counts):
 | Audit and physical-evidence-policy Python | 21 passed |
 
 Operational PWA audit, unused-import checker and `git diff --check` passed.
-Nine official `maverick app <id> frontend build --json` builds passed and emitted
+Nine official `loopino app <id> frontend build --json` builds passed and emitted
 scoped refresh events: Calendar, Chat, CRM, Mail, Fitness, Storage, Website
 Studio, App Store and Base Shell. The eight TypeScript app build pipelines run
 `tsc --noEmit`; App Store uses its JavaScript build/content-hash checks. Website

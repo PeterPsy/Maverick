@@ -257,7 +257,7 @@ def bootstrap_default_admin(
         user = build_user_record(
             user_id=f"user:{username}",
             username=username,
-            display_name="Maverick Admin",
+            display_name="Loopino Admin",
             platform_role="admin",
             now=timestamp,
         )

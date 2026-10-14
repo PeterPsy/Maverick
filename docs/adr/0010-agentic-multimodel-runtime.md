@@ -5,7 +5,7 @@
 
 ## Context
 
-Maverick supports native coding runtimes and hosted API models. A previous
+Loopino supports native coding runtimes and hosted API models. A previous
 design represented availability through immutable profile revisions, rollout
 states, workspace lineage, signed/digested execution metadata, Full Workspace
 contracts and compatibility migrations. That duplicated ordinary provider
@@ -13,7 +13,7 @@ configuration and could disable a working model because metadata diverged.
 
 ## Decision
 
-Maverick stores one current `AgenticProfileDefinition` for each configured
+Loopino stores one current `AgenticProfileDefinition` for each configured
 runtime/provider/model and one direct workspace binding for each workspace
 choice. The word “profile” remains a domain type name; it no longer implies a
 release object, revision history or certification lifecycle.
@@ -29,7 +29,7 @@ records returned by Core directly and do not group or hide historical rows.
 
 ## Runtime families
 
-- **CLI** models own their loop and tools; Maverick launches and supervises the
+- **CLI** models own their loop and tools; Loopino launches and supervises the
   installed structured runtime. Codex is the primary implementation.
 - **API** models use a hosted API while Core owns the action loop, tools, bounded
   context, accounting and recovery.

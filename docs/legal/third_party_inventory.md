@@ -1,6 +1,6 @@
 # Third-Party Inventory
 
-For the first public Maverick release, the direct dependency inventory is generated into:
+For the first public Loopino release, the direct dependency inventory is generated into:
 
 - `docs/legal/third_party_inventory.json`
 

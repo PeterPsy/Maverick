@@ -176,7 +176,7 @@ describe("ThreadRow", () => {
 
     expect(row?.getAttribute("draggable")).toBe("true");
     expect(dataTransfer.effectAllowed).toBe("copy");
-    expect(JSON.parse(payloads.get("application/x-maverick-chat-thread") || "{}")).toMatchObject({
+    expect(JSON.parse(payloads.get("application/x-loopino-chat-thread") || "{}")).toMatchObject({
       owner_app_id: "chat",
       thread_id: "thread-1",
       title: "Budget notes",
@@ -184,7 +184,7 @@ describe("ThreadRow", () => {
     expect(dataTransfer.setDragImage).toHaveBeenCalledOnce();
     expect(row?.classList.contains("is-dragging")).toBe(true);
     if (isShellMobileLayout) {
-      expect(postMessage).toHaveBeenCalledExactlyOnceWith({ type: "maverick.shell.sidebar.close" }, "*");
+      expect(postMessage).toHaveBeenCalledExactlyOnceWith({ type: "loopino.shell.sidebar.close" }, "*");
     } else {
       expect(postMessage).not.toHaveBeenCalled();
     }

@@ -27,9 +27,9 @@ describe("PWA client recovery", () => {
         controller: { postMessage },
         getRegistrations: vi.fn().mockResolvedValue([
           {
-            active: { postMessage, scriptURL: "https://maverick.test/sw.js" },
+            active: { postMessage, scriptURL: "https://loopino.test/sw.js" },
             installing: null,
-            scope: "https://maverick.test/",
+            scope: "https://loopino.test/",
             unregister,
             waiting: null,
           },
@@ -41,9 +41,9 @@ describe("PWA client recovery", () => {
       value: {
         delete: vi.fn(async (name: string) => { deleted.push(name); return true; }),
         keys: vi.fn().mockResolvedValue([
-          "maverick-static-v2:one",
-          "maverick-app-static-v2",
-          "maverick-base-shell-v3",
+          "loopino-static-v2:one",
+          "loopino-app-static-v2",
+          "loopino-base-shell-v3",
           "mail-private-cache",
         ]),
       },
@@ -51,9 +51,9 @@ describe("PWA client recovery", () => {
 
     await disableShellServiceWorker();
 
-    expect(postMessage).toHaveBeenCalledWith({ type: "MAVERICK_DISABLE" });
+    expect(postMessage).toHaveBeenCalledWith({ type: "LOOPINO_DISABLE" });
     expect(unregister).toHaveBeenCalledOnce();
-    expect(deleted.sort()).toEqual(["maverick-app-static-v2", "maverick-base-shell-v3", "maverick-static-v2:one"].sort());
+    expect(deleted.sort()).toEqual(["loopino-app-static-v2", "loopino-base-shell-v3", "loopino-static-v2:one"].sort());
   });
 
   it("requests an in-place verified cache recovery from the active worker", () => {
@@ -64,17 +64,17 @@ describe("PWA client recovery", () => {
     });
 
     expect(recoverShellStaticCache()).toBe(true);
-    expect(postMessage).toHaveBeenCalledWith({ type: "MAVERICK_RECOVER" });
+    expect(postMessage).toHaveBeenCalledWith({ type: "LOOPINO_RECOVER" });
   });
 
   it("enables the Storage broker only for the exact v2 boolean projection", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        schema: "maverick.pwa-config.v2",
+        schema: "loopino.pwa-config.v2",
         features: { storage_file_cache: true },
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        schema: "maverick.pwa-config.v2",
+        schema: "loopino.pwa-config.v2",
         features: { storage_file_cache: "true" },
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response("not-json", { status: 200 }))

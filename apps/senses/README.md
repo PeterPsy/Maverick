@@ -1,8 +1,8 @@
 # Senses
 
-Senses is a root Maverick app for device and sensor inputs. Phase 8 keeps the
+Senses is a root Loopino app for device and sensor inputs. Phase 8 keeps the
 user-session pairing, workspace-scoped device registry, authenticated frame
-ingestion, and explicit routing from stored captures into Maverick Chat runtime
+ingestion, and explicit routing from stored captures into Loopino Chat runtime
 threads without adding a public bearer-token ingress. It adds the Audio MVP:
 bounded push-to-talk audio ingestion, Storage-backed audio captures, optional
 Speech transcription through a declared provider dependency, and textual Chat
@@ -24,14 +24,14 @@ routing even when Speech/TTS is unavailable.
   `senses_set_custom_view`, `senses_clear_custom_view`
 - hooks: `install`, `migrate`, `background_tick`, `health_check`
 
-The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
+The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Loopino
 user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
 device token in Phase 8. Pairing, registry, settings, ingestion, and routing
 operations are backend/view-only because standard CLI/MCP app contexts do not
-carry a Maverick user session.
+carry a Loopino user session.
 
 The standard view-state tools read and write a workspace-shared UI state file.
-`view_filter` requires an authenticated Maverick actor. `set_view_filter`,
+`view_filter` requires an authenticated Loopino actor. `set_view_filter`,
 `set_custom_view`, and `clear_custom_view` additionally require workspace-admin
 or platform-admin authority, including when invoked through MCP.
 
@@ -65,7 +65,7 @@ The current schema creates these workspace-scoped tables:
 ## Pairing
 
 `pairing.start` creates a short code with a bounded TTL and returns a
-machine-readable QR payload. `pairing.complete` requires a Maverick user session
+machine-readable QR payload. `pairing.complete` requires a Loopino user session
 and associates the completing iOS device with that user and workspace. When
 member pairing is disabled, completion is limited to workspace admins or the
 user who created the code. The server stores only registry/session metadata;
@@ -76,7 +76,7 @@ workspace devices and update Senses settings.
 
 ## Frame Ingestion
 
-`ingest.frame` requires a Maverick user session, an active paired device, an
+`ingest.frame` requires a Loopino user session, an active paired device, an
 active `device_session_id`, `schema_version=senses.capture.v1`, `request_id`,
 and `idempotency_key`. Senses generates the authoritative `capture_id` and
 Storage path, validates MIME, base64, decoded size, timestamp skew and optional
@@ -139,7 +139,7 @@ user, or a workspace-admin session. It records a `runtime_dispatch_attempt`,
 chooses the routing target from `routing_sessions`, and returns one
 `runtime_launch_request` with the capture attached by Storage workspace-relative
 path. When the request omits `agent_id` or `agent_type_id`, Senses targets the
-`chat` agent type. Senses does not call Chat directly; the Maverick core owns
+`chat` agent type. Senses does not call Chat directly; the Loopino core owns
 runtime session and thread creation.
 
 MVP routing rules are:
@@ -187,10 +187,10 @@ local engine directly.
 
 ## Frontend And iOS Host Bridge
 
-The Senses frontend is the primary visual surface for Maverick status, iOS host
+The Senses frontend is the primary visual surface for Loopino status, iOS host
 status, glasses connection, capture state, local Senses queue, last frame/error,
 pairing, captures, routing, settings, and diagnostics. When the app is opened
-inside Maverick iOS, the WebView exposes a minimal `sensesHost` message handler
+inside Loopino iOS, the WebView exposes a minimal `sensesHost` message handler
 only while the main WebView is on the same-origin `/app/senses` route. The
 handler accepts controlled commands:
 
@@ -201,7 +201,7 @@ handler accepts controlled commands:
 - `openLogin`
 
 The native app pushes sanitized status into the page with the
-`maverick.senses.native-status` browser event. For native Ask and Voice
+`loopino.senses.native-status` browser event. For native Ask and Voice
 commands, the iOS bridge publishes a busy capture status as soon as the command
 starts and publishes the final status after recording, submit, Storage/STT
 scheduling, and queue drain finish. No cookies, bearer tokens, raw DAT handles,
@@ -210,9 +210,9 @@ browser or PWA without the iOS host, backend-owned device, pairing, capture,
 routing, and settings views still work, while physical glasses actions show as
 unavailable.
 
-Maverick iOS remains responsible for Meta DAT SDK configuration, iOS
+Loopino iOS remains responsible for Meta DAT SDK configuration, iOS
 permissions, Meta glasses pairing, physical snapshot capture, local retry queue,
-user-session HTTPS submission to Senses, and opening Maverick login when the
+user-session HTTPS submission to Senses, and opening Loopino login when the
 session expires. Senses remains responsible for the registry, pairing sessions,
 capture records, Storage write requests, routing state, settings, audit, and the
 user-facing diagnostic UI.
@@ -220,8 +220,8 @@ user-facing diagnostic UI.
 ## Verify
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-root apps/senses --json
-maverick app senses frontend build --json
+loopino core cli run core.app-sdk.validate --app-root apps/senses --json
+loopino app senses frontend build --json
 python3 -m unittest discover -s apps/senses/tests -p 'test_*.py'
 python3 -m compileall apps/senses/backend apps/senses/cli apps/senses/mcp apps/senses/hooks
 ```
@@ -230,17 +230,17 @@ After Senses and Storage are installed and enabled in the workspace, configure
 the required Storage providers from an authorized workspace-admin context:
 
 ```bash
-maverick core cli run app.senses.dependencies.set \
+loopino core cli run app.senses.dependencies.set \
   --arguments-json '{"alias":"storage-file-content-write","provider_app_ids":["storage"]}' \
   --json
-maverick core cli run app.senses.dependencies.set \
+loopino core cli run app.senses.dependencies.set \
   --arguments-json '{"alias":"storage-file-catalog","provider_app_ids":["storage"]}' \
   --json
-maverick core cli run app.senses.dependencies.set \
+loopino core cli run app.senses.dependencies.set \
   --arguments-json '{"alias":"chat-communication","provider_app_ids":["chat"]}' \
   --json
-maverick core cli run app.senses.dependencies --json
-maverick app senses cli run senses --action health --json
+loopino core cli run app.senses.dependencies --json
+loopino app senses cli run senses --action health --json
 ```
 
 Runtime readiness is true only when the manifest reports
@@ -250,10 +250,10 @@ contract runtime permission `create_sessions` is active.
 ## SDK Flow
 
 ```bash
-maverick core cli run core.app-sdk.validate --app-root apps/senses --json
-maverick app senses frontend build --json
-maverick app senses cli list --json
-maverick app senses mcp list --json
+loopino core cli run core.app-sdk.validate --app-root apps/senses --json
+loopino app senses frontend build --json
+loopino app senses cli list --json
+loopino app senses mcp list --json
 ```
 
 ## Contract Notes

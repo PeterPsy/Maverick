@@ -26,7 +26,7 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
   const passwordInput = useRef<HTMLInputElement>(null);
   const canContinue = credential.trim().length > 0;
   const canSubmit = canContinue && password.length > 0;
-  const errorId = error ? "maverick-login-error" : undefined;
+  const errorId = error ? "loopino-login-error" : undefined;
   const requestedServices = GOOGLE_SERVICES.filter(service => google?.login_services.includes(service.id));
 
   function cancelGoogle() {
@@ -98,7 +98,7 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
   return <main className="bs-login">
     <Suspense fallback={<div className="bs-login-paper-bg is-static" aria-hidden="true" />}><LoginPaperBackground /></Suspense>
     <div className="bs-login__brand-strip"><BrandMark className="bs-login__brand-mark" variant="mark" /></div>
-    <section className="bs-login__stage" aria-label="Maverick sign-in">
+    <section className="bs-login__stage" aria-label="Loopino sign-in">
       <div className="bs-login__content">
         <form className="bs-login__form" onSubmit={submit} aria-busy={isSubmitting}>
           <div className="bs-login__step" key={step}>
@@ -112,7 +112,7 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
             <div className="bs-login__fields">
               <div className="bs-glass-field">
                 <label className={`bs-glass-field__floating ${step === "password" && password ? "is-visible" : ""}`}
-                  htmlFor={step === "email" ? "maverick-login-credential" : "maverick-login-password"}>
+                  htmlFor={step === "email" ? "loopino-login-credential" : "loopino-login-password"}>
                   {step === "email" ? "Email or username" : "Password"}
                 </label>
                 <span className="bs-glass-field__control">
@@ -122,10 +122,10 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
                     aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(value => !value)}>
                     <span className="material-symbols-rounded" aria-hidden="true">{showPassword ? "visibility_off" : "visibility"}</span>
                   </button>}
-                  {step === "email" ? <input id="maverick-login-credential" autoComplete="username" type="text" value={credential}
+                  {step === "email" ? <input id="loopino-login-credential" autoComplete="username" type="text" value={credential}
                     aria-describedby={errorId} aria-invalid={!!error} disabled={isSubmitting} placeholder="Email or username" spellCheck={false}
                     onChange={event => { setCredential(event.target.value); setError(null); }} />
-                    : <input id="maverick-login-password" autoComplete="current-password" type={showPassword ? "text" : "password"}
+                    : <input id="loopino-login-password" autoComplete="current-password" type={showPassword ? "text" : "password"}
                       value={password} ref={passwordInput} aria-describedby={errorId} aria-invalid={!!error} disabled={isSubmitting} placeholder="Password"
                       onChange={event => { setPassword(event.target.value); setError(null); }} />}
                   <button className={`bs-glass-field__action ${(step === "email" ? canContinue : canSubmit) ? "is-visible" : ""}`}
@@ -142,7 +142,7 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
               </div>
             </div>
           </div>
-          {error && <p className="bs-form-error" id="maverick-login-error" role="alert">{error}</p>}
+          {error && <p className="bs-form-error" id="loopino-login-error" role="alert">{error}</p>}
         </form>
         {step === "email" && <div className="bs-login__google">
           <button className="bs-google-button" type="button" disabled={isSubmitting || !google?.configured} onClick={() => void signInGoogle()}>
@@ -157,7 +157,7 @@ export function LoginScreen({ onAuthenticated, callbackError = null }: {
             </>}
           </div>}
           {google && !google.configured && <small>Google sign-in is not configured on this installation.</small>}
-          {googlePending && <div className="bs-login__pending"><span className="bs-login__spinner" aria-hidden="true" /><p role="status">Continue in your browser. Maverick will update automatically.</p>
+          {googlePending && <div className="bs-login__pending"><span className="bs-login__spinner" aria-hidden="true" /><p role="status">Continue in your browser. Loopino will update automatically.</p>
             <button type="button" onClick={cancelGoogle}>Cancel Google sign-in</button></div>}
         </div>}
         <ServerProfilesLauncher inline beforeSwitch={cancelGoogle} />

@@ -137,7 +137,7 @@ class DocsStudioServiceTest(unittest.TestCase):
 
     def test_app_docs_deduplicate_identical_readmes_across_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            repo_root = Path(tmp) / "maverick"
+            repo_root = Path(tmp) / "loopino"
             workspace_root = repo_root / "workspaces" / "default"
             workspace_app = workspace_root / "apps" / "sample-app"
             server_app = repo_root / "apps" / "sample-app"

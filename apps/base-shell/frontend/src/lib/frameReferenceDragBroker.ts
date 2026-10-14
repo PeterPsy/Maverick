@@ -1,4 +1,4 @@
-import { isMaverickFrameInScope, postToMaverickFrame, registeredMaverickFrameElement, subscribeMaverickFrameRegistry, type MaverickFrameScope } from '../iframePolicy';
+import { isLoopinoFrameInScope, postToLoopinoFrame, registeredLoopinoFrameElement, subscribeLoopinoFrameRegistry, type LoopinoFrameScope } from '../iframePolicy';
 
 type DragMessage = {
   type: string;
@@ -12,14 +12,14 @@ type DragMessage = {
 };
 
 /** Route a captured pointer drag without reading either isolated frame's DOM. */
-export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () => void {
+export function installFrameReferenceDragBroker(scope: LoopinoFrameScope): () => void {
   let active: { frame: HTMLIFrameElement; origin: string; message: DragMessage; preview: HTMLElement; overlay: HTMLElement; hoverFrame: HTMLIFrameElement | null } | null = null;
   function postTarget(frame: HTMLIFrameElement, type: 'over' | 'leave', x: number, y: number) {
-    if (!active || !isMaverickFrameInScope(frame, scope)) return;
+    if (!active || !isLoopinoFrameInScope(frame, scope)) return;
     const rect = frame.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    postToMaverickFrame(frame, {
-      type: `maverick.reference-drag.${type}`, drag_id: active.message.drag_id, transfer: active.message.transfer,
+    postToLoopinoFrame(frame, {
+      type: `loopino.reference-drag.${type}`, drag_id: active.message.drag_id, transfer: active.message.transfer,
       x: (x - rect.left) * frame.offsetWidth / rect.width - frame.clientLeft,
       y: (y - rect.top) * frame.offsetHeight / rect.height - frame.clientTop,
     });
@@ -29,7 +29,7 @@ export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () =
       if (active.hoverFrame) postTarget(active.hoverFrame, 'leave', 0, 0);
       active.preview.remove();
       active.overlay.remove();
-      postToMaverickFrame(active.frame, { type: 'maverick.reference-drag.finished', drag_id: active.message.drag_id });
+      postToLoopinoFrame(active.frame, { type: 'loopino.reference-drag.finished', drag_id: active.message.drag_id });
     }
     active = null;
   }
@@ -40,7 +40,7 @@ export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () =
     active.overlay.style.pointerEvents = 'none';
     const hit = document.elementFromPoint(x, y);
     active.overlay.style.pointerEvents = '';
-    const target = hit instanceof HTMLIFrameElement && isMaverickFrameInScope(hit, scope) ? hit : null;
+    const target = hit instanceof HTMLIFrameElement && isLoopinoFrameInScope(hit, scope) ? hit : null;
     if (active.hoverFrame !== target && active.hoverFrame) postTarget(active.hoverFrame, 'leave', x, y);
     active.hoverFrame = target;
     if (target) postTarget(target, 'over', x, y);
@@ -50,28 +50,28 @@ export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () =
     const { transfer, drag_id } = active.message;
     clear();
     const target = document.elementFromPoint(x, y);
-    if (!(target instanceof HTMLIFrameElement) || !isMaverickFrameInScope(target, scope)) return;
+    if (!(target instanceof HTMLIFrameElement) || !isLoopinoFrameInScope(target, scope)) return;
     const targetRect = target.getBoundingClientRect();
-    postToMaverickFrame(target, {
-      type: 'maverick.reference-drag.drop', drag_id, transfer,
+    postToLoopinoFrame(target, {
+      type: 'loopino.reference-drag.drop', drag_id, transfer,
       x: (x - targetRect.left) * target.offsetWidth / targetRect.width - target.clientLeft,
       y: (y - targetRect.top) * target.offsetHeight / targetRect.height - target.clientTop,
     });
   }
   function onMessage(event: MessageEvent) {
     const message = event.data as DragMessage | null;
-    if (!message || !['maverick.reference-drag.start', 'maverick.reference-drag.move', 'maverick.reference-drag.end', 'maverick.reference-drag.cancel'].includes(message.type)) return;
-    const frame = registeredMaverickFrameElement(event, scope);
+    if (!message || !['loopino.reference-drag.start', 'loopino.reference-drag.move', 'loopino.reference-drag.end', 'loopino.reference-drag.cancel'].includes(message.type)) return;
+    const frame = registeredLoopinoFrameElement(event, scope);
     if (!frame || typeof message.drag_id !== 'string' || !message.drag_id || message.drag_id.length > 128) return;
-    if (message.type === 'maverick.reference-drag.cancel') {
+    if (message.type === 'loopino.reference-drag.cancel') {
       if (active?.frame === frame && active.message.drag_id === message.drag_id) clear();
       return;
     }
     if (![message.x, message.y, message.viewport_width, message.viewport_height].every(Number.isFinite)
       || message.viewport_width <= 0 || message.viewport_height <= 0) return;
-    if (message.type === 'maverick.reference-drag.start') {
+    if (message.type === 'loopino.reference-drag.start') {
       const transfer = message.transfer;
-      if (!transfer || typeof transfer.type !== 'string' || !/^application\/x-maverick-[a-z-]+$/.test(transfer.type)
+      if (!transfer || typeof transfer.type !== 'string' || !/^application\/x-loopino-[a-z-]+$/.test(transfer.type)
         || typeof transfer.data !== 'string' || transfer.data.length > 65_536
         || typeof message.label !== 'string' || message.label.length > 512) return;
       clear();
@@ -96,12 +96,12 @@ export function installFrameReferenceDragBroker(scope: MaverickFrameScope): () =
     const y = rect.top + frame.clientTop * scaleY + message.y * frame.clientHeight * scaleY / message.viewport_height;
     if (!Number.isFinite(x) || !Number.isFinite(y)) { clear(); return; }
     move(x, y);
-    if (message.type === 'maverick.reference-drag.end') drop(x, y);
+    if (message.type === 'loopino.reference-drag.end') drop(x, y);
   }
   const onVisibility = () => { if (document.hidden) clear(); };
   const onKey = (event: KeyboardEvent) => { if (active && event.key === 'Escape') { event.preventDefault(); clear(); } };
-  const stopRegistry = subscribeMaverickFrameRegistry(() => {
-    if (active && (!isMaverickFrameInScope(active.frame, scope) || active.frame.dataset.maverickFrameOrigin !== active.origin)) clear();
+  const stopRegistry = subscribeLoopinoFrameRegistry(() => {
+    if (active && (!isLoopinoFrameInScope(active.frame, scope) || active.frame.dataset.loopinoFrameOrigin !== active.origin)) clear();
   });
   window.addEventListener('message', onMessage);
   window.addEventListener('keydown', onKey);

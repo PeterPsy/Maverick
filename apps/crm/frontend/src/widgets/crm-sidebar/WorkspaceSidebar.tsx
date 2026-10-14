@@ -27,7 +27,7 @@ export function WorkspaceSidebar({ view, navigate, counts, countsError, retry }:
   return <aside className="product-sidebar">
     <header>
       <span className="product-mark"><PanelsTopLeft size={22} aria-hidden="true" /></span>
-      <div><strong>Maverick</strong><small>Relationship workspace</small></div>
+      <div><strong>Loopino</strong><small>Relationship workspace</small></div>
     </header>
     <nav aria-label="CRM workspace">
       {productNavigation.filter((item) => !item.secondary).map(navigationItem)}

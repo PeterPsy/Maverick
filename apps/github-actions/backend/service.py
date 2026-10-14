@@ -15,8 +15,8 @@ import zipfile
 
 
 DEFAULT_OWNER = "giuntiocram"
-DEFAULT_REPO = "maverick-glasses-ios"
-DEFAULT_REF = "maverick-integration"
+DEFAULT_REPO = "loopino-glasses-ios"
+DEFAULT_REF = "loopino-integration"
 DEFAULT_WORKFLOW = "ios-install-device.yml"
 DEFAULT_DEVICE_ID = "00008120-00144CD90130201E"
 DEFAULT_API_BASE = "https://api.github.com"
@@ -225,7 +225,7 @@ class GitHubActionsClient:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "Maverick-GitHub-Actions-App",
+            "User-Agent": "Loopino-GitHub-Actions-App",
         }
         if "/app/installations/" in path and path.endswith("/access_tokens"):
             headers["Authorization"] = f"Bearer {self._app_jwt()}"

@@ -136,9 +136,9 @@ def _proc_matches_runtime_engine_session(pid: int, session_id: str) -> bool:
     base = f"/proc/{pid}"
     with open(f"{base}/environ", "rb") as handle:
         environ = handle.read().split(b"\0")
-    if f"MAVERICK_RUNTIME_SESSION_ID={session_id}".encode() not in environ:
+    if f"LOOPINO_RUNTIME_SESSION_ID={session_id}".encode() not in environ:
         return False
-    return any(item.startswith(b"MAVERICK_RUNTIME_ENGINE_ID=") and item.split(b"=", 1)[1] for item in environ)
+    return any(item.startswith(b"LOOPINO_RUNTIME_ENGINE_ID=") and item.split(b"=", 1)[1] for item in environ)
 
 
 def terminate_codex_app_server_processes_for_session(session_id: str, *, timeout_seconds: float = 1.5) -> int:

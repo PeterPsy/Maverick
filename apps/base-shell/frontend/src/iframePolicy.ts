@@ -1,7 +1,7 @@
 import type { ShellThemeState } from "./theme";
 import { shellThemeMessage } from "./theme";
 
-export const MAVERICK_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts";
+export const LOOPINO_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts";
 
 const CHAT_PUBLIC_APP_ID = "chat";
 
@@ -29,32 +29,32 @@ export function isolatedFrameBrowserFeaturePolicy(features: string | undefined, 
 const MAX_FRAME_OWNER_ID_LENGTH = 256;
 const MAX_FRAME_SCOPE_ID_LENGTH = 256;
 
-export type MaverickFrameScope = Readonly<{
+export type LoopinoFrameScope = Readonly<{
   sessionGeneration: string;
   workspaceId: string;
 }>;
 
-export type RegisteredMaverickFrameIdentity = Readonly<{
+export type RegisteredLoopinoFrameIdentity = Readonly<{
   ownerAppId: string;
-  scope: MaverickFrameScope;
+  scope: LoopinoFrameScope;
 }>;
 
-const registeredFrames = new Map<HTMLIFrameElement, RegisteredMaverickFrameIdentity>();
+const registeredFrames = new Map<HTMLIFrameElement, RegisteredLoopinoFrameIdentity>();
 const frameRegistryListeners = new Set<() => void>();
 let frameRegistryRevision = 0;
 
-export function subscribeMaverickFrameRegistry(listener: () => void): () => void {
+export function subscribeLoopinoFrameRegistry(listener: () => void): () => void {
   frameRegistryListeners.add(listener);
   return () => { frameRegistryListeners.delete(listener); };
 }
 
-export function maverickFrameRegistryRevision(): number {
+export function loopinoFrameRegistryRevision(): number {
   return frameRegistryRevision;
 }
 
-export function registeredMaverickAppIds(scope: MaverickFrameScope): string[] {
+export function registeredLoopinoAppIds(scope: LoopinoFrameScope): string[] {
   return [...new Set([...registeredFrames]
-    .filter(([frame, identity]) => frame.isConnected && sameMaverickFrameScope(identity.scope, scope))
+    .filter(([frame, identity]) => frame.isConnected && sameLoopinoFrameScope(identity.scope, scope))
     .map(([, identity]) => identity.ownerAppId))];
 }
 
@@ -63,29 +63,29 @@ function notifyFrameRegistryChanged() {
   for (const listener of frameRegistryListeners) listener();
 }
 
-export function setMaverickFrameOrigin(
+export function setLoopinoFrameOrigin(
   frame: HTMLIFrameElement,
   origin: string | null,
   ownerAppId: string,
-  scope: MaverickFrameScope,
+  scope: LoopinoFrameScope,
 ) {
   if (!origin) {
     const removed = registeredFrames.delete(frame);
-    delete frame.dataset.maverickFrameOrigin;
+    delete frame.dataset.loopinoFrameOrigin;
     if (removed) notifyFrameRegistryChanged();
     return;
   }
   const parsed = new URL(origin);
   if (parsed.origin !== origin || origin === window.location.origin) {
-    throw new Error("Maverick app frames require a distinct exact origin.");
+    throw new Error("Loopino app frames require a distinct exact origin.");
   }
   if (!isValidFrameOwnerId(ownerAppId)) {
-    throw new Error("Maverick app frames require one exact owner app id.");
+    throw new Error("Loopino app frames require one exact owner app id.");
   }
   if (!isValidFrameScope(scope)) {
-    throw new Error("Maverick app frames require one exact workspace/session scope.");
+    throw new Error("Loopino app frames require one exact workspace/session scope.");
   }
-  frame.dataset.maverickFrameOrigin = origin;
+  frame.dataset.loopinoFrameOrigin = origin;
   registeredFrames.set(frame, Object.freeze({
     ownerAppId,
     scope: Object.freeze({ ...scope }),
@@ -93,8 +93,8 @@ export function setMaverickFrameOrigin(
   notifyFrameRegistryChanged();
 }
 
-export function isMaverickFrameMessage(event: MessageEvent, frame: HTMLIFrameElement | null | undefined): boolean {
-  const expectedOrigin = frame?.dataset.maverickFrameOrigin;
+export function isLoopinoFrameMessage(event: MessageEvent, frame: HTMLIFrameElement | null | undefined): boolean {
+  const expectedOrigin = frame?.dataset.loopinoFrameOrigin;
   return Boolean(
     frame?.contentWindow
     && expectedOrigin
@@ -103,63 +103,63 @@ export function isMaverickFrameMessage(event: MessageEvent, frame: HTMLIFrameEle
   );
 }
 
-export function isRegisteredMaverickFrameMessage(
+export function isRegisteredLoopinoFrameMessage(
   event: MessageEvent,
-  expectedScope: MaverickFrameScope,
+  expectedScope: LoopinoFrameScope,
 ): boolean {
-  return registeredMaverickFrameOwner(event, expectedScope) !== null;
+  return registeredLoopinoFrameOwner(event, expectedScope) !== null;
 }
 
-export function registeredMaverickFrameIdentity(
+export function registeredLoopinoFrameIdentity(
   event: MessageEvent,
-): RegisteredMaverickFrameIdentity | null {
+): RegisteredLoopinoFrameIdentity | null {
   for (const [frame, identity] of registeredFrames) {
-    if (isMaverickFrameMessage(event, frame)) return identity;
+    if (isLoopinoFrameMessage(event, frame)) return identity;
   }
   return null;
 }
 
-export function registeredMaverickFrameOwner(
+export function registeredLoopinoFrameOwner(
   event: MessageEvent,
-  expectedScope: MaverickFrameScope,
+  expectedScope: LoopinoFrameScope,
 ): string | null {
-  const identity = registeredMaverickFrameIdentity(event);
-  return identity && sameMaverickFrameScope(identity.scope, expectedScope)
+  const identity = registeredLoopinoFrameIdentity(event);
+  return identity && sameLoopinoFrameScope(identity.scope, expectedScope)
     ? identity.ownerAppId
     : null;
 }
 
-export function registeredMaverickFrameElement(event: MessageEvent, scope: MaverickFrameScope): HTMLIFrameElement | null {
+export function registeredLoopinoFrameElement(event: MessageEvent, scope: LoopinoFrameScope): HTMLIFrameElement | null {
   for (const [frame, identity] of registeredFrames) {
-    if (frame.isConnected && sameMaverickFrameScope(identity.scope, scope) && isMaverickFrameMessage(event, frame)) return frame;
+    if (frame.isConnected && sameLoopinoFrameScope(identity.scope, scope) && isLoopinoFrameMessage(event, frame)) return frame;
   }
   return null;
 }
 
-export function isMaverickFrameInScope(frame: HTMLIFrameElement, scope: MaverickFrameScope): boolean {
+export function isLoopinoFrameInScope(frame: HTMLIFrameElement, scope: LoopinoFrameScope): boolean {
   const identity = registeredFrames.get(frame);
-  return Boolean(frame.isConnected && identity && sameMaverickFrameScope(identity.scope, scope));
+  return Boolean(frame.isConnected && identity && sameLoopinoFrameScope(identity.scope, scope));
 }
 
-export function isMaverickOwnerMessage(
+export function isLoopinoOwnerMessage(
   event: MessageEvent,
   ownerAppId: string,
-  expectedScope: MaverickFrameScope,
+  expectedScope: LoopinoFrameScope,
 ): boolean {
   return isValidFrameOwnerId(ownerAppId)
     && (isShellWindowMessage(event)
-      || registeredMaverickFrameOwner(event, expectedScope) === ownerAppId);
+      || registeredLoopinoFrameOwner(event, expectedScope) === ownerAppId);
 }
 
 export function isShellWindowMessage(event: MessageEvent): boolean {
   return event.source === window && event.origin === window.location.origin;
 }
 
-export function postToMaverickFrame(frame: HTMLIFrameElement | null | undefined, message: unknown) {
+export function postToLoopinoFrame(frame: HTMLIFrameElement | null | undefined, message: unknown) {
   if (!frame?.contentWindow) {
     return;
   }
-  const targetOrigin = frame.dataset.maverickFrameOrigin;
+  const targetOrigin = frame.dataset.loopinoFrameOrigin;
   if (!targetOrigin) return;
   try {
     frame.contentWindow.postMessage(message, targetOrigin);
@@ -172,7 +172,7 @@ export function postToMaverickFrame(frame: HTMLIFrameElement | null | undefined,
   }
 }
 
-export function postMaverickFrameVisibility(
+export function postLoopinoFrameVisibility(
   frame: HTMLIFrameElement | null | undefined,
   payload: {
     app_id?: string;
@@ -181,21 +181,21 @@ export function postMaverickFrameVisibility(
     widget_id?: string;
   },
 ) {
-  postToMaverickFrame(frame, {
-    type: "maverick.app.visibility-changed",
+  postToLoopinoFrame(frame, {
+    type: "loopino.app.visibility-changed",
     ...payload,
   });
 }
 
 /** Broadcast only within the current authenticated workspace/session generation. */
-export function broadcastMaverickFrameEvent(scope: MaverickFrameScope, message: unknown): void {
+export function broadcastLoopinoFrameEvent(scope: LoopinoFrameScope, message: unknown): void {
   for (const [frame, identity] of registeredFrames) {
-    if (sameMaverickFrameScope(identity.scope, scope)) postToMaverickFrame(frame, message);
+    if (sameLoopinoFrameScope(identity.scope, scope)) postToLoopinoFrame(frame, message);
   }
 }
 
-export function postMaverickShellTheme(frame: HTMLIFrameElement | null | undefined, theme: ShellThemeState) {
-  postToMaverickFrame(frame, shellThemeMessage(theme));
+export function postLoopinoShellTheme(frame: HTMLIFrameElement | null | undefined, theme: ShellThemeState) {
+  postToLoopinoFrame(frame, shellThemeMessage(theme));
 }
 
 function isValidFrameOwnerId(value: unknown): value is string {
@@ -206,15 +206,15 @@ function isValidFrameOwnerId(value: unknown): value is string {
     && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
-export function sameMaverickFrameScope(
-  left: MaverickFrameScope,
-  right: MaverickFrameScope,
+export function sameLoopinoFrameScope(
+  left: LoopinoFrameScope,
+  right: LoopinoFrameScope,
 ): boolean {
   return left.sessionGeneration === right.sessionGeneration
     && left.workspaceId === right.workspaceId;
 }
 
-function isValidFrameScope(value: unknown): value is MaverickFrameScope {
+function isValidFrameScope(value: unknown): value is LoopinoFrameScope {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const scope = value as { sessionGeneration?: unknown; workspaceId?: unknown };
   return isValidFrameScopeId(scope.sessionGeneration) && isValidFrameScopeId(scope.workspaceId);

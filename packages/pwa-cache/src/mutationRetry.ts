@@ -1,7 +1,7 @@
 import mutationRetryRegistry from "./mutationRetryRegistry.v2.json";
 
-const MUTATION_RETRY_EXECUTOR_BRAND: unique symbol = Symbol("maverick.mutation-retry-executor");
-const MUTATION_RETRY_REGISTRY_SCHEMA = "maverick.pwa-mutation-retry-registry.v2";
+const MUTATION_RETRY_EXECUTOR_BRAND: unique symbol = Symbol("loopino.mutation-retry-executor");
+const MUTATION_RETRY_REGISTRY_SCHEMA = "loopino.pwa-mutation-retry-registry.v2";
 const MUTATION_RETRY_MAX_BODY_BYTES = 1_048_576;
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,199}$/u;
 const RETRY_AUDIT_ID_PATTERN = /^[a-z0-9][a-z0-9.-]{4,126}\.v[1-9][0-9]*$/u;

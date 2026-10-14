@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { AccountAvatar } from '@maverick/account-avatar';
+import { AccountAvatar } from '@loopino/account-avatar';
 import { CalendarDays, ChevronRight, CircleUserRound, RefreshCw } from 'lucide-react';
 import type { CalendarConnection, CalendarRemoteCalendar } from '../../components/ui/calendar-types';
 import { t } from '../../preferences';

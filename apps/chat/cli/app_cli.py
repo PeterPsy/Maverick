@@ -72,7 +72,7 @@ else:
             changed = result.pop("_changed", False)
             response = {"status_code": 200, "workspace_id": payload.get("workspace_id"), "app_id": payload.get("app_id"), **result}
             if changed:
-                response["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
+                response["app_events"] = [{"type": "loopino.app.data-changed", "resource": "learning"}]
             print(json.dumps(response, ensure_ascii=False))
             sys.exit(0)
         status_code, result = handle_action(Path(payload["data_root"]), body)

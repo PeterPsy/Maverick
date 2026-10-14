@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { maverickAppIsVisible, observeMaverickVisibility } from '@maverick/pwa-cache';
+import { loopinoAppIsVisible, observeLoopinoVisibility } from '@loopino/pwa-cache';
 import { StorageCatalogRequests } from '../lib/storageCatalogRequests';
 
 /** Suspends a Storage surface's reads, preserving its UI and any accepted mutations. */
@@ -8,9 +8,9 @@ export function useStorageReadLifecycle(onResume: () => void) {
   const resume = useRef(onResume);
   resume.current = onResume;
   useEffect(() => {
-    let visible = maverickAppIsVisible();
+    let visible = loopinoAppIsVisible();
     requests.setVisible(visible);
-    const stop = observeMaverickVisibility((next) => {
+    const stop = observeLoopinoVisibility((next) => {
       if (next === visible) return;
       visible = next;
       requests.setVisible(next);

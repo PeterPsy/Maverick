@@ -214,7 +214,7 @@ def _recommended_target_patterns(consumer: SecretConsumer, *, scope: dict[str, o
     for tool in _string_list(consumer.get("mcp_tools")):
         surface = f"mcp/{tool}"
         targets.append(app_secret_target(surface, resource_type=resource_type, resource_id=resource_id) if scoped else app_secret_target(surface))
-    return _dedupe(targets) or ["maverick://app.backend/*"]
+    return _dedupe(targets) or ["loopino://app.backend/*"]
 
 
 def _recommended_reason(
@@ -226,7 +226,7 @@ def _recommended_reason(
     target_patterns: list[str],
 ) -> str:
     scope_text = "this resource" if scope.get("type") == "resource" and scope.get("resource_id") else "the workspace"
-    if target_patterns == ["maverick://app.backend/*"]:
+    if target_patterns == ["loopino://app.backend/*"]:
         return f"Allow {app_id} to use {logical_name} for all declared app backend consumers because no narrower target was available."
     surfaces = []
     if consumer.get("backend"):

@@ -400,7 +400,7 @@ def initialize(data_root: str | Path) -> None:
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("app_version", APP_VERSION))
     marker = {"app_id": "crm", "app_version": APP_VERSION, "data_schema_version": SCHEMA_VERSION, "updated_at": utc_now()}
-    (root / ".maverick-app.json").write_text(json.dumps(marker, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    (root / ".loopino-app.json").write_text(json.dumps(marker, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     view_state_path = root / "view_state.json"
     if not view_state_path.exists():
         view_state_path.write_text(

@@ -5,7 +5,7 @@
 .settings-password-icon {
   border-color: rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.09);
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 .settings-password-grid {
@@ -51,7 +51,7 @@
 }
 
 .settings-migration-plan > .material-symbols-rounded {
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 .settings-migration-collections {
@@ -72,7 +72,7 @@
 }
 
 .settings-migration-collections small {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .settings-migration-delete-source {
@@ -105,11 +105,11 @@
 }
 
 .settings-migration-progress-heading > .material-symbols-rounded {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .settings-migration-progress-heading em {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.78rem;
   font-style: normal;
   font-weight: 400;
@@ -122,7 +122,7 @@
 
 .settings-migration-progress.is-complete .settings-migration-progress-heading > .material-symbols-rounded,
 .settings-migration-progress.is-complete .settings-migration-progress-heading em {
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 .settings-migration-progress.is-failed {
@@ -132,7 +132,7 @@
 
 .settings-migration-progress.is-failed .settings-migration-progress-heading > .material-symbols-rounded,
 .settings-migration-progress.is-failed .settings-migration-progress-heading em {
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }
 
 .settings-adapter-cards {
@@ -148,9 +148,9 @@ button.settings-adapter-card {
   gap: 12px;
   width: 100%;
   min-height: 5.2rem;
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
-  color: var(--maverick-text);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
+  color: var(--loopino-text);
   padding: 14px;
   text-align: left;
   font-size: 0.82rem;
@@ -158,14 +158,14 @@ button.settings-adapter-card {
 }
 
 .settings-adapter-card:hover:not(:disabled) {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
   background: rgba(255, 255, 255, 0.052);
 }
 
 .settings-adapter-card.is-active {
   border-color: rgba(255, 255, 255, 0.34);
   background: rgba(255, 255, 255, 0.09);
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
   cursor: default;
 }
 
@@ -187,9 +187,9 @@ button.settings-adapter-card {
 
 .settings-adapter-card em {
   align-self: start;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.68rem;
   font-style: normal;
   font-weight: 400;
@@ -199,5 +199,5 @@ button.settings-adapter-card {
 
 .settings-adapter-card.is-active em {
   border-color: rgba(255, 255, 255, 0.26);
-  color: var(--maverick-accent);
+  color: var(--loopino-accent);
 }

@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from typing import Any
 
-from app_surface_transport import run_maverick_app_mcp
+from app_surface_transport import run_loopino_app_mcp
 from content_store import body_hash, canonical_body
 from errors import MemoryValidationError
 
@@ -20,8 +20,8 @@ def fetch_app_entity_source(data_root: Path, request: dict[str, str]) -> dict[st
     owning_app_id = request["owning_app_id"]
     entity_type = request["entity_type"]
     entity_id = request["entity_id"]
-    if not shutil.which("maverick"):
-        raise MemoryValidationError("app_entity ingest requires the Maverick app reference surface.")
+    if not shutil.which("loopino"):
+        raise MemoryValidationError("app_entity ingest requires the Loopino app reference surface.")
     workspace_root = workspace_root_for_data_root(data_root)
     if workspace_root is None:
         raise MemoryValidationError("Memory data_root must live under a workspace data directory for app_entity ingestion.")
@@ -111,7 +111,7 @@ def merge_reference_snapshots(resolved: dict[str, Any], summary: dict[str, Any])
 
 
 def discover_reference_tools(workspace_root: Path, owning_app_id: str) -> dict[str, str]:
-    completed = run_maverick_app_mcp(workspace_root, app_id=owning_app_id, operation="list")
+    completed = run_loopino_app_mcp(workspace_root, app_id=owning_app_id, operation="list")
     if completed.returncode != 0:
         raise MemoryValidationError("app_entity ingest could not discover the app reference surface.")
     try:
@@ -143,7 +143,7 @@ def preferred_reference_tool_name(names: list[str], *, owning_app_id: str, actio
 def validate_reference_manifest(workspace_root: Path, owning_app_id: str, tool_name: str, entity_type: str) -> None:
     if not tool_name:
         return
-    completed = run_maverick_app_mcp(workspace_root, app_id=owning_app_id, operation="call", tool_name=tool_name)
+    completed = run_loopino_app_mcp(workspace_root, app_id=owning_app_id, operation="call", tool_name=tool_name)
     response = _reference_response(completed)
     if response is None:
         return
@@ -161,7 +161,7 @@ def run_reference_tool(
     entity_type: str,
     entity_id: str,
 ) -> subprocess.CompletedProcess[str]:
-    return run_maverick_app_mcp(
+    return run_loopino_app_mcp(
         workspace_root,
         app_id=owning_app_id,
         operation="call",

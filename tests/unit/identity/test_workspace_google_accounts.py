@@ -103,10 +103,10 @@ class WorkspaceGoogleAccountsTests(unittest.TestCase):
 
     def test_workspace_access_route_requires_same_origin_and_returns_the_account_set(self):
         body = json.dumps({"workspace_id": "default", "account_id": self.accounts[0].account_id, "enabled": False}).encode()
-        for origin, expected in [("https://evil.example", "403"), ("https://maverick.example", "200")]:
+        for origin, expected in [("https://evil.example", "403"), ("https://loopino.example", "200")]:
             captured = []
             environ = {"PATH_INFO": "/api/connected-accounts/workspace-access", "REQUEST_METHOD": "POST",
-                "HTTP_ORIGIN": origin, "HTTP_HOST": "maverick.example", "wsgi.url_scheme": "https",
+                "HTTP_ORIGIN": origin, "HTTP_HOST": "loopino.example", "wsgi.url_scheme": "https",
                 "wsgi.input": fixtures.BytesIO(body), "CONTENT_LENGTH": str(len(body))}
             with patch("core.api.connected_accounts_api.resolve_request_session", return_value=self.f.context):
                 handle_connected_accounts_api(self.f.state, environ, lambda status, headers: captured.append(status))
@@ -148,7 +148,7 @@ class WorkspaceGoogleAccountsTests(unittest.TestCase):
         body = json.dumps({"workspace_id": "second", "account_id": self.accounts[0].account_id, "enabled": False}).encode()
         captured = []
         environ = {"PATH_INFO": "/api/connected-accounts/workspace-access", "REQUEST_METHOD": "POST",
-            "HTTP_ORIGIN": "https://maverick.example", "HTTP_HOST": "maverick.example", "wsgi.url_scheme": "https",
+            "HTTP_ORIGIN": "https://loopino.example", "HTTP_HOST": "loopino.example", "wsgi.url_scheme": "https",
             "wsgi.input": fixtures.BytesIO(body), "CONTENT_LENGTH": str(len(body))}
         with patch("core.api.connected_accounts_api.resolve_request_session", return_value=self.f.context):
             response = handle_connected_accounts_api(self.f.state, environ, lambda status, headers: captured.append(status))
@@ -221,7 +221,7 @@ class WorkspaceGoogleAccountsTests(unittest.TestCase):
                 items = public.get("connections", public.get("items", []))
                 self.assertEqual({item["id"] for item in items if item["status"] == "connected"},
                                  {"platform_" + item.account_id for item in self.accounts}, public)
-                self.assertNotIn("maverick-account:", json.dumps(public))
+                self.assertNotIn("loopino-account:", json.dumps(public))
                 select_account(self.f.state, user_id=self.f.user.user_id, workspace_id="default", account_id=self.accounts[0].account_id)
                 default_result = invoke()["json"]
                 default_items = default_result.get("connections", default_result.get("items", []))

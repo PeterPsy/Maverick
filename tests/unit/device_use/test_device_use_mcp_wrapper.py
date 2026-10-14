@@ -14,7 +14,7 @@ from core.runtime.runtime_cli_wrapper import write_runtime_device_use_mcp_wrappe
 class DeviceUseMcpWrapperTests(unittest.TestCase):
     def test_device_use_mcp_wrapper_stdio_interaction(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            wrapper_path = Path(temp_dir) / "maverick-device-use-mcp"
+            wrapper_path = Path(temp_dir) / "loopino-device-use-mcp"
             write_runtime_device_use_mcp_wrapper(wrapper_path)
             self.assertTrue(wrapper_path.exists())
             self.assertTrue(os.access(wrapper_path, os.X_OK))
@@ -30,14 +30,14 @@ class DeviceUseMcpWrapperTests(unittest.TestCase):
                 input=input_data,
                 capture_output=True,
                 text=True,
-                env={**os.environ, "MAVERICK_API_BASE": "http://127.0.0.1:1",
-                     "MAVERICK_RUNTIME_API_TOKEN": ""},
+                env={**os.environ, "LOOPINO_API_BASE": "http://127.0.0.1:1",
+                     "LOOPINO_RUNTIME_API_TOKEN": ""},
                 timeout=5,
             )
             self.assertEqual(proc.returncode, 0)
             lines = [json.loads(line) for line in proc.stdout.strip().split("\n") if line.strip()]
             self.assertEqual(len(lines), 2)
-            self.assertEqual(lines[0]["result"]["serverInfo"]["name"], "maverick-device-use-mcp")
+            self.assertEqual(lines[0]["result"]["serverInfo"]["name"], "loopino-device-use-mcp")
             tool_names = [t["name"] for t in lines[1]["result"]["tools"]]
             self.assertIn("mac_computer", tool_names)
             self.assertIn("mac_peekaboo", tool_names)

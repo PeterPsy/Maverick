@@ -1,5 +1,5 @@
 import { installFrameReferenceDragBroker } from '../../../../base-shell/frontend/src/lib/frameReferenceDragBroker';
-import { MAVERICK_IFRAME_SANDBOX, setMaverickFrameOrigin } from '../../../../base-shell/frontend/src/iframePolicy';
+import { LOOPINO_IFRAME_SANDBOX, setLoopinoFrameOrigin } from '../../../../base-shell/frontend/src/iframePolicy';
 import '../../../../base-shell/frontend/src/styles/ui.css';
 
 const scope = { workspaceId: 'fixture', sessionGeneration: 'fixture-login' };
@@ -13,7 +13,7 @@ for (const id of ['storage', 'sidebar', 'chat']) {
   url.searchParams.set('widget', 'true');
   url.searchParams.set('width', '480');
   if (id === 'sidebar') url.searchParams.set('mode', 'sidebar');
-  frame.sandbox.value = MAVERICK_IFRAME_SANDBOX;
+  frame.sandbox.value = LOOPINO_IFRAME_SANDBOX;
   frame.src = url.href;
-  setMaverickFrameOrigin(frame, url.origin, id === 'chat' ? 'chat' : 'storage', scope);
+  setLoopinoFrameOrigin(frame, url.origin, id === 'chat' ? 'chat' : 'storage', scope);
 }

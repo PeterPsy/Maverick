@@ -8,7 +8,7 @@ import {
   createReadModelRequestExecutor,
   createSafeRequestRetryExecutor,
   type SafeRequestRetryExecutor,
-} from "@maverick/pwa-cache";
+} from "@loopino/pwa-cache";
 import { shellRetryCoordinator } from "./pwaCacheRuntime";
 import { reportShellAuthorizationFailure } from "./shellAuthorization";
 
@@ -279,34 +279,34 @@ export type PinnedAppsPayload = {
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
-export class MaverickHttpError extends Error {
+export class LoopinoHttpError extends Error {
   readonly retryAfterMs: number | null;
   readonly path: string;
   readonly status: number;
 
   constructor(path: string, response: Response) {
     super(`Request failed ${response.status}: ${path}`);
-    this.name = "MaverickHttpError";
+    this.name = "LoopinoHttpError";
     this.path = path;
     this.status = response.status;
     this.retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
   }
 }
 
-export class MaverickTransportError extends Error {
+export class LoopinoTransportError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
-    this.name = "MaverickTransportError";
+    this.name = "LoopinoTransportError";
   }
 }
 
 export function isRetryableReadError(error: unknown): boolean {
-  return error instanceof MaverickTransportError
-    || (error instanceof MaverickHttpError && [408, 425, 429, 500, 502, 503, 504].includes(error.status));
+  return error instanceof LoopinoTransportError
+    || (error instanceof LoopinoHttpError && [408, 425, 429, 500, 502, 503, 504].includes(error.status));
 }
 
 export function retryAfterMs(error: unknown): number | null {
-  return error instanceof MaverickHttpError ? error.retryAfterMs : null;
+  return error instanceof LoopinoHttpError ? error.retryAfterMs : null;
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -332,7 +332,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     });
     receivedResponse = true;
     if (!response.ok) {
-      const responseError = new MaverickHttpError(path, response);
+      const responseError = new LoopinoHttpError(path, response);
       if (responseError.status === 401 || responseError.status === 403) {
         void reportShellAuthorizationFailure(responseError.status, responseError.path);
       }
@@ -341,14 +341,14 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     shellRetryCoordinator.confirmUsefulTransport();
     return (await response.json()) as T;
   } catch (requestError) {
-    if (requestError instanceof MaverickHttpError) {
+    if (requestError instanceof LoopinoHttpError) {
       throw requestError;
     }
     if (didTimeout) {
-      throw new MaverickTransportError(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
+      throw new LoopinoTransportError(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
     }
     if (!receivedResponse && !init.signal?.aborted) {
-      throw new MaverickTransportError(`Transport failed: ${path}`, { cause: requestError });
+      throw new LoopinoTransportError(`Transport failed: ${path}`, { cause: requestError });
     }
     throw requestError;
   } finally {
@@ -377,14 +377,14 @@ async function requestWithRetry<T>(
     return response;
   } catch (error) {
     if (error instanceof SafeRequestRetryHttpError) {
-      const responseError = new MaverickHttpError(executor.endpoint, error.response);
+      const responseError = new LoopinoHttpError(executor.endpoint, error.response);
       if (responseError.status === 401 || responseError.status === 403) {
         void reportShellAuthorizationFailure(responseError.status, responseError.path);
       }
       throw responseError;
     }
     if (error instanceof SafeRequestRetryTransportError) {
-      throw new MaverickTransportError(error.message, { cause: error });
+      throw new LoopinoTransportError(error.message, { cause: error });
     }
     throw error;
   }
@@ -600,14 +600,14 @@ export async function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayloa
     return normalizePinnedAppsPayload(response);
   } catch (error) {
     if (error instanceof MutationRetryHttpError) {
-      const responseError = new MaverickHttpError(executor.endpoint, error.response);
+      const responseError = new LoopinoHttpError(executor.endpoint, error.response);
       if (responseError.status === 401 || responseError.status === 403) {
         void reportShellAuthorizationFailure(responseError.status, responseError.path);
       }
       throw responseError;
     }
     if (error instanceof MutationRetryTransportError) {
-      throw new MaverickTransportError(error.message, { cause: error });
+      throw new LoopinoTransportError(error.message, { cause: error });
     }
     throw error;
   }

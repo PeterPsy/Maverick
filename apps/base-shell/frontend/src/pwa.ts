@@ -10,8 +10,8 @@ export type ShellPwaUpdateState = {
 };
 
 const CONFIG_TIMEOUT_MS = 4_000;
-const STATIC_CACHE_PREFIX = "maverick-static-v2:";
-const KNOWN_STATIC_CACHES = new Set(["maverick-app-static-v2", "maverick-base-shell-v3"]);
+const STATIC_CACHE_PREFIX = "loopino-static-v2:";
+const KNOWN_STATIC_CACHES = new Set(["loopino-app-static-v2", "loopino-base-shell-v3"]);
 const TRANSIENT_CONFIG_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const listeners = new Set<() => void>();
 let waitingRegistration: ServiceWorkerRegistration | null = null;
@@ -30,7 +30,7 @@ export function registerShellServiceWorker(): void {
   }
 
   const start = () => {
-    configureShellServiceWorker().catch((error: unknown) => debugWarning("Maverick PWA setup failed.", error));
+    configureShellServiceWorker().catch((error: unknown) => debugWarning("Loopino PWA setup failed.", error));
   };
   if (document.readyState === "complete") {
     void Promise.resolve().then(start);
@@ -50,7 +50,7 @@ export async function applyShellServiceWorkerUpdate(): Promise<boolean> {
   }
   reloadOnControllerChange = true;
   setUpdateState({ ...updateState, applying: true });
-  waiting.postMessage({ type: "MAVERICK_SKIP_WAITING" });
+  waiting.postMessage({ type: "LOOPINO_SKIP_WAITING" });
   return true;
 }
 
@@ -60,7 +60,7 @@ export function recoverShellStaticCache(): boolean {
     return false;
   }
   setUpdateState({ ...updateState, recovery: "recovering" });
-  controller.postMessage({ type: "MAVERICK_RECOVER" });
+  controller.postMessage({ type: "LOOPINO_RECOVER" });
   return true;
 }
 
@@ -71,10 +71,10 @@ export async function disableShellServiceWorker(): Promise<void> {
   const registrations = await navigator.serviceWorker.getRegistrations();
   await Promise.all(
     registrations
-      .filter(isMaverickShellRegistration)
+      .filter(isLoopinoShellRegistration)
       .map(async (registration) => {
         for (const worker of [registration.installing, registration.waiting, registration.active]) {
-          worker?.postMessage({ type: "MAVERICK_DISABLE" });
+          worker?.postMessage({ type: "LOOPINO_DISABLE" });
         }
         await registration.unregister();
       }),
@@ -132,7 +132,7 @@ async function projectedDataFeatureEnabled(
     } catch {
       return false;
     }
-    return payload.schema === "maverick.pwa-config.v2"
+    return payload.schema === "loopino.pwa-config.v2"
       && payload.features?.[feature] === true;
   } catch {
     return null;
@@ -177,7 +177,7 @@ async function serviceWorkerV2Enabled(): Promise<boolean | null> {
       return null;
     }
     const payload = (await response.json()) as { schema?: unknown; service_worker?: { enabled?: unknown; generation?: unknown } };
-    if (payload.schema !== "maverick.pwa-config.v2" || payload.service_worker?.generation !== "v2") {
+    if (payload.schema !== "loopino.pwa-config.v2" || payload.service_worker?.generation !== "v2") {
       return null;
     }
     return payload.service_worker.enabled === true;
@@ -205,18 +205,18 @@ function installServiceWorkerLifecycleListeners(): void {
     const message = event.data && typeof event.data === "object"
       ? event.data as { build_id?: unknown; metric?: unknown; type?: unknown }
       : {};
-    if (message.type === "MAVERICK_PWA_METRIC") {
+    if (message.type === "LOOPINO_PWA_METRIC") {
       shellPwaMetrics.recordServiceWorker(message.metric);
       return;
     }
     const buildId = typeof message.build_id === "string" ? message.build_id : null;
-    if (message.type === "MAVERICK_SW_VERSION" && updateState.available) {
+    if (message.type === "LOOPINO_SW_VERSION" && updateState.available) {
       setUpdateState({ ...updateState, buildId });
-    } else if (message.type === "MAVERICK_SW_ACTIVATED") {
+    } else if (message.type === "LOOPINO_SW_ACTIVATED") {
       setUpdateState({ ...updateState, applying: false, available: false, buildId, recovery: "idle" });
-    } else if (message.type === "MAVERICK_SW_RECOVERED") {
+    } else if (message.type === "LOOPINO_SW_RECOVERED") {
       setUpdateState({ ...updateState, recovery: "recovered" });
-    } else if (message.type === "MAVERICK_SW_RECOVERY_FAILED") {
+    } else if (message.type === "LOOPINO_SW_RECOVERY_FAILED") {
       setUpdateState({ ...updateState, recovery: "failed" });
     }
   });
@@ -239,10 +239,10 @@ function observeRegistration(registration: ServiceWorkerRegistration): void {
 function announceWaitingWorker(registration: ServiceWorkerRegistration): void {
   waitingRegistration = registration;
   setUpdateState({ ...updateState, applying: false, available: true, buildId: null });
-  registration.waiting?.postMessage({ type: "MAVERICK_GET_VERSION" });
+  registration.waiting?.postMessage({ type: "LOOPINO_GET_VERSION" });
 }
 
-function isMaverickShellRegistration(registration: ServiceWorkerRegistration): boolean {
+function isLoopinoShellRegistration(registration: ServiceWorkerRegistration): boolean {
   const workers = [registration.installing, registration.waiting, registration.active].filter(Boolean) as ServiceWorker[];
   if (workers.some((worker) => new URL(worker.scriptURL).pathname === "/sw.js")) {
     return true;
@@ -266,7 +266,7 @@ function setUpdateState(next: ShellPwaUpdateState): void {
 
 function debugWarning(message: string, error: unknown): void {
   try {
-    if (window.localStorage.getItem("maverick3:pwa-debug") === "1") {
+    if (window.localStorage.getItem("loopino:pwa-debug") === "1") {
       console.warn(message, error);
     }
   } catch {

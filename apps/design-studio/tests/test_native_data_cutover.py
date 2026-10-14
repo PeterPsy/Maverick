@@ -72,7 +72,7 @@ def _make_app_root(base: Path) -> tuple[Path, Path]:
     (source / "app.sqlite").write_bytes(b"canonical-private-db")
     (source / "project-secret.txt").write_text("semantic project secret", encoding="utf-8")
     (source / "launcher-status.json").write_text('{"legacy":true}', encoding="utf-8")
-    runtime = source / "maverick-runtime"
+    runtime = source / "loopino-runtime"
     runtime.mkdir()
     (runtime / "correlations.json").write_text('{"thread":"legacy-secret"}', encoding="utf-8")
     (runtime / "conversation-bindings.json").write_text('{"binding":"legacy"}', encoding="utf-8")
@@ -82,7 +82,7 @@ def _make_app_root(base: Path) -> tuple[Path, Path]:
         "active": {"data_generation": GENERATION},
     }
     files = {
-        ".maverick-app.json": {"app_id": "design-studio"},
+        ".loopino-app.json": {"app_id": "design-studio"},
         "adapter-state.json": {"opendesign_app_config": {"secret": "legacy config"}},
         "state.json": {"projects": [{"name": "legacy project"}]},
         "delegations/state.json": {"delegations": {}},
@@ -124,7 +124,7 @@ class NativeDataCutoverTests(unittest.TestCase):
         def inventory_runner(_installation, *, data_dir: Path, log_path: Path) -> dict:
             calls.append(
                 {
-                    "runtime_present": (data_dir / "maverick-runtime").exists(),
+                    "runtime_present": (data_dir / "loopino-runtime").exists(),
                     "canonical_present": (data_dir / "project-secret.txt").exists(),
                 }
             )
@@ -147,7 +147,7 @@ class NativeDataCutoverTests(unittest.TestCase):
         )
         native = self.root / "opendesign-native"
         self.assertEqual((native / "project-secret.txt").read_text(), "semantic project secret")
-        self.assertFalse((native / "maverick-runtime").exists())
+        self.assertFalse((native / "loopino-runtime").exists())
         self.assertFalse((native / "launcher-status.json").exists())
         self.assertFalse((native / "previous-native.txt").exists())
         self.assertEqual(stat.S_IMODE(native.stat().st_mode), 0o700)
@@ -175,7 +175,7 @@ class NativeDataCutoverTests(unittest.TestCase):
         self.assertFalse(stat.S_IMODE(self.source.stat().st_mode) & 0o222)
         for relative in marker["legacy_read_only_files"]:
             self.assertFalse(stat.S_IMODE((self.root / relative).stat().st_mode) & 0o222)
-        self.assertTrue(stat.S_IMODE((self.root / ".maverick-app.json").stat().st_mode) & 0o200)
+        self.assertTrue(stat.S_IMODE((self.root / ".loopino-app.json").stat().st_mode) & 0o200)
         self.assertTrue(stat.S_IMODE((self.root / "delegations/state.json").stat().st_mode) & 0o200)
 
         repeated = perform_native_data_cutover(

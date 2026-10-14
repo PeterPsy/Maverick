@@ -17,11 +17,11 @@
   width: min(100%, 43rem);
   max-height: min(42rem, calc(100dvh - 1.5rem));
   overflow: auto;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-card-radius);
+  border: 1px solid var(--loopino-border-strong);
+  border-radius: var(--loopino-card-radius);
   background: rgba(14, 14, 16, 0.9);
   box-shadow:
-    var(--maverick-glass-edge),
+    var(--loopino-glass-edge),
     0 34px 110px rgba(0, 0, 0, 0.48);
 }
 
@@ -31,7 +31,7 @@
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  background: var(--maverick-glass-highlight);
+  background: var(--loopino-glass-highlight);
   opacity: 0.82;
   pointer-events: none;
 }
@@ -45,14 +45,14 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-card-radius);
-  background: var(--maverick-glass-surface);
+  border: 1px solid var(--loopino-border);
+  border-radius: var(--loopino-card-radius);
+  background: var(--loopino-glass-surface);
   box-shadow: var(--crm-panel-shadow);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   scrollbar-width: thin !important;
-  scrollbar-color: var(--maverick-border-strong) transparent;
+  scrollbar-color: var(--loopino-border-strong) transparent;
 }
 
 .crm-detail-page::-webkit-scrollbar {
@@ -62,7 +62,7 @@
 
 .crm-detail-page::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: var(--maverick-border-strong);
+  background: var(--loopino-border-strong);
 }
 
 .crm-detail-page::before {
@@ -71,7 +71,7 @@
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  background: var(--maverick-glass-highlight);
+  background: var(--loopino-glass-highlight);
   opacity: 0.7;
   pointer-events: none;
 }
@@ -95,7 +95,7 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 1.05rem 1.1rem;
-  border-bottom: 1px solid var(--maverick-border);
+  border-bottom: 1px solid var(--loopino-border);
   background: rgba(12, 12, 14, 0.9);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
@@ -121,7 +121,7 @@
 }
 
 .detail-header small {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.72rem;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -133,10 +133,10 @@
   place-items: center;
   width: 2.25rem;
   height: 2.25rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-surface);
+  color: var(--loopino-text-muted);
   transition:
     background 150ms ease,
     border-color 150ms ease,
@@ -150,10 +150,10 @@
   justify-content: center;
   gap: 0.36rem;
   min-height: 2.25rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-surface);
+  color: var(--loopino-text-muted);
   padding: 0 0.74rem;
   font-size: 0.78rem;
   transition:
@@ -177,10 +177,10 @@
   justify-content: center;
   gap: 0.38rem;
   height: 2.25rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-surface);
+  color: var(--loopino-text-muted);
   transition:
     background 150ms ease,
     border-color 150ms ease,
@@ -218,11 +218,11 @@
   gap: 0.18rem;
   width: min(15rem, calc(100vw - 2rem));
   padding: 0.38rem;
-  border: 1px solid var(--maverick-border-strong);
+  border: 1px solid var(--loopino-border-strong);
   border-radius: 0.86rem;
   background: rgba(18, 18, 20, 0.98);
   box-shadow:
-    var(--maverick-glass-edge),
+    var(--loopino-glass-edge),
     0 18px 56px rgba(0, 0, 0, 0.42);
 }
 
@@ -236,15 +236,15 @@
   border: 1px solid transparent;
   border-radius: 0.62rem;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   text-align: left;
 }
 
 .detail-secondary-menu button:hover,
 .detail-secondary-menu button:focus-visible {
-  border-color: var(--maverick-border);
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  border-color: var(--loopino-border);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
   outline: none;
 }
 
@@ -265,9 +265,9 @@
 .detail-icon-button:focus-visible,
 .detail-text-button:hover,
 .detail-text-button:focus-visible {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
   outline: none;
 }
 
@@ -280,10 +280,10 @@
 
 .detail-tags span {
   max-width: 100%;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
   padding: 0.22rem 0.55rem;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
   overflow-wrap: anywhere;
 }
@@ -296,7 +296,7 @@
   overflow: visible;
   padding: 1.05rem 1.1rem 1.2rem;
   scrollbar-width: thin;
-  scrollbar-color: var(--maverick-border-strong) transparent;
+  scrollbar-color: var(--loopino-border-strong) transparent;
 }
 
 .detail-timeline {
@@ -307,7 +307,7 @@
 }
 
 .detail-timeline h3 {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.72rem;
   font-weight: 400;
   text-transform: uppercase;
@@ -317,13 +317,13 @@
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  border-top: 1px solid var(--maverick-border);
+  border-top: 1px solid var(--loopino-border);
   padding-top: 0.65rem;
   font-size: 0.82rem;
 }
 
 .detail-timeline span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .detail-fields div {
@@ -352,7 +352,7 @@
 
 .detail-section-heading h3 {
   margin: 0;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   font-size: 0.72rem;
   font-weight: 400;
   text-transform: uppercase;
@@ -360,7 +360,7 @@
 
 .detail-section-heading p {
   margin: 0.18rem 0 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -379,32 +379,32 @@
   justify-content: center;
   gap: 0.35rem;
   min-height: 2rem;
-  border: 1px solid var(--maverick-border);
+  border: 1px solid var(--loopino-border);
   border-radius: 999px;
-  background: var(--maverick-surface);
-  color: var(--maverick-text-muted);
+  background: var(--loopino-surface);
+  color: var(--loopino-text-muted);
   padding: 0 0.68rem;
   font-size: 0.76rem;
 }
 
 .detail-section-heading button:hover,
 .detail-section-heading button:focus-visible {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-hover);
-  color: var(--maverick-text);
+  border-color: var(--loopino-border-strong);
+  background: var(--loopino-surface-hover);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .detail-fields dt {
   font-size: 0.72rem;
   font-weight: 400;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .detail-fields dd {
   margin: 0.18rem 0 0;
   overflow-wrap: anywhere;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-size: 0.9rem;
 }
 

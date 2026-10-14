@@ -32,7 +32,7 @@ class AsgiApplicationTests(unittest.TestCase):
         self.assertIn("asyncio.to_thread", source)
         self.assertIn("ThreadPoolExecutor", source)
         self.assertIn("run_in_executor", source)
-        self.assertIn("maverick-app-backend", source)
+        self.assertIn("loopino-app-backend", source)
         self.assertIn("_run_wsgi_http", source)
         self.assertIn("self.http_host", source)
 
@@ -97,7 +97,7 @@ class AsgiApplicationTests(unittest.TestCase):
         async def send(message: dict[str, object]) -> None:
             sent.append(message)
 
-        with patch.dict("os.environ", {"MAVERICK_MAX_JSON_BODY_BYTES": "5"}):
+        with patch.dict("os.environ", {"LOOPINO_MAX_JSON_BODY_BYTES": "5"}):
             asyncio.run(
                 host(
                     {"type": "http", "path": "/api/session", "method": "POST", "headers": []},
@@ -131,7 +131,7 @@ class AsgiApplicationTests(unittest.TestCase):
 
         self.assertEqual(sent[0]["type"], "http.response.start")
         self.assertEqual(sent[0]["status"], 200)
-        self.assertEqual(json.loads(sent[1]["body"].decode("utf-8")), {"status": "ok", "service": "maverick-core"})
+        self.assertEqual(json.loads(sent[1]["body"].decode("utf-8")), {"status": "ok", "service": "loopino-core"})
 
     def test_streaming_app_response_closes_blocked_iterator_on_client_disconnect(self) -> None:
         class BlockingIterator:
@@ -194,7 +194,7 @@ class AsgiApplicationTests(unittest.TestCase):
 
     def test_app_events_websocket_filters_events_to_session_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo_root = Path(temp) / "maverick"
+            repo_root = Path(temp) / "loopino"
             for name in ("core", "apps", "workspaces", "scripts"):
                 (repo_root / name).mkdir(parents=True, exist_ok=True)
             (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
@@ -202,9 +202,9 @@ class AsgiApplicationTests(unittest.TestCase):
             with patch.dict(
                 os.environ,
                 {
-                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-                    "MAVERICK_ADMIN_USERNAME": "admin",
-                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                    "LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "LOOPINO_ADMIN_USERNAME": "admin",
+                    "LOOPINO_ADMIN_PASSWORD": "loopino",
                 },
                 clear=False,
             ):
@@ -235,8 +235,8 @@ class AsgiApplicationTests(unittest.TestCase):
                 )
                 while not any(message.get("type") == "websocket.accept" for message in sent):
                     await asyncio.sleep(0)
-                state.app_event_bus.publish({"type": "maverick.app.data-changed", "workspace_id": "other", "owner_app_id": "sample", "resource": "records"})
-                state.app_event_bus.publish({"type": "maverick.app.data-changed", "workspace_id": "default", "owner_app_id": "sample", "resource": "records"})
+                state.app_event_bus.publish({"type": "loopino.app.data-changed", "workspace_id": "other", "owner_app_id": "sample", "resource": "records"})
+                state.app_event_bus.publish({"type": "loopino.app.data-changed", "workspace_id": "default", "owner_app_id": "sample", "resource": "records"})
                 while not any(message.get("type") == "websocket.send" for message in sent):
                     await asyncio.sleep(0)
                 await receive_queue.put({"type": "websocket.disconnect"})
@@ -249,7 +249,7 @@ class AsgiApplicationTests(unittest.TestCase):
 
     def _login_cookie(self, state) -> str:
         app_host = PlatformHost(state, start_path=state.repository_root)
-        payload = json.dumps({"username": "admin", "password": "maverick"}).encode("utf-8")
+        payload = json.dumps({"username": "admin", "password": "loopino"}).encode("utf-8")
         headers: dict[str, str] = {}
         environ = {
             "PATH_INFO": "/api/auth/login",

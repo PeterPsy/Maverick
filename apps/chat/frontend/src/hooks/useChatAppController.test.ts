@@ -254,18 +254,18 @@ describe("selectedProviderForSession", () => {
       activeProviderId: "codex",
       activeSession: session({
         runtime_mode: "agentic",
-        provider_id: "maverick-tool-loop",
+        provider_id: "loopino-tool-loop",
         execution_binding: {
           workspace_binding_id: "binding-remote",
           model_provider_id: "openrouter",
           model_id: "z-ai/glm-5.3-flash",
-          runtime_engine_id: "maverick-tool-loop",
+          runtime_engine_id: "loopino-tool-loop",
         },
         agentic_containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
         agentic_governance: {
           display_name: "OpenRouter GLM 5.3 Flash · Relace FP4 · fake-data preview",
           workspace_binding_id: "binding-remote",
-          runtime_engine_id: "maverick-tool-loop",
+          runtime_engine_id: "loopino-tool-loop",
           model_provider_id: "openrouter",
           model_id: "z-ai/glm-5.3-flash",
           containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },

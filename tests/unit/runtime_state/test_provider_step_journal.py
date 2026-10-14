@@ -37,7 +37,7 @@ class ProviderStepJournalTest(unittest.TestCase):
             codec_id="fake-hosted-codec",
             codec_version="1",
             schema_version="1",
-            content_type="application/vnd.maverick.fake-private",
+            content_type="application/vnd.loopino.fake-private",
         )
         self.envelope = ProviderPrivateEnvelope(
             schema_version="1",

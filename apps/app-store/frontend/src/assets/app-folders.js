@@ -1,9 +1,9 @@
 (function () {
-  const data = window.MaverickAppFolderData;
-  const lightbox = window.MaverickAppFolderLightbox;
+  const data = window.LoopinoAppFolderData;
+  const lightbox = window.LoopinoAppFolderLightbox;
 
   if (!data || !lightbox) {
-    window.MaverickAppFolderView = { render: () => null };
+    window.LoopinoAppFolderView = { render: () => null };
     return;
   }
 
@@ -168,5 +168,5 @@
     mount.replaceChildren(grid);
   }
 
-  window.MaverickAppFolderView = { render };
+  window.LoopinoAppFolderView = { render };
 })();

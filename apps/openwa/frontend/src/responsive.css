@@ -3,7 +3,7 @@
     grid-template-columns: 145px 275px minmax(0, 1fr);
   }
   .app-shell {
-    padding: calc(18px + var(--maverick-shell-mobile-content-top-offset, 0px)) 18px 18px;
+    padding: calc(18px + var(--loopino-shell-mobile-content-top-offset, 0px)) 18px 18px;
   }
   .conversation-session {
     display: none;
@@ -38,7 +38,7 @@
 }
 @media (max-width: 520px) {
   .app-shell {
-    padding: calc(10px + var(--maverick-shell-mobile-content-top-offset, 0px))
+    padding: calc(10px + var(--loopino-shell-mobile-content-top-offset, 0px))
       10px 10px;
     gap: 12px;
   }
@@ -128,7 +128,7 @@
     width: 19px;
   }
   .setup-page {
-    padding: calc(20px + var(--maverick-shell-mobile-content-top-offset, 0px))
+    padding: calc(20px + var(--loopino-shell-mobile-content-top-offset, 0px))
       14px 20px;
   }
   .setup-card {
@@ -138,7 +138,7 @@
     font-size: 25px;
   }
   .modal-backdrop {
-    padding: calc(14px + var(--maverick-shell-mobile-content-top-offset, 0px)) 14px 14px;
+    padding: calc(14px + var(--loopino-shell-mobile-content-top-offset, 0px)) 14px 14px;
   }
   .modal {
     padding: 22px;
@@ -177,7 +177,7 @@
     flex: 1 1 130px;
   }
   .modal, .modal-backdrop .setup-card {
-    max-height: calc(100dvh - 28px - var(--maverick-shell-mobile-content-top-offset, 0px));
+    max-height: calc(100dvh - 28px - var(--loopino-shell-mobile-content-top-offset, 0px));
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -11,7 +11,7 @@ from core.providers.agentic_profiles import (
 from core.providers.errors import AgenticProfileError
 from core.providers.models import ProviderSelection
 from core.providers.provider_codex_models import build_codex_definition
-from tests.support.maverick_agent_onboarding import provider_store
+from tests.support.loopino_agent_onboarding import provider_store
 
 
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
@@ -30,7 +30,7 @@ class AgenticProfilesTest(unittest.TestCase):
             selection_reason="test",
             created_at=NOW,
             updated_at=NOW,
-            model_id="gpt-5.6-sol",
+            model_id="gpt-6.1-sol",
             model_reasoning_effort="high",
         )
 
@@ -50,10 +50,10 @@ class AgenticProfilesTest(unittest.TestCase):
 
     def test_republishing_a_model_replaces_the_same_definition(self) -> None:
         first = publish_codex_agentic_profile(
-            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
+            self.store, definition=self.codex, model_id="gpt-6.1-sol", now=NOW
         )
         second = publish_codex_agentic_profile(
-            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
+            self.store, definition=self.codex, model_id="gpt-6.1-sol", now=NOW
         )
 
         self.assertEqual(first.definition_id, second.definition_id)
@@ -61,13 +61,13 @@ class AgenticProfilesTest(unittest.TestCase):
 
     def test_adapter_version_change_updates_the_same_definition(self) -> None:
         first = publish_codex_agentic_profile(
-            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
+            self.store, definition=self.codex, model_id="gpt-6.1-sol", now=NOW
         )
         with patch("core.providers.agentic_profiles.CODEX_ADAPTER_VERSION", "999"):
             updated = publish_codex_agentic_profile(
                 self.store,
                 definition=self.codex,
-                model_id="gpt-5.6-sol",
+                model_id="gpt-6.1-sol",
                 now=NOW,
             )
 
@@ -77,7 +77,7 @@ class AgenticProfilesTest(unittest.TestCase):
 
     def test_profile_hydration_ignores_and_republication_removes_retired_fields(self) -> None:
         current = publish_codex_agentic_profile(
-            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
+            self.store, definition=self.codex, model_id="gpt-6.1-sol", now=NOW
         )
         collection = self.store.collections.agentic_profile_definitions
         document = collection.documents[0]
@@ -98,7 +98,7 @@ class AgenticProfilesTest(unittest.TestCase):
 
     def test_reasoning_is_validated_directly_against_the_model(self) -> None:
         definition = publish_codex_agentic_profile(
-            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
+            self.store, definition=self.codex, model_id="gpt-6.1-sol", now=NOW
         )
         self.assertEqual(_validated_reasoning_effort(definition, reasoning_effort="high"), "high")
         with self.assertRaisesRegex(AgenticProfileError, "profile_reasoning_effort_unsupported"):

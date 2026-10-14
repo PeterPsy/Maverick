@@ -1,4 +1,4 @@
-"""Authenticated Maverick App Store API surface."""
+"""Authenticated Loopino App Store API surface."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def handle_app_store_api(
         ).hexdigest()
         response_payload = {
             **payload,
-            "schema": "maverick.app-store-catalog.v1",
+            "schema": "loopino.app-store-catalog.v1",
             "revision": revision,
         }
         etag = format_etag(revision)

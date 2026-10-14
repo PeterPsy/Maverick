@@ -86,7 +86,7 @@ def codex_initialize_params(*, session: RuntimeSessionRecord) -> dict[str, Any]:
     research = runtime_session_is_research(session)
     params: dict[str, Any] = {
         "clientInfo": {
-            "name": "research-client" if research else "maverick",
+            "name": "research-client" if research else "loopino",
             "version": "1.0.0" if research else "3.0.0",
         },
     }
@@ -108,7 +108,7 @@ def codex_thread_params(
             "cwd": launch_spec.working_directory,
             "approvalPolicy": "never",
             "sandbox": "read-only",
-            # Research keeps one private Codex archive per Maverick chat so a
+            # Research keeps one private Codex archive per Loopino chat so a
             # later process can resume the same isolated conversation.
             "ephemeral": False,
             "environments": [],

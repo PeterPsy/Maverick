@@ -18,7 +18,7 @@ from core.apps.models import AppVisibilityDeclaration
 
 class AppReferenceApiTestSupport:
     def _repo_root(self, temp_dir: str) -> Path:
-        repo_root = Path(temp_dir) / "maverick"
+        repo_root = Path(temp_dir) / "loopino"
         for name in ("core", "apps", "workspaces", "scripts", "docs"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -65,7 +65,7 @@ class AppReferenceApiTestSupport:
             name="Records",
             version="1.0.0",
             description="Record reference test app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 visibility=visibility,
                 capabilities=build_app_capabilities(
@@ -119,7 +119,7 @@ class AppReferenceApiTestSupport:
             name=app_id.replace("-", " ").title(),
             version="1.0.0",
             description="Search reference test app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 capabilities=build_app_capabilities(
                     mcp_tools=[
@@ -152,7 +152,7 @@ class AppReferenceApiTestSupport:
             name="Broken",
             version="1.0.0",
             description="Broken reference test app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(
                 capabilities=build_app_capabilities(
                     mcp_tools=[
@@ -176,12 +176,12 @@ class AppReferenceApiTestSupport:
             name="Vendor Records",
             version="1.0.0",
             description="Frontend mount test app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(entrypoints=build_app_entrypoints(frontend="frontend/dist")),
         )
         write_app_contract_file(app_root, parsed)
 
-    def _login(self, app: PlatformHost, *, username: str = "admin", password: str = "maverick") -> str:
+    def _login(self, app: PlatformHost, *, username: str = "admin", password: str = "loopino") -> str:
         status, _payload, headers = self._invoke(
             app,
             path="/api/auth/login",
@@ -210,11 +210,11 @@ class AppReferenceApiTestSupport:
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": query_string if separator else "",
-            "HTTP_HOST": "maverick.test",
+            "HTTP_HOST": "loopino.test",
             "wsgi.input": BytesIO(payload),
         }
         if method != "GET":
-            environ["HTTP_ORIGIN"] = "http://maverick.test"
+            environ["HTTP_ORIGIN"] = "http://loopino.test"
         if cookie:
             environ["HTTP_COOKIE"] = cookie
         if auth_token:
@@ -243,7 +243,7 @@ class AppReferenceApiTestSupport:
             "CONTENT_LENGTH": "0",
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": query_string if separator else "",
-            "HTTP_HOST": "maverick.test",
+            "HTTP_HOST": "loopino.test",
             "wsgi.input": BytesIO(b""),
         }
         if cookie:

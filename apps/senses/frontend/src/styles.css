@@ -17,7 +17,7 @@ body {
   overflow: hidden;
   background: var(--senses-bg);
   color: var(--senses-text);
-  font-family: var(--maverick-font);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -42,7 +42,7 @@ a {
   height: 100dvh;
   min-height: 0;
   margin: 0 auto;
-  padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 16px) 16px 16px;
+  padding: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 16px) 16px 16px;
   overflow: hidden;
 }
 
@@ -312,7 +312,7 @@ a {
 
 .senses-toast {
   position: absolute;
-  top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 18px);
+  top: calc(var(--loopino-shell-mobile-content-top-offset, 0px) + 18px);
   right: 18px;
   z-index: 5;
   display: grid;

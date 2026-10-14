@@ -149,8 +149,8 @@ function pinnedAgenticSessionProvider(
   const binding = session.execution_binding;
   const governance = session.agentic_governance;
   const contained = session.agentic_containment?.status === "NO-GO";
-  const executionFamily = binding?.runtime_engine_id === "maverick-tool-loop"
-    ? "maverick_agent"
+  const executionFamily = binding?.runtime_engine_id === "loopino-tool-loop"
+    ? "loopino_agent"
     : (
     binding?.runtime_engine_id === "codex"
     && binding.adapter_id === "codex-app-server"

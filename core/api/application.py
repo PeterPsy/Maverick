@@ -1,4 +1,4 @@
-"""Application bootstrap for the Maverick core."""
+"""Application bootstrap for the Loopino core."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def create_application(
             except Exception:
                 pass
     return {
-        "name": "maverick-core",
+        "name": "loopino-core",
         "status": "initialized",
         "repository_root": str(paths.repository_root),
         "default_workspace_id": "default",

@@ -29,7 +29,7 @@ describe("providerSupportsDeviceUse", () => {
 
   it("rejects a runtime that cannot carry the native Codex tool bridge", () => {
     expect(providerSupportsDeviceUse(provider({
-      runtime_engine_id: "maverick-tool-loop",
+      runtime_engine_id: "loopino-tool-loop",
       default_model_family: "glm-5.3-flash",
     }))).toBe(false);
   });

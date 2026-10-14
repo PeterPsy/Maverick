@@ -12,10 +12,10 @@ class AppFrameAssetTests(unittest.TestCase):
             "<link HREF = '/apps/storage/assets/app-one.css?theme=dark'>"
         )
 
-        rewritten = rewrite_public_app_asset_urls(html, "https://maverick.test")
+        rewritten = rewrite_public_app_asset_urls(html, "https://loopino.test")
 
-        self.assertIn('src="https://maverick.test/apps/storage/assets/app-one.js"', rewritten)
-        self.assertIn("HREF = 'https://maverick.test/apps/storage/assets/app-one.css?theme=dark'", rewritten)
+        self.assertIn('src="https://loopino.test/apps/storage/assets/app-one.js"', rewritten)
+        self.assertIn("HREF = 'https://loopino.test/apps/storage/assets/app-one.css?theme=dark'", rewritten)
 
     def test_api_navigation_and_existing_absolute_urls_are_unchanged(self) -> None:
         html = (
@@ -24,7 +24,7 @@ class AppFrameAssetTests(unittest.TestCase):
             '<script src="https://cdn.example/apps/storage/assets/app.js"></script>'
         )
 
-        self.assertEqual(rewrite_public_app_asset_urls(html, "https://maverick.test"), html)
+        self.assertEqual(rewrite_public_app_asset_urls(html, "https://loopino.test"), html)
 
 
 if __name__ == "__main__":

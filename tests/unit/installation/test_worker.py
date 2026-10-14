@@ -15,7 +15,7 @@ class InstallationWorkerTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.service = InstallationService(Path(self.folder.name), environment={}, dns_factory=FakeDns)
         self.service.store.write("configuration", {**self.service.configuration(), "installation_id": "a" * 32})
-        self.plan = self.service.plan(address="maverick.example.com", target_ip="8.8.8.8")
+        self.plan = self.service.plan(address="loopino.example.com", target_ip="8.8.8.8")
         self.job = self.service.apply(self.plan["plan_id"])
         self.commits = []
 

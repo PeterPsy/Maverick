@@ -16,7 +16,7 @@ SENSITIVE_QUERY_KEY_PATTERN = (
 )
 KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN = "sk|pk|rk|ghp|gho|ghu|ghs|ghr|github_pat"
 E2E_CANARY_SECRET_PATTERN = (
-    r"\b(?:hook|maverick|provider|redaction)[-_]e2e[-_](?:secret|token)(?:[-_][A-Za-z0-9_.=+/@-]+)?\b"
+    r"\b(?:hook|loopino|provider|redaction)[-_]e2e[-_](?:secret|token)(?:[-_][A-Za-z0-9_.=+/@-]+)?\b"
 )
 
 SENSITIVE_KEY_PARTS = (

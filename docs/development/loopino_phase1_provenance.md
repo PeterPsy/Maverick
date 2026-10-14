@@ -51,9 +51,9 @@ reviewable in source. Company-specific sources remain available for explicit
 installation; clean first boot must enable only the installation's standard app
 selection without Core/Shell app-id exceptions.
 
-## Endpoint decision for coordinator review
+## Approved endpoint decision
 
-Proposed public catalog: `https://loopino.giuntitrail.com/catalog`, serving the
+Coordinator-approved public catalog: `https://loopino.giuntitrail.com/catalog`, serving the
 existing `api/apps` catalog and immutable checksum-addressed bundles beneath
 that prefix. This uses the authorized hostname and avoids new DNS dependencies.
 Tranche 1 prepares generation and local schema/installation checks. The URL must
@@ -66,3 +66,37 @@ or historical build evidence until the coordinator supplies published Loopino
 repository destinations. Active workflow source retrieval uses
 `GITHUB_REPOSITORY` and the exact dispatched commit. Third-party registered URLs
 remain unchanged. Default product origin is `https://loopino.giuntitrail.com`.
+
+## Reviewed implementation boundary
+
+The coordinator approved `data/app-artifacts` as the single permitted artifact
+store, including denial of symlink ancestors and traversal IDs. Node closure
+trust admits only the protected declared distribution beneath `.toolchains`;
+its real binary and ancestors must be root-owned and not group/world writable.
+TLS/browser-origin/ACME/credential/log defaults remain installation-owned.
+Hosted services explicitly select `.env.loopino`, installation-owned service
+HOME and empty provider-auth homes. No operator login is copied or selected.
+
+The standard selection is also the skill-template inclusion boundary and the
+catalog export boundary. All distributed sources can be registered, while
+unselected custom apps require explicit installation. Verification bindings and
+random verification secrets are isolated operational material, not deployment
+accounts. Browser install/migrate no longer auto-starts a Lab worker.
+
+## Typed phase 2 migration inventory
+
+`loopino_phase2_identity_map.json` records exact environment/worker messages,
+protocol/schema/URI/local-state identities and their original source owners.
+The full pre-change token/path/URL inventory remains in the ignored operations
+record. Phase 2 must interpret each owning schema and cryptographic domain;
+persisted state must never undergo a blanket text replacement. This tranche
+neither migrates predecessor data nor accepts predecessor aliases.
+
+Cookies, grant URIs, workspace/artifact markers, provider IDs, runtime adapters,
+PWA/Keychain/local state and cryptographic domain prefixes change at their
+writers and readers. The Core and native Device Use digest is pinned together
+at `393689b7d1fc701ccf70d85da73e836a3989b27d4e55e9ebaa6829e3f378735d`.
+The hook trust hash changes because the exact command identity changed; its
+validation and fail-closed behavior remain in force. The hosted builtin effect
+audit stays fail-closed until the rebuilt executable closure is reviewed and
+its exact pins are refreshed. That refresh is a separate artifact checkpoint.

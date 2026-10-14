@@ -1,7 +1,7 @@
 """Foreground-only authenticated visual fixture; never uses workspace data.
 
-Run from the Maverick root with .venv/bin/python -m apps.calendar.tests.visual_fixture.
-Open http://maverick.localhost:8000/app/calendar so isolated local frames can launch.
+Run from the Loopino root with .venv/bin/python -m apps.calendar.tests.visual_fixture.
+Open http://loopino.localhost:8000/app/calendar so isolated local frames can launch.
 The isolated account is calendar-visual-test / calendar-visual-fixture.
 Ctrl-C shuts down the backend scheduler and removes all temporary state.
 """
@@ -39,13 +39,13 @@ def main():
             )
         os.environ.update(
             {
-                "MAVERICK_CONTROL_STORE": "json",
-                "MAVERICK_JSON_CONTROL_STORE_ROOT": str(root / "control"),
-                "MAVERICK_ADMIN_USERNAME": "calendar-visual-test",
-                "MAVERICK_ADMIN_PASSWORD": "calendar-visual-fixture",
-                "MAVERICK_SECRET_KEY_FILE": str(key_file),
-                "MAVERICK_ADMIN_PASSWORD_REF": "",
-                "MAVERICK_SIDECAR_ORIGIN_MODE": "local",
+                "LOOPINO_CONTROL_STORE": "json",
+                "LOOPINO_JSON_CONTROL_STORE_ROOT": str(root / "control"),
+                "LOOPINO_ADMIN_USERNAME": "calendar-visual-test",
+                "LOOPINO_ADMIN_PASSWORD": "calendar-visual-fixture",
+                "LOOPINO_SECRET_KEY_FILE": str(key_file),
+                "LOOPINO_ADMIN_PASSWORD_REF": "",
+                "LOOPINO_SIDECAR_ORIGIN_MODE": "local",
             }
         )
         state = bootstrap_platform_state(

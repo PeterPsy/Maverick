@@ -157,7 +157,7 @@ class PromptsChatTestCase(unittest.TestCase):
             )
             self.assertEqual(
                 service.app_events_for_action("prompts_chat.install_skill"),
-                [{"type": "maverick.app.data-changed", "resource": "skills"}],
+                [{"type": "loopino.app.data-changed", "resource": "skills"}],
             )
 
             delete_status, delete_payload = service.handle_action(

@@ -15,7 +15,7 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     browser = await chromium.launch({ headless: true, executablePath: browserExecutable() || undefined,
       args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" });
-    await context.addInitScript(() => localStorage.setItem("maverick:base-shell:session", JSON.stringify({ activeAppId: "canvas", sidebarMode: "fixed", isSidebarOpen: true })));
+    await context.addInitScript(() => localStorage.setItem("loopino:base-shell:session", JSON.stringify({ activeAppId: "canvas", sidebarMode: "fixed", isSidebarOpen: true })));
     const page = await context.newPage();
     page.on("pageerror", (error) => console.error("Fixture page error:", error.message));
     lastPage = page;
@@ -82,12 +82,12 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await inbox.waitFor({ state: "hidden" });
     assert.equal(await bell.evaluate((button) => button === document.activeElement), true);
     assert.equal(await top.getAttribute("aria-expanded"), "true");
-    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-desktop.png") });
+    if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR, "sidebar-desktop.png") });
     await top.focus();
     await page.keyboard.press("Escape");
     assert.equal(await top.getAttribute("aria-expanded"), "false");
 
-    await page.getByRole("button", { name: "Controlli Maverick", exact: true }).hover();
+    await page.getByRole("button", { name: "Controlli Loopino", exact: true }).hover();
     assert.equal(await page.getByRole("button", { name: "Sidebar fissa", exact: true }).count(), 0);
     assert.equal(await page.getByRole("button", { name: "Solo app in overlay", exact: true }).count(), 0);
     const bottomPanel = page.locator(".bs-sidebar__rail-menu--bottom .bs-sidebar__rail-menu-panel");
@@ -96,9 +96,9 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
       const railStyle = getComputedStyle(document.querySelector(".bs-sidebar__rail"));
       return [style.backdropFilter, style.backgroundColor, railStyle.backdropFilter];
     }), ["blur(26px)", "rgba(12, 12, 14, 0.58)", "none"]);
-    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-bottom-dark.png") });
+    if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR, "sidebar-bottom-dark.png") });
     await page.getByRole("button", { name: "Light mode", exact: true }).click();
-    assert.equal(await page.locator("html").getAttribute("data-maverick-theme"), "light");
+    assert.equal(await page.locator("html").getAttribute("data-loopino-theme"), "light");
     await page.waitForFunction(() => [...document.querySelectorAll(".bs-sidebar__rail-menu-trigger")].every((button) => {
       const style = getComputedStyle(button);
       return style.backgroundColor === "rgb(17, 24, 39)" && style.color === "rgb(255, 255, 255)";
@@ -109,7 +109,7 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
         return [style.backgroundColor, style.color];
       }), ["rgb(17, 24, 39)", "rgb(255, 255, 255)"]);
     }
-    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-bottom-light.png") });
+    if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR, "sidebar-bottom-light.png") });
     await page.getByRole("button", { name: "chat. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-shell.is-sidebar-mode-fixed").waitFor();
     const canvasButton = page.getByRole("button", { name: "canvas. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true });
@@ -119,7 +119,7 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     assert.deepEqual(await canvasDot.evaluate((element) => {
       const style = getComputedStyle(element);
       const railStyle = getComputedStyle(element.closest(".bs-sidebar__rail"));
-      return [parseFloat(style.width), style.backgroundColor, railStyle.getPropertyValue("--maverick-text").trim()];
+      return [parseFloat(style.width), style.backgroundColor, railStyle.getPropertyValue("--loopino-text").trim()];
     }), [3, "rgb(17, 24, 39)", "#111827"]);
     const dotBox = await canvasDot.boundingBox();
     const canvasBox = await canvasButton.boundingBox();
@@ -128,7 +128,7 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     assert.ok(Math.abs(dotBox.y + dotBox.height / 2 - canvasBox.y - canvasBox.height / 2) < 1);
     await rail.locator(".bs-sidebar__rail-button.is-active .bs-sidebar__rail-loaded-dot").waitFor();
     assert.equal(await rail.locator(".bs-sidebar__rail-loaded-dot").count(), 2);
-    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-background-light.png") });
+    if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR, "sidebar-background-light.png") });
     assert.equal(await page.getByRole("button", { name: "Sidebar fissa", exact: true }).getAttribute("aria-pressed"), "true");
     assert.equal(await page.getByRole("button", { name: "Solo app in overlay", exact: true }).count(), 1);
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x > 300);
@@ -161,7 +161,7 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
       assert.ok(compactDotBox.x >= scrollport.x && compactDotBox.x + compactDotBox.width <= scrollport.x + scrollport.width);
       const backgroundButtonBox = await backgroundDot.locator("..").boundingBox();
       assert.ok(backgroundButtonBox.y >= scrollport.y && backgroundButtonBox.y + backgroundButtonBox.height <= scrollport.y + scrollport.height);
-      if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, `sidebar-rail-margin-${height}.png`) });
+      if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR, `sidebar-rail-margin-${height}.png`) });
     }
     await context.close();
 
@@ -202,9 +202,9 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     assert.equal(await mobilePage.locator(".bs-shell.is-sidebar-open").count(), 0);
     const mobilePanel = await mobilePage.locator(".bs-sidebar__rail-menu-panel").boundingBox();
     assert.ok(mobilePanel.x >= 0 && mobilePanel.x + mobilePanel.width <= 390);
-    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await mobilePage.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-mobile.png") });
+    if (process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR) await mobilePage.screenshot({ path: resolve(process.env.LOOPINO_SIDEBAR_SCREENSHOT_DIR, "sidebar-mobile.png") });
     await mobilePage.getByRole("button", { name: "Light mode", exact: true }).tap();
-    assert.equal(await mobilePage.locator("html").getAttribute("data-maverick-theme"), "light");
+    assert.equal(await mobilePage.locator("html").getAttribute("data-loopino-theme"), "light");
     await mobilePage.getByRole("button", { name: "Chiudi controlli workspace", exact: true }).tap();
     assert.equal(await mobilePage.locator(".bs-sidebar__rail-menu-panel").count(), 0);
     await mobile.close();

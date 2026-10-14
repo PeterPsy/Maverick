@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type MouseEvent } from "react";
-import { requestParentExternalUrl } from "@maverick/pwa-cache";
+import { requestParentExternalUrl } from "@loopino/pwa-cache";
 import { X } from "lucide-react";
 import {
   decideRuntimeToolConfirmation,

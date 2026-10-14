@@ -659,7 +659,7 @@ class GoogleDriveProvider:
             operation="drive_write",
             detail="Google Drive did not grant permission to add files to the target folder.",
         )
-        boundary = f"maverick-storage-{hashlib.sha256(f'{self.connection_id}:{name}:{time.time()}'.encode('utf-8')).hexdigest()[:24]}"
+        boundary = f"loopino-storage-{hashlib.sha256(f'{self.connection_id}:{name}:{time.time()}'.encode('utf-8')).hexdigest()[:24]}"
         metadata = {"name": name, "parents": [parent_id]}
         response = self._drive_upload_request(
             "POST",

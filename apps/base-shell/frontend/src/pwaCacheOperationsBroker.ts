@@ -8,11 +8,11 @@ import {
   type ParentPwaCacheOperationsRequestMessage,
   type ParentPwaCacheOperationsResultMessage,
   type PwaCacheMetricsSnapshot,
-} from "@maverick/pwa-cache";
+} from "@loopino/pwa-cache";
 import {
-  registeredMaverickFrameIdentity,
-  sameMaverickFrameScope,
-  type MaverickFrameScope,
+  registeredLoopinoFrameIdentity,
+  sameLoopinoFrameScope,
+  type LoopinoFrameScope,
 } from "./iframePolicy";
 import { shellCacheLifecycle, shellPwaMetrics } from "./pwaCacheRuntime";
 
@@ -27,7 +27,7 @@ type CacheOperationsMetrics = {
 };
 
 type PwaCacheOperationsBrokerOptions = {
-  frameScope: MaverickFrameScope;
+  frameScope: LoopinoFrameScope;
   lifecycle?: CacheOperationsLifecycle;
   metrics?: CacheOperationsMetrics;
 };
@@ -37,7 +37,7 @@ const MAX_ACTIVE_OPERATIONS = 8;
 export class PwaCacheOperationsBroker {
   private readonly active = new Map<string, MessagePort>();
   private disposed = false;
-  private readonly frameScope: MaverickFrameScope;
+  private readonly frameScope: LoopinoFrameScope;
   private readonly lifecycle: CacheOperationsLifecycle;
   private readonly metrics: CacheOperationsMetrics;
 
@@ -49,10 +49,10 @@ export class PwaCacheOperationsBroker {
 
   handleWindowMessage(event: MessageEvent): boolean {
     const raw = messageRecord(event.data);
-    if (raw?.type !== "maverick.pwa.cache-operations.request.v1") return false;
-    const identity = registeredMaverickFrameIdentity(event);
+    if (raw?.type !== "loopino.pwa.cache-operations.request.v1") return false;
+    const identity = registeredLoopinoFrameIdentity(event);
     if (!identity || identity.ownerAppId !== "settings"
-        || !sameMaverickFrameScope(identity.scope, this.frameScope)) return false;
+        || !sameLoopinoFrameScope(identity.scope, this.frameScope)) return false;
     const port = event.ports.length === 1 ? event.ports[0] : null;
     if (!port) return true;
     if (!isParentPwaCacheOperationsRequest(event.data) || this.disposed) {

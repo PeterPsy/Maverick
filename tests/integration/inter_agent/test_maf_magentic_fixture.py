@@ -5,7 +5,7 @@ import os
 import unittest
 
 from core.inter_agent.adapters.base import AdapterEventMappingContext
-from core.inter_agent.adapters.maf import MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK, MafAdapter
+from core.inter_agent.adapters.maf import LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK, MafAdapter
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
 from tests.support.maf_magentic_fixture import (
@@ -25,8 +25,8 @@ from tests.support.repo import make_temp_repo_root
 class MafMagenticFixtureTest(unittest.IsolatedAsyncioTestCase):
     async def test_source_backed_magentic_manager_events_map_append_and_replay(self) -> None:
         asyncio.get_running_loop().slow_callback_duration = 5.0
-        if os.environ.get(MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK) != "1":
-            self.skipTest(f"Source-backed MAF fixture requires {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1.")
+        if os.environ.get(LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK) != "1":
+            self.skipTest(f"Source-backed MAF fixture requires {LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK}=1.")
         maf = load_maf_symbols(self)
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)
@@ -142,8 +142,8 @@ class MafMagenticFixtureTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_source_backed_magentic_stall_and_max_rounds_map_budget_failure(self) -> None:
         asyncio.get_running_loop().slow_callback_duration = 5.0
-        if os.environ.get(MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK) != "1":
-            self.skipTest(f"Source-backed MAF fixture requires {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1.")
+        if os.environ.get(LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK) != "1":
+            self.skipTest(f"Source-backed MAF fixture requires {LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK}=1.")
         maf = load_maf_symbols(self)
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)

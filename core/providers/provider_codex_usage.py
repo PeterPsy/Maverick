@@ -37,7 +37,7 @@ def read_codex_subscription_usage(
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {access_token}",
-        "User-Agent": "Maverick/3 provider-usage",
+        "User-Agent": "Loopino/3 provider-usage",
     }
     if account_id:
         headers["ChatGPT-Account-ID"] = account_id

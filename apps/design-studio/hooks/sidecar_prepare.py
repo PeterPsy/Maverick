@@ -28,7 +28,7 @@ from official_release_selection import ensure_release_selection  # noqa: E402
 from official_update_lock import official_update_lock  # noqa: E402
 
 
-LAUNCH_CONFIGURATION_ENV = "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+LAUNCH_CONFIGURATION_ENV = "LOOPINO_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
 
 
 def main() -> None:

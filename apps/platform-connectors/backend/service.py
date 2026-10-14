@@ -15,7 +15,7 @@ from workflows import TERMINAL, callback, finish, request, start_browser
 
 
 def response(run, requests=None):
-    return {"run":run, "app_events":[{"type":"maverick.app.data-changed","resource":"state"}],
+    return {"run":run, "app_events":[{"type":"loopino.app.data-changed","resource":"state"}],
             **({"dependency_backend_requests":requests} if requests else {})}
 
 
@@ -133,7 +133,7 @@ def handle(payload, body=None):
             else:
                 raise ValueError("Unknown Connectors action.")
         if action not in {"status","run.get","collection.get","references.manifest","references.search","references.resolve","references.summarize","view_filter"}:
-            result["app_events"] = [{"type":"maverick.app.data-changed","resource":"state"}]
+            result["app_events"] = [{"type":"loopino.app.data-changed","resource":"state"}]
         return 200,result
     except FetchError as error:
         return error.status,{"error":error.code,"detail":str(error)}

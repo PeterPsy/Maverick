@@ -8,7 +8,7 @@ import { AppSettingsDialog, externalSettingsProvider } from "../src/components/A
 const widget = vi.fn((props: Record<string, unknown>) => <div data-widget-kind={String(props.contentKind)} />);
 vi.mock("../src/components/WidgetSlot", () => ({ WidgetSlot: (props: Record<string, unknown>) => widget(props) }));
 
-const app = { app_id: "website-studio", name: "Website Studio", description: "Build websites", version: "1", publisher: "Maverick", frontend_role: "workspace", provides: [], logo: null } as unknown as AppRegistryItem;
+const app = { app_id: "website-studio", name: "Website Studio", description: "Build websites", version: "1", publisher: "Loopino", frontend_role: "workspace", provides: [], logo: null } as unknown as AppRegistryItem;
 const provider = { ...app, app_id: "publisher-renamed", provides: [{ interface: "external.surfaces.settings", version: "1", surfaces: ["view"] }] } as AppRegistryItem;
 const frameScope = { workspaceId: "tenant-a", sessionGeneration: "session-a" };
 const theme = { color_scheme: "dark", effective: "dark", mode: "dark" } as const;

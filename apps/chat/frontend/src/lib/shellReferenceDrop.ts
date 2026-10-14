@@ -1,10 +1,10 @@
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { appReferenceMentionItemsFromDataTransfer, hasAppReferenceDragData } from './storageDragReferences';
 
 /** Reuse the composer's validated drop path after the shell resolves the target frame. */
 export function listenForShellReferenceDrops(): () => void {
   function onMessage(event: MessageEvent) {
-    if (!isExactMaverickParentMessage(event) || event.data?.type !== 'maverick.reference-drag.drop') return;
+    if (!isExactLoopinoParentMessage(event) || event.data?.type !== 'loopino.reference-drag.drop') return;
     const { x, y, transfer } = event.data;
     if (!Number.isFinite(x) || !Number.isFinite(y) || !transfer || typeof transfer.type !== 'string'
       || typeof transfer.data !== 'string' || transfer.data.length > 65_536) return;

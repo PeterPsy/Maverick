@@ -1,4 +1,4 @@
-"""Core-owned CLI commands for the official Maverick App SDK."""
+"""Core-owned CLI commands for the official Loopino App SDK."""
 
 from __future__ import annotations
 
@@ -31,19 +31,19 @@ def app_sdk_command_specs(
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build core-owned app SDK command specs."""
     return [
-        (_definition("create", "Generate a Maverick app source tree from an SDK template."), _create_handler(start_path)),
-        (_definition("validate", "Validate a Maverick app source tree."), _validate_handler(start_path)),
-        (_definition("register-local", "Register a workspace-local Maverick app project."), _register_handler(app_store, start_path)),
-        (_definition("install-local", "Install a registered workspace-local Maverick app."), _install_handler(app_store, observability_store, start_path)),
+        (_definition("create", "Generate a Loopino app source tree from an SDK template."), _create_handler(start_path)),
+        (_definition("validate", "Validate a Loopino app source tree."), _validate_handler(start_path)),
+        (_definition("register-local", "Register a workspace-local Loopino app project."), _register_handler(app_store, start_path)),
+        (_definition("install-local", "Install a registered workspace-local Loopino app."), _install_handler(app_store, observability_store, start_path)),
         (_definition("status", "Inspect SDK app source, registration, and installation state."), _status_handler(app_store, start_path)),
-        (_definition("package", "Package a valid Maverick app source tree."), _package_handler(start_path)),
+        (_definition("package", "Package a valid Loopino app source tree."), _package_handler(start_path)),
     ]
 
 
 def _definition(action: str, description: str) -> CliCommandDefinition:
     return CliCommandDefinition(
         command_id=f"core.app-sdk.{action}",
-        path_segments=["maverick", "app", action],
+        path_segments=["loopino", "app", action],
         description=description,
         argument_schema={"type": "object"},
         owner_kind="core",

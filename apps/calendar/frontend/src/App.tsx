@@ -2,7 +2,7 @@ import { useGoogleFreshness } from "./useGoogleFreshness";
 import { useCalendarNotices } from "./useCalendarNotices";
 import { usePendingDeletion } from "./usePendingDeletion";
 import { t } from "./preferences";
-import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
+import { isExactLoopinoParentMessage } from "@loopino/pwa-cache";
 import { useCalendarReads } from "./useCalendarReads";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -20,7 +20,7 @@ import { applyViewState, sortEvents } from "./view-state-filtering";
 import {
   calendarOAuthCallbackFromLocation,
   eventIdFromParams,
-  maverickPlatformOrigin,
+  loopinoPlatformOrigin,
   runtimeAppIdFromPathname,
   scalarString,
   type CalendarOAuthCallback,
@@ -71,7 +71,7 @@ export function App() {
     const oauthCallback = calendarOAuthCallbackFromLocation(
       window.location.pathname,
       window.location.search,
-      maverickPlatformOrigin(),
+      loopinoPlatformOrigin(),
     );
     if (oauthCallback) {
       adoptRuntimeAppId(oauthCallback.appId);
@@ -80,7 +80,7 @@ export function App() {
       void load();
     }
     window.parent?.postMessage(
-      { type: "maverick.app.ready", app_id: runtimeAppIdRef.current },
+      { type: "loopino.app.ready", app_id: runtimeAppIdRef.current },
       "*",
     );
   }, []);
@@ -88,7 +88,7 @@ export function App() {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (
-        !isExactMaverickParentMessage(event) ||
+        !isExactLoopinoParentMessage(event) ||
         !event.data ||
         typeof event.data !== "object"
       ) {
@@ -101,7 +101,7 @@ export function App() {
         resource?: string;
         type?: string;
       };
-      if (payload.type === "maverick.app.navigate") {
+      if (payload.type === "loopino.app.navigate") {
         if (payload.app_id && payload.app_id !== runtimeAppIdRef.current) {
           return;
         }
@@ -218,7 +218,7 @@ export function App() {
     void loadEvent(event.id);
     window.parent?.postMessage(
       {
-        type: "maverick.app.open-app",
+        type: "loopino.app.open-app",
         app_id: runtimeAppId,
         params: {
           app_page: `events/${event.id}`,
@@ -318,7 +318,7 @@ export function App() {
 function notifyCalendarDataChanged(appId: string) {
   window.parent?.postMessage(
     {
-      type: "maverick.app.data-changed",
+      type: "loopino.app.data-changed",
       owner_app_id: appId,
       resource: "events",
     },

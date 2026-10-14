@@ -43,7 +43,7 @@ class LearningTestCase(unittest.TestCase):
             'usage': {'total_tokens': 50}})
 
     def proposal(self, turn='turn-1'):
-        return candidate('La ricerca è completata e verificata.', scope='maverick', memory_type='none',
+        return candidate('La ricerca è completata e verificata.', scope='loopino', memory_type='none',
             problem_kind='reliability', generalization='Prevent failures across workspace tasks',
             verification='Reproduce and verify the failure',
             evidence=[{'turn_id': turn, 'role': 'assistant', 'quote': 'La ricerca è completata e verificata.'}])

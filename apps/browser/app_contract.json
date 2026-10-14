@@ -4,7 +4,7 @@
   "name": "Browser",
   "version": "0.4.0",
   "description": "Interactive user-connected Chrome Agent tab and isolated Browser Lab research.",
-  "publisher": "maverick",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

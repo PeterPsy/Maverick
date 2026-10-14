@@ -11,87 +11,87 @@
 }
 
 :root,
-:root[data-maverick-theme="dark"],
+:root[data-loopino-theme="dark"],
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --maverick-color-scheme: dark;
-  --maverick-contrast-rgb: 255, 255, 255;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.64);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-popover-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
-  --maverick-text-on-accent: #0a0a0b;
+  --loopino-color-scheme: dark;
+  --loopino-contrast-rgb: 255, 255, 255;
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.64);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-accent: #ffffff;
+  --loopino-popover-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  --loopino-text-on-accent: #0a0a0b;
   --chat-sidebar-icon-color: rgba(236, 236, 236, 0.72);
   --chat-sidebar-glass-radius: 34px;
   --chat-sidebar-cell-radius: 22px;
   --chat-sidebar-control-radius: 18px;
   --chat-sidebar-glass-surface: rgba(12, 12, 14, 0.58);
   --chat-sidebar-solid-surface: rgb(12, 12, 14);
-  --chat-sidebar-soft-border: rgba(var(--maverick-contrast-rgb), 0.1);
-  --chat-sidebar-soft-surface: rgba(var(--maverick-contrast-rgb), 0.065);
-  --chat-sidebar-soft-surface-hover: rgba(var(--maverick-contrast-rgb), 0.105);
-  --chat-sidebar-soft-surface-active: rgba(var(--maverick-contrast-rgb), 0.14);
+  --chat-sidebar-soft-border: rgba(var(--loopino-contrast-rgb), 0.1);
+  --chat-sidebar-soft-surface: rgba(var(--loopino-contrast-rgb), 0.065);
+  --chat-sidebar-soft-surface-hover: rgba(var(--loopino-contrast-rgb), 0.105);
+  --chat-sidebar-soft-surface-active: rgba(var(--loopino-contrast-rgb), 0.14);
   --chat-sidebar-active-fill: linear-gradient(var(--chat-sidebar-soft-surface-active), var(--chat-sidebar-soft-surface-active)), var(--chat-sidebar-solid-surface);
   --chat-sidebar-busy-fill: var(--chat-sidebar-solid-surface);
-  --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.075), inset 0 1px 0 rgba(var(--maverick-contrast-rgb), 0.14);
-  --chat-sidebar-glass-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.052), inset 0 1px 0 rgba(var(--maverick-contrast-rgb), 0.09);
+  --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.075), inset 0 1px 0 rgba(var(--loopino-contrast-rgb), 0.14);
+  --chat-sidebar-glass-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.052), inset 0 1px 0 rgba(var(--loopino-contrast-rgb), 0.09);
   --chat-sidebar-glass-highlight:
-    linear-gradient(135deg, rgba(var(--maverick-contrast-rgb), 0.08), transparent 36%),
-    linear-gradient(315deg, rgba(var(--maverick-contrast-rgb), 0.035), transparent 42%);
+    linear-gradient(135deg, rgba(var(--loopino-contrast-rgb), 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(var(--loopino-contrast-rgb), 0.035), transparent 42%);
   --chat-sidebar-composer-shadow:
     var(--chat-sidebar-glass-edge),
     0 24px 80px rgba(0, 0, 0, 0.36);
   --chat-sidebar-select-bg: #171717;
-  --chat-sidebar-select-text: var(--maverick-text);
+  --chat-sidebar-select-text: var(--loopino-text);
   --chat-sidebar-edit-surface: rgba(12, 12, 14, 0.62);
   --chat-sidebar-edit-surface-focus: rgba(12, 12, 14, 0.72);
   --chat-sidebar-edit-surface-strong: rgba(12, 12, 14, 0.78);
   --chat-sidebar-source-badge-bg: #ffffff;
   --chat-sidebar-source-badge-text: #0a0a0b;
   --chat-sidebar-source-badge-border: rgba(255, 255, 255, 0.26);
-  --maverick-border: var(--chat-sidebar-soft-border);
-  --maverick-border-strong: rgba(var(--maverick-contrast-rgb), 0.24);
-  --maverick-surface-soft: var(--chat-sidebar-soft-surface);
-  --maverick-surface-hover: var(--chat-sidebar-soft-surface-hover);
-  --maverick-popover-surface: var(--chat-sidebar-solid-surface);
+  --loopino-border: var(--chat-sidebar-soft-border);
+  --loopino-border-strong: rgba(var(--loopino-contrast-rgb), 0.24);
+  --loopino-surface-soft: var(--chat-sidebar-soft-surface);
+  --loopino-surface-hover: var(--chat-sidebar-soft-surface-hover);
+  --loopino-popover-surface: var(--chat-sidebar-solid-surface);
 }
 
-:root[data-maverick-theme="light"],
+:root[data-loopino-theme="light"],
 :root[data-theme="light"] {
-  --maverick-popover-shadow: none;
+  --loopino-popover-shadow: none;
   color-scheme: light;
-  --maverick-color-scheme: light;
-  --maverick-contrast-rgb: 15, 23, 42;
-  --maverick-bg: #f7f8fb;
-  --maverick-text: #111827;
-  --maverick-text-muted: rgba(17, 24, 39, 0.66);
-  --maverick-text-soft: rgba(17, 24, 39, 0.42);
-  --maverick-accent: #111827;
-  --maverick-text-on-accent: #ffffff;
+  --loopino-color-scheme: light;
+  --loopino-contrast-rgb: 15, 23, 42;
+  --loopino-bg: #f7f8fb;
+  --loopino-text: #111827;
+  --loopino-text-muted: rgba(17, 24, 39, 0.66);
+  --loopino-text-soft: rgba(17, 24, 39, 0.42);
+  --loopino-accent: #111827;
+  --loopino-text-on-accent: #ffffff;
   --chat-sidebar-icon-color: rgba(17, 24, 39, 0.72);
   --chat-sidebar-glass-surface: rgba(255, 255, 255, 0.72);
   --chat-sidebar-solid-surface: #ffffff;
-  --chat-sidebar-soft-border: rgba(var(--maverick-contrast-rgb), 0.1);
-  --chat-sidebar-soft-surface: rgba(var(--maverick-contrast-rgb), 0.055);
-  --chat-sidebar-soft-surface-hover: rgba(var(--maverick-contrast-rgb), 0.085);
-  --chat-sidebar-soft-surface-active: rgba(var(--maverick-contrast-rgb), 0.12);
+  --chat-sidebar-soft-border: rgba(var(--loopino-contrast-rgb), 0.1);
+  --chat-sidebar-soft-surface: rgba(var(--loopino-contrast-rgb), 0.055);
+  --chat-sidebar-soft-surface-hover: rgba(var(--loopino-contrast-rgb), 0.085);
+  --chat-sidebar-soft-surface-active: rgba(var(--loopino-contrast-rgb), 0.12);
   --chat-sidebar-active-fill: linear-gradient(var(--chat-sidebar-soft-surface-active), var(--chat-sidebar-soft-surface-active)), var(--chat-sidebar-solid-surface);
   --chat-sidebar-busy-fill: var(--chat-sidebar-solid-surface);
-  --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  --chat-sidebar-glass-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --chat-sidebar-glass-edge: inset 0 0 0 1px rgba(var(--loopino-contrast-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
   --chat-sidebar-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 36%),
-    linear-gradient(315deg, rgba(var(--maverick-contrast-rgb), 0.035), transparent 42%);
+    linear-gradient(315deg, rgba(var(--loopino-contrast-rgb), 0.035), transparent 42%);
   --chat-sidebar-composer-shadow:
     var(--chat-sidebar-glass-edge),
     0 20px 58px rgba(15, 23, 42, 0.14);
   --chat-sidebar-select-bg: #ffffff;
-  --chat-sidebar-select-text: var(--maverick-text);
-  --chat-sidebar-edit-surface: rgba(var(--maverick-contrast-rgb), 0.055);
-  --chat-sidebar-edit-surface-focus: rgba(var(--maverick-contrast-rgb), 0.085);
-  --chat-sidebar-edit-surface-strong: rgba(var(--maverick-contrast-rgb), 0.075);
+  --chat-sidebar-select-text: var(--loopino-text);
+  --chat-sidebar-edit-surface: rgba(var(--loopino-contrast-rgb), 0.055);
+  --chat-sidebar-edit-surface-focus: rgba(var(--loopino-contrast-rgb), 0.085);
+  --chat-sidebar-edit-surface-strong: rgba(var(--loopino-contrast-rgb), 0.075);
   --chat-sidebar-source-badge-bg: #ffffff;
   --chat-sidebar-source-badge-text: #0a0a0b;
   --chat-sidebar-source-badge-border: rgba(15, 23, 42, 0.12);
@@ -114,7 +114,7 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   font-family: "Avenir Next", "Sohne", "Segoe UI", sans-serif;
 }
 

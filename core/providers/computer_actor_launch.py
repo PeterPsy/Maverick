@@ -25,6 +25,6 @@ def computer_actor_launch(session, adapter):
         runtime_home=home, runtime_bin=runtime_bin, execution_mode="sandbox",
         host_command=adapter._runtime_command(adapter.codex_command), require_code_mode_host=True)
     env = {**codex_research_environment(dict(os.environ)), "CODEX_HOME": str(home),
-           "MAVERICK_RUNTIME_SESSION_ID": session.session_id,
-           "MAVERICK_RUNTIME_ENGINE_ID": "codex-computer-actor"}
+           "LOOPINO_RUNTIME_SESSION_ID": session.session_id,
+           "LOOPINO_RUNTIME_ENGINE_ID": "codex-computer-actor"}
     return command, env, home, workdir

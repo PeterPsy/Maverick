@@ -7,13 +7,13 @@
     // Apply the shell's effective theme before styles or the deferred app bundle.
     (() => {
       const params = new URLSearchParams(location.search);
-      const value = params.get("maverick_theme") || params.get("maverick_color_scheme");
+      const value = params.get("loopino_theme") || params.get("loopino_color_scheme");
       const theme = value === "light" ? "light" : "dark";
-      document.documentElement.dataset.maverickTheme = theme;
+      document.documentElement.dataset.loopinoTheme = theme;
       document.documentElement.style.colorScheme = theme;
     })();
   </script>
-  <title>Maverick Browser</title>
+  <title>Loopino Browser</title>
   <link rel="icon" href="/apps/browser/icon.svg">
 </head>
 <body><div id="app"></div><script type="module" src="/src/main.js"></script></body>

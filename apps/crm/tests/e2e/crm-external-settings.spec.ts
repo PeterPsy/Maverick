@@ -151,10 +151,10 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
     const shellOrigin = appOrigin.replace('127.0.0.1', 'localhost');
     await page.context().grantPermissions(['local-network-access'], { origin: shellOrigin });
     await page.addInitScript(({ appOrigin, shellOrigin }) => {
-      if (location.origin === appOrigin) (window as any).__MAVERICK_PLATFORM_ORIGIN__ = shellOrigin;
+      if (location.origin === appOrigin) (window as any).__LOOPINO_PLATFORM_ORIGIN__ = shellOrigin;
     }, { appOrigin, shellOrigin });
     await page.route('**/__settings_host', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><style>
-      * { box-sizing: border-box; } :root { --maverick-bg:#070708; --maverick-text:#ececec; --maverick-text-muted:#aaa; --maverick-border:#ffffff14; --maverick-border-strong:#ffffff24; --maverick-surface-active:#ffffff24; --bs-mobile-shell-status-bar-height:${viewport.width === 390 ? '24px' : '0px'}; font:14px system-ui; } body { margin:0; background:#111; } ${shellCss}
+      * { box-sizing: border-box; } :root { --loopino-bg:#070708; --loopino-text:#ececec; --loopino-text-muted:#aaa; --loopino-border:#ffffff14; --loopino-border-strong:#ffffff24; --loopino-surface-active:#ffffff24; --bs-mobile-shell-status-bar-height:${viewport.width === 390 ? '24px' : '0px'}; font:14px system-ui; } body { margin:0; background:#111; } ${shellCss}
       </style></head><body><dialog class="bs-app-settings"><header class="bs-app-settings__header"><div><p>Impostazioni app</p><h2>CRM</h2></div><button class="bs-app-settings__close">×</button></header>
       <nav class="bs-app-settings__tabs"><button>Generali</button><button aria-pressed="true">Superfici esterne</button></nav>
       <div class="bs-app-settings__body bs-app-settings__body--external"><section class="bs-widget-slot bs-widget-slot--fill"><iframe class="bs-widget-slot__frame" title="CRM settings" allow="fullscreen" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" src="${appOrigin}${widgetUrl}"></iframe></section></div></dialog><script>
@@ -162,7 +162,7 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
       window.externalUrlRequests = [];
       const frame = document.querySelector('iframe');
       window.addEventListener('message', event => {
-        if (event.source === frame.contentWindow && event.origin === ${JSON.stringify(appOrigin)} && event.data.type === 'maverick.app.external-url') {
+        if (event.source === frame.contentWindow && event.origin === ${JSON.stringify(appOrigin)} && event.data.type === 'loopino.app.external-url') {
           window.externalUrlRequests.push(event.data);
         }
       });
@@ -185,7 +185,7 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
     await widget.locator('.crm-external-content').evaluate(node => { node.scrollTop = 0; });
     await expect(save).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath('crm-settings-dark.png') });
-    await page.evaluate(origin => document.querySelector('iframe')!.contentWindow!.postMessage({ type: 'maverick.widget.context-changed', context: { content: { shell_theme: { effective: 'light' } } } }, origin), appOrigin);
+    await page.evaluate(origin => document.querySelector('iframe')!.contentWindow!.postMessage({ type: 'loopino.widget.context-changed', context: { content: { shell_theme: { effective: 'light' } } } }, origin), appOrigin);
     await expect(widget.locator('html')).toHaveAttribute('data-theme', 'light');
     expect(await widget.locator('html').evaluate(node => getComputedStyle(node).colorScheme)).toBe('light');
     await page.screenshot({ path: testInfo.outputPath('crm-settings-light.png') });
@@ -197,7 +197,7 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
     await expect(widget.locator('textarea')).toHaveCount(0);
     await widget.getByRole('link', { name: 'Apri CRM' }).click();
     await expect.poll(() => page.evaluate(() => (window as any).externalUrlRequests)).toEqual([{
-      type: 'maverick.app.external-url',
+      type: 'loopino.app.external-url',
       owner_app_id: 'crm',
       widget_id: 'crm-external-settings',
       disposition: 'new-window',

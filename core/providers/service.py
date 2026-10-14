@@ -1148,7 +1148,7 @@ def build_resolved_runtime_backend_launch_spec(
         )
         credential_binding_id = binding.binding_id
         resolved_secret_refs.append(lease.secret_ref)
-        secret_env["MAVERICK_PROVIDER_SECRET"] = lease.value
+        secret_env["LOOPINO_PROVIDER_SECRET"] = lease.value
     if runtime_adapter is not None:
         launch_kwargs = {
             "secret_env": secret_env,

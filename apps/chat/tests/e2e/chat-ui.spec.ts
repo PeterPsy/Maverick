@@ -114,7 +114,7 @@ test.describe("Chat app browser smoke", () => {
     await expect(composer).toBeEditable();
     await composer.fill("Bozza mobile da conservare");
     await expect.poll(() => page.evaluate(() => Object.keys(localStorage)
-      .filter(key => key.startsWith("maverick.chat.composerDraft.v1:")).length)).toBe(1);
+      .filter(key => key.startsWith("loopino.chat.composerDraft.v1:")).length)).toBe(1);
     const otherApp = await page.context().newPage();
     await otherApp.bringToFront();
     await page.bringToFront();
@@ -125,7 +125,7 @@ test.describe("Chat app browser smoke", () => {
     expect(submissions).toBe(0);
     await composer.fill("");
     await expect.poll(() => page.evaluate(() => Object.entries(localStorage)
-      .filter(([key]) => key.startsWith("maverick.chat.composerDraft.v1:")))).toEqual([]);
+      .filter(([key]) => key.startsWith("loopino.chat.composerDraft.v1:")))).toEqual([]);
     await page.reload();
     await expect(composer).toBeEditable();
     await expectComposerText(page, "");
@@ -224,7 +224,7 @@ test.describe("Chat app browser smoke", () => {
       await trace.locator("[data-slot=trace-header]").click();
       await page.screenshot({ path: `/tmp/chat-agent-trace-complete-${width}.png` });
       await page.evaluate(() => window.postMessage({
-        type: "maverick.shell.theme-changed", theme: { mode: "light", effective: "light", color_scheme: "light" },
+        type: "loopino.shell.theme-changed", theme: { mode: "light", effective: "light", color_scheme: "light" },
       }, window.location.origin));
       await expect(page.locator(".chatapp-tool-trace > .chatapp-tool-inline__toggle")).toHaveCSS("color", "rgba(15, 23, 42, 0.58)");
       await page.screenshot({ path: `/tmp/chat-agent-trace-light-${width}.png` });
@@ -254,7 +254,7 @@ test.describe("Chat app browser smoke", () => {
         items: providers.items.map(provider => ({ ...provider, ...nativeProfile })),
       }));
       await page.addInitScript(() => {
-        Object.assign(window, { __MAVERICK_PLATFORM_ORIGIN__: location.origin });
+        Object.assign(window, { __LOOPINO_PLATFORM_ORIGIN__: location.origin });
       });
       const id = "01234567-89ab-cdef-0123-456789abcdef";
       let stopped = false;
@@ -280,7 +280,7 @@ test.describe("Chat app browser smoke", () => {
             };
             window.nativeActions = [];
             addEventListener("message", event => {
-              if (event.data?.type !== "maverick.device-use.request.v1") return;
+              if (event.data?.type !== "loopino.device-use.request.v1") return;
               const request = event.data;
               window.nativeActions.push({action: request.action, mode: request.mode});
               if (request.action === "start") Object.assign(snapshot, {
@@ -292,11 +292,11 @@ test.describe("Chat app browser smoke", () => {
               event.ports[0].postMessage({ok: true, result: snapshot});
             });
           </script>
-          <iframe title="Maverick Mac preview" src="/apps/chat/" style="width:100%;height:100vh;border:0"></iframe>
+          <iframe title="Loopino Mac preview" src="/apps/chat/" style="width:100%;height:100vh;border:0"></iframe>
         </body></html>`,
       }));
       await page.goto("/apps/chat/native-frame-preview");
-      const chat = page.frameLocator('iframe[title="Maverick Mac preview"]');
+      const chat = page.frameLocator('iframe[title="Loopino Mac preview"]');
       await expect(chat.getByRole("textbox")).toBeEditable();
       const compact = await chat.getByRole("button", { name: "Composer utilities" }).isVisible();
       if (compact) await chat.getByRole("button", { name: "Composer utilities" }).click();
@@ -638,7 +638,7 @@ test.describe("Chat app browser smoke", () => {
       });
       document.addEventListener("copy", () => {
         const activeElement = document.activeElement;
-        (window as Window & { __maverickCopiedText?: string }).__maverickCopiedText =
+        (window as Window & { __loopinoCopiedText?: string }).__loopinoCopiedText =
           activeElement instanceof HTMLTextAreaElement
             ? activeElement.value
             : document.getSelection()?.toString() || "";
@@ -691,7 +691,7 @@ test.describe("Chat app browser smoke", () => {
       const isolatedChatFrame = page.frames().find((frame) => frame.url() === chatUrl);
       expect(isolatedChatFrame).toBeDefined();
       await expect.poll(() => isolatedChatFrame?.evaluate(
-        () => (window as Window & { __maverickCopiedText?: string }).__maverickCopiedText || "",
+        () => (window as Window & { __loopinoCopiedText?: string }).__loopinoCopiedText || "",
       )).toBe("Clipboard answer from isolated frame.");
     } finally {
       await new Promise<void>((resolve, reject) => {
@@ -840,7 +840,7 @@ test.describe("Chat app browser smoke", () => {
     await page.evaluate((runId) => {
       window.postMessage(
         {
-          type: "maverick.app.navigate",
+          type: "loopino.app.navigate",
           app_id: "chat",
           params: { app_page: `graph/${runId}` },
         },

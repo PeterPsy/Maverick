@@ -133,7 +133,7 @@ def _run_reference_searches(
     if not search_specs:
         return []
     max_workers = min(REFERENCE_SEARCH_MAX_WORKERS, len(search_specs))
-    executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="maverick-reference-search")
+    executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="loopino-reference-search")
     pending_specs = list(search_specs)
     future_specs: dict[Any, tuple[int, dict[str, Any], dict[str, Any]]] = {}
 

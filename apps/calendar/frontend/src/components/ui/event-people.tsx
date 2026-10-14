@@ -148,7 +148,7 @@ export function EventPeople({
         {t(
           google
             ? "Google invitees require email addresses. Responses are shown as received from Google."
-            : "Local participants are notes; Maverick does not send invitations.",
+            : "Local participants are notes; Loopino does not send invitations.",
         )}
       </p>
     </fieldset>

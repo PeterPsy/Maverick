@@ -123,7 +123,7 @@ describe('Storage integration API', () => {
     const error = await callBackend({ action: 'app.bootstrap' }).catch((reason) => reason);
 
     expect(error).toBeInstanceOf(FitnessHttpError);
-    expect(error).toMatchObject({ name: 'MaverickHttpError', status: 401, retryAfterMs: 60_000 });
+    expect(error).toMatchObject({ name: 'LoopinoHttpError', status: 401, retryAfterMs: 60_000 });
   });
 
   it('sends workout.start as one atomic start request when a workout is supplied', async () => {
@@ -193,7 +193,7 @@ describe('Storage integration API', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'maverick.app.open-app',
+        type: 'loopino.app.open-app',
         app_id: 'storage',
         params: {
           role: 'uploaded',
@@ -215,7 +215,7 @@ describe('Storage integration API', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'maverick.app.open-app',
+        type: 'loopino.app.open-app',
         app_id: 'storage',
         params: {
           provider: 'google_drive',
@@ -251,7 +251,7 @@ describe('Storage integration API', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'maverick.app.open-app',
+        type: 'loopino.app.open-app',
         app_id: 'storage',
         params: {
           provider: 'google_drive',

@@ -1,4 +1,4 @@
-"""Tests for Maverick's Node.js runtime policy."""
+"""Tests for Loopino's Node.js runtime policy."""
 
 from __future__ import annotations
 

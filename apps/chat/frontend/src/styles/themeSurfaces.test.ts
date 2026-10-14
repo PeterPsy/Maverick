@@ -15,7 +15,7 @@ describe("chat light theme surfaces", () => {
     styleElements.forEach((styleElement) => styleElement.remove());
     styleElements = [];
     document.body.replaceChildren();
-    delete document.documentElement.dataset.maverickTheme;
+    delete document.documentElement.dataset.loopinoTheme;
     delete document.documentElement.dataset.theme;
     document.documentElement.removeAttribute("style");
   });
@@ -103,7 +103,7 @@ describe("chat light theme surfaces", () => {
 
     documents.forEach((filePath) => {
       const html = readFileSync(filePath, "utf8");
-      expect(html, filePath).toContain('id="maverick-first-paint"');
+      expect(html, filePath).toContain('id="loopino-first-paint"');
       if (filePath.includes("/widgets/chat-sidebar/") || filePath.includes("/widgets/chat-sidebar-footer/")) {
         expect(html, filePath).toContain("background: transparent;");
       } else {
@@ -164,10 +164,10 @@ describe("chat multi-agent board control", () => {
     const styles = readStyleFile(resolve(currentDir, "chat/transcript/inter-agent.css"));
 
     expect(styles).toMatch(
-      /\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__canvas\s*{[\s\S]*background:\s*var\(--maverick-bg\);/,
+      /\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__canvas\s*{[\s\S]*background:\s*var\(--loopino-bg\);/,
     );
     expect(styles).toMatch(
-      /\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__board\s*{[\s\S]*background:\s*var\(--maverick-bg\);/,
+      /\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__board\s*{[\s\S]*background:\s*var\(--loopino-bg\);/,
     );
     expect(styles).not.toMatch(/\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__board::after/);
     expect(styles).toMatch(/\.chatapp-inter-agent-graph__node\s*{[^}]*height:\s*auto;/);
@@ -216,7 +216,7 @@ function containsForbiddenDarkSurfaceLiteral(line: string): boolean {
 }
 
 function applyRootTheme(theme: "dark" | "light"): void {
-  document.documentElement.dataset.maverickTheme = theme;
+  document.documentElement.dataset.loopinoTheme = theme;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 }

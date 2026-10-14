@@ -2,7 +2,7 @@ import { resolvePanelLayout } from "./lib/panelLayout";
 import { usePanelViewport } from "./hooks/usePanelViewport";
 import { reportShellAuthorizationFailure, resetShellAuthorizationChecks } from "./shellAuthorization";
 import { useShellSessionRecovery } from "./hooks/useShellSessionRecovery";
-import { createIdempotencyKey } from "@maverick/pwa-cache";
+import { createIdempotencyKey } from "@loopino/pwa-cache";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { flushSync } from "react-dom";
@@ -15,7 +15,7 @@ import {
   listPinnedApps,
   listWorkspaces,
   logout,
-  MaverickHttpError,
+  LoopinoHttpError,
   ProviderSetupSettings,
   savePinnedApps,
   SessionPayload,
@@ -54,10 +54,10 @@ import { installFrameReferenceDragBroker } from "./lib/frameReferenceDragBroker"
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { useMountedAppIds } from "./hooks/useMountedAppIds";
 import {
-  isMaverickOwnerMessage,
-  isRegisteredMaverickFrameMessage,
+  isLoopinoOwnerMessage,
+  isRegisteredLoopinoFrameMessage,
   isShellWindowMessage,
-  type MaverickFrameScope,
+  type LoopinoFrameScope,
 } from "./iframePolicy";
 import { usePwaDataCacheBrokerHost } from "./usePwaDataCacheBrokerHost";
 import { useDeviceUseBroker } from "./useDeviceUseBroker";
@@ -159,7 +159,7 @@ export function AppShell() {
     : null;
   const authenticatedFrameWorkspaceId = authenticatedSession?.workspace_id ?? null;
   accountPanelOpenRef.current = Boolean(accountsScope && accountsScope === authenticatedFrameScopeIdentity);
-  const frameScope = useMemo<MaverickFrameScope | null>(() => (
+  const frameScope = useMemo<LoopinoFrameScope | null>(() => (
     authenticatedFrameScopeIdentity && authenticatedFrameWorkspaceId
       ? Object.freeze({
           sessionGeneration: createIdempotencyKey("shellFrame"),
@@ -170,7 +170,7 @@ export function AppShell() {
   useEffect(() => {
     if (!authenticatedFrameScopeIdentity) { setAccountsScope(null); return; }
     const open = () => setAccountsScope(authenticatedFrameScopeIdentity);
-    window.addEventListener("maverick.connected-accounts.open", open);
+    window.addEventListener("loopino.connected-accounts.open", open);
     const url = new URL(window.location.href);
     if (pendingGoogleCallback.current) {
       setAccountCallbackError(pendingGoogleCallback.current.error); open();
@@ -178,7 +178,7 @@ export function AppShell() {
       url.searchParams.delete("google_connected"); url.searchParams.delete("google_error");
       window.history.replaceState(null, "", url);
     }
-    return () => window.removeEventListener("maverick.connected-accounts.open", open);
+    return () => window.removeEventListener("loopino.connected-accounts.open", open);
   }, [authenticatedFrameScopeIdentity]);
   const mountedAppIds = useMountedAppIds(frameScope);
   useEffect(() => { setAppSettingsScope(null); }, [activeAppId, frameScope?.sessionGeneration]);
@@ -269,10 +269,10 @@ export function AppShell() {
     const style: CSSProperties & {
       "--bs-floating-chat-fixed-space"?: string;
       "--bs-floating-chat-width"?: string;
-      "--maverick-sidebar-details-width"?: string;
+      "--loopino-sidebar-details-width"?: string;
     } = { ...shellSidebarMetrics };
     if (!isMobileLayout) {
-      style["--maverick-sidebar-details-width"] = `${panelLayout.sidebarWidth}px`;
+      style["--loopino-sidebar-details-width"] = `${panelLayout.sidebarWidth}px`;
       style["--bs-floating-chat-width"] = `${panelLayout.chatWidth}px`;
       style["--bs-floating-chat-fixed-space"] = `${panelLayout.chatWidth + 1.5 * panelViewport.rootFontSize}px`;
     }
@@ -373,7 +373,7 @@ export function AppShell() {
   function notifyAppDataChanged(ownerAppId: string, resource: string, detail: Record<string, string> = {}) {
     window.postMessage(
       {
-        type: "maverick.app.data-changed",
+        type: "loopino.app.data-changed",
         owner_app_id: ownerAppId,
         resource,
         ...detail,
@@ -452,7 +452,7 @@ export function AppShell() {
       if (controller.signal.aborted) {
         return;
       }
-      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+      if (loadError instanceof LoopinoHttpError && [401, 403].includes(loadError.status)) {
         void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
         if (loadError.path === "/api/session" && loadError.status === 401) return;
       }
@@ -500,7 +500,7 @@ export function AppShell() {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
-      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+      if (loadError instanceof LoopinoHttpError && [401, 403].includes(loadError.status)) {
         void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
         return;
       }
@@ -532,7 +532,7 @@ export function AppShell() {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
-      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+      if (loadError instanceof LoopinoHttpError && [401, 403].includes(loadError.status)) {
         void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
         return;
       }
@@ -566,7 +566,7 @@ export function AppShell() {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
-      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+      if (loadError instanceof LoopinoHttpError && [401, 403].includes(loadError.status)) {
         void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
         return;
       }
@@ -668,11 +668,11 @@ export function AppShell() {
         return;
       }
       const payload = event.data as { entity_id?: string; owner_app_id?: string; resource?: string; type?: string };
-      if (payload.type !== "maverick.app.data-changed"
+      if (payload.type !== "loopino.app.data-changed"
           || !payload.owner_app_id
           || !payload.resource
           || !frameScope
-          || !isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)) {
+          || !isLoopinoOwnerMessage(event, payload.owner_app_id, frameScope)) {
         return;
       }
       if (payload.owner_app_id !== "app-store"
@@ -696,14 +696,14 @@ export function AppShell() {
     function handleShellCommand(event: MessageEvent) {
       if (
         (!isShellWindowMessage(event)
-          && (!frameScope || !isRegisteredMaverickFrameMessage(event, frameScope)))
+          && (!frameScope || !isRegisteredLoopinoFrameMessage(event, frameScope)))
         || !event.data
         || typeof event.data !== "object"
       ) {
         return;
       }
       const payload = event.data as { type?: string };
-      if (payload.type === "maverick.shell.logout") {
+      if (payload.type === "loopino.shell.logout") {
         handleLogout().catch((logoutError) => {
           setError(logoutError instanceof Error ? logoutError.message : "Unable to logout.");
         });
@@ -970,7 +970,7 @@ export function AppShell() {
         <ServerProfilesLauncher />
         <div className="bs-shell-initial-pending">
           {error ? <div role="alert">
-            <p>Connessione a Maverick non disponibile. Riprovo appena torna la connessione.</p>
+            <p>Connessione a Loopino non disponibile. Riprovo appena torna la connessione.</p>
             <button type="button" onClick={() => { void loadShellState(); }}>Riprova</button>
           </div> : <ShellPendingIndicator ariaLabel="Loading workspace" label="Loading workspace" />}
         </div>

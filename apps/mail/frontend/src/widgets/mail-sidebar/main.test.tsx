@@ -54,7 +54,7 @@ it.each(['gmail', 'imap_smtp'])('toggles sidebar filters without refetching and 
     expect(inbox.getAttribute('aria-checked')).toBe('false');
     expect(sent.getAttribute('aria-checked')).toBe('true');
     expect(messages.mock.calls.at(-1)?.[0]).toMatchObject({
-      type: 'maverick.widget.open-app', app_id: 'mail', params: { mailbox_scopes: 'all:sent', thread: null },
+      type: 'loopino.widget.open-app', app_id: 'mail', params: { mailbox_scopes: 'all:sent', thread: null },
     });
     await act(async () => sent.click());
     expect(messages.mock.calls.at(-1)?.[0].params.mailbox_scopes).toBe('');

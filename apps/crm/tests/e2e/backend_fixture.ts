@@ -27,5 +27,5 @@ export async function mount(page: Page, dataRoot: string, providers = { mail: 't
 export async function navigate(page: Page, name: string) {
   const item = productNavigation.find((entry) => entry.label === name);
   if (!item) throw new Error(`Unknown CRM navigation label: ${name}`);
-  await page.evaluate((app_page) => window.postMessage({ type: 'maverick.app.navigate', app_id: 'crm', params: { app_page } }, window.location.origin), item.page);
+  await page.evaluate((app_page) => window.postMessage({ type: 'loopino.app.navigate', app_id: 'crm', params: { app_page } }, window.location.origin), item.page);
 }

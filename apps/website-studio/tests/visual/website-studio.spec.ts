@@ -65,7 +65,7 @@ test.describe('Website Studio visual smoke', () => {
     await expect(loading).toHaveCount(0);
   });
 
-  test('keeps the Maverick loader over the canvas until the first HTML document is mounted', async ({ page }) => {
+  test('keeps the Loopino loader over the canvas until the first HTML document is mounted', async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 820 });
     await installWebsiteStudioMocks(page, { delayedAction: 'preview_document', delayMs: 1_200 });
 
@@ -90,7 +90,7 @@ test.describe('Website Studio visual smoke', () => {
     await expect(page.locator('.preview-loading-state')).toHaveCount(0);
 
     await emitShellMessage(page, {
-      type: 'maverick.app.navigate',
+      type: 'loopino.app.navigate',
       params: { site_id: SITE_ID, app_page: 'routes/route_about', route_id: 'route_about', route: '/about' }
     });
 
@@ -128,7 +128,7 @@ test.describe('Website Studio visual smoke', () => {
       await expect(contentFrame!.locator('[data-testid="runtime-preview"]')).toContainText('Giuntitrail');
 
       await emitShellMessage(page, {
-        type: 'maverick.app.navigate',
+        type: 'loopino.app.navigate',
         params: { site_id: SITE_ID, app_page: 'info', website_info: '1' }
       });
 
@@ -176,7 +176,7 @@ test.describe('Website Studio visual smoke', () => {
 
     await expect(async () => {
       await emitShellMessage(page, {
-        type: 'maverick.app.navigate',
+        type: 'loopino.app.navigate',
         params: { site_id: SITE_ID, app_page: 'routes/route_about' }
       });
       await expect(iframe).toHaveAttribute('data-route-id', 'route_about', { timeout: 750 });
@@ -190,7 +190,7 @@ test.describe('Website Studio visual smoke', () => {
 
     await expect(async () => {
       await emitShellMessage(page, {
-        type: 'maverick.app.navigate',
+        type: 'loopino.app.navigate',
         params: { site_id: SITE_ID, app_page: 'components/component_cta', page_id: 'page_home', route: '/', target_selector: '.cta' }
       });
       await expect(iframe).toHaveAttribute('data-component-id', 'component_cta', { timeout: 750 });
@@ -201,7 +201,7 @@ test.describe('Website Studio visual smoke', () => {
     expect(mockState.backendActions.filter((action) => action === 'build_preview').length).toBe(initialBuildPreviewCount + 1);
 
     await emitShellMessage(page, {
-      type: 'maverick.app.navigate',
+      type: 'loopino.app.navigate',
       params: { site_id: SITE_ID, app_page: 'info', website_info: '1' }
     });
     const infoPanel = page.locator('.website-info-panel');
@@ -211,7 +211,7 @@ test.describe('Website Studio visual smoke', () => {
     mockState.changedFilesCount = 1;
     const actionsBeforeRefresh = mockState.backendActions.length;
     await expect(async () => {
-      await emitShellMessage(page, { type: 'maverick.app.data-changed', owner_app_id: 'website-studio' });
+      await emitShellMessage(page, { type: 'loopino.app.data-changed', owner_app_id: 'website-studio' });
       await expect.poll(() => mockState.backendActions.length, { timeout: 750 }).toBeGreaterThan(actionsBeforeRefresh);
     }).toPass({ timeout: 6_000 });
 
@@ -245,7 +245,7 @@ test.describe('Website Studio visual smoke', () => {
     await expect(inlinePreview).toBeVisible();
 
     await emitShellMessage(page, {
-      type: 'maverick.app.navigate',
+      type: 'loopino.app.navigate',
       params: { site_id: SITE_ID, app_page: 'preview/fullscreen', fullscreen_preview: '1' }
     });
 
@@ -267,7 +267,7 @@ test.describe('Website Studio visual smoke', () => {
     });
 
     await emitShellMessage(page, {
-      type: 'maverick.widget.context-changed',
+      type: 'loopino.widget.context-changed',
       context: { content: { payload: { active_app_params: { site_id: SITE_ID } } } }
     });
 
@@ -682,7 +682,7 @@ function delay(ms: number): Promise<void> {
 
 async function openSite(page: Page, params: Record<string, string> = {}): Promise<void> {
   await emitShellMessage(page, {
-    type: 'maverick.app.navigate',
+    type: 'loopino.app.navigate',
     params: { site_id: SITE_ID, ...params }
   });
 }
@@ -696,7 +696,7 @@ async function emitShellMessage(page: Page, payload: Record<string, unknown>): P
 async function openAppMessages(page: Page): Promise<Array<{ params?: Record<string, string>; type?: string }>> {
   return page.evaluate(() => {
     const messages = (window as unknown as { __websiteStudioMessages?: Array<{ params?: Record<string, string>; type?: string }> }).__websiteStudioMessages || [];
-    return messages.filter((message) => message?.type === 'maverick.widget.open-app');
+    return messages.filter((message) => message?.type === 'loopino.widget.open-app');
   });
 }
 
@@ -870,7 +870,7 @@ function backendResponse(action: string, body: Record<string, unknown>, state: M
           publish_requests: [{ id: 'pub_ready', status: 'published', build_id: 'build_ready', diff_summary: changedTone }],
           approval_events: [{ id: 'appr_ready', status: 'approved' }],
           builds: [{ id: 'build_ready', status: 'passed' }],
-          deployments: [{ id: 'deploy_ready', status: 'published', mode: 'maverick_managed_static' }]
+          deployments: [{ id: 'deploy_ready', status: 'published', mode: 'loopino_managed_static' }]
         }
       };
     case 'preview_document':

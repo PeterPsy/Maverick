@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { bindSettingsHostEvents } from './settingsHostEvents';
 
 describe('Settings shell navigation', () => {
-  const shellOrigin = 'https://maverick.test';
-  const frameOrigin = 'https://settings.frames.maverick.test';
-  let frame: EventTarget & { parent: Window; location: { origin: string }; __MAVERICK_PLATFORM_ORIGIN__: string };
+  const shellOrigin = 'https://loopino.test';
+  const frameOrigin = 'https://settings.frames.loopino.test';
+  let frame: EventTarget & { parent: Window; location: { origin: string }; __LOOPINO_PLATFORM_ORIGIN__: string };
   let parent: Window;
   let context: { navigate: Mock<(params: Record<string, unknown>) => void>; visibilityChanged: Mock<(visible: boolean) => void> };
 
   beforeEach(() => {
     parent = { postMessage: vi.fn() } as unknown as Window;
     frame = Object.assign(new EventTarget(), {
-      parent, location: { origin: frameOrigin }, __MAVERICK_PLATFORM_ORIGIN__: shellOrigin,
+      parent, location: { origin: frameOrigin }, __LOOPINO_PLATFORM_ORIGIN__: shellOrigin,
     });
     vi.stubGlobal('window', frame);
     vi.stubGlobal('document', Object.assign(new EventTarget(), { hidden: false }));
@@ -30,14 +30,14 @@ describe('Settings shell navigation', () => {
   it('changes pages when the shell navigates an isolated Settings frame', () => {
     for (const page of ['users', 'workspace-access', 'learning', 'platform-settings']) {
       const params = { app_page: `pages/${page}`, page_id: page };
-      message({ type: 'maverick.app.navigate', app_id: 'settings', params });
+      message({ type: 'loopino.app.navigate', app_id: 'settings', params });
       expect(context.navigate).toHaveBeenLastCalledWith(params);
     }
     expect(context.navigate).toHaveBeenCalledTimes(4);
   });
 
   it('rejects other origins, sources, apps, and relay duplicates', () => {
-    const navigation = { type: 'maverick.app.navigate', app_id: 'settings', params: { page_id: 'users' } };
+    const navigation = { type: 'loopino.app.navigate', app_id: 'settings', params: { page_id: 'users' } };
     message(navigation, 'https://untrusted.test');
     message(navigation, shellOrigin, {} as Window);
     message(navigation, frameOrigin, frame as unknown as Window);
@@ -46,9 +46,9 @@ describe('Settings shell navigation', () => {
   });
 
   it('receives visibility changes from the isolated frame parent', () => {
-    message({ type: 'maverick.app.visibility-changed', app_id: 'settings', visible: false });
+    message({ type: 'loopino.app.visibility-changed', app_id: 'settings', visible: false });
     expect(context.visibilityChanged).toHaveBeenLastCalledWith(false);
-    message({ type: 'maverick.app.visibility-changed', app_id: 'settings', visible: true });
+    message({ type: 'loopino.app.visibility-changed', app_id: 'settings', visible: true });
     expect(context.visibilityChanged).toHaveBeenLastCalledWith(true);
   });
 });

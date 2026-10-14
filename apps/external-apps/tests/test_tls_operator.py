@@ -12,7 +12,7 @@ sys.path.insert(0, str(APP_ROOT / "deployment"))
 from tls_config import certificate_requests, render_hosts
 from tls import activate, certbot_command, refresh
 
-DOMAIN = "apps.maverick.example.org"
+DOMAIN = "apps.loopino.example.org"
 NAMESPACE = "a" * 12
 HOST = "site-" + NAMESPACE + "b" * 20 + "." + DOMAIN
 

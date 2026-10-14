@@ -36,9 +36,9 @@ from opencode_runtime import OpenCodeRuntimeError, RUNTIME_RELATIVE_PATH, verify
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 OFFICIAL_STORE_MOUNT = Path("/artifacts/opendesign")
 SIDECAR_DATA_MOUNT = Path("/data")
-SIDECAR_STATUS_MOUNT = Path("/run/maverick/sidecar-status.json")
-LAUNCH_CONFIGURATION_ENV = "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
-SIDECAR_STATUS_ENV = "MAVERICK_SIDECAR_STATUS_FILE"
+SIDECAR_STATUS_MOUNT = Path("/run/loopino/sidecar-status.json")
+LAUNCH_CONFIGURATION_ENV = "LOOPINO_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+SIDECAR_STATUS_ENV = "LOOPINO_SIDECAR_STATUS_FILE"
 
 
 def main() -> None:
@@ -48,12 +48,12 @@ def main() -> None:
     port = _port(_required_env("OD_PORT"))
     api_token = _required_env("OD_API_TOKEN")
     store_root = _required_directory(
-        Path(_required_env("MAVERICK_OPENDESIGN_STORE_ROOT")),
+        Path(_required_env("LOOPINO_OPENDESIGN_STORE_ROOT")),
         expected=OFFICIAL_STORE_MOUNT,
         label="official OpenDesign artifact store",
     )
     data_dir = _required_directory(
-        Path(_required_env("MAVERICK_OPENDESIGN_DATA_DIR")),
+        Path(_required_env("LOOPINO_OPENDESIGN_DATA_DIR")),
         expected=SIDECAR_DATA_MOUNT,
         create=True,
         label="OpenDesign data directory",
@@ -133,7 +133,7 @@ def build_native_launch(
 ) -> tuple[list[str], dict[str, str], Path]:
     """Build the official OCI entrypoint inside Core's artifact-root sandbox.
 
-    The outer Maverick sandbox owns authentication, workspace binding, network
+    The outer Loopino sandbox owns authentication, workspace binding, network
     isolation, the Unix relay, and the read-only official OCI execution root.
     Only the upstream data volume is writable.
     """
@@ -152,11 +152,11 @@ def build_native_launch(
         "HOME": str(data / "sandbox/agent-home"),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
-        "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE": os.environ.get(
-            "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE", "disabled"
+        "LOOPINO_OPENDESIGN_DELEGATION_BRIDGE": os.environ.get(
+            "LOOPINO_OPENDESIGN_DELEGATION_BRIDGE", "disabled"
         ),
-        "MAVERICK_OPENDESIGN_MODEL_BRIDGE": os.environ.get(
-            "MAVERICK_OPENDESIGN_MODEL_BRIDGE", "disabled"
+        "LOOPINO_OPENDESIGN_MODEL_BRIDGE": os.environ.get(
+            "LOOPINO_OPENDESIGN_MODEL_BRIDGE", "disabled"
         ),
         "NEXT_TELEMETRY_DISABLED": "1",
         "NODE_ENV": "production",
@@ -184,9 +184,9 @@ def build_native_launch(
     if model_profile_path is not None:
         environment.update(
             {
-                "MAVERICK_MODEL_ACCESS_SOCKET": _required_env("MAVERICK_MODEL_ACCESS_SOCKET"),
-                "MAVERICK_MODEL_ACCESS_STATE": "available",
-                "MAVERICK_MODEL_ACCESS_TOKEN": _required_env("MAVERICK_MODEL_ACCESS_TOKEN"),
+                "LOOPINO_MODEL_ACCESS_SOCKET": _required_env("LOOPINO_MODEL_ACCESS_SOCKET"),
+                "LOOPINO_MODEL_ACCESS_STATE": "available",
+                "LOOPINO_MODEL_ACCESS_TOKEN": _required_env("LOOPINO_MODEL_ACCESS_TOKEN"),
                 "ALL_PROXY": "",
                 "HTTP_PROXY": "",
                 "HTTPS_PROXY": "",
@@ -227,7 +227,7 @@ def _configure_model_access(
     artifact_root: Path,
 ) -> tuple[ModelAccessHttpBridge | None, dict[str, Any], Path | None]:
     remove_model_access_profiles(data_dir)
-    mode = os.environ.get("MAVERICK_OPENDESIGN_MODEL_BRIDGE", "disabled")
+    mode = os.environ.get("LOOPINO_OPENDESIGN_MODEL_BRIDGE", "disabled")
     if mode == "disabled":
         return None, {
             "state": "disabled",

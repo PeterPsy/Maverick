@@ -8,7 +8,7 @@ import re
 SKILL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,62}$")
 SCHEMA_VERSION = "1"
 
-DEFAULT_SKILL_CONTENT = """Use this skill when a Maverick agent needs a focused, repeatable procedure.
+DEFAULT_SKILL_CONTENT = """Use this skill when a Loopino agent needs a focused, repeatable procedure.
 
 ## Workflow
 

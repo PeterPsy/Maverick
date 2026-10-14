@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  maverickAppIsVisible,
-  observeMaverickVisibility,
-} from "@maverick/pwa-cache";
+  loopinoAppIsVisible,
+  observeLoopinoVisibility,
+} from "@loopino/pwa-cache";
 import { syncCalendar } from "./api";
 import type { CalendarConnection, CalendarRemoteCalendar } from "./types";
 import { calendarWindow } from "./pwaCache";
@@ -26,7 +26,7 @@ export function useGoogleFreshness(
   const runRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
   async function run(force = false) {
     if (
-      !maverickAppIsVisible() ||
+      !loopinoAppIsVisible() ||
       navigator.onLine === false ||
       inFlight.current
     )
@@ -42,7 +42,7 @@ export function useGoogleFreshness(
       )) {
         if (
           generation.current !== currentGeneration ||
-          !maverickAppIsVisible() ||
+          !loopinoAppIsVisible() ||
           !online()
         )
           break;
@@ -121,7 +121,7 @@ export function useGoogleFreshness(
     setStatus("");
     setRunning(false);
     let timer: number | undefined;
-    const stop = observeMaverickVisibility((visible) => {
+    const stop = observeLoopinoVisibility((visible) => {
       window.clearInterval(timer);
       if (visible) {
         void runRef.current();

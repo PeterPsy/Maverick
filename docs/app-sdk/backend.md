@@ -1,4 +1,4 @@
-# Maverick App SDK Backend Guide
+# Loopino App SDK Backend Guide
 
 Date: 2026-04-21
 
@@ -28,7 +28,7 @@ Mounted backend entrypoints receive a bounded `headers` object in their payload 
 Most backend entrypoints should keep returning one JSON object on stdout. Mounted `GET` or `HEAD` media routes and explicit progressive `POST` operations may opt in to binary streaming when the core payload includes:
 
 ```json
-{"stream_response_protocol": "maverick.backend.stream.v1"}
+{"stream_response_protocol": "loopino.backend.stream.v1"}
 ```
 
 In that mode the entrypoint emits one UTF-8 JSON header line followed by optional binary stdout bytes:
@@ -45,7 +45,7 @@ Mounted backend callers may request a bounded subset of the app's declared secre
 
 Mounted `GET` or `HEAD` media routes may also return an app-approved local file through `file_response`. The core validates the path against the app's allowed roots and serves it with range support. `file_response.headers` is optional and supports only a small safe allowlist for browser loading requirements, currently `Access-Control-Allow-Origin`, `Cross-Origin-Resource-Policy`, and `Timing-Allow-Origin`; arbitrary headers, cookies, and content overrides are ignored by the core.
 
-Apps that need repeated browser loads for the same approved file can avoid launching their backend for every asset request by writing a manifest under their data root at `run/file-gateway/<token>.json` and linking to `/api/apps/<app_id>/backend/file/<token>`. The manifest schema is `maverick.app.file_gateway.v1` and contains the same `file_response` object plus optional `app_id`, `expires_at`, `access`, and `allowed_paths` fields. By default the core validates the user's authenticated session, membership, app visibility, manifest app ownership, expiry, allowed roots, ETag, and range semantics before serving the file directly.
+Apps that need repeated browser loads for the same approved file can avoid launching their backend for every asset request by writing a manifest under their data root at `run/file-gateway/<token>.json` and linking to `/api/apps/<app_id>/backend/file/<token>`. The manifest schema is `loopino.app.file_gateway.v1` and contains the same `file_response` object plus optional `app_id`, `expires_at`, `access`, and `allowed_paths` fields. By default the core validates the user's authenticated session, membership, app visibility, manifest app ownership, expiry, allowed roots, ETag, and range semantics before serving the file directly.
 
 For opaque sandbox iframes or other browser contexts that cannot send useful cookies, apps may opt in to bearer capability mode with `"access": "public_capability"`. Public capability manifests must use unguessable random tokens, set a short `expires_at`, and include exact absolute file paths in `allowed_paths`; the core rejects expired capabilities, capabilities longer than 24 hours, missing exact-path scopes, path scopes outside the app's allowed roots, and responses whose `file_response.path` is not explicitly listed. Public capability URLs must be treated as temporary read-only asset grants and should only be emitted for already-approved preview/build artifacts.
 
@@ -58,7 +58,7 @@ Recommended pattern:
 - backend translates mounted HTTP requests into app actions
 - CLI translates command invocations into the same app actions
 - MCP translates tool invocations into the same app actions
-- mutating actions emit `app_events` such as `maverick.app.data-changed` when mounted UI should refresh live
+- mutating actions emit `app_events` such as `loopino.app.data-changed` when mounted UI should refresh live
 
 If the app declares:
 

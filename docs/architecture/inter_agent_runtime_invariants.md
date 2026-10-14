@@ -11,7 +11,7 @@ invariants below remain in force.
 
 ## Purpose
 
-This ADR fixes the runtime invariants required before Maverick can create real multi-agent child sessions.
+This ADR fixes the runtime invariants required before Loopino can create real multi-agent child sessions.
 
 It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. F3 adds the native MVP executor for `manager_tools`, `sequential`, and `concurrent` runs while keeping adapters and handoff execution out of scope. F4 adds the initial Chat UX wiring, inline approvals, and graph entry links while keeping runtime execution inside core-owned inter-agent APIs. F5 adds Chat graph mode backed by core-owned inter-agent replay and live stream surfaces. F7 promotes `group_chat` as the first advanced product-facing mode behind explicit feature flags.
 
@@ -307,9 +307,9 @@ The F5 WebSocket may poll the inter-agent event store for the MVP. A dedicated i
 The static `group_chat` executor remains a low-level feature-flagged evaluation
 surface. It is not the Chat product submission path after the orchestration
 redesign. `handoff`, `group_chat`, and `magentic_like` adapters must still map
-to Maverick-owned run, participant, edge, event, budget, approval, and artifact
+to Loopino-owned run, participant, edge, event, budget, approval, and artifact
 records and must never project their output into a root transcript.
 
 ## Gate
 
-No later phase may bypass the inter-agent service when creating real child runtime sessions. Hidden thread visibility and raw runtime access rejection must remain covered by runtime-thread, runtime HTTP, WebSocket, cleanup, and inter-agent service/API tests. Adapter phases must map back into the same run, participant, budget, artifact, and event contracts rather than owning Maverick session or secret state.
+No later phase may bypass the inter-agent service when creating real child runtime sessions. Hidden thread visibility and raw runtime access rejection must remain covered by runtime-thread, runtime HTTP, WebSocket, cleanup, and inter-agent service/API tests. Adapter phases must map back into the same run, participant, budget, artifact, and event contracts rather than owning Loopino session or secret state.

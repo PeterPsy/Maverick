@@ -115,7 +115,7 @@ def main():
     fixture = CalculatorFixture(args.chromium)
     usage = []
     try:
-        with tempfile.TemporaryDirectory(prefix='maverick-calculator-live-') as root:
+        with tempfile.TemporaryDirectory(prefix='loopino-calculator-live-') as root:
             actor = CodexComputerActor(
                 SimpleNamespace(session_id='live-changing-ids-fixture', workspace_id='default', runtime_root=root),
                 SimpleNamespace(mode='full', approved_apps=(BUNDLE,), initial_app=BUNDLE),

@@ -28,7 +28,7 @@ def main() -> None:
 
 
 def worker_idle_timeout_seconds() -> int:
-    configured = os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER_IDLE_SECONDS", "").strip()
+    configured = os.environ.get("LOOPINO_SPEECH_BACKEND_WORKER_IDLE_SECONDS", "").strip()
     if not configured:
         return DEFAULT_IDLE_TIMEOUT_SECONDS
     try:
@@ -165,7 +165,7 @@ def body_from_payload(payload: dict) -> dict:
 def streaming_response_requested(payload: dict) -> bool:
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
     return (
-        str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1"
+        str(payload.get("stream_response_protocol") or "") == "loopino.backend.stream.v1"
         and str(body.get("response_mode") or "").strip().lower() == "stream"
     )
 

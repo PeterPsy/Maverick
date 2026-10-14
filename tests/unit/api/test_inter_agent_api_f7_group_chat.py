@@ -30,7 +30,7 @@ class InterAgentApiF7GroupChatTest(InterAgentApiSupport):
 
         self.assertEqual(create_status, 400)
         self.assertEqual(create_payload["error"], "inter_agent_validation_failed")
-        self.assertIn("MAVERICK_FEATURE_GROUP_CHAT=1", create_payload["detail"])
+        self.assertIn("LOOPINO_FEATURE_GROUP_CHAT=1", create_payload["detail"])
 
     def test_inter_agent_http_group_chat_requires_aggregator_when_flag_enabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -43,7 +43,7 @@ class InterAgentApiF7GroupChatTest(InterAgentApiSupport):
             payload["mode"] = "group_chat"
             payload["participants"][1]["execution_mode"] = "embedded_executor"
 
-            with patch.dict("os.environ", {"MAVERICK_FEATURE_GROUP_CHAT": "1"}):
+            with patch.dict("os.environ", {"LOOPINO_FEATURE_GROUP_CHAT": "1"}):
                 create_status, create_payload, _headers = self._invoke(
                     app,
                     path="/api/inter-agent/runs",
@@ -100,7 +100,7 @@ class InterAgentApiF7GroupChatTest(InterAgentApiSupport):
                 )
                 return turn, [event]
 
-            with patch.dict("os.environ", {"MAVERICK_FEATURE_GROUP_CHAT": "1"}):
+            with patch.dict("os.environ", {"LOOPINO_FEATURE_GROUP_CHAT": "1"}):
                 create_status, create_payload, _headers = self._invoke(
                     app,
                     path="/api/inter-agent/runs",

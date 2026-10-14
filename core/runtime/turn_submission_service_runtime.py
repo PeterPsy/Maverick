@@ -239,7 +239,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                 )
 
     try:
-        Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
+        Thread(target=worker, name=f"loopino-runtime-prewarm-{session.session_id}", daemon=True).start()
     except Exception as error:
         elapsed_ms = (time.perf_counter() - started_at) * 1000
         _record_session_prewarm_failed(
@@ -793,7 +793,7 @@ def submit_runtime_turn_async(
 
                     Thread(
                         target=publish,
-                        name=f"maverick-runtime-thread-active-{active.turn_id}",
+                        name=f"loopino-runtime-thread-active-{active.turn_id}",
                         daemon=True,
                     ).start()
 
@@ -1163,7 +1163,7 @@ def submit_runtime_turn_async(
         if prewarm_after_turn:
             schedule_runtime_session_prewarm(state, session=session)
 
-    Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
+    Thread(target=worker, name=f"loopino-runtime-turn-{turn.turn_id}", daemon=True).start()
     return turn, events
 
 

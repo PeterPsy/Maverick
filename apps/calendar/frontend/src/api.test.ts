@@ -42,14 +42,14 @@ describe("Calendar API OAuth helpers", () => {
     )
     vi.stubGlobal("fetch", fetchMock)
 
-    const result = await startGoogleOAuth("calendar", { redirectUri: "https://maverick.example/apps/calendar/oauth/callback" })
+    const result = await startGoogleOAuth("calendar", { redirectUri: "https://loopino.example/apps/calendar/oauth/callback" })
     const body = requestBody(fetchMock)
 
     expect(result.authorization_url).toContain("accounts.google.com")
     expect(body).toEqual({
       action: "calendar_connections.start_oauth",
       provider: "google",
-      redirect_uri: "https://maverick.example/apps/calendar/oauth/callback",
+      redirect_uri: "https://loopino.example/apps/calendar/oauth/callback",
       _app_secret_request: {
         required: true,
         selectors: [
@@ -75,7 +75,7 @@ describe("Calendar API OAuth helpers", () => {
     const result = await completeGoogleOAuth("calendar", {
       code: "oauth-code",
       state: "opaque-state",
-      redirectUri: "https://maverick.example/apps/calendar/oauth/callback",
+      redirectUri: "https://loopino.example/apps/calendar/oauth/callback",
     })
     const body = requestBody(fetchMock)
 
@@ -85,7 +85,7 @@ describe("Calendar API OAuth helpers", () => {
       provider: "google",
       code: "oauth-code",
       state: "opaque-state",
-      redirect_uri: "https://maverick.example/apps/calendar/oauth/callback",
+      redirect_uri: "https://loopino.example/apps/calendar/oauth/callback",
       _app_secret_request: {
         required: true,
         selectors: [
@@ -277,7 +277,7 @@ describe("Calendar API OAuth helpers", () => {
     )
     vi.stubGlobal("fetch", fetchMock)
 
-    await expect(startGoogleOAuth("calendar", { redirectUri: "https://maverick.example/apps/calendar/oauth/callback" })).rejects.toMatchObject({
+    await expect(startGoogleOAuth("calendar", { redirectUri: "https://loopino.example/apps/calendar/oauth/callback" })).rejects.toMatchObject({
       code: "missing_secret_grant",
       detail: "Google OAuth client id is unavailable through Core Secrets.",
       status: 403,

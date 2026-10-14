@@ -1,17 +1,17 @@
 :root {
   color-scheme: dark;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
+  --loopino-bg: rgba(7, 7, 8, 1);
+  --loopino-surface: rgba(255, 255, 255, 0.055);
+  --loopino-surface-hover: rgba(255, 255, 255, 0.105);
+  --loopino-surface-active: rgba(255, 255, 255, 0.14);
+  --loopino-border: rgba(255, 255, 255, 0.08);
+  --loopino-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --loopino-text: #ececec;
+  --loopino-text-muted: rgba(236, 236, 236, 0.66);
+  --loopino-text-soft: rgba(236, 236, 236, 0.42);
   --fitness-accent: #ffffff;
   --fitness-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --loopino-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -30,8 +30,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -73,7 +73,7 @@ input {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
   background: rgba(12, 12, 14, 0.58);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   padding: 0.24rem;
 }
@@ -86,7 +86,7 @@ input {
   min-width: 0;
   border-radius: 18px;
   background: transparent;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   padding: 0 0.4rem;
 }
 
@@ -117,7 +117,7 @@ input {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
   background: rgba(12, 12, 14, 0.58);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   padding: 0 0.72rem;
 }
@@ -167,8 +167,8 @@ input {
 
 .fitness-sidebar-row:hover,
 .fitness-sidebar-row.is-active {
-  background: var(--maverick-surface-active);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-surface-active);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .fitness-sidebar-row span,
@@ -181,12 +181,12 @@ input {
 
 .fitness-sidebar-row small {
   grid-column: 2;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .fitness-sidebar-empty {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.76rem;
   padding: 0.72rem;
 }
@@ -204,7 +204,7 @@ input {
   gap: 0.54rem;
   min-height: 2.9rem;
   border-radius: 18px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.58rem 0.72rem;
 }
 

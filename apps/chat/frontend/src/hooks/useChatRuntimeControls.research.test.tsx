@@ -7,9 +7,9 @@ import { RESEARCH_RUNNER_ID } from "../lib/runtimeProfiles";
 import { useChatRuntimeControls } from "./useChatRuntimeControls";
 
 const providers: ProviderItem[] = [
-  { provider_id: "deepseek", label: "DeepSeek", execution_family: "maverick_agent" },
-  { provider_id: "glm", label: "GLM", execution_family: "maverick_agent" },
-  { provider_id: "google", label: "Gemini API", execution_family: "maverick_agent" },
+  { provider_id: "deepseek", label: "DeepSeek", execution_family: "loopino_agent" },
+  { provider_id: "glm", label: "GLM", execution_family: "loopino_agent" },
+  { provider_id: "google", label: "Gemini API", execution_family: "loopino_agent" },
   { provider_id: "codex-sol", label: "GPT Sol", execution_family: "native_agent" },
   { provider_id: "codex-astra", label: "GPT Astra", execution_family: "native_agent" },
   { provider_id: "antigravity", label: "Gemini CLI", execution_family: "native_agent" },

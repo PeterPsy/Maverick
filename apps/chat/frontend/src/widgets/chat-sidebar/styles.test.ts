@@ -66,7 +66,7 @@ describe("chat sidebar unread response state", () => {
     const styles = readStyle("styles.css");
 
     expect(styles).toContain(".bs-chat-list__item.is-unread:not(.is-busy):not(.is-expanded)");
-    expect(styles).toContain("border-color: var(--maverick-accent);");
+    expect(styles).toContain("border-color: var(--loopino-accent);");
     expect(styles.indexOf(".bs-chat-list__item.is-unread:not(.is-busy):not(.is-expanded)")).toBeGreaterThan(styles.indexOf(".bs-chat-list__item.is-expanded"));
   });
 });

@@ -8,7 +8,7 @@ from safety import slugify
 def working_branch_for_site(site: dict[str, object], request: dict[str, object] | None = None) -> str:
     site_id = str(site.get("id") or "site")
     slug = publish_request_slug(request) if request else str(site.get("slug") or site_id)
-    return f"maverick/{site_id}/{slug}"
+    return f"loopino/{site_id}/{slug}"
 
 
 def publish_request_slug(request: dict[str, object] | None) -> str:

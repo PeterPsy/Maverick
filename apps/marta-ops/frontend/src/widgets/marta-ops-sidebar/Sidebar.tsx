@@ -47,7 +47,7 @@ export function MartaOpsSidebar() {
 
   function navigate(next: Record<string, unknown>) {
     openWidgetApp(appId, next);
-    if (isMobile) postToShell({ type: "maverick.shell.sidebar.close" });
+    if (isMobile) postToShell({ type: "loopino.shell.sidebar.close" });
   }
 
   return (

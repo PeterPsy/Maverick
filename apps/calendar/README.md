@@ -1,6 +1,6 @@
 # Calendar
 
-Calendar is a Maverick workspace app for event planning. It provides a launchable React/Vite frontend with month, week, day, and list views, plus an app-owned backend that persists events under the workspace data root.
+Calendar is a Loopino workspace app for event planning. It provides a launchable React/Vite frontend with month, week, day, and list views, plus an app-owned backend that persists events under the workspace data root.
 
 ## Contract Notes
 
@@ -59,12 +59,12 @@ their existing completion semantics.
 Agent-facing discovery should use the workspace's installed local app id. The examples below use `<calendar_app_id>`; in the default workspace binding this is `calendar`.
 
 ```bash
-maverick apps list --json
-maverick app <calendar_app_id> mcp list --json
-maverick app <calendar_app_id> mcp inspect calendar_operations_manifest --json
-maverick app <calendar_app_id> mcp call calendar_operations_manifest
-maverick app <calendar_app_id> cli list --json
-maverick app <calendar_app_id> cli run calendar --json
+loopino apps list --json
+loopino app <calendar_app_id> mcp list --json
+loopino app <calendar_app_id> mcp inspect calendar_operations_manifest --json
+loopino app <calendar_app_id> mcp call calendar_operations_manifest
+loopino app <calendar_app_id> cli list --json
+loopino app <calendar_app_id> cli run calendar --json
 ```
 
 The MCP tools are:
@@ -109,14 +109,14 @@ Per-account Google Calendar refresh tokens use the `google-calendar-refresh-toke
 Create the Google OAuth client id and client secret values through a full-access admin Core Secrets or Vault secure-input flow. Do not put the raw values in source, fixtures, logs, shell history, or README examples. After the two Core Secrets exist, grant Calendar access by logical name:
 
 ```bash
-maverick core cli run core.secret_grants.create --json --arguments-json '{"app_id":"calendar","logical_name":"google-oauth-client-id","alias":"calendar-google-oauth-client-id","actions":["app.backend"],"target_patterns":["maverick://app.backend/backend","maverick://app.backend/cli/calendar","maverick://app.backend/mcp/calendar-connections.start-oauth","maverick://app.backend/mcp/calendar-sync"],"reason":"Allow Calendar to start Google Calendar OAuth and refresh Google Calendar access."}'
-maverick core cli run core.secret_grants.create --json --arguments-json '{"app_id":"calendar","logical_name":"google-oauth-client-secret","alias":"calendar-google-oauth-client-secret","actions":["app.backend"],"target_patterns":["maverick://app.backend/backend","maverick://app.backend/cli/calendar","maverick://app.backend/mcp/calendar-sync"],"reason":"Allow Calendar to complete backend OAuth callbacks and refresh Google Calendar access."}'
+loopino core cli run core.secret_grants.create --json --arguments-json '{"app_id":"calendar","logical_name":"google-oauth-client-id","alias":"calendar-google-oauth-client-id","actions":["app.backend"],"target_patterns":["loopino://app.backend/backend","loopino://app.backend/cli/calendar","loopino://app.backend/mcp/calendar-connections.start-oauth","loopino://app.backend/mcp/calendar-sync"],"reason":"Allow Calendar to start Google Calendar OAuth and refresh Google Calendar access."}'
+loopino core cli run core.secret_grants.create --json --arguments-json '{"app_id":"calendar","logical_name":"google-oauth-client-secret","alias":"calendar-google-oauth-client-secret","actions":["app.backend"],"target_patterns":["loopino://app.backend/backend","loopino://app.backend/cli/calendar","loopino://app.backend/mcp/calendar-sync"],"reason":"Allow Calendar to complete backend OAuth callbacks and refresh Google Calendar access."}'
 ```
 
 The `alias` values above are examples for already-created Core Secrets metadata, not secret values. Operators can use different aliases or `secret_id` values. Verify the recommended redaction-safe needs with:
 
 ```bash
-maverick app vault cli run vault --json --action diagnose --workspace_id default --app_id calendar
+loopino app vault cli run vault --json --action diagnose --workspace_id default --app_id calendar
 ```
 
 Vault should report `google-oauth-client-id` and `google-oauth-client-secret` as workspace-scoped needs with `recommended_action: "add_value"`. It should report `google-calendar-refresh-token` as an app-managed `calendar_connection` resource need with `recommended_action: "complete_app_setup"`; Calendar writes that refresh token through OAuth completion instead of asking an operator to paste it manually.
@@ -200,7 +200,7 @@ Create, update, and move operations accept `conflict_policy`:
 `calendar` is an installation-level built-in app under `apps/calendar`, not a workspace-local app project. Validate this source tree with an explicit app root:
 
 ```bash
-./scripts/maverick core cli run core.app-sdk.validate --app-id calendar --app-root apps/calendar --workspace default --json
+./scripts/loopino core cli run core.app-sdk.validate --app-id calendar --app-root apps/calendar --workspace default --json
 ```
 
 `register-local`, `install-local`, and `package` operate on workspace-local app projects under `workspaces/<workspace_id>/apps/<app_id>/`; they are not the correct lifecycle for this built-in Calendar app source.
@@ -212,12 +212,12 @@ cd apps/calendar
 npm install
 npm run build
 cd ../..
-./scripts/maverick core cli run core.app-sdk.validate --app-id calendar --app-root apps/calendar --workspace default --json
+./scripts/loopino core cli run core.app-sdk.validate --app-id calendar --app-root apps/calendar --workspace default --json
 python3 -m unittest apps.calendar.tests.test_calendar_app
 python3 -m unittest tests.contracts.app_contract.test_repository_contracts
-maverick app <calendar_app_id> cli list --json
-maverick app <calendar_app_id> mcp list --json
-maverick app <calendar_app_id> frontend build --json
+loopino app <calendar_app_id> cli list --json
+loopino app <calendar_app_id> mcp list --json
+loopino app <calendar_app_id> frontend build --json
 ```
 
 
@@ -318,7 +318,7 @@ windows and buffers, month/time-grid interactions, keyboard event opening, draft
 preservation and undo. Provider checks use temporary state and simulated responses;
 no real appointments are changed by the test suite. Authenticated Browser Lab
 acceptance uses a temporary PlatformAsgiHost instance with the real login, backend
-routes and isolated app frames at `http://maverick.localhost:8000/app/calendar`.
+routes and isolated app frames at `http://loopino.localhost:8000/app/calendar`.
 Desktop (1440×1000) and mobile (390×844) screenshots and accessibility snapshots
 cover the time grid, separate all-day row, overlapping columns, mobile agenda,
 contextual creation, draft preservation during another session's update and the
@@ -379,7 +379,7 @@ response status, optional/self/organizer/resource flags and response details).
 edits merge current remote attendee metadata before sending the replacement array;
 new local participants are annotations and do not send invitations. Google writes
 send only changed fields. Original provider color ids are retained, and a title edit
-does not resend invitees, reminders or colors. Category and tags belong to Maverick
+does not resend invitees, reminders or colors. Category and tags belong to Loopino
 and survive accepted provider responses and subsequent sync. Existing mirrors obtain
 new read metadata on their next provider sync.
 

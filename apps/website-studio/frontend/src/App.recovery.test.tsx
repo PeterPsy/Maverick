@@ -143,7 +143,7 @@ describe('Website Studio snapshot recovery', () => {
       throw new Error(`Unexpected action: ${body.action}`);
     });
     await mount();
-    await message({ type: 'maverick.app.navigate', params: { site_id: 'site', info_panel: '1' } });
+    await message({ type: 'loopino.app.navigate', params: { site_id: 'site', info_panel: '1' } });
     const changedFiles = () => Array.from(state.host.querySelectorAll('.website-info-metric'))
       .find((metric) => metric.querySelector('span')?.textContent === 'changed')?.querySelector('strong')?.textContent;
     expect(changedFiles()).toBe('0');
@@ -193,7 +193,7 @@ describe('Website Studio snapshot recovery', () => {
   it('does not accept recovery messages from another owner, origin or frame', async () => {
     await mount();
     state.current = snapshot('b');
-    const payload = { type: 'maverick.app.data-changed', owner_app_id: 'website-studio', resource: 'records' };
+    const payload = { type: 'loopino.app.data-changed', owner_app_id: 'website-studio', resource: 'records' };
     await message({ ...payload, owner_app_id: 'storage' });
     await message(payload, 'https://other.invalid');
     await message(payload, window.location.origin, null);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { maverickAppIsVisible, observeMaverickVisibility } from "@maverick/pwa-cache";
+import { loopinoAppIsVisible, observeLoopinoVisibility } from "@loopino/pwa-cache";
 
 // Read callbacks own their UI errors and ignore results after their signal aborts.
 // Mutations must never use this scheduler: hiding an app cannot cancel a send.
@@ -17,7 +17,7 @@ export function useVisiblePolling(
     let timer: ReturnType<typeof setTimeout> | undefined;
     let queued = false;
     let failures = 0;
-    const visible = () => !disposed && enabled && maverickAppIsVisible();
+    const visible = () => !disposed && enabled && loopinoAppIsVisible();
     function run(resetDelay = false): Promise<void> {
       if (!visible()) return Promise.resolve();
       if (resetDelay) failures = 0;
@@ -40,7 +40,7 @@ export function useVisiblePolling(
       return pending;
     }
     runner.current = () => run(true);
-    const stop = observeMaverickVisibility((isVisible) => {
+    const stop = observeLoopinoVisibility((isVisible) => {
       if (isVisible) void run(true);
       else {
         queued = false;

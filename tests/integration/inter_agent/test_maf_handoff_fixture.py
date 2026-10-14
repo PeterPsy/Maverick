@@ -14,7 +14,7 @@ from core.inter_agent.adapters.base import (
     AdapterEventMappingContext,
     InterAgentAdapterUnavailableError,
 )
-from core.inter_agent.adapters.maf import MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK, MafAdapter
+from core.inter_agent.adapters.maf import LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK, MafAdapter
 from core.inter_agent.models import BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
@@ -31,21 +31,21 @@ HANDOFF_EVENT_TYPES = {
 
 class MafHandoffFixtureTest(unittest.IsolatedAsyncioTestCase):
     def test_adapter_is_unavailable_when_feature_flag_is_off(self) -> None:
-        with patch.dict(os.environ, {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK: "0"}):
+        with patch.dict(os.environ, {LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK: "0"}):
             adapter = MafAdapter()
 
             self.assertFalse(adapter.is_enabled())
             self.assertFalse(adapter.is_available())
             with self.assertRaisesRegex(
                 InterAgentAdapterUnavailableError,
-                MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK,
+                LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK,
             ):
                 adapter.require_available()
 
     async def test_source_backed_handoff_events_map_append_and_replay(self) -> None:
         asyncio.get_running_loop().slow_callback_duration = 5.0
-        if os.environ.get(MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK) != "1":
-            self.skipTest(f"Source-backed MAF fixture requires {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1.")
+        if os.environ.get(LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK) != "1":
+            self.skipTest(f"Source-backed MAF fixture requires {LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK}=1.")
         maf = _load_maf_symbols(self)
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)
@@ -150,7 +150,7 @@ class MafHandoffFixtureTest(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(event.runtime_session_id)
             self.assertIsNone(event.runtime_turn_id)
             self.assertIsNone(event.runtime_event_id)
-            _assert_payload_is_safe_maverick_projection(self, event.payload)
+            _assert_payload_is_safe_loopino_projection(self, event.payload)
 
         participants = store.list_participants(run.run_id, workspace_id=run.workspace_id)
         self.assertEqual([participant.participant_id for participant in participants], ["triage", "specialist"])
@@ -214,7 +214,7 @@ def _load_maf_symbols(test_case: unittest.TestCase) -> SimpleNamespace:
     except (ImportError, ModuleNotFoundError) as exc:
         test_case.fail(
             f"MAF optional dependency is unavailable while "
-            f"{MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1: {exc}"
+            f"{LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK}=1: {exc}"
         )
     return SimpleNamespace(
         Agent=Agent,
@@ -324,7 +324,7 @@ def _maf_event_shape(events: list[object]) -> list[dict[str, object]]:
     return shape
 
 
-def _assert_payload_is_safe_maverick_projection(
+def _assert_payload_is_safe_loopino_projection(
     test_case: unittest.TestCase,
     payload: dict[str, object],
 ) -> None:

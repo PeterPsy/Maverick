@@ -11,7 +11,7 @@ from core.runtime.output_compaction.redaction import (
 )
 
 
-CODEX_POST_TOOL_USE_HOOK_NAME = "maverick_codex_post_tool_use_hook.py"
+CODEX_POST_TOOL_USE_HOOK_NAME = "loopino_codex_post_tool_use_hook.py"
 
 
 def write_codex_post_tool_use_hook(path: Path) -> None:
@@ -22,7 +22,7 @@ def write_codex_post_tool_use_hook(path: Path) -> None:
 
 
 def _codex_post_tool_use_hook_source() -> str:
-    """Return a standalone hook bridge that can run without importing Maverick."""
+    """Return a standalone hook bridge that can run without importing Loopino."""
     source = r'''#!/usr/bin/env python3
 from datetime import datetime, timezone
 import hashlib
@@ -37,9 +37,9 @@ API_PATH = "/api/runtime/provider-hooks/codex/post-tool-use"
 DIAGNOSTIC_LOG_RELATIVE_PATH = os.path.join("logs", "provider-hook-events.jsonl")
 MIN_FALLBACK_BYTES = 16000
 MAX_FALLBACK_BYTES = 12000
-SENSITIVE_QUERY_KEYS = "__MAVERICK_SENSITIVE_QUERY_KEYS__"
-KNOWN_UNDERSCORE_TOKEN_PREFIXES = "__MAVERICK_KNOWN_UNDERSCORE_TOKEN_PREFIXES__"
-E2E_CANARY_SECRET_PATTERN = r"__MAVERICK_E2E_CANARY_SECRET_PATTERN__"
+SENSITIVE_QUERY_KEYS = "__LOOPINO_SENSITIVE_QUERY_KEYS__"
+KNOWN_UNDERSCORE_TOKEN_PREFIXES = "__LOOPINO_KNOWN_UNDERSCORE_TOKEN_PREFIXES__"
+E2E_CANARY_SECRET_PATTERN = r"__LOOPINO_E2E_CANARY_SECRET_PATTERN__"
 
 def main():
     raw = sys.stdin.read()
@@ -53,7 +53,7 @@ def main():
         return 0
 
     write_hook_diagnostic(payload, bridge_status="called", fallback_status="not_run")
-    response, bridge_status = call_maverick(payload)
+    response, bridge_status = call_loopino(payload)
     if isinstance(response, dict):
         if response.get("emit") and isinstance(response.get("response"), dict):
             write_hook_diagnostic(payload, bridge_status=bridge_status, fallback_status="not_run")
@@ -66,11 +66,11 @@ def main():
         print(json.dumps(fallback, separators=(",", ":")))
     return 0
 
-def call_maverick(payload):
-    token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "").strip()
+def call_loopino(payload):
+    token = os.environ.get("LOOPINO_RUNTIME_API_TOKEN", "").strip()
     if not token:
         return None, "unavailable"
-    base_url = (os.environ.get("MAVERICK_API_BASE", "").strip() or "http://127.0.0.1:8014").rstrip("/")
+    base_url = (os.environ.get("LOOPINO_API_BASE", "").strip() or "http://127.0.0.1:8014").rstrip("/")
     request = urllib.request.Request(
         base_url + API_PATH,
         data=json.dumps(payload).encode("utf-8"),
@@ -135,7 +135,7 @@ def write_hook_diagnostic(payload, bridge_status, fallback_status):
         fallback_status=fallback_status,
     )
     line = json.dumps(event, separators=(",", ":"), sort_keys=True)
-    runtime_root = os.environ.get("MAVERICK_RUNTIME_ROOT", "").strip()
+    runtime_root = os.environ.get("LOOPINO_RUNTIME_ROOT", "").strip()
     if runtime_root:
         try:
             log_path = os.path.join(runtime_root, DIAGNOSTIC_LOG_RELATIVE_PATH)
@@ -152,8 +152,8 @@ def build_hook_diagnostic(payload, bridge_status, fallback_status):
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "hook_event_name": diagnostic_string(payload.get("hook_event_name") or payload.get("hookEventName")),
         "tool_name": diagnostic_string(payload.get("tool_name") or payload.get("toolName")),
-        "has_token": bool(os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "").strip()),
-        "api_base_present": bool(os.environ.get("MAVERICK_API_BASE", "").strip()),
+        "has_token": bool(os.environ.get("LOOPINO_RUNTIME_API_TOKEN", "").strip()),
+        "api_base_present": bool(os.environ.get("LOOPINO_API_BASE", "").strip()),
         "compaction_disabled": compaction_disabled(),
         "payload_shape": {"top_level_keys": diagnostic_payload_keys(payload)},
         "extracted_text_bytes": diagnostic_extracted_text_bytes(payload),
@@ -178,7 +178,7 @@ def diagnostic_string(value):
     return collapsed[:100]
 
 def compaction_disabled():
-    value = os.environ.get("MAVERICK_RUNTIME_OUTPUT_COMPACTION", "1").strip().lower()
+    value = os.environ.get("LOOPINO_RUNTIME_OUTPUT_COMPACTION", "1").strip().lower()
     return value in {"0", "false", "no", "off", "disabled"}
 
 def extract_response_text(payload):
@@ -293,7 +293,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 '''
     return (
-        source.replace("__MAVERICK_SENSITIVE_QUERY_KEYS__", SENSITIVE_QUERY_KEY_PATTERN)
-        .replace("__MAVERICK_KNOWN_UNDERSCORE_TOKEN_PREFIXES__", KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN)
-        .replace("__MAVERICK_E2E_CANARY_SECRET_PATTERN__", E2E_CANARY_SECRET_PATTERN)
+        source.replace("__LOOPINO_SENSITIVE_QUERY_KEYS__", SENSITIVE_QUERY_KEY_PATTERN)
+        .replace("__LOOPINO_KNOWN_UNDERSCORE_TOKEN_PREFIXES__", KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN)
+        .replace("__LOOPINO_E2E_CANARY_SECRET_PATTERN__", E2E_CANARY_SECRET_PATTERN)
     )

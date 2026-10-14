@@ -1,4 +1,4 @@
-"""Identity-domain records for the Maverick control plane."""
+"""Identity-domain records for the Loopino control plane."""
 
 from __future__ import annotations
 

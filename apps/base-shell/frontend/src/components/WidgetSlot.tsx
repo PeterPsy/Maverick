@@ -2,13 +2,13 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef,
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import { widgetVisible } from "../lib/widgetVisibility";
 import {
-  MAVERICK_IFRAME_SANDBOX,
+  LOOPINO_IFRAME_SANDBOX,
   isShellWindowMessage,
-  postMaverickFrameVisibility,
-  postMaverickShellTheme,
-  postToMaverickFrame,
-  registeredMaverickFrameOwner,
-  type MaverickFrameScope,
+  postLoopinoFrameVisibility,
+  postLoopinoShellTheme,
+  postToLoopinoFrame,
+  registeredLoopinoFrameOwner,
+  type LoopinoFrameScope,
   widgetFrameBrowserFeaturePolicy,
 } from "../iframePolicy";
 import {
@@ -21,7 +21,7 @@ import { measureStartupMetric } from "../startupMetrics";
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
-import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
+import { IsolatedLoopinoFrame } from "./IsolatedLoopinoFrame";
 
 export type PrimaryActionPreferredSurface = "app" | "sidebar";
 
@@ -101,7 +101,7 @@ export function WidgetSlot({
   activeWorkspaceId: string;
   content: Record<string, unknown>;
   contentKind: string;
-  frameScope: MaverickFrameScope;
+  frameScope: LoopinoFrameScope;
   hostAppId: string;
   label: string;
   emptyMessage?: string;
@@ -245,11 +245,11 @@ export function WidgetSlot({
       return;
     }
     postWidgetVisibility();
-    postMaverickShellTheme(widgetFrameRef.current, shellTheme);
-    postToMaverickFrame(
+    postLoopinoShellTheme(widgetFrameRef.current, shellTheme);
+    postToLoopinoFrame(
       widgetFrameRef.current,
       {
-        type: "maverick.widget.context-changed",
+        type: "loopino.widget.context-changed",
         context: {
           content: themedWidgetContextContent({
             activeWorkspaceId,
@@ -263,10 +263,10 @@ export function WidgetSlot({
       },
     );
     if (supportsPrimaryActionSlot) {
-      postToMaverickFrame(
+      postToLoopinoFrame(
         widgetFrameRef.current,
         {
-          type: "maverick.widget.primary-action.query",
+          type: "loopino.widget.primary-action.query",
           owner_app_id: widget.owner_app_id,
           widget_id: widget.widget_id,
         },
@@ -280,7 +280,7 @@ export function WidgetSlot({
     }
     const visible = widgetVisible(isActive, document.visibilityState !== "hidden",
       size === "overlay" && overlaySize.width === "3rem" && overlaySize.height === "3rem");
-    postMaverickFrameVisibility(widgetFrameRef.current, {
+    postLoopinoFrameVisibility(widgetFrameRef.current, {
       owner_app_id: widget.owner_app_id,
       visible,
       widget_id: widget.widget_id,
@@ -292,7 +292,7 @@ export function WidgetSlot({
   }, [activeWorkspaceId, contentKind, contentSignature, themeSignature, widget?.owner_app_id, widget?.widget_id]);
 
   useEffect(() => {
-    postMaverickShellTheme(widgetFrameRef.current, shellTheme);
+    postLoopinoShellTheme(widgetFrameRef.current, shellTheme);
   }, [themeSignature, widget?.owner_app_id, widget?.widget_id]);
 
   useEffect(() => {
@@ -303,7 +303,7 @@ export function WidgetSlot({
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      const senderOwnerAppId = registeredMaverickFrameOwner(event, frameScope);
+      const senderOwnerAppId = registeredLoopinoFrameOwner(event, frameScope);
       const senderIsShell = isShellWindowMessage(event);
       if (
         (!senderIsShell && !senderOwnerAppId)
@@ -313,12 +313,12 @@ export function WidgetSlot({
         return;
       }
       const payload = event.data as WidgetMessagePayload;
-      if (payload.type === "maverick.widget.ready" && isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)) {
+      if (payload.type === "loopino.widget.ready" && isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)) {
         postWidgetContextChanged();
         return;
       }
       if (
-        ["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(payload.type || "") &&
+        ["loopino.app.frontend-changed", "loopino.app.runtime-changed"].includes(payload.type || "") &&
         typeof payload.owner_app_id === "string" &&
         payload.owner_app_id === widget?.owner_app_id &&
         (senderIsShell || senderOwnerAppId === payload.owner_app_id) &&
@@ -328,14 +328,14 @@ export function WidgetSlot({
         return;
       }
       if (
-        payload.type === "maverick.widget.open-app" &&
+        payload.type === "loopino.widget.open-app" &&
         payload.app_id &&
         isMountedWidgetFrameSource(event, widgetFrameRef.current)
       ) {
         onOpenApp(payload.app_id, payload.params);
       }
       if (
-        payload.type === "maverick.widget.dock.open" &&
+        payload.type === "loopino.widget.dock.open" &&
         payload.placement === "right" &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
@@ -353,19 +353,19 @@ export function WidgetSlot({
         });
       }
       if (
-        payload.type === "maverick.widget.dock.close" &&
+        payload.type === "loopino.widget.dock.close" &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
         onCloseDock?.();
       }
-      if (payload.type === "maverick.shell.sidebar.close" && isActiveWidgetCommand(event, widgetFrameRef.current, isActive)) {
+      if (payload.type === "loopino.shell.sidebar.close" && isActiveWidgetCommand(event, widgetFrameRef.current, isActive)) {
         onCloseSidebar?.();
       }
-      if (payload.type === "maverick.shell.sidebar.open" && isActiveWidgetCommand(event, widgetFrameRef.current, isActive)) {
+      if (payload.type === "loopino.shell.sidebar.open" && isActiveWidgetCommand(event, widgetFrameRef.current, isActive)) {
         onOpenSidebar?.();
       }
       if (
-        payload.type === "maverick.widget.primary-action.state" &&
+        payload.type === "loopino.widget.primary-action.state" &&
         supportsPrimaryActionSlot &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
@@ -378,7 +378,7 @@ export function WidgetSlot({
         onPrimaryActionStateChange?.(state);
       }
       if (
-        payload.type === "maverick.app.external-url" &&
+        payload.type === "loopino.app.external-url" &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
         const url = externalHttpUrlFromMessage(payload.url);
@@ -388,7 +388,7 @@ export function WidgetSlot({
         return;
       }
       if (
-        payload.type === "maverick.shell.capture-area.start" &&
+        payload.type === "loopino.shell.capture-area.start" &&
         size === "overlay" &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
@@ -397,7 +397,7 @@ export function WidgetSlot({
         void startCaptureSession();
       }
       if (
-        payload.type === "maverick.widget.resize" &&
+        payload.type === "loopino.widget.resize" &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
         if (size === "overlay") {
@@ -415,7 +415,7 @@ export function WidgetSlot({
         }
       }
       if (
-        payload.type === "maverick.chat.active-thread-changed"
+        payload.type === "loopino.chat.active-thread-changed"
         && widget
         && payload.owner_app_id === widget.owner_app_id
         && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
@@ -430,10 +430,10 @@ export function WidgetSlot({
             threadId: activeThreadId,
           });
         }
-        postToMaverickFrame(
+        postToLoopinoFrame(
           widgetFrameRef.current,
           {
-            type: "maverick.chat.active-thread-changed",
+            type: "loopino.chat.active-thread-changed",
             active_thread_id: activeThreadId,
             navigation_scope: navigationScope,
             owner_app_id: ownerAppId,
@@ -446,18 +446,18 @@ export function WidgetSlot({
         && payload.owner_app_id
         && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
       ) {
-        postToMaverickFrame(widgetFrameRef.current, selectionMessage);
+        postToLoopinoFrame(widgetFrameRef.current, selectionMessage);
       }
       if (
-        payload.type === "maverick.app.data-changed"
+        payload.type === "loopino.app.data-changed"
         && typeof payload.owner_app_id === "string"
         && payload.owner_app_id === widget?.owner_app_id
         && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
       ) {
-        postToMaverickFrame(
+        postToLoopinoFrame(
           widgetFrameRef.current,
           {
-            type: "maverick.widget.data-changed",
+            type: "loopino.widget.data-changed",
             active_thread_id: typeof payload.active_thread_id === "string" ? payload.active_thread_id : "",
             ...(payload.detail && typeof payload.detail === "object" ? { detail: payload.detail } : {}),
             navigation_scope: typeof payload.navigation_scope === "string" ? payload.navigation_scope : "",
@@ -495,10 +495,10 @@ export function WidgetSlot({
     if (!supportsPrimaryActionSlot || !widget) {
       return;
     }
-    postToMaverickFrame(
+    postToLoopinoFrame(
       widgetFrameRef.current,
       {
-        type: "maverick.widget.primary-action.invoke",
+        type: "loopino.widget.primary-action.invoke",
         owner_app_id: widget.owner_app_id,
         widget_id: widget.widget_id,
       },
@@ -506,10 +506,10 @@ export function WidgetSlot({
   }, [primaryActionRequestId, supportsPrimaryActionSlot, widget?.owner_app_id, widget?.widget_id]);
 
   function postCaptureError(message: string) {
-    postToMaverickFrame(
+    postToLoopinoFrame(
       widgetFrameRef.current,
       {
-        type: "maverick.widget.capture-area.error",
+        type: "loopino.widget.capture-area.error",
         error: message,
         navigation_scope: captureNavigationScopeRef.current,
       },
@@ -517,10 +517,10 @@ export function WidgetSlot({
   }
 
   function postCaptureFile(file: File) {
-    postToMaverickFrame(
+    postToLoopinoFrame(
       widgetFrameRef.current,
       {
-        type: "maverick.widget.capture-area.complete",
+        type: "loopino.widget.capture-area.complete",
         files: [file],
         navigation_scope: captureNavigationScopeRef.current,
       },
@@ -667,7 +667,7 @@ export function WidgetSlot({
         aria-label={label}
         style={slotStyle}
       >
-        <IsolatedMaverickFrame
+        <IsolatedLoopinoFrame
           allow={widgetAllowPolicy}
           allowFullScreen
           appId={widget.owner_app_id}
@@ -678,11 +678,11 @@ export function WidgetSlot({
           onLaunchError={handleLaunchError}
           onLoad={() => {
             setLoadedFrameKey(widgetFrameKey);
-            postMaverickShellTheme(widgetFrameRef.current, shellTheme);
+            postLoopinoShellTheme(widgetFrameRef.current, shellTheme);
             postWidgetContextChanged();
           }}
           ref={widgetFrameRef}
-          sandbox={MAVERICK_IFRAME_SANDBOX}
+          sandbox={LOOPINO_IFRAME_SANDBOX}
           launchPath={src}
           title={label}
         />
@@ -824,7 +824,7 @@ export function selectPreferredWidget(
 function widgetFrameSrc(frontendMount: string, contextToken: string, revision: number, shellTheme: ShellThemeState): string {
   const url = urlWithShellThemeSearchParams(frontendMount, shellTheme);
   if (revision > 0) {
-    url.searchParams.set("_maverick_refresh", String(revision));
+    url.searchParams.set("_loopino_refresh", String(revision));
   }
   url.hash = `context=${encodeURIComponent(contextToken)}`;
   return `${url.pathname}${url.search}${url.hash}`;

@@ -99,7 +99,7 @@ serve_json_requests(handle)
 
         target = self._target()
         with tempfile.TemporaryDirectory() as temp:
-            repo_root = Path(temp) / "maverick"
+            repo_root = Path(temp) / "loopino"
             app_root = repo_root / "apps" / "sidecar-demo"
             app_root.mkdir(parents=True)
             for name in ("core", "workspaces", "scripts"):
@@ -233,7 +233,7 @@ serve_json_requests(handle)
             name="Sidecar Demo",
             version="0.1.0",
             description="Test app.",
-            publisher="maverick",
+            publisher="loopino",
             contract=build_app_contract(services=build_app_services(http_sidecars=[sidecar])),
         )
         binding = WorkspaceAppBindingRecord(

@@ -191,7 +191,7 @@ def _certify_and_select(
                 "native_ready": False,
                 "rollback_to_legacy_allowed": True,
                 "writer": "official-native-opendesign",
-                "semantic_content_copied_to_maverick_state": False,
+                "semantic_content_copied_to_loopino_state": False,
             }
             atomic_write_json(app_root / MARKER_FILE, marker)
         except Exception:
@@ -257,8 +257,8 @@ def _inventory_mismatches(before: dict[str, Any], after: dict[str, Any]) -> list
 
 
 def _remove_legacy_runtime_metadata(data_root: Path) -> None:
-    shutil.rmtree(data_root / "maverick-runtime", ignore_errors=True)
-    for name in ("launcher-status.json", "maverick-ready.json"):
+    shutil.rmtree(data_root / "loopino-runtime", ignore_errors=True)
+    for name in ("launcher-status.json", "loopino-ready.json"):
         (data_root / name).unlink(missing_ok=True)
 
 __all__ = [

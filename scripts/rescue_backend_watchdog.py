@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Watch the main Maverick backend and launch the configured rescue provider after sustained downtime."""
+"""Watch the main Loopino backend and launch the configured rescue provider after sustained downtime."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def _probe_backend(url: str, *, timeout_seconds: float) -> tuple[bool, str]:
 
 def _build_rescue_prompt(*, repository_root: Path, health_url: str, downtime_seconds: float, detail: str) -> str:
     downtime_minutes = downtime_seconds / 60
-    return f"""Maverick autonomous backend rescue.
+    return f"""Loopino autonomous backend rescue.
 
 Context:
 - Repository: {repository_root}
@@ -86,18 +86,18 @@ Context:
 - You are running from the independent rescue path with full filesystem access.
 
 Objective:
-1. Diagnose why the current Maverick backend is down.
+1. Diagnose why the current Loopino backend is down.
 2. Read the current code and deployment files as source of truth.
 3. Apply the smallest forward fix needed to restore the backend.
 4. Do not use git rollback operations. Do not run `git reset`, `git checkout`, `git restore`, or any destructive history rewrite to undo work.
 5. Preserve unrelated user changes. Work with the current tree.
 6. Run the smallest relevant verification you can.
-7. Restart the main backend with `systemctl restart maverick-core.service` if systemd is available.
+7. Restart the main backend with `systemctl restart loopino-core.service` if systemd is available.
 8. Verify `{health_url}` returns healthy after the fix.
 
 Important recovery behavior:
 - Do not manually recreate runtime agents.
-- After the backend starts, Maverick startup recovery should automatically resume interrupted running runtime sessions by queuing `resume` turns.
+- After the backend starts, Loopino startup recovery should automatically resume interrupted running runtime sessions by queuing `resume` turns.
 - If that startup recovery is broken and directly causes the outage, fix the recovery bug minimally.
 
 Return a concise summary of diagnosis, files changed, verification, and backend health result.
@@ -140,20 +140,20 @@ def _try_lock(path: Path):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
-    parser.add_argument("--health-url", default=os.environ.get("MAVERICK_CORE_HEALTH_URL", DEFAULT_HEALTH_URL))
-    parser.add_argument("--state-file", type=Path, default=Path(os.environ.get("MAVERICK_BACKEND_WATCHDOG_STATE", DEFAULT_STATE_FILE)))
-    parser.add_argument("--lock-file", type=Path, default=Path(os.environ.get("MAVERICK_BACKEND_RESCUE_LOCK", DEFAULT_LOCK_FILE)))
-    parser.add_argument("--log-dir", type=Path, default=Path(os.environ.get("MAVERICK_BACKEND_RESCUE_LOG_DIR", DEFAULT_LOG_DIR)))
-    parser.add_argument("--threshold-seconds", type=int, default=int(os.environ.get("MAVERICK_BACKEND_RESCUE_THRESHOLD_SECONDS", "300")))
-    parser.add_argument("--cooldown-seconds", type=int, default=int(os.environ.get("MAVERICK_BACKEND_RESCUE_COOLDOWN_SECONDS", "1800")))
-    parser.add_argument("--probe-timeout-seconds", type=float, default=float(os.environ.get("MAVERICK_BACKEND_HEALTH_TIMEOUT_SECONDS", "5")))
-    parser.add_argument("--provider-workspace-id", default=os.environ.get("MAVERICK_RECOVERY_PROVIDER_WORKSPACE_ID", DEFAULT_PROVIDER_WORKSPACE_ID))
-    parser.add_argument("--codex-command", default=os.environ.get("MAVERICK_CODEX_COMMAND", "codex"))
+    parser.add_argument("--health-url", default=os.environ.get("LOOPINO_CORE_HEALTH_URL", DEFAULT_HEALTH_URL))
+    parser.add_argument("--state-file", type=Path, default=Path(os.environ.get("LOOPINO_BACKEND_WATCHDOG_STATE", DEFAULT_STATE_FILE)))
+    parser.add_argument("--lock-file", type=Path, default=Path(os.environ.get("LOOPINO_BACKEND_RESCUE_LOCK", DEFAULT_LOCK_FILE)))
+    parser.add_argument("--log-dir", type=Path, default=Path(os.environ.get("LOOPINO_BACKEND_RESCUE_LOG_DIR", DEFAULT_LOG_DIR)))
+    parser.add_argument("--threshold-seconds", type=int, default=int(os.environ.get("LOOPINO_BACKEND_RESCUE_THRESHOLD_SECONDS", "300")))
+    parser.add_argument("--cooldown-seconds", type=int, default=int(os.environ.get("LOOPINO_BACKEND_RESCUE_COOLDOWN_SECONDS", "1800")))
+    parser.add_argument("--probe-timeout-seconds", type=float, default=float(os.environ.get("LOOPINO_BACKEND_HEALTH_TIMEOUT_SECONDS", "5")))
+    parser.add_argument("--provider-workspace-id", default=os.environ.get("LOOPINO_RECOVERY_PROVIDER_WORKSPACE_ID", DEFAULT_PROVIDER_WORKSPACE_ID))
+    parser.add_argument("--codex-command", default=os.environ.get("LOOPINO_CODEX_COMMAND", "codex"))
     parser.add_argument(
         "--provider-command-override",
         "--rescue-command",
         dest="provider_command_override",
-        default=os.environ.get("MAVERICK_BACKEND_RESCUE_COMMAND", ""),
+        default=os.environ.get("LOOPINO_BACKEND_RESCUE_COMMAND", ""),
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)

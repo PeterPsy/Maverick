@@ -13,7 +13,7 @@ Date: 2026-04-17
 
 ## Purpose
 
-Define the standard contract that every Maverick app must follow.
+Define the standard contract that every Loopino app must follow.
 
 This contract does not impose the internal data model of an app.
 
@@ -50,7 +50,7 @@ Apps without a frontend do not expose the frontend rebuild operation.
 
 The app contract is not the same thing as app installation state.
 
-Maverick should distinguish clearly between:
+Loopino should distinguish clearly between:
 
 - app source or project material
 - app distribution artifact
@@ -78,7 +78,7 @@ Mounted app frontends have a canonical user-facing shell route:
 /app/<local_app_id>/<app_page>
 ```
 
-This route belongs to the base shell and is served by the configured root shell app. It selects an enabled workspace app binding by its local app id and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `maverick.app.navigate` message.
+This route belongs to the base shell and is served by the configured root shell app. It selects an enabled workspace app binding by its local app id and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `loopino.app.navigate` message.
 
 On reload, Base Shell preserves an explicit Chat conversation route. Chat
 starts with a new draft when no conversation is requested and never selects a
@@ -125,14 +125,14 @@ the exact bound parent origin, returns `204`, and sets the target-origin frame
 session before the embedding app navigates to the validated frontend URL. A
 direct hidden-form navigation is not valid for this nested flow because the
 inherited iframe sandbox can serialize its browser `Origin` as `null`. The host
-may reveal the frame only after `maverick.app-frame.loaded` arrives from that
+may reveal the frame only after `loopino.app-frame.loaded` arrives from that
 exact origin and iframe `Window`; denial, malformed attestation, frame error,
 authorization loss,
 or a bounded readiness timeout must render the app's generic fallback.
 
 OAuth started from an installed/standalone PWA must preserve the platform
 session's browser container. An app-owned widget requests the generic validated
-`maverick.app.external-url` shell broker with `disposition: "same-window"` in
+`loopino.app.external-url` shell broker with `disposition: "same-window"` in
 that mode instead of opening a popup that may be handed to a separate Safari
 cookie jar. The shell accepts the disposition only from the already registered
 app/widget frame and only for a validated HTTP(S) URL. Normal browser mode may
@@ -149,12 +149,12 @@ browser sessions retain popup-first behavior with same-window fallback when a
 popup is blocked.
 
 The native macOS shell exposes a main-frame, platform-origin-only
-`maverickExternalURL` WebKit handler. The shell broker uses it before browser
+`loopinoExternalURL` WebKit handler. The shell broker uses it before browser
 effects so `noopener`'s null popup result cannot cause two system-browser
 launches. Without that handler, browser and standalone-PWA behavior above is
 unchanged. Native WebKit also receives `window.open`, `target=_blank` and external
 top-level navigation, opening validated HTTP(S) destinations in the default
-browser rather than loading them inside Maverick or clearing Device Use.
+browser rather than loading them inside Loopino or clearing Device Use.
 App-owned iframe navigation remains embedded. A Storage OAuth `about:blank`
 popup is a temporary native URL receiver with no native bridge, released after
 handoff or cancellation. OAuth completes in the browser's session using the
@@ -184,7 +184,7 @@ The public app id declared by the app artifact and the local app id used for one
 
 For built-in apps these values may be equal, but the architecture must not rely on that. A workspace may install two compatible forks or versions of the same public app under different local ids, and app contracts must not hardcode the local id they will be mounted under.
 
-Apps own the structure and meaning of `<app_page>`. The platform must not hardcode every app's internal route tree. An app that exposes deep links should translate its own page segments, such as `threads/<thread_id>` or `runtime-sessions/<runtime_session_id>`, into its internal state after receiving `maverick.app.navigate`.
+Apps own the structure and meaning of `<app_page>`. The platform must not hardcode every app's internal route tree. An app that exposes deep links should translate its own page segments, such as `threads/<thread_id>` or `runtime-sessions/<runtime_session_id>`, into its internal state after receiving `loopino.app.navigate`.
 
 ## Shell Theme Protocol
 
@@ -194,17 +194,17 @@ For every mounted app iframe and shell-hosted widget iframe, the shell must
 include these URL parameters in the isolated launch path before the frontend
 bundle executes:
 
-- `maverick_theme`: the effective visual theme, `dark` or `light`
-- `maverick_theme_mode`: the user's preference, `dark`, `light`, or `system`
-- `maverick_color_scheme`: the CSS color scheme to apply, `dark` or `light`
+- `loopino_theme`: the effective visual theme, `dark` or `light`
+- `loopino_theme_mode`: the user's preference, `dark`, `light`, or `system`
+- `loopino_color_scheme`: the CSS color scheme to apply, `dark` or `light`
 
-App and widget frontends that support shell theming should run a tiny pre-paint bootstrap in their HTML entrypoint. That bootstrap reads the URL parameters, sets `data-maverick-theme`, `data-theme`, and `colorScheme` on the document root, and then lets the normal frontend code attach listeners. This prevents persisted or shell-provided light mode from flashing through the default dark CSS before module execution.
+App and widget frontends that support shell theming should run a tiny pre-paint bootstrap in their HTML entrypoint. That bootstrap reads the URL parameters, sets `data-loopino-theme`, `data-theme`, and `colorScheme` on the document root, and then lets the normal frontend code attach listeners. This prevents persisted or shell-provided light mode from flashing through the default dark CSS before module execution.
 
 The shell also posts live theme updates without remounting iframe documents:
 
 ```json
 {
-  "type": "maverick.shell.theme-changed",
+  "type": "loopino.shell.theme-changed",
   "theme": {
     "mode": "system",
     "effective": "light",
@@ -213,7 +213,7 @@ The shell also posts live theme updates without remounting iframe documents:
 }
 ```
 
-Mounted apps may also receive the same `theme` object on `maverick.app.navigate`. Widgets may receive it in `context.content.shell_theme` on `maverick.widget.context-changed`.
+Mounted apps may also receive the same `theme` object on `loopino.app.navigate`. Widgets may receive it in `context.content.shell_theme` on `loopino.widget.context-changed`.
 Apps and widgets must ignore `theme` fields on unrelated messages so app-owned
 UI state messages cannot accidentally change document theme. Shell-to-frame
 messages are accepted only through the exact-parent relay bound to the platform
@@ -222,7 +222,7 @@ app listeners.
 
 ## App Distribution Sources
 
-Maverick supports two canonical app source locations:
+Loopino supports two canonical app source locations:
 
 - installation-level app artifacts under `/apps`
 - workspace-local app projects under `workspaces/<workspace_id>/apps`
@@ -236,7 +236,7 @@ It may contain:
 - open-source or source-available apps distributed through the server app store
 - versioned app bundles validated by the core
 
-The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog only through core-owned App Store APIs such as `/api/app-store/apps`; the app backend must not fetch the public catalog or submission transport directly. It may show installation-level server app sources that are not necessarily installed in the active workspace, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install, uninstall, complete workspace-local deletion, workspace assignment, and shortcut pinning choices, but it does not bypass platform boundaries: remote catalog retrieval, public submission transport, authenticated server source reads, authenticated installation state reads, checksum verification, source registration, workspace-local project registration, workspace binding, workspace-local project deletion, and uninstall binding removal remain generic core app-hosting operations.
+The Loopino App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog only through core-owned App Store APIs such as `/api/app-store/apps`; the app backend must not fetch the public catalog or submission transport directly. It may show installation-level server app sources that are not necessarily installed in the active workspace, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install, uninstall, complete workspace-local deletion, workspace assignment, and shortcut pinning choices, but it does not bypass platform boundaries: remote catalog retrieval, public submission transport, authenticated server source reads, authenticated installation state reads, checksum verification, source registration, workspace-local project registration, workspace binding, workspace-local project deletion, and uninstall binding removal remain generic core app-hosting operations.
 
 The App Store's app shortcut sidebar may list every visible workspace app in its "all apps" scope, including apps without a workspace frontend and apps whose frontend role is only supporting. Only launchable workspace frontends may be opened or pinned from that sidebar. Non-launchable apps are shown as app records, not shortcuts: they must not expose pin controls or send shell open requests.
 
@@ -377,7 +377,7 @@ The core should enforce this at install, fork, upgrade, and workspace execution 
 
 Contract validity is necessary but not sufficient.
 
-Every app tracked as a real Maverick product surface must also meet a repository completeness baseline:
+Every app tracked as a real Loopino product surface must also meet a repository completeness baseline:
 
 - a `README.md` in the app root describing the app purpose, declared surfaces, storage ownership, and SDK validation flow
 - at least one automated contract smoke check in the repository test suite
@@ -645,7 +645,7 @@ Rules:
 - Remote catalog entries are normalized by the core before they reach the App Store UI so `presentation`, `frontend_role`, `frontend_launchable`, and `surfaces` have the same meaning as server, local, and installation payloads.
 - user-facing grouping and icon styling must be derived from the contract role, not from hardcoded app ids
 - direct `/apps/<mount_app_id>/` asset serving remains available for declared frontends even when the role is `supporting`
-- `sidebar_enabled` is an optional boolean, default true. It controls the Maverick shell's app sidebar, independently of the user's overlay/fixed preference and the presence of sidebar widgets. Set it to false for a self-contained canvas or editor that needs only the app rail. `/api/apps` exposes the effective boolean. The canonical serializer omits the default true value and preserves false.
+- `sidebar_enabled` is an optional boolean, default true. It controls the Loopino shell's app sidebar, independently of the user's overlay/fixed preference and the presence of sidebar widgets. Set it to false for a self-contained canvas or editor that needs only the app rail. `/api/apps` exposes the effective boolean. The canonical serializer omits the default true value and preserves false.
 - When `sidebar_enabled` is false, rail hover/focus and app/widget sidebar-open requests cannot open the detail panel, fixed mode reserves only rail width, and the app's `shell.sidebar.primary`/`shell.sidebar.footer` widgets are not mounted. Previously visited enabled apps retain their hidden widget frames and resume when selected again. The global overlay/fixed preference remains available for subsequent enabled apps.
 - Desktop apps without the sidebar expose two compact rail menus: workspace selection and current-app settings above the app shortcuts; branding and theme below them. Overlay/fixed controls are omitted while the sidebar is disabled; the saved preference resumes on enabled apps. Menu triggers use the theme's solid accent and separators, and menus use translucent backgrounds with backdrop blur. The rail's own blur lives on a sibling pseudo-element to avoid restricting the floating menus' backdrop sampling. Menus support hover, keyboard focus, click/touch, Escape and outside dismissal. Mobile uses the existing header menu to open the same shell controls in a compact popover, without opening a sidebar or reserving sidebar space.
 - New app authors must choose the sidebar behavior deliberately. Apps using shell-owned sidebar widget slots keep the default enabled mode. Apps disabling it must provide their navigation and contextual actions in their own main frontend. This is an app contract choice, not an app-id map or an install/enable toggle. Current first-party apps keep it enabled except Design Studio, which declares false.
@@ -812,13 +812,13 @@ Apps with mutable workspace data should declare the app-owned resources that emi
 }
 ```
 
-This declaration tells agents and host surfaces which app resources may publish the standard `maverick.app.data-changed` event. It is not a data subscription implementation by itself.
+This declaration tells agents and host surfaces which app resources may publish the standard `loopino.app.data-changed` event. It is not a data subscription implementation by itself.
 
 Rules:
 
 - app data changes must go through official app backend, MCP, CLI, or lifecycle surfaces
 - direct writes into `data/<app_id>` are repair operations, not normal product behavior, because they bypass live events
-- write actions that mutate a declared resource may return `maverick.app.data-changed` with `resource`; the core stamps the current app as `owner_app_id`
+- write actions that mutate a declared resource may return `loopino.app.data-changed` with `resource`; the core stamps the current app as `owner_app_id`
 - the core must ignore app-returned events whose type is not allowed for that surface or whose `resource` is not declared in `capabilities.data_events`
 - Events may include `scope_keys`, a nonempty list of at most 128 lowercase
   SHA-256 strings whose meaning belongs to the app. Core copies only these
@@ -1051,7 +1051,7 @@ Rules:
 - `view_id` must identify a mounted app view declared in `capabilities.views`
 - `entity_types` must reference entity types declared in `capabilities.reference_entities`
 - each `state_actions` entry must declare an `action`, a boolean `standard`, and a human-readable `description`
-- `standard: true` means the action follows a Maverick-wide view-composition semantic contract and agents may call it consistently across apps that declare it
+- `standard: true` means the action follows a Loopino-wide view-composition semantic contract and agents may call it consistently across apps that declare it
 - `standard: false` means the action is app-specific; agents may use it only after reading that app's declaration and should not assume other apps expose the same behavior
 - the owning app stores and interprets its own view state under `data/<app_id>/`
 - `set_custom_view` should accept a title plus stable references for the declared entity types
@@ -1085,7 +1085,7 @@ A record-centric app can declare the same standard view actions for `account`, `
 
 ## Mounted App Model
 
-In Maverick, everything above the core should be treated as an app.
+In Loopino, everything above the core should be treated as an app.
 
 This includes:
 
@@ -1169,7 +1169,7 @@ Mounted app backend entrypoints are still host-managed subprocess work. During A
 
 The platform host may provide workspace, data-root, request, and active-provider context to the backend entrypoint, but ordinary backend polling, CRUD, settings, and widget actions must not create runtime sessions, runtime turns, or runtime events. Runtime records are reserved for explicit runtime execution through the generic runtime APIs.
 
-Mounted backends may opt into a progressive binary response for a `POST /api/apps/<mount_app_id>/backend` call by receiving a JSON body with `response_mode: "stream"`. The core still owns authentication, workspace authorization, CSRF enforcement, request limits, app-secret delivery, entrypoint timeout, and cancellation. It invokes the backend with `stream_response_protocol: "maverick.backend.stream.v1"`; a cooperating entrypoint writes one newline-terminated JSON header containing `status_code` and `stream_response`, flushes it, and then writes raw response bytes to stdout. The platform HTTP host must forward each available following chunk without using a fill-to-size buffered read or waiting for process completion, and progressive responses must disable reverse-proxy buffering through a core-owned response header. While opening or forwarding a mounted backend stream, an HTTP client disconnect must terminate that request's entrypoint subprocess without cancelling unrelated app requests; host shutdown must still terminate the same process through the parent shutdown controller. An entrypoint that returns an ordinary JSON result remains an ordinary backend response even when the caller requested streaming.
+Mounted backends may opt into a progressive binary response for a `POST /api/apps/<mount_app_id>/backend` call by receiving a JSON body with `response_mode: "stream"`. The core still owns authentication, workspace authorization, CSRF enforcement, request limits, app-secret delivery, entrypoint timeout, and cancellation. It invokes the backend with `stream_response_protocol: "loopino.backend.stream.v1"`; a cooperating entrypoint writes one newline-terminated JSON header containing `status_code` and `stream_response`, flushes it, and then writes raw response bytes to stdout. The platform HTTP host must forward each available following chunk without using a fill-to-size buffered read or waiting for process completion, and progressive responses must disable reverse-proxy buffering through a core-owned response header. While opening or forwarding a mounted backend stream, an HTTP client disconnect must terminate that request's entrypoint subprocess without cancelling unrelated app requests; host shutdown must still terminate the same process through the parent shutdown controller. An entrypoint that returns an ordinary JSON result remains an ordinary backend response even when the caller requested streaming.
 
 Mounted backend secret selection supports the same bounded `_app_secret_request` object in a JSON body or as compact JSON in the `_app_secret_request` query parameter when a binary request body cannot carry app metadata. Both forms remain contract-checked and grant-checked by Core; the query form does not expose values, only logical names and whether the request is required.
 
@@ -1186,14 +1186,14 @@ The exact production routing layer may be implemented behind `nginx`, but the mo
 
 ## App-Owned HTTP Sidecars
 
-Some source-available apps need to run an app-owned local HTTP process while still staying behind the Maverick host boundary.
+Some source-available apps need to run an app-owned local HTTP process while still staying behind the Loopino host boundary.
 
 The contract may declare those processes under `services.http_sidecars`. This section is strict contract metadata, not an escape hatch to arbitrary host services. A sidecar declaration names the runtime, working directory, command, environment substitutions, loopback bind target, readiness check, workspace log files, and an optional governed proxy.
 
 Sandbox-compatible sidecars must bind only to loopback. Apps that expose sidecar routes to a mounted frontend must provide a `proxy.route_policy`; routes are denied by default unless explicitly declared as:
 
 - `pass_through` for bounded HTTP forwarding to the sidecar
-- `handled_by_core` for routes the app protocol needs but the Maverick host must own, such as provider proxying or Storage import/export
+- `handled_by_core` for routes the app protocol needs but the Loopino host must own, such as provider proxying or Storage import/export
 - `blocked` for upstream features that are intentionally unavailable in sandbox mode
 
 Rules use `path_template`, not a prefix. Literal segments match exactly and a
@@ -1238,7 +1238,7 @@ Absolute, parent, symlinked, or escaping selections fail closed.
 An app whose launch selection is host-owned may declare one bounded
 `host_prepare` entrypoint. Core runs it only for a fresh managed launch, after
 there is no live managed writer and before creating the sidecar or model-access
-capabilities. The declaration allowlists exact `MAVERICK_APP_*` output keys;
+capabilities. The declaration allowlists exact `LOOPINO_APP_*` output keys;
 the hook must return exactly those string values and cannot replace static or
 Core-owned environment fields. This is a control-plane projection, not a
 general secret channel: values are size-bounded, raw provider credentials are
@@ -1254,7 +1254,7 @@ When a narrowed sidecar also declares `diagnostics.status_file`, that path
 remains relative to the binding's app-data root but does not widen `/data`.
 Core creates and validates exactly that owner-only regular file, clears stale
 content before launch, and bind-mounts only its inode at the fixed
-`/run/maverick/sidecar-status.json` capability path. The surrounding directory,
+`/run/loopino/sidecar-status.json` capability path. The surrounding directory,
 release controls, journals, and backups remain absent. Core injects the fixed
 path itself; app static environment and `host_prepare` output cannot choose a
 host path. A launcher must update the bound file in place rather than replacing
@@ -1292,8 +1292,8 @@ read-only `artifact_mounts` namespace already declared for that sidecar. Core
 resolves the host path from the lease rather than from sidecar input and mounts
 only the exact requested directory read-only; undeclared namespaces, missing
 paths, traversal, symlink escapes, and arbitrary host paths fail closed. Neither
-transport creates a Maverick runtime
-session or grants access to Maverick memory, Chat history, prompts, personas,
+transport creates a Loopino runtime
+session or grants access to Loopino memory, Chat history, prompts, personas,
 skills, or tools. The sidecar may receive the technical socket and capability,
 but never a raw provider credential.
 
@@ -1343,7 +1343,7 @@ declare the generic isolated-browser-origin capability defined by
 [`sidecar_browser_origin.md`](sidecar_browser_origin.md). That capability uses
 an opaque host beneath `sidecars.<installation-domain>`, a body-only one-shot
 bootstrap ticket, and a separate host-only session cookie. The isolated host
-routes only the declared sidecar roots and never falls through to Maverick API
+routes only the declared sidecar roots and never falls through to Loopino API
 routes. App contracts do not choose the opaque host, ticket, cookie, workspace,
 technical port, or generation, and the capability fails closed when local or
 hosted origin prerequisites are unavailable.
@@ -1376,7 +1376,7 @@ previews use them.
 An authenticated mounted app obtains a
 body-only launch ticket with `POST /api/app-sidecars/browser-launch`, providing
 only its app id, declared sidecar id, and a clean root-relative landing path.
-Core resolves actor/workspace/install generation from the Maverick session,
+Core resolves actor/workspace/install generation from the Loopino session,
 starts the already-authorized sidecar, and returns an origin plus bootstrap
 instructions and a separate confirmation token that grants no sidecar access.
 When the request arrived through an authenticated app frame, Core binds the
@@ -1391,7 +1391,7 @@ document can emit it. Reusing a live process is not itself a readiness result:
 before issuing every new ticket, Core rechecks the declaration's health endpoint and
 evicts the process if that check fails. A process that is alive but no longer
 ready therefore receives no new browser authority. The browser submits the
-ticket to `/.well-known/maverick-sidecar-bootstrap` on that origin; it never selects a
+ticket to `/.well-known/loopino-sidecar-bootstrap` on that origin; it never selects a
 workspace, binding, technical listener, or host. Logout, workspace switch,
 disable/uninstall, sidecar restart, generation change, and core restart revoke
 the corresponding in-memory authority.
@@ -1426,7 +1426,7 @@ services rather than accepting process ids or ports. Before stopping anything,
 it revokes only the isolated-origin launch tickets and sessions bound to the
 current workspace/app. It then stops only those declared sidecars, starts them,
 waits for each declared readiness contract, emits redaction-safe audit records,
-and publishes `maverick.app.runtime-changed` with the owner app and workspace.
+and publishes `loopino.app.runtime-changed` with the owner app and workspace.
 The owner-authenticated local control channel preserves typed startup codes and
 phases (for example `runtime_binding_invalid/sidecar_contract_resolve` or a
 typed daemon startup failure); it must not collapse contract, spawn, or health
@@ -1509,7 +1509,7 @@ sandbox contract is deliberately singular: `inherit_host_env: false`,
 Sandbox environment values may use only `${service.port}`, `${service.token}`,
 `${app.data_dir}`, and `${app.source_dir}`; `${workspace.root}`, unresolved
 host substitutions, `HOME`, provider keys, platform bootstrap/runtime tokens,
-and secret-store material are rejected. Core overrides Maverick identity fields
+and secret-store material are rejected. Core overrides Loopino identity fields
 and never derives the sidecar environment from `os.environ`.
 
 The internal TCP listener exists only in the sidecar network namespace. Health,
@@ -1538,7 +1538,7 @@ The intended split is:
 
 This is a core design principle.
 
-Apps in Maverick are not just mini-sites.
+Apps in Loopino are not just mini-sites.
 
 They are platform extensions that can be:
 
@@ -1565,7 +1565,7 @@ That does not make `base-shell` part of the core.
 
 It remains an app mounted by the core like every other app.
 
-This rule matters because the Maverick product shell should still be replaceable, versionable, and governable as an app.
+This rule matters because the Loopino product shell should still be replaceable, versionable, and governable as an app.
 
 ## Personal external accounts
 
@@ -1577,7 +1577,7 @@ invocation-scoped Core broker and app-owned personal data subtree.
 Workspace selections contain multiple enabled accounts and one default. Each
 payload account has its own broker handle; operations must select the handle for
 their concrete connection ID. Account defaults never merge provider authority.
-See [`connected_accounts.md`](connected_accounts.md) and `maverick sdk docs` for the
+See [`connected_accounts.md`](connected_accounts.md) and `loopino sdk docs` for the
 Google capability definitions and SDK transport.
 
 ## Secret references
@@ -1590,9 +1590,9 @@ The app only owns the references it expects to use.
 
 Secret values remain under platform control and must not be stored inside the app-owned workspace data root.
 
-Mounted app backends may request app-scoped secret writes through the generic entrypoint result contract. The core persists or rotates the raw value in the platform secret store, creates or reuses an app backend grant for the current `(workspace_id, app_id, logical_name)`, strips the raw write from the HTTP response, and returns only non-sensitive metadata. Automatic secret create, rotate, and grant creation steps emit explicit audit/event records attributed to the app and actor when available. Legacy app bindings are migration input only; app-entrypoint delivery consumes grants. On later mounted backend, CLI, or MCP calls, the core delivers `app_secrets` only from active, non-expired app grants whose logical names are declared by the app contract, whose action allowlist includes `app.backend`, whose target patterns match the synthetic delivery target, and whose resource scope matches the request. Non-resource grants are delivered only to non-resource requests. Resource-scoped grants are delivered only when `resource_type` and `resource_id` match exactly. Backend delivery uses `maverick://app.backend/backend`. CLI and MCP delivery uses per-entrypoint targets such as `maverick://app.backend/cli/<command>` and `maverick://app.backend/mcp/<tool>`, and each command or tool receives only the declared logical names listed in its descriptor `required_secrets` array or derived by its descriptor `secret_selectors` array. A grant may use `maverick://app.backend/*` to cover all app entrypoint delivery targets, but descriptor-level secret declarations still limit which values are delivered to each backend call, CLI command, or MCP tool. Delivery fails closed and records audit/event data when a required logical name has no current compatible grant. App CLI and MCP entrypoints must consume that delivered `app_secrets` payload; they must not import core secret-store internals, read configured control-plane secret collections directly, or reconstruct secret values from control-plane files.
+Mounted app backends may request app-scoped secret writes through the generic entrypoint result contract. The core persists or rotates the raw value in the platform secret store, creates or reuses an app backend grant for the current `(workspace_id, app_id, logical_name)`, strips the raw write from the HTTP response, and returns only non-sensitive metadata. Automatic secret create, rotate, and grant creation steps emit explicit audit/event records attributed to the app and actor when available. Legacy app bindings are migration input only; app-entrypoint delivery consumes grants. On later mounted backend, CLI, or MCP calls, the core delivers `app_secrets` only from active, non-expired app grants whose logical names are declared by the app contract, whose action allowlist includes `app.backend`, whose target patterns match the synthetic delivery target, and whose resource scope matches the request. Non-resource grants are delivered only to non-resource requests. Resource-scoped grants are delivered only when `resource_type` and `resource_id` match exactly. Backend delivery uses `loopino://app.backend/backend`. CLI and MCP delivery uses per-entrypoint targets such as `loopino://app.backend/cli/<command>` and `loopino://app.backend/mcp/<tool>`, and each command or tool receives only the declared logical names listed in its descriptor `required_secrets` array or derived by its descriptor `secret_selectors` array. A grant may use `loopino://app.backend/*` to cover all app entrypoint delivery targets, but descriptor-level secret declarations still limit which values are delivered to each backend call, CLI command, or MCP tool. Delivery fails closed and records audit/event data when a required logical name has no current compatible grant. App CLI and MCP entrypoints must consume that delivered `app_secrets` payload; they must not import core secret-store internals, read configured control-plane secret collections directly, or reconstruct secret values from control-plane files.
 
-A platform-owned grant binds a secret reference to a workspace, enabled and surface-resolvable app id, logical name, allowed action set, optional structured HTTP/HTTPS or platform delivery target patterns, expiry, and revocation state. Apps store or receive the grant reference and ask the platform to use the secret for a concrete action and target. The core validates the grant before decrypting the value, rejects `app.backend` grants whose logical name is not declared by the target app under `permissions.secrets.read`, rejects manual and app-written grants whose resource scope does not match the app's descriptor-declared consumer mode, rejects resource-specific platform delivery target patterns that point at a different resource than the grant scope, returns only redacted metadata to browser clients, strips query strings from audit targets, stores only allowlisted bounded request context, and records allow or deny audit events without raw values. Secret permission logical names are sensitive contract metadata for grant administration: Vault-style UI discovery must use an admin-only Core Secrets endpoint, while generic registry surfaces such as `/api/apps` must omit them. That admin endpoint may expose redaction-safe consumer metadata such as whether a logical name is consumed only through resource-scoped selectors and which `resource_type` values those selectors declare, so governance UI does not suggest workspace-wide grants for per-resource credentials. It may also expose redaction-safe issue-oriented needs with recommended grant specs, value state, grant state, user action, and credential-match confidence metadata; those recommendations must be derived from contracts and descriptors and should prefer specific `maverick://app.backend/backend`, `maverick://app.backend/cli/<command>`, or `maverick://app.backend/mcp/<tool>` targets over `maverick://app.backend/*` whenever the narrower target covers the declared consumer. Expired grants are reported as expired derived state, ignored during app-entrypoint delivery selection, and no longer block replacement of the same logical name. Empty targets are accepted only for internal `app.backend` defaults; user-directed actions require explicit targets. `*` target patterns are rejected for mixed-action grants because targets are grant-wide, not per-action.
+A platform-owned grant binds a secret reference to a workspace, enabled and surface-resolvable app id, logical name, allowed action set, optional structured HTTP/HTTPS or platform delivery target patterns, expiry, and revocation state. Apps store or receive the grant reference and ask the platform to use the secret for a concrete action and target. The core validates the grant before decrypting the value, rejects `app.backend` grants whose logical name is not declared by the target app under `permissions.secrets.read`, rejects manual and app-written grants whose resource scope does not match the app's descriptor-declared consumer mode, rejects resource-specific platform delivery target patterns that point at a different resource than the grant scope, returns only redacted metadata to browser clients, strips query strings from audit targets, stores only allowlisted bounded request context, and records allow or deny audit events without raw values. Secret permission logical names are sensitive contract metadata for grant administration: Vault-style UI discovery must use an admin-only Core Secrets endpoint, while generic registry surfaces such as `/api/apps` must omit them. That admin endpoint may expose redaction-safe consumer metadata such as whether a logical name is consumed only through resource-scoped selectors and which `resource_type` values those selectors declare, so governance UI does not suggest workspace-wide grants for per-resource credentials. It may also expose redaction-safe issue-oriented needs with recommended grant specs, value state, grant state, user action, and credential-match confidence metadata; those recommendations must be derived from contracts and descriptors and should prefer specific `loopino://app.backend/backend`, `loopino://app.backend/cli/<command>`, or `loopino://app.backend/mcp/<tool>` targets over `loopino://app.backend/*` whenever the narrower target covers the declared consumer. Expired grants are reported as expired derived state, ignored during app-entrypoint delivery selection, and no longer block replacement of the same logical name. Empty targets are accepted only for internal `app.backend` defaults; user-directed actions require explicit targets. `*` target patterns are rejected for mixed-action grants because targets are grant-wide, not per-action.
 
 Vault is a built-in sealed app that provides the user-facing Credential Inbox, Connection Issues, and Advanced details UI for this model. Its normal workflows call admin-gated Core Secrets APIs for redaction-safe inventory, issue recommendations, controlled credential input, rotation, CSV import, and audit/diagnostic review; direct grant mechanics stay in advanced diagnostics and core-owned agent operations rather than the primary user workflow. Vault does not own a secret-value data model and must not persist raw values under `data/vault`.
 
@@ -1645,7 +1645,7 @@ Example shape:
 }
 ```
 
-`permissions.providers` is for core-governed workspace model provider access, not app-owned secret delivery. `model_proxy: true` allows redaction-safe provider status/model metadata through a governed `handled_by_core` route or the explicit sidecar `model_access` transport above. `credential_source: "core-vault"` declares that raw provider credentials remain under Maverick/Vault control. `deliver_secrets_to_app: false` is the sandbox default and means provider keys must not be included in browser payloads, app backend `app_secrets`, sidecar environment, media config files, or sidecar-forwarded requests. The model-access socket carries only a scoped technical handle; Core resolves the raw credential at execution time and forwards provider protocol bytes without cognitive enrichment.
+`permissions.providers` is for core-governed workspace model provider access, not app-owned secret delivery. `model_proxy: true` allows redaction-safe provider status/model metadata through a governed `handled_by_core` route or the explicit sidecar `model_access` transport above. `credential_source: "core-vault"` declares that raw provider credentials remain under Loopino/Vault control. `deliver_secrets_to_app: false` is the sandbox default and means provider keys must not be included in browser payloads, app backend `app_secrets`, sidecar environment, media config files, or sidecar-forwarded requests. The model-access socket carries only a scoped technical handle; Core resolves the raw credential at execution time and forwards provider protocol bytes without cognitive enrichment.
 
 ## Lifecycle Declaration
 
@@ -1828,7 +1828,7 @@ The generated artifact is part of the app store payload, not part of the core pa
 
 The build source remains app-owned and must not introduce framework-specific assumptions into the core host.
 
-For the first frontend build operation, the core supports app sources that declare a frontend entrypoint and contain a `package.json` with a real `build` script either at the app root or at the frontend source root. The core runs the build from that package root only through an authenticated full-access or operator-authorized host path. If `node_modules` is absent, the package root must contain `package-lock.json`; the official build operation runs `npm ci` before `npm run build` so a clean checkout can reproduce the build deterministically. Every successful build must produce `maverick-frontend-assets.json` using schema `maverick.frontend-assets.v2`. A build-aware bundler plugin may classify generated content-hashed outputs as `immutable`; a conservative post-build fallback classifies every artifact as `revalidated`. The optional `navigation_fallback` field names a verified normal HTML entrypoint and is valid only when that same path is selected by a verified precache record; it never declares an alternative product shell. The build-aware plugin rejects local static resource references in emitted HTML when the referenced file is absent from the built artifact; navigation links and external or embedded URLs are not artifact references. Core verifies safe relative paths, file presence, byte size, and SHA-256 before publishing `maverick.app.frontend-changed`. A hash-looking filename without a matching verified manifest record is never evidence of immutability.
+For the first frontend build operation, the core supports app sources that declare a frontend entrypoint and contain a `package.json` with a real `build` script either at the app root or at the frontend source root. The core runs the build from that package root only through an authenticated full-access or operator-authorized host path. If `node_modules` is absent, the package root must contain `package-lock.json`; the official build operation runs `npm ci` before `npm run build` so a clean checkout can reproduce the build deterministically. Every successful build must produce `loopino-frontend-assets.json` using schema `loopino.frontend-assets.v2`. A build-aware bundler plugin may classify generated content-hashed outputs as `immutable`; a conservative post-build fallback classifies every artifact as `revalidated`. The optional `navigation_fallback` field names a verified normal HTML entrypoint and is valid only when that same path is selected by a verified precache record; it never declares an alternative product shell. The build-aware plugin rejects local static resource references in emitted HTML when the referenced file is absent from the built artifact; navigation links and external or embedded URLs are not artifact references. Core verifies safe relative paths, file presence, byte size, and SHA-256 before publishing `loopino.app.frontend-changed`. A hash-looking filename without a matching verified manifest record is never evidence of immutability.
 
 Mounted app registry, frontend documents, and backend routes are authenticated
 workspace surfaces. Anonymous requests may load the root shell, the configured
@@ -1850,7 +1850,7 @@ the frontend artifact root are public artifacts and must not contain user,
 workspace, secret, or app-data payloads. Only bytes matching an `immutable`
 record in the generated manifest receive
 `public, max-age=31536000, immutable`; other public static files remain
-revalidated. The exact root asset `maverick-icon-compact.png` is the app-owned
+revalidated. The exact root asset `loopino-icon-compact.png` is the app-owned
 compact identity image used by shell surfaces such as the rail and App Store;
 Core allowlists that filename as a public, revalidated image so isolated shell
 surfaces can render it without app-frame session authority. Similar or nested
@@ -1866,7 +1866,7 @@ same-origin fetches required for verified precache while continuing to block
 all unrelated subresources.
 
 App Store resolves public app identity images against the Core-injected
-`window.__MAVERICK_PLATFORM_ORIGIN__`, so icons belonging to other apps use the
+`window.__LOOPINO_PLATFORM_ORIGIN__`, so icons belonging to other apps use the
 platform asset routes instead of the App Store's owner-scoped isolated origin.
 
 Gzip or Brotli content encoding and cross-origin headers allow isolated app and
@@ -1895,7 +1895,7 @@ Workspace-local editable backend entrypoints are additionally workspace-admin
 gated until a dedicated app backend sandbox/governance model is available.
 
 Browser persistence does not change app ownership. An app that later opts a
-read model into the shared PWA SDK must declare a canonical Maverick
+read model into the shared PWA SDK must declare a canonical Loopino
 `data_class` source, resource provenance, stable revision, bounded TTL and byte
 budget, invalidation event, and sanitization rule. The local persistence policy
 is derived from that canonical classification under ADR-0012 and has only
@@ -1912,7 +1912,7 @@ disabled by default until its resource, privacy, lifecycle, and physical
 rollout gates are approved; isolation is necessary but does not itself grant
 cache policy.
 
-Core injects a frozen, non-configurable `__MAVERICK_APP_FRAME_CONTEXT__` into
+Core injects a frozen, non-configurable `__LOOPINO_APP_FRAME_CONTEXT__` into
 each authenticated isolated app and widget HTML document. It contains only the
 canonical workspace id and public mounted app id from the browser-session
 binding. Apps may use this host-attested context to reject a legacy cache value
@@ -1920,12 +1920,12 @@ from another scope; URL query parameters are not workspace attestation and the
 context itself does not authorize an app action.
 
 An authenticated app frame may delegate its own backend to a Chrome extension
-through `POST /.well-known/maverick-app-background/grant`. The issuer must provide
+through `POST /.well-known/loopino-app-background/grant`. The issuer must provide
 same-origin CSRF proof, an exact `chrome-extension://` client origin and a bounded
 explicit action list. Widget documents cannot issue grants. Core retains only a
 hashed, memory-only capability bound to the issuing actor, login, workspace, app
 generation, host and client origin. The client sends its bearer exclusively to
-`/.well-known/maverick-app-background/request`; only POST bodies whose explicit
+`/.well-known/loopino-app-background/request`; only POST bodies whose explicit
 `action` is admitted reach the issuing app's backend. DELETE revokes the grant.
 Every call revalidates live login, active workspace, membership, visibility and app
 generation; no platform cookie or general user token is delivered to the client.
@@ -2039,7 +2039,7 @@ The M3 shared implementation is `packages/pwa-cache/`. The top-level host must
 create an app-bound capability with explicit non-empty user id, workspace id,
 and owning app id; an adapter receives a client from that capability and
 registers each resource exactly once with policy revision
-`maverick.local-persistence-policy.v2` and an app-owned resource schema
+`loopino.local-persistence-policy.v2` and an app-owned resource schema
 revision. The resource declaration supplies its canonical data class and
 provenance, sanitizer, stable server revision or ETag, fresh and absolute
 expiry TTLs, maximum entry bytes, maximum resource bytes, stale-render
@@ -2054,7 +2054,7 @@ an explicitly renderable stale value. Expired, malformed, sanitizer-rejected,
 wrong-scope, wrong-policy, wrong-resource-schema, wrong-entry-schema,
 impossible-timestamp, size-mismatched, and lease-expired entries are misses. An
 adapter must use `not_modified` only when it already has the matching cached
-value, and must emit `maverick.app.data-changed` with the owning app and
+value, and must emit `loopino.app.data-changed` with the owning app and
 resource after a confirmed server mutation. Quota, IndexedDB, migration,
 serialization, or cache-write failure must never replace a successful server
 response.
@@ -2117,8 +2117,8 @@ the normal backoff cap.
 The SDK's retry coordinator is RAM-only. Safe HTTP reads wait before their first
 attempt when offline or hidden; cache reads remain outside that network boundary.
 It automatically pauses retries for connectivity, document
-visibility and `maverick.app.visibility-changed`, treats browser `online`,
-focus, and successful Maverick responses only as early retry hints, and
+visibility and `loopino.app.visibility-changed`, treats browser `online`,
+focus, and successful Loopino responses only as early retry hints, and
 cancels work at unmount or principal/scope change. Unsafe requests are not
 replayed without a stable `Idempotency-Key`, a request fingerprint, and an
 explicit server-deduplication contract. Even then they re-enter current server
@@ -2184,7 +2184,7 @@ Instead, host apps should keep the iframe mounted and send a generic browser mes
 
 ```json
 {
-  "type": "maverick.app.navigate",
+  "type": "loopino.app.navigate",
   "app_id": "chat",
   "params": {
     "thread_id": "thread_123"
@@ -2202,12 +2202,12 @@ Mounted app frontends should acknowledge readiness with the matching app-owned l
 
 ```json
 {
-  "type": "maverick.app.ready",
+  "type": "loopino.app.ready",
   "app_id": "chat"
 }
 ```
 
-The readiness message means the mounted frontend has reached its first useful render, which may still be an app-owned loading skeleton while app data is loading. The host should reveal a cold-mounted target iframe and resend the latest pending navigation params for that app when it receives `maverick.app.ready`, but repeated readiness messages for the same app, frame, and navigation signature must not fan out duplicate navigation deliveries.
+The readiness message means the mounted frontend has reached its first useful render, which may still be an app-owned loading skeleton while app data is loading. The host should reveal a cold-mounted target iframe and resend the latest pending navigation params for that app when it receives `loopino.app.ready`, but repeated readiness messages for the same app, frame, and navigation signature must not fan out duplicate navigation deliveries.
 
 This avoids losing navigation requests when an app iframe is freshly mounted after login, logout, refresh, or recovery and the host message arrives before the app has installed its listener.
 - the host may know the target `app_id`, but must not know app-private storage or route internals
@@ -2235,7 +2235,7 @@ stale binding revokes it. HTTP and WebSocket forwarding preserve the bound app
 identity, and any app/widget frontend path naming another owner fails with an
 authorization denial before its document can be served.
 
-During shell app switches, a host may keep the previously visible app frame on screen while the newly requested iframe loads hidden. If a third-party app does not yet emit `maverick.app.ready`, the host may use a bounded post-load fallback to reveal the frame, but it must retain a theme-colored loading surface rather than exposing a default blank iframe canvas during normal cold mounts.
+During shell app switches, a host may keep the previously visible app frame on screen while the newly requested iframe loads hidden. If a third-party app does not yet emit `loopino.app.ready`, the host may use a bounded post-load fallback to reveal the frame, but it must retain a theme-colored loading surface rather than exposing a default blank iframe canvas during normal cold mounts.
 
 Shell-mounted app and widget iframes preserve access to their own mounted
 frontend and API routes through the isolated proxy. The sandbox includes
@@ -2265,7 +2265,7 @@ Public static assets remain cross-origin readable and must never carry
 user-specific data, but their document interpretation is sandboxed and
 `nosniff`.
 
-Cross-app reference drags use the shell's `maverick.reference-drag` broker:
+Cross-app reference drags use the shell's `loopino.reference-drag` broker:
 native browser drag events can be blocked between isolated origins. The source
 captures the pointer after a movement threshold and sends `start`, `move`,
 `end`, or `cancel` to the exact platform origin. `start` carries a bounded
@@ -2278,7 +2278,7 @@ iframe. Only that target receives `drop` with target-local coordinates, and the
 source receives `finished` to release capture. The shell never reads app DOM
 or interprets reference entities. Its scoped `over` and `leave` messages preserve
 hover feedback for app-owned move targets, including Storage's main and sidebar
-frames. The SDK's `startMaverickReferencePointerDrag` shares pointer capture,
+frames. The SDK's `startLoopinoReferencePointerDrag` shares pointer capture,
 movement threshold, exact-origin messaging and cleanup between Mail and Storage;
 each app produces and validates its own payload. Storage rehydrates native role
 markers through its existing parsers and writers before invoking move handlers.
@@ -2290,15 +2290,15 @@ ordinary clicks and native file drops retain their existing paths.
 On mobile, the shell may render transparent chrome above mounted app iframes.
 To let app content scroll visually underneath that chrome while keeping the
 first app content below it, the isolated document bootstrap applies the initial
-layout from `maverick_mobile_layout` and then accepts exact-parent
-`maverick.shell.layout-changed` messages. It sets
-`--maverick-shell-mobile-content-top-offset` and the related status/header
+layout from `loopino_mobile_layout` and then accepts exact-parent
+`loopino.shell.layout-changed` messages. It sets
+`--loopino-shell-mobile-content-top-offset` and the related status/header
 variables inside the isolated document; the shell never reaches through the
 cross-origin DOM. The shell must not crop the mounted iframe below its mobile
 header, because that prevents app content from appearing behind the transparent
 mobile header chrome.
 
-The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
+The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `loopino.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
 
 The desktop app rail derives its loaded-app dots from the shared, authenticated
 frame registry, including both main views and app-owned widgets. A hibernated
@@ -2312,7 +2312,7 @@ consumers can use `requireOnline: false` to observe foreground state and render
 authorized offline cached data. This option neither enables network work nor
 changes cache authorization; background reads retain the connectivity gate.
 
-Apps that declare a frontend entrypoint may be rebuilt through the official core app-hosting frontend build operation when they provide a real build script. After a successful rebuild, the core publishes `maverick.app.frontend-changed` on the app event WebSocket. The shell should react to that event by remounting only the affected app iframe and shell-hosted widget iframes owned by that app with a shell-owned cache-busting query parameter. This refresh path is for updated frontend artifacts after rebuilds. It must not be used for app-owned internal navigation, must not poll mounted frontend documents, and must not require a full shell page reload for already-mounted app or widget iframes.
+Apps that declare a frontend entrypoint may be rebuilt through the official core app-hosting frontend build operation when they provide a real build script. After a successful rebuild, the core publishes `loopino.app.frontend-changed` on the app event WebSocket. The shell should react to that event by remounting only the affected app iframe and shell-hosted widget iframes owned by that app with a shell-owned cache-busting query parameter. This refresh path is for updated frontend artifacts after rebuilds. It must not be used for app-owned internal navigation, must not poll mounted frontend documents, and must not require a full shell page reload for already-mounted app or widget iframes.
 
 This avoids unnecessary reloads, keeps app state alive, and preserves a clean core/app boundary.
 
@@ -2385,7 +2385,7 @@ The core remains responsible for:
 
 Host apps may forward generic app data invalidation messages to widgets when the invalidation belongs to the widget owner.
 
-Core-owned runtime data should use core realtime transports instead of app invalidation messages. For example, Chat full app and widgets subscribe to `WS /ws/runtime/threads` for initial and live thread catalog state; active thread selection can be mirrored with an app-owned UI message such as `maverick.chat.active-thread-changed`, but the thread records themselves must not be refreshed through `maverick.app.data-changed`. Runtime thread snapshots are bounded initial pages with `threads_page` metadata, and REST mutations return changed-thread or removed-id deltas rather than a full catalog replacement.
+Core-owned runtime data should use core realtime transports instead of app invalidation messages. For example, Chat full app and widgets subscribe to `WS /ws/runtime/threads` for initial and live thread catalog state; active thread selection can be mirrored with an app-owned UI message such as `loopino.chat.active-thread-changed`, but the thread records themselves must not be refreshed through `loopino.app.data-changed`. Runtime thread snapshots are bounded initial pages with `threads_page` metadata, and REST mutations return changed-thread or removed-id deltas rather than a full catalog replacement.
 
 A shell-hosted floating widget follows the same rule. The shell may reserve a visual overlay slot, such as a bottom-right holder, but the embedded app still owns the widget declaration, renderer, backend actions, and persisted state. The shell selects the widget through the registry by `host` and `content_kind`; it must not import the widget owner's source or call private app APIs.
 
@@ -2539,18 +2539,18 @@ returned document may be embedded; it does not reinterpret the context token's
 
 The widget frontend document route is a controlled authenticated mount. Static non-HTML files below that widget frontend mount, such as `styles.css`, `main.js`, fonts, or images, follow the same public-cacheable rule as app frontend assets: they must not contain user-specific data and may be served with cross-origin headers so sandboxed widget iframes can load their own bundle without per-asset session cookies.
 
-Iframe widgets that need host-driven sizing may post `maverick.widget.resize` to their parent with the declaring `owner_app_id`, `widget_id`, and a pixel height such as `320px`.
+Iframe widgets that need host-driven sizing may post `loopino.widget.resize` to their parent with the declaring `owner_app_id`, `widget_id`, and a pixel height such as `320px`.
 The embedded widget must measure its content, not the current iframe viewport, so parent resizing does not create a feedback loop.
 The host must validate the message origin and frame source, match `owner_app_id` and `widget_id` to the mounted widget, accept only bounded pixel values, and ignore invalid or excessive resize strings.
 Long widget content should be capped by the host surface and scroll inside the mounted iframe rather than stretching the host transcript or shell area indefinitely.
 
-Shell sidebar footer widgets may expose a mobile header primary action through the `maverick.widget.primary-action` protocol.
+Shell sidebar footer widgets may expose a mobile header primary action through the `loopino.widget.primary-action` protocol.
 This is a shell-to-widget contract, not a shell-owned app command.
 The shell may query only the mounted `shell.sidebar.footer` widget selected for the active app:
 
 ```json
 {
-  "type": "maverick.widget.primary-action.query",
+  "type": "loopino.widget.primary-action.query",
   "owner_app_id": "agents",
   "widget_id": "agents-sidebar-footer"
 }
@@ -2560,7 +2560,7 @@ The widget answers with its current availability:
 
 ```json
 {
-  "type": "maverick.widget.primary-action.state",
+  "type": "loopino.widget.primary-action.state",
   "owner_app_id": "agents",
   "widget_id": "agents-sidebar-footer",
   "available": true,
@@ -2571,14 +2571,14 @@ The widget answers with its current availability:
 
 `preferred_surface` is optional and defaults to `app`.
 When a footer action needs UI that lives inside the shell sidebar, it may return `"preferred_surface": "sidebar"`.
-The host may then open the currently selected sidebar surface immediately before sending `maverick.widget.primary-action.invoke`.
+The host may then open the currently selected sidebar surface immediately before sending `loopino.widget.primary-action.invoke`.
 This is a narrow primary-action affordance and must not reintroduce a generic iframe command that opens the shell sidebar.
 
 When the user activates the shell header button, the shell sends:
 
 ```json
 {
-  "type": "maverick.widget.primary-action.invoke",
+  "type": "loopino.widget.primary-action.invoke",
   "owner_app_id": "agents",
   "widget_id": "agents-sidebar-footer"
 }
@@ -2675,11 +2675,11 @@ For apps that expose content in the `base-shell` sidebar:
 - project actions go through the chat app backend, while thread create, rename, move, delete, and delete-all actions go through core runtime thread APIs; deleting a chat project must request core runtime cleanup for every thread with that `project_id` and commit the app-owned project deletion only after cleanup succeeds
 - project and thread settings panels are rendered by the chat widget, not by the shell
 - optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app with explicit scalar params such as a thread id or a new-chat request
-- the shell forwards those scalar params to the mounted chat app through `maverick.app.navigate` without reloading the chat iframe
+- the shell forwards those scalar params to the mounted chat app through `loopino.app.navigate` without reloading the chat iframe
 - shell-hosted widget slots must include the active workspace id in the signed widget context and remount the widget iframe when the active workspace changes
 - a widget must never keep showing app-owned data loaded under a previous workspace after the host has switched workspace context
 - host apps should hide iframe widget slots without unmounting them when a temporary shell panel closes, unless a widget explicitly asks to be reset
-- `maverick.app.runtime-changed` and `maverick.app.frontend-changed` remount
+- `loopino.app.runtime-changed` and `loopino.app.frontend-changed` remount
   only the mounted app iframe and shell-hosted widget iframes whose owner id
   matches the event; unrelated app and widget frames retain their state
 
@@ -2847,7 +2847,7 @@ If rollback is unsupported, that should be declared rather than implied.
 
 ## Example Contract
 
-The following example shows the kind of app contract Maverick should expect at platform level.
+The following example shows the kind of app contract Loopino should expect at platform level.
 
 ```json
 {
@@ -3039,39 +3039,39 @@ Discovery must be narrow by default so agents do not pull every command from eve
 The compact installed-app discovery shape is:
 
 ```text
-maverick apps list --json
+loopino apps list --json
 ```
 
 Core CLI discovery and invocation use:
 
 ```text
-maverick core cli list --json
-maverick core cli inspect <command_id> --json
-maverick core cli run <command_id> ...
+loopino core cli list --json
+loopino core cli inspect <command_id> --json
+loopino core cli run <command_id> ...
 ```
 
 App CLI discovery and invocation use:
 
 ```text
-maverick app <app_id> cli list --json
-maverick app <app_id> cli inspect <command_name> --json
-maverick app <app_id> cli run <command_name> ...
+loopino app <app_id> cli list --json
+loopino app <app_id> cli inspect <command_name> --json
+loopino app <app_id> cli run <command_name> ...
 ```
 
 Core MCP discovery and invocation use:
 
 ```text
-maverick core mcp list --json
-maverick core mcp inspect <tool_name> --json
-maverick core mcp call <tool_name> ...
+loopino core mcp list --json
+loopino core mcp inspect <tool_name> --json
+loopino core mcp call <tool_name> ...
 ```
 
 App MCP discovery and invocation use:
 
 ```text
-maverick app <app_id> mcp list --json
-maverick app <app_id> mcp inspect <tool_name> --json
-maverick app <app_id> mcp call <tool_name> ...
+loopino app <app_id> mcp list --json
+loopino app <app_id> mcp inspect <tool_name> --json
+loopino app <app_id> mcp call <tool_name> ...
 ```
 
 The wrapper resolves the current workspace, checks the enabled app registry, applies CLI or MCP invocation policy, resolves the app-owned data root when applicable, and then executes the declared entrypoint through the platform host.
@@ -3171,15 +3171,15 @@ egress validation, executable-closure audit, result classification, and live
 authority checks still apply; no descriptor may broaden Research into
 interactive browsing, workspace reads, writes, shell, or delegation. This is
 the hosted API implementation of the central Research profile. Native runtimes
-are not given these Maverick handles: they are selectable only when their
+are not given these Loopino handles: they are selectable only when their
 adapter declares and enforces the reviewed native web-only contract. Codex then
 receives only its provider-native live web search in an instruction-free,
-auth-only runtime. Its private provider archive persists for that Maverick chat
+auth-only runtime. Its private provider archive persists for that Loopino chat
 so a new process can resume the conversation, while exact runtime-version,
 private-home, environment, and structured tool-surface checks fail closed.
 Unreviewed native adapters remain unavailable for Research.
 
-Antigravity's reviewed native Research adapter follows the same no-Maverick-tools
+Antigravity's reviewed native Research adapter follows the same no-Loopino-tools
 boundary. Its fixed primary agent declares only native `search_web` and
 `read_url_content`, disables ambient customizations, and runs over an empty
 private sandbox workdir with auth-only provider state. The immutable agent
@@ -3254,7 +3254,7 @@ The app developer is free to choose how the app stores its own data inside that 
 
 ## Decision Summary
 
-The standard Maverick app contract should require:
+The standard Loopino app contract should require:
 
 - stable app identity
 - workspace-owned storage under `data/<app_id>/`
@@ -3362,3 +3362,16 @@ owns window/controller identity and layout persistence; Base Shell owns placemen
 visibility, the common panel width budget and focus isolation of the covered app.
 See [shell_widget_lifecycle.md](shell_widget_lifecycle.md) for the continuity and
 verification requirements. The obsolete separate dock entrypoint is removed.
+
+## Loopino product static distribution
+
+The approved installation-owned catalog is
+`https://loopino.giuntitrail.com/catalog`. `scripts/export_product_catalog.py`
+packages only the explicit `apps/bootstrap.json` selection through the official
+`core.app_sdk.packaging.package_app_source` API. Output lives at ignored
+`installation/catalog`: revalidated `/api/apps` JSON contains `{items,count}`,
+version/presentation/distribution metadata and same-origin artifact URLs.
+Immutable artifact filenames include their verified SHA-256; SDK checksum
+manifests accompany them. Export excludes custom/company sources and never
+includes tenant/control-plane/provider state. No workspace forks are created.
+The deployment tranche must serve and verify this path before publication.

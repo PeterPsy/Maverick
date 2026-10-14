@@ -16,16 +16,16 @@ Before activation, complete verification, retain the deployed source revision,
 and arrange a maintenance restart with all agent-owned tests/builds stopped.
 Use the verified SQLite runtime (at least 3.51.3). Preserve the existing service
 environment, user/group and library-path configuration. Configure the next
-backend with `MAVERICK_USAGE_STORE=sqlite`; ensure later environment files do not
+backend with `LOOPINO_USAGE_STORE=sqlite`; ensure later environment files do not
 override that setting.
 
 Example temporary service drop-in, with paths changed to the actual installation:
 
 ```ini
 [Service]
-Environment=MAVERICK_USAGE_STORE=sqlite
+Environment=LOOPINO_USAGE_STORE=sqlite
 TimeoutStartSec=300
-ExecStartPre=/srv/maverick/.venv/bin/python -m core.usage.startup_maintenance --repository-root /srv/maverick --receipt /srv/maverick/data/control-plane/usage/maintenance/cutover-2026-09-20.json
+ExecStartPre=/srv/loopino/.venv/bin/python -m core.usage.startup_maintenance --repository-root /srv/loopino --receipt /srv/loopino/data/control-plane/usage/maintenance/cutover-2026-09-20.json
 ```
 
 Reload the service configuration and use the managed backend restart. The next

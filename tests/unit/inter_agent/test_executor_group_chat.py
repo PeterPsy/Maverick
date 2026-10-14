@@ -68,7 +68,7 @@ class InterAgentGroupChatExecutorTest(unittest.TestCase):
         self.assertEqual(result.final_answer, "Choose option B with a staged rollout.")
         self.assertEqual(plan_event.payload["summary"], "Orchestrator started a group chat run with 3 worker nodes.")
         self.assertEqual([event.participant_id for event in message_events], ["analyst", "reviewer", "synthesizer"])
-        self.assertIn("You are one participant in a Maverick group chat run.", message_events[0].payload["input_text"])
+        self.assertIn("You are one participant in a Loopino group chat run.", message_events[0].payload["input_text"])
         self.assertIn("Prior participant outputs in this group chat round", message_events[2].payload["input_text"])
         self.assertIn("Analyst: Option A is faster.", message_events[2].payload["input_text"])
         self.assertIn("Reviewer: Option B has lower risk.", message_events[2].payload["input_text"])

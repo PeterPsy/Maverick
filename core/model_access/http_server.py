@@ -98,10 +98,10 @@ class _BrokerRequestHandler(socketserver.StreamRequestHandler):
             Thread(
                 target=_watch_disconnect,
                 args=(self.connection, cancellation, disconnect_stop),
-                name="maverick-model-access-disconnect",
+                name="loopino-model-access-disconnect",
                 daemon=True,
             ).start()
-            if request.method == "GET" and request.path == "/maverick/v1/catalog":
+            if request.method == "GET" and request.path == "/loopino/v1/catalog":
                 _send_json(self.wfile, 200, broker.catalog(scope).public_payload())
                 return
             if request.method == "GET" and request.path == "/v1/models":
@@ -140,9 +140,9 @@ class _BrokerRequestHandler(socketserver.StreamRequestHandler):
                     cancellation.set()
                     response.close()
                 return
-            if request.method == "POST" and request.path == "/maverick/v1/cli/codex/exec":
+            if request.method == "POST" and request.path == "/loopino/v1/cli/codex/exec":
                 argv = _decode_string_list_header(
-                    request.headers.get("x-maverick-cli-argv", "")
+                    request.headers.get("x-loopino-cli-argv", "")
                 )
                 authorize_cli_invocation(
                     broker.catalog(scope),
@@ -153,14 +153,14 @@ class _BrokerRequestHandler(socketserver.StreamRequestHandler):
                     scope=scope,
                     provider_id="codex",
                     argv=argv,
-                    cwd=_decode_string_header(request.headers.get("x-maverick-cli-cwd", "")),
+                    cwd=_decode_string_header(request.headers.get("x-loopino-cli-cwd", "")),
                     stdin=request.body,
                     cancellation=cancellation,
                 )
                 _send_stream_headers(
                     self.wfile,
                     200,
-                    (("Content-Type", "application/x-maverick-cli-frames"),),
+                    (("Content-Type", "application/x-loopino-cli-frames"),),
                 )
                 _send_cli_frames(self.wfile, frames, cancellation)
                 return

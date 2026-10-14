@@ -1,4 +1,4 @@
-import { connectAppEventSocket, isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { connectAppEventSocket, isExactLoopinoParentMessage } from '@loopino/pwa-cache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadDocsState } from './api';
 import { DocsStudioLoadingSkeleton } from './components/DocsStudioLoadingSkeleton';
@@ -87,12 +87,12 @@ export function App() {
   }, [notice]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'docs-studio' }, "*");
+    window.parent?.postMessage({ type: 'loopino.app.ready', app_id: 'docs-studio' }, "*");
   }, []);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
+      if (!isExactLoopinoParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -102,7 +102,7 @@ export function App() {
         resource?: string;
         type?: string;
       };
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'docs-studio')) {
+      if (payload.type === 'loopino.app.navigate' && (!payload.app_id || payload.app_id === 'docs-studio')) {
         const requestedPageId = docPageIdFromParams(payload.params || {});
         if (requestedPageId) {
           if (findPage(state, requestedPageId)) {
@@ -122,7 +122,7 @@ export function App() {
   }, [state]);
 
   useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((payload) => {
-    if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'docs-studio' && (!payload.resource || payload.resource === 'state')) {
+    if (payload.type === 'loopino.app.data-changed' && payload.owner_app_id === 'docs-studio' && (!payload.resource || payload.resource === 'state')) {
       void refresh(activePageIdRef.current || undefined);
     }
   }, () => { void refresh(activePageIdRef.current || undefined); }), []);

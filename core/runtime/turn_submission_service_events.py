@@ -310,4 +310,4 @@ def _debug_log_runtime_turn(
 
 
 def _runtime_turn_debug_logs_enabled() -> bool:
-    return os.environ.get("MAVERICK_RUNTIME_TURN_DEBUG_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}
+    return os.environ.get("LOOPINO_RUNTIME_TURN_DEBUG_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}

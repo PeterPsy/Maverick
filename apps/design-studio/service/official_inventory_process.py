@@ -219,7 +219,7 @@ class _RelayHTTPConnection(http.client.HTTPConnection):
         super().__init__("disposable-opendesign", timeout=timeout)
         self._relay_socket = Path(relay_socket)
         self._preamble = (
-            b"MAVERICK-SIDECAR-RELAY/1 " + capability.encode("ascii") + b"\n"
+            b"LOOPINO-SIDECAR-RELAY/1 " + capability.encode("ascii") + b"\n"
         )
 
     def connect(self) -> None:

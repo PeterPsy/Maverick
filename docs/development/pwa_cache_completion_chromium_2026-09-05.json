@@ -1,5 +1,5 @@
 {
-  "schema": "maverick.pwa-shell-cache-smoke.v2",
+  "schema": "loopino.pwa-shell-cache-smoke.v2",
   "captured_at": "2026-09-05T21:15:03.167Z",
   "engine": "chromium",
   "environment": "playwright-persistent-profile",

@@ -39,10 +39,10 @@ export function setupAppHarness() {
     await act(async () => { window.dispatchEvent(new MessageEvent('message', { data, origin, source })); });
   }
   function changed(resource = 'records') {
-    return message({ type: 'maverick.app.data-changed', owner_app_id: 'website-studio', resource });
+    return message({ type: 'loopino.app.data-changed', owner_app_id: 'website-studio', resource });
   }
   function navigate(route: string, params: Record<string, string> = {}) {
-    return message({ type: 'maverick.app.navigate', params: { site_id: 'site', route, ...params } });
+    return message({ type: 'loopino.app.navigate', params: { site_id: 'site', route, ...params } });
   }
   function useRead(fresh: Promise<WorkspaceSnapshot>, revalidated: Promise<WorkspaceSnapshot | null> = Promise.resolve(null)) {
     vi.mocked(cachedWorkspaceSnapshot).mockReturnValueOnce({ fresh, revalidated });

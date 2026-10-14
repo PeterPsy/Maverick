@@ -5,9 +5,9 @@
 }
 
 .chatapp-prompt-preview__section {
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
+  border: 1px solid rgba(var(--loopino-contrast-rgb), 0.08);
   border-radius: 16px;
-  background: rgba(var(--maverick-contrast-rgb), 0.025);
+  background: rgba(var(--loopino-contrast-rgb), 0.025);
   overflow: hidden;
 }
 
@@ -18,7 +18,7 @@
   font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   list-style: none;
 }
 
@@ -38,13 +38,13 @@
   flex-wrap: wrap;
   gap: 0.45rem;
   align-items: baseline;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
 }
 
 .chatapp-prompt-preview__description {
   margin: 0;
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
   line-height: 1.5;
 }
 
@@ -54,8 +54,8 @@
   overflow: auto;
   padding: 0.85rem;
   border-radius: 12px;
-  background: var(--maverick-control-inset-surface);
-  color: var(--maverick-text);
+  background: var(--loopino-control-inset-surface);
+  color: var(--loopino-text);
   font-size: 0.8rem;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -75,7 +75,7 @@
   align-items: flex-start;
   padding: 0.85rem;
   border-radius: 12px;
-  background: var(--maverick-control-inset-surface-muted);
+  background: var(--loopino-control-inset-surface-muted);
 }
 
 .chatapp-prompt-preview__skill-copy {

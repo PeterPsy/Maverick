@@ -26,7 +26,7 @@ class SidecarBrowserLaunchLifecycleTests(SidecarBrowserOriginTestSupport, unitte
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
             app = PlatformAsgiHost(state, shutdown_controller=shutdown)
-            cookie = await self._login(app, host="maverick.localhost:8000")
+            cookie = await self._login(app, host="loopino.localhost:8000")
             failure = SidecarStartupError(
                 "activation_incomplete",
                 "health_recheck",
@@ -42,8 +42,8 @@ class SidecarBrowserLaunchLifecycleTests(SidecarBrowserOriginTestSupport, unitte
                 status, payload, _headers = await self._launch(
                     app,
                     platform_cookie=cookie,
-                    host="maverick.localhost:8000",
-                    origin="http://maverick.localhost:8000",
+                    host="loopino.localhost:8000",
+                    origin="http://loopino.localhost:8000",
                 )
 
             self.assertEqual(status, 503)
@@ -62,7 +62,7 @@ class SidecarBrowserLaunchLifecycleTests(SidecarBrowserOriginTestSupport, unitte
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
             app = PlatformAsgiHost(state, shutdown_controller=shutdown)
-            cookie = await self._login(app, host="maverick.localhost:8000")
+            cookie = await self._login(app, host="loopino.localhost:8000")
             with patch.object(
                 state.sidecar_browser_sessions,
                 "issue_ticket",
@@ -71,8 +71,8 @@ class SidecarBrowserLaunchLifecycleTests(SidecarBrowserOriginTestSupport, unitte
                 status, payload, _headers = await self._launch(
                     app,
                     platform_cookie=cookie,
-                    host="maverick.localhost:8000",
-                    origin="http://maverick.localhost:8000",
+                    host="loopino.localhost:8000",
+                    origin="http://loopino.localhost:8000",
                 )
 
             self.assertEqual(status, 503)
@@ -93,12 +93,12 @@ class SidecarBrowserLaunchLifecycleTests(SidecarBrowserOriginTestSupport, unitte
             )
             first_shutdown = EntrypointShutdownController()
             first_app = PlatformAsgiHost(state, shutdown_controller=first_shutdown)
-            first_cookie = await self._login(first_app, host="maverick.localhost:8000")
+            first_cookie = await self._login(first_app, host="loopino.localhost:8000")
             first_status, _launch, _headers = await self._launch(
                 first_app,
                 platform_cookie=first_cookie,
-                host="maverick.localhost:8000",
-                origin="http://maverick.localhost:8000",
+                host="loopino.localhost:8000",
+                origin="http://loopino.localhost:8000",
             )
             self.assertEqual(first_status, 200)
             first_shutdown.begin_shutdown()
@@ -112,13 +112,13 @@ class SidecarBrowserLaunchLifecycleTests(SidecarBrowserOriginTestSupport, unitte
             )
             restarted_cookie = await self._login(
                 restarted_app,
-                host="maverick.localhost:8000",
+                host="loopino.localhost:8000",
             )
             restarted_status, _launch, _headers = await self._launch(
                 restarted_app,
                 platform_cookie=restarted_cookie,
-                host="maverick.localhost:8000",
-                origin="http://maverick.localhost:8000",
+                host="loopino.localhost:8000",
+                origin="http://loopino.localhost:8000",
             )
             self.assertEqual(restarted_status, 200)
 

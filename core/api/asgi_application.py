@@ -1,4 +1,4 @@
-"""ASGI host for Maverick HTTP and WebSocket surfaces."""
+"""ASGI host for Loopino HTTP and WebSocket surfaces."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class PlatformAsgiHost:
         self.shutdown_controller = shutdown_controller or EntrypointShutdownController()
         self.app_backend_executor = ThreadPoolExecutor(
             max_workers=_app_backend_worker_count(),
-            thread_name_prefix="maverick-app-backend",
+            thread_name_prefix="loopino-app-backend",
         )
         if state is None:
             start_model_access_broker_server(
@@ -219,7 +219,7 @@ class PlatformAsgiHost:
 
     async def _handle_platform_http(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
         if scope.get("path") == "/health":
-            await _send_direct_json_response(send, b'{\n  "status": "ok",\n  "service": "maverick-core"\n}')
+            await _send_direct_json_response(send, b'{\n  "status": "ok",\n  "service": "loopino-core"\n}')
             return
         sidecar_route = parse_app_sidecar_proxy_route(scope.get("path"))
         if sidecar_route is not None:
@@ -257,7 +257,7 @@ class PlatformAsgiHost:
                 parent=self.shutdown_controller,
                 interruption_reason="client disconnect",
             )
-            environ["maverick.entrypoint_shutdown_controller"] = request_shutdown_controller
+            environ["loopino.entrypoint_shutdown_controller"] = request_shutdown_controller
             disconnect_task = asyncio.create_task(_wait_for_http_disconnect(receive))
             response_future = loop.run_in_executor(
                 self.app_backend_executor,
@@ -371,7 +371,7 @@ async def _read_asgi_body(receive: AsgiReceive) -> bytes:
 
 
 def _app_backend_worker_count() -> int:
-    raw = os.environ.get("MAVERICK_APP_BACKEND_WORKERS", "")
+    raw = os.environ.get("LOOPINO_APP_BACKEND_WORKERS", "")
     if not raw:
         return 4
     try:

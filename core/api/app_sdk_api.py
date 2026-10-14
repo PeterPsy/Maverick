@@ -1,4 +1,4 @@
-"""Workspace-scoped HTTP surface for the official Maverick App SDK."""
+"""Workspace-scoped HTTP surface for the official Loopino App SDK."""
 
 from __future__ import annotations
 

@@ -84,7 +84,7 @@ function pageMatchesSearch(page: DocsNavigationPage, query: string) {
 function openPageInShell(pageId: string) {
   window.parent?.postMessage(
     {
-      type: 'maverick.widget.open-app',
+      type: 'loopino.widget.open-app',
       app_id: 'docs-studio',
       params: {
         app_page: `pages/${pageId}`,
@@ -94,7 +94,7 @@ function openPageInShell(pageId: string) {
     "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
+    window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, "*");
   }
 }
 
@@ -221,7 +221,7 @@ function DocsStudioSidebarWidget() {
         return;
       }
       if (
-        (payload.type !== 'maverick.widget.data-changed' && payload.type !== 'maverick.app.data-changed') ||
+        (payload.type !== 'loopino.widget.data-changed' && payload.type !== 'loopino.app.data-changed') ||
         payload.owner_app_id !== 'docs-studio'
       ) {
         return;

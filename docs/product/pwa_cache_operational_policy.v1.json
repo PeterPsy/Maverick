@@ -1,5 +1,5 @@
 {
-  "schema": "maverick.pwa-cache-operational-policy.v1",
+  "schema": "loopino.pwa-cache-operational-policy.v1",
   "asset_budgets": {
     "max_frontend_asset_bytes": 16777216,
     "max_frontend_manifest_bytes": 67108864,

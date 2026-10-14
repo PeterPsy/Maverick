@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 
 
-GRANT_PATH = "/.well-known/maverick-app-background/grant"
-REQUEST_PATH = "/.well-known/maverick-app-background/request"
+GRANT_PATH = "/.well-known/loopino-app-background/grant"
+REQUEST_PATH = "/.well-known/loopino-app-background/request"
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
 

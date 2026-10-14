@@ -69,8 +69,8 @@ def json_request(url, *, data=None, headers=None):
 
 def credential_refs():
     return (
-        os.environ.get("MAVERICK_GOOGLE_CLIENT_ID_REF", "platform:secret-alias/google-oauth-client-id"),
-        os.environ.get("MAVERICK_GOOGLE_CLIENT_SECRET_REF", "platform:secret-alias/google-oauth-client-secret"),
+        os.environ.get("LOOPINO_GOOGLE_CLIENT_ID_REF", "platform:secret-alias/google-oauth-client-id"),
+        os.environ.get("LOOPINO_GOOGLE_CLIENT_SECRET_REF", "platform:secret-alias/google-oauth-client-secret"),
     )
 
 
@@ -88,7 +88,7 @@ def credentials(store):
 
 
 def redirect_uri():
-    uri = os.environ.get("MAVERICK_GOOGLE_REDIRECT_URI", "").strip()
+    uri = os.environ.get("LOOPINO_GOOGLE_REDIRECT_URI", "").strip()
     parsed = urlsplit(uri)
     if (parsed.path != CALLBACK_PATH or not parsed.hostname or parsed.query or parsed.fragment
             or parsed.username or parsed.password or parsed.scheme not in {"https", "http"}

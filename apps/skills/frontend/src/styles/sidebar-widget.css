@@ -17,8 +17,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--maverick-font);
+  color: var(--loopino-text);
+  font-family: var(--loopino-font);
 }
 
 button,
@@ -59,14 +59,14 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
   background: rgba(12, 12, 14, 0.58);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   padding: 0 0.72rem;
 }
 
 .skills-sidebar-search-frame svg {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   flex: none;
 }
 
@@ -74,17 +74,17 @@ button {
   width: 100%;
   min-width: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   outline: none;
 }
 
 .skills-sidebar-search::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--loopino-text-soft);
 }
 
 .skills-sidebar-search-frame:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+  border-color: var(--loopino-accent);
+  box-shadow: 0 0 0 3px var(--loopino-accent-soft);
 }
 
 @media (max-width: 979px) {
@@ -132,7 +132,7 @@ button {
   border: 1px solid transparent;
   border-radius: 22px;
   background: transparent;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0 0.7rem;
   text-align: left;
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
@@ -140,16 +140,16 @@ button {
 
 .skills-sidebar-row:hover,
 .skills-sidebar-row.is-active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--loopino-border-strong);
 }
 
 .skills-sidebar-row:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
 }
 
 .skills-sidebar-row.is-active {
-  background: var(--maverick-surface-active);
-  box-shadow: var(--maverick-inner-edge);
+  background: var(--loopino-surface-active);
+  box-shadow: var(--loopino-inner-edge);
 }
 
 .skills-sidebar-row:active {
@@ -162,11 +162,11 @@ button {
   width: 2rem;
   height: 2rem;
   border-radius: 15px;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
 }
 
 .skills-sidebar-row.is-active .skills-sidebar-row__icon {
-  color: var(--maverick-text);
+  color: var(--loopino-text);
 }
 
 .skills-sidebar-row__copy {
@@ -187,13 +187,13 @@ button {
 }
 
 .skills-sidebar-row__copy span {
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.72rem;
 }
 
 .skills-sidebar-empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--loopino-text-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }
@@ -210,7 +210,7 @@ button {
   gap: 0.65rem;
   min-height: 3.05rem;
   border-radius: 22px;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   padding: 0.58rem 0.7rem;
 }
 
@@ -272,10 +272,10 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
   background: rgba(12, 12, 14, 0.58);
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--loopino-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
-  color: var(--maverick-text);
+  color: var(--loopino-text);
   padding: 0 0.82rem;
   font-size: 0.76rem;
   font-weight: 400;
@@ -285,7 +285,7 @@ button {
 
 .skills-sidebar-footer-button:hover,
 .skills-sidebar-footer-button:focus-visible {
-  background: var(--maverick-surface-hover);
+  background: var(--loopino-surface-hover);
   outline: none;
 }
 

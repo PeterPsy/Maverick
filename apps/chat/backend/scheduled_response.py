@@ -26,7 +26,7 @@ def envelope(result, *, flattened=False, data_root=None):
         resources += ["scheduled-chats", "notifications"]
     elif notifications:
         resources += ["notifications"]
-    response["app_events"] = [{"type": "maverick.app.data-changed", "resource": resource} for resource in resources]
+    response["app_events"] = [{"type": "loopino.app.data-changed", "resource": resource} for resource in resources]
     if flattened:
         response.update(result)
     else:

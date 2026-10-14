@@ -1,6 +1,6 @@
 {
   "tools": {
-    "maverick_agents_app": {
+    "loopino_agents_app": {
       "effect_class": "destructive",
       "description": "Generic Agents operation dispatcher.",
       "input_schema": {

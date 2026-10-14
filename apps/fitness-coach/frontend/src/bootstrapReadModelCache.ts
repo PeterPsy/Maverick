@@ -1,9 +1,9 @@
 import {
-  readMaverickAppFrameContext,
+  readLoopinoAppFrameContext,
   readThroughParentDataCache,
   readCacheModelJson,
   type ParentDataCacheReadResult
-} from '@maverick/pwa-cache';
+} from '@loopino/pwa-cache';
 import { callBackend, currentStorageAppId, mountedAppIdFromPath } from './api';
 import { sanitizeBootstrapReadModel } from './bootstrapCache';
 import type { AppBootstrapPayload } from './types';
@@ -21,7 +21,7 @@ export async function readCachedBootstrap(
     typeof window === 'undefined' ? '' : window.location.pathname,
     'fitness-coach'
   );
-  const frameContext = readMaverickAppFrameContext();
+  const frameContext = readLoopinoAppFrameContext();
   const frameContextMatchesMount = !frameContext || frameContext.appId === appId;
   const storageAppId = currentStorageAppId();
   const includeRuns = options.includeRuns === true;

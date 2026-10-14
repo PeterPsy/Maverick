@@ -21,7 +21,7 @@ valid.
 
 ## Decision
 
-- Core reserves `POST /.well-known/maverick-app-frame-session` on every
+- Core reserves `POST /.well-known/loopino-app-frame-session` on every
   app-frame origin. A request must present the host-bound app-frame cookie, the
   exact isolated `Origin`, `Sec-Fetch-Site: same-origin`, current platform
   identity, current workspace membership, and current app generation.

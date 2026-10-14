@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {attachConnectorFrame} from "./connector-frame.mjs";
 
 test("fresh connector waits for login, selects one Browser document and fences sharing replacement",async t=>{
-  const origin="https://maverick.test",url="https://af-0123456789abcdef01234567.sidecars.maverick.test/apps/browser/";
+  const origin="https://loopino.test",url="https://af-0123456789abcdef01234567.sidecars.loopino.test/apps/browser/";
   const b={sharingId:"selected",connectorTabId:10,origin,path:"/app/browser"};
   let current=b,frames=[],writes=0;const injections=[];
   const originalChrome=globalThis.chrome;

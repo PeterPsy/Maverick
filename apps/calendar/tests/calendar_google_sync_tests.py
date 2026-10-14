@@ -536,8 +536,8 @@ class CalendarGoogleSyncTest(unittest.TestCase):
         self.assertEqual(
             _app_events_for_action("calendar_calendars.select"),
             [
-                {"type": "maverick.app.data-changed", "owner_app_id": "calendar", "resource": "calendars"},
-                {"type": "maverick.app.data-changed", "owner_app_id": "calendar", "resource": "events"},
+                {"type": "loopino.app.data-changed", "owner_app_id": "calendar", "resource": "calendars"},
+                {"type": "loopino.app.data-changed", "owner_app_id": "calendar", "resource": "events"},
             ],
         )
 
@@ -615,7 +615,7 @@ class CalendarGoogleSyncTest(unittest.TestCase):
                 return 200, {
                     "id": "google-created",
                     "summary": "Remote Created",
-                    "description": "Created from Maverick",
+                    "description": "Created from Loopino",
                     "status": "confirmed",
                     "start": {"dateTime": "2026-05-28T13:00:00Z", "timeZone": "UTC"},
                     "end": {"dateTime": "2026-05-28T14:00:00Z", "timeZone": "UTC"},
@@ -634,7 +634,7 @@ class CalendarGoogleSyncTest(unittest.TestCase):
                     "action": "create",
                     "event": {
                         "title": "Remote Created",
-                        "description": "Created from Maverick",
+                        "description": "Created from Loopino",
                         "startTime": "2026-05-28T13:00:00Z",
                         "endTime": "2026-05-28T14:00:00Z",
                         "source": "google_calendar",

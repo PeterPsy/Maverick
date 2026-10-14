@@ -20,7 +20,7 @@ export function postActiveThreadChanged({
   });
   window.parent?.postMessage(
     {
-      type: "maverick.chat.active-thread-changed",
+      type: "loopino.chat.active-thread-changed",
       owner_app_id: "chat",
       active_thread_id: activeThreadId,
       ...(navigationScope ? { navigation_scope: navigationScope } : {}),

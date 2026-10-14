@@ -7,7 +7,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 import unittest
 
-from core.inter_agent.adapters.maf import MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK
+from core.inter_agent.adapters.maf import LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK
 from core.inter_agent.models import BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
 
 
@@ -84,7 +84,7 @@ def load_maf_symbols(test_case: unittest.TestCase) -> SimpleNamespace:
     except (ImportError, ModuleNotFoundError) as exc:
         test_case.fail(
             f"MAF optional dependency is unavailable while "
-            f"{MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1: {exc}"
+            f"{LOOPINO_EXPERIMENTAL_AGENT_FRAMEWORK}=1: {exc}"
         )
     return SimpleNamespace(
         Agent=Agent,

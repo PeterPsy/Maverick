@@ -242,9 +242,9 @@ class ProviderHookCompactionTest(unittest.TestCase):
             with patch.dict(
                 namespace["os"].environ,  # type: ignore[index, union-attr]
                 {
-                    "MAVERICK_RUNTIME_ROOT": temp_dir,
-                    "MAVERICK_RUNTIME_API_TOKEN": "runtime-token",
-                    "MAVERICK_API_BASE": "http://127.0.0.1:8014",
+                    "LOOPINO_RUNTIME_ROOT": temp_dir,
+                    "LOOPINO_RUNTIME_API_TOKEN": "runtime-token",
+                    "LOOPINO_API_BASE": "http://127.0.0.1:8014",
                 },
             ):
                 with patch.object(namespace["urllib"].request, "urlopen", fake_urlopen):  # type: ignore[index, union-attr]
@@ -277,9 +277,9 @@ class ProviderHookCompactionTest(unittest.TestCase):
             with patch.dict(
                 namespace["os"].environ,  # type: ignore[index, union-attr]
                 {
-                    "MAVERICK_RUNTIME_ROOT": temp_dir,
-                    "MAVERICK_RUNTIME_API_TOKEN": "runtime-token-secret",
-                    "MAVERICK_API_BASE": "http://127.0.0.1:8014",
+                    "LOOPINO_RUNTIME_ROOT": temp_dir,
+                    "LOOPINO_RUNTIME_API_TOKEN": "runtime-token-secret",
+                    "LOOPINO_API_BASE": "http://127.0.0.1:8014",
                 },
             ):
                 response = fallback_response(  # type: ignore[operator]
@@ -322,7 +322,7 @@ class ProviderHookCompactionTest(unittest.TestCase):
         huge_stdout = "API_TOKEN=secret-value\n" + ("diagnostic line\n" * 2000)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.dict(namespace["os"].environ, {"MAVERICK_RUNTIME_ROOT": temp_dir}):  # type: ignore[index, union-attr]
+            with patch.dict(namespace["os"].environ, {"LOOPINO_RUNTIME_ROOT": temp_dir}):  # type: ignore[index, union-attr]
                 response = fallback_response(  # type: ignore[operator]
                     {
                         "hook_event_name": "PostToolUse",
@@ -343,7 +343,7 @@ class ProviderHookCompactionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.dict(  # type: ignore[index, union-attr]
                 namespace["os"].environ,
-                {"MAVERICK_RUNTIME_OUTPUT_COMPACTION": "0", "MAVERICK_RUNTIME_ROOT": temp_dir},
+                {"LOOPINO_RUNTIME_OUTPUT_COMPACTION": "0", "LOOPINO_RUNTIME_ROOT": temp_dir},
             ):
                 disabled_response = fallback_response(  # type: ignore[operator]
                     {
@@ -361,7 +361,7 @@ class ProviderHookCompactionTest(unittest.TestCase):
         huge_output = "Cookie: session=secret\n" + ("diagnostic line\n" * 2000)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.dict(namespace["os"].environ, {"MAVERICK_RUNTIME_ROOT": temp_dir}):  # type: ignore[index, union-attr]
+            with patch.dict(namespace["os"].environ, {"LOOPINO_RUNTIME_ROOT": temp_dir}):  # type: ignore[index, union-attr]
                 response = fallback_response(  # type: ignore[operator]
                     {
                         "hookEventName": "PostToolUse",
@@ -401,7 +401,7 @@ class ProviderHookCompactionTest(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch.dict(namespace["os"].environ, {"MAVERICK_RUNTIME_ROOT": temp_dir}):  # type: ignore[index, union-attr]
+            with patch.dict(namespace["os"].environ, {"LOOPINO_RUNTIME_ROOT": temp_dir}):  # type: ignore[index, union-attr]
                 response = fallback_response(  # type: ignore[operator]
                     {
                         "hook_event_name": "PostToolUse",

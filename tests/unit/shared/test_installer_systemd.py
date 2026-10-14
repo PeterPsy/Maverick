@@ -1,4 +1,4 @@
-"""Tests for rendered Maverick systemd service environment."""
+"""Tests for rendered Loopino systemd service environment."""
 
 from __future__ import annotations
 
@@ -21,11 +21,11 @@ class InstallerSystemdTestCase(unittest.TestCase):
 
         rendered = render_install_plan(config)
 
-        expected_path = "Environment=PATH=/usr/local/bin:/usr/bin:/bin"
+        expected_path = f"Environment=PATH={repo_root}/.venv/bin:{repo_root}/.toolchains/bin:{repo_root}/.toolchains/node/bin:/usr/local/bin:/usr/bin:/bin"
         for service_name in (
-            "maverick-core.service",
-            "maverick-backend-watchdog.service",
-            "maverick-rescue.service",
+            "loopino-core.service",
+            "loopino-backend-watchdog.service",
+            "loopino-rescue.service",
         ):
             with self.subTest(service_name=service_name):
                 self.assertIn(expected_path, rendered[config.systemd_dir / service_name])
@@ -36,7 +36,7 @@ class InstallerSystemdTestCase(unittest.TestCase):
 
         rendered = render_install_plan(config)
 
-        core_service = rendered[config.systemd_dir / "maverick-core.service"]
+        core_service = rendered[config.systemd_dir / "loopino-core.service"]
         self.assertIn("OOMScoreAdjust=-500", core_service)
 
 

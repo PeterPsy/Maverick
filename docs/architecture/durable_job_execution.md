@@ -4,7 +4,7 @@ Date: 2026-08-08
 
 ## Purpose
 
-`compute.job.execution` version `1` is the generic Maverick capability for work
+`compute.job.execution` version `1` is the generic Loopino capability for work
 that must outlive an HTTP request, app entrypoint, or agent turn. Its canonical
 submission envelope is `app-job.v1`, defined by
 `core/jobs/schemas/app-job.v1.schema.json`.

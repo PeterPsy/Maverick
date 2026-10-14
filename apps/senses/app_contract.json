@@ -3,8 +3,8 @@
   "contract_version": "1.0",
   "name": "Senses",
   "version": "0.8.0",
-  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing, Storage-backed frame/audio captures, and runtime routing to Chat.",
-  "publisher": "maverick",
+  "description": "Device and sensor connector for Loopino workspace inputs with user-session pairing, Storage-backed frame/audio captures, and runtime routing to Chat.",
+  "publisher": "loopino",
   "minimum_core_version": "0.1.0",
   "provides": [
     {

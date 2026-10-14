@@ -44,7 +44,7 @@ def utcnow() -> datetime:
 
 
 def _codex_executable() -> str:
-    configured = os.environ.get("MAVERICK_CODEX_COMMAND", "").strip()
+    configured = os.environ.get("LOOPINO_CODEX_COMMAND", "").strip()
     if configured:
         return configured
     resolved = shutil.which("codex")
@@ -101,7 +101,7 @@ def _fallback_model_options() -> list[ProviderModelOption]:
         ProviderModelOption(
             model_id=CODEX_DEFAULT_MODEL,
             label=CODEX_DEFAULT_MODEL,
-            description="Default Codex model configured by Maverick when the Codex model catalog cannot be read.",
+            description="Default Codex model configured by Loopino when the Codex model catalog cannot be read.",
             default_reasoning_effort=CODEX_DEFAULT_REASONING_EFFORT,
             supported_reasoning_efforts=_fallback_reasoning_options(),
         )
@@ -277,19 +277,19 @@ class CodexCommandMixin:
             env["TMP"] = str(runtime_root)
             env["TEMP"] = str(runtime_root)
             return env
-        env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
-        env["MAVERICK_WORKSPACE_ID"] = session.workspace_id
-        env["MAVERICK_RUNTIME_ROOT"] = str(runtime_root)
-        env["MAVERICK_RUNTIME_BIN"] = str(runtime_bin)
-        env["MAVERICK_RUNTIME_SESSION_ID"] = session.session_id
-        env["MAVERICK_RUNTIME_ENGINE_ID"] = "codex"
-        env["MAVERICK_EFFECTIVE_MODE"] = execution_mode
-        env["MAVERICK_RUNTIME_API_TOKEN"] = issue_workspace_api_token(
+        env["LOOPINO_WORKSPACE_ROOT"] = str(workspace_root)
+        env["LOOPINO_WORKSPACE_ID"] = session.workspace_id
+        env["LOOPINO_RUNTIME_ROOT"] = str(runtime_root)
+        env["LOOPINO_RUNTIME_BIN"] = str(runtime_bin)
+        env["LOOPINO_RUNTIME_SESSION_ID"] = session.session_id
+        env["LOOPINO_RUNTIME_ENGINE_ID"] = "codex"
+        env["LOOPINO_EFFECTIVE_MODE"] = execution_mode
+        env["LOOPINO_RUNTIME_API_TOKEN"] = issue_workspace_api_token(
             workspace_id=session.workspace_id,
             runtime_session_id=session.session_id,
             effective_mode=execution_mode,
         )
-        env["MAVERICK_API_BASE"] = str(env.get("MAVERICK_API_BASE") or "http://127.0.0.1:8014").rstrip("/")
+        env["LOOPINO_API_BASE"] = str(env.get("LOOPINO_API_BASE") or "http://127.0.0.1:8014").rstrip("/")
         if execution_mode == "sandbox":
             runtime_root.mkdir(parents=True, exist_ok=True)
             env["TMPDIR"] = str(runtime_root)

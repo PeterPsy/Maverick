@@ -20,9 +20,9 @@ from tests.support.markers import slow_test_class
 
 
 class SettingsFrontendDistTests(unittest.TestCase):
-    """Verify the bundled Settings frontend keeps the Maverick glass theme."""
+    """Verify the bundled Settings frontend keeps the Loopino glass theme."""
 
-    def test_frontend_dist_uses_maverick_glass_theme(self) -> None:
+    def test_frontend_dist_uses_loopino_glass_theme(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         css_files = sorted((app_root / "frontend" / "dist" / "assets").glob("*.css"))
         self.assertTrue(css_files)
@@ -31,7 +31,7 @@ class SettingsFrontendDistTests(unittest.TestCase):
 
         self.assertIn("Settings", frontend_html)
         self.assertIn("color-scheme:dark", frontend_css)
-        self.assertIn("--maverick-glass-surface", frontend_css)
+        self.assertIn("--loopino-glass-surface", frontend_css)
         self.assertIn("backdrop-filter:blur(26px)", frontend_css)
         self.assertIn("@keyframes settings-loading-skeleton-shimmer", frontend_css)
         self.assertIn(".settings-platform", frontend_css)
@@ -51,8 +51,8 @@ class SettingsFrontendDistTests(unittest.TestCase):
         self.assertEqual(sidebar_widget.frontend.mount, "frontend/dist/widgets/settings-sidebar")
         self.assertTrue((app_root / "frontend" / "dist" / "widgets" / "settings-sidebar" / "index.html").is_file())
         self.assertIn("'widgets/settings-sidebar/index': 'frontend/widgets/settings-sidebar/index.html'", vite_source)
-        self.assertIn("maverick.widget.open-app", sidebar_source)
-        self.assertIn("maverick.shell.sidebar.close", sidebar_source)
+        self.assertIn("loopino.widget.open-app", sidebar_source)
+        self.assertIn("loopino.shell.sidebar.close", sidebar_source)
 
     def test_settings_sidebar_uses_page_navigation(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -470,7 +470,7 @@ const settings = {
         health: 'healthy',
         health_reason_codes: [],
         update: { status: 'unknown', detail: null },
-        adapter: { id: 'codex-app-server', version: 'fixture', trusted_distribution: 'maverick_builtin' },
+        adapter: { id: 'codex-app-server', version: 'fixture', trusted_distribution: 'loopino_builtin' },
         protocol: { kind: 'app_server', id: 'codex-app-server-stdio', version: null, event_schema: 'fixture' },
         authentication_status: 'runtime_managed',
         models: [{ provider_id: 'codex', model_id: 'gpt-6.1-sol', model_revision: null, model_revision_policy: 'provider_alias' }],
@@ -716,14 +716,14 @@ settings.agentic_admin = {
   items: [{
     definition_id: 'google-agentic-gemini-3-5-pro-preview',
     display_name: 'Google Gemini 3.5 Pro',
-    runtime_engine_id: 'maverick-tool-loop',
+    runtime_engine_id: 'loopino-tool-loop',
     model_provider_id: 'google-ai-studio',
     model_id: 'gemini-3.5-pro',
     provider_protocol: 'google-interactions-sse',
     provider_api_version: 'v1beta',
     adapter_id: 'google-interactions-agentic',
     adapter_version_constraint: '==8',
-    execution_family: 'maverick_agent',
+    execution_family: 'loopino_agent',
     runtime_status: 'incomplete',
     runtime_status_reason: 'hosted_agent_runtime_disabled',
     capabilities: {},
@@ -998,7 +998,7 @@ const sourceAdapter = {
   kind: 'json',
   json_root: 'data/control-plane/json',
   mongo_uri: null,
-  mongo_database: 'maverick'
+  mongo_database: 'loopino'
 };
 const calls = [];
 
@@ -1073,8 +1073,8 @@ function makeController() {
       active_adapter: {
         kind: 'mongo',
         json_root: 'data/control-plane/json',
-        mongo_uri: 'mongodb://newhost:27017/maverick',
-        mongo_database: 'maverick'
+        mongo_uri: 'mongodb://newhost:27017/loopino',
+        mongo_database: 'loopino'
       },
       collections: [{ name: 'users', count: 2 }],
       restart_required_for_cutover: false
@@ -1097,7 +1097,7 @@ function makeController() {
   assert.equal(requestCount('/dry-run'), 1);
   assert.equal(controller.viewState().migrationPlan.same_adapter, false);
 
-  controller.updateDraft('mongodb_uri', 'mongodb://newhost:27017/maverick');
+  controller.updateDraft('mongodb_uri', 'mongodb://newhost:27017/loopino');
   assert.equal(controller.viewState().migrationPlan, null, 'editing the draft invalidates the reviewed plan');
 
   await controller.apply();
@@ -1219,7 +1219,7 @@ class SettingsApiTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
+        repo_root = Path(temp_dir.name) / "loopino"
         for name in ("core", "apps", "workspaces", "docs", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -1303,8 +1303,8 @@ class SettingsApiTestCase(unittest.TestCase):
             path="/api/auth/login",
             method="POST",
             body={
-                "username": username or os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": password or os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+                "username": username or os.environ.get("LOOPINO_ADMIN_USERNAME", "admin"),
+                "password": password or os.environ.get("LOOPINO_ADMIN_PASSWORD", "loopino"),
             },
         )
         self.assertEqual(status, 200)

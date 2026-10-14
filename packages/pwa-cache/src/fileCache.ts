@@ -10,8 +10,8 @@ import {
 } from "./fileCacheIdentity";
 import { BrowserFileCacheMaintenance } from "./fileCacheMaintenance";
 import {
-  MaverickFileHttpError,
-  MaverickFileRevalidationError,
+  LoopinoFileHttpError,
+  LoopinoFileRevalidationError,
   cacheErrorReason,
   combinedSignal,
   fetchFileResponse,
@@ -180,8 +180,8 @@ export class PwaFileCache {
         }
       } catch (error) {
         if (isAbortError(error)
-            || error instanceof MaverickFileHttpError
-            || error instanceof MaverickFileRevalidationError) throw error;
+            || error instanceof LoopinoFileHttpError
+            || error instanceof LoopinoFileRevalidationError) throw error;
         this.persistenceUnavailable = true;
         this.telemetry({ kind: "error", reason: cacheErrorReason(error) });
       }
@@ -331,7 +331,7 @@ export class PwaFileCache {
     }
     if (!response.ok) {
       if (partial && !resuming) await this.writer?.discard(key, partial);
-      throw new MaverickFileHttpError(response);
+      throw new LoopinoFileHttpError(response);
     }
     if (response.status === 206 && !resuming) {
       if (partial) await this.writer?.discard(key, partial);
@@ -414,7 +414,7 @@ export class PwaFileCache {
 
   private async readNetwork(url: string, signal: AbortSignal): Promise<FileCacheOpenResult> {
     const response = await fetchFileResponse(this.fetchImpl, url, signal);
-    if (!response.ok) throw new MaverickFileHttpError(response);
+    if (!response.ok) throw new LoopinoFileHttpError(response);
     return networkBlobResult(response, response.headers.get("ETag")?.trim() ?? "");
   }
 }

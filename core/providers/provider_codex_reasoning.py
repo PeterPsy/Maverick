@@ -1,4 +1,4 @@
-"""Maverick-owned Codex reasoning defaults and catalog normalization."""
+"""Loopino-owned Codex reasoning defaults and catalog normalization."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ CODEX_REASONING_PREFERENCE = ("xhigh", "max", "high", "medium", "low", "minimal"
 
 
 def codex_default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
-    """Choose Maverick's preferred single-agent reasoning effort for one Codex model."""
+    """Choose Loopino's preferred single-agent reasoning effort for one Codex model."""
     if option is None:
         return CODEX_DEFAULT_REASONING_EFFORT
     supported = [

@@ -33,11 +33,11 @@
     "browser": {
       "cli": {
         "descriptor_sha256": "5a727db7f73659da767a8e92714b3d4ef9509b6b4f215ec75f274b99db991389",
-        "execution_sha256": "5a3ae3b9d97b267da9eb60c4f26098031d2045079a773bbbc0a678116dab7851"
+        "execution_sha256": "c4e9d53631e3f74c781e4fda2b5bd7271ec7389d42088d847f38122f18d2e582"
       },
       "mcp": {
         "descriptor_sha256": "270e0f4daa4a23f32f78ff7ce9617c44b0adbb5bdf4f96db2bac352b891e4e9d",
-        "execution_sha256": "87dcb743f092fdb2b614207b98862f8d27ea77bd4f1daf3394a82fb45df42d38"
+        "execution_sha256": "23743c5f4461b2b85a2227c01db1f93e4b01b4c4d0f9b3dd69dbe1451dd55024"
       }
     },
     "calendar": {
@@ -231,6 +231,6 @@
       }
     }
   },
-  "audit_revision": "2026-10-14-loopino-phase1-reviewed-v16",
+  "audit_revision": "2026-10-14-loopino-phase1-deployment-v17",
   "schema_version": "2"
 }

@@ -37,11 +37,15 @@ def configure(enabled: bool) -> None:
         handle.write("yes" if enabled else "no")
 
 
+def lab_enabled() -> bool:
+    flag = SERVICE_ROOT / "lab-enabled"
+    return flag.is_file() and not flag.is_symlink() and flag.read_text() == "yes"
+
+
 def ensure_running(*, enable: bool = False) -> dict:
     if enable:
         configure(True)
-    flag = SERVICE_ROOT / "lab-enabled"
-    if not flag.is_file() or flag.is_symlink() or flag.read_text() != "yes":
+    if not lab_enabled():
         return {"status": "disabled"}
     current = control("status")
     if current.get("status") != "stopped":
@@ -55,7 +59,7 @@ def ensure_running(*, enable: bool = False) -> dict:
     subprocess.Popen([sys.executable, str(Path(__file__).with_name("lab_runtime_worker.py")), node],
                      cwd=APP_ROOT, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True,
-                     env={key: os.environ[key] for key in ("PATH", "HOME", "LANG", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "PLAYWRIGHT_BROWSERS_PATH") if key in os.environ})
+                     env={key: os.environ[key] for key in ("PATH", "HOME", "LANG", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "PLAYWRIGHT_BROWSERS_PATH", "LD_LIBRARY_PATH") if key in os.environ})
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         current = control("status")

@@ -17,7 +17,7 @@ import threading
 import time
 
 from broker_client import broker_health
-from lab_runtime_control import APP_ROOT, SERVICE_ROOT, SOCKET_PATH
+from lab_runtime_control import APP_ROOT, SERVICE_ROOT, SOCKET_PATH, lab_enabled
 
 
 def signal_group(child, signum: int) -> None:
@@ -34,6 +34,8 @@ def runtime_status(children: dict, health: dict) -> dict:
 
 
 def main(node: str) -> None:
+    if not lab_enabled():
+        return
     os.environ["LOOPINO_BROWSER_BROKER_TIMEOUT_SECONDS"] = "2"
     SERVICE_ROOT.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(SERVICE_ROOT / "lab.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -52,8 +54,8 @@ def main(node: str) -> None:
         handler = RotatingFileHandler(SERVICE_ROOT / "lab.log", maxBytes=1024*1024, backupCount=2)
         handler.setFormatter(logging.Formatter("%(asctime)s %(message)s")); logger.addHandler(handler)
         (SERVICE_ROOT / "lab.log").chmod(0o600)
-        env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR") if key in os.environ}
-        cache = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/home/ubuntu/.cache/ms-playwright"))
+        env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "LD_LIBRARY_PATH") if key in os.environ}
+        cache = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", str(APP_ROOT.parents[1] / ".toolchains/playwright-browsers")))
         env.update({"PLAYWRIGHT_BROWSERS_PATH": str(cache), "LOOPINO_BROWSER_BROKER_TOKEN_FILE": str(token)})
         stopped = threading.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopped.set())

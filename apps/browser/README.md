@@ -353,3 +353,26 @@ The architecture and acceptance evidence are recorded in
 [`browser_reading_architecture.md`](../../docs/architecture/browser_reading_architecture.md).
 Real Instagram verification requires the user's authenticated shared tab; fixture
 coverage must not be represented as inspection of a real profile.
+
+
+### Clean Linux Lab provisioning
+
+Keep Playwright 1.60.0 browser downloads under the protected installation
+`.toolchains/playwright-browsers` tree (`PLAYWRIGHT_BROWSERS_PATH`), not a host
+user cache. The runtime worker forwards the explicit installation library path
+for extracted Linux browser dependencies while filtering provider credentials.
+A dedicated `loopino-browser.service` may supervise this existing worker in the
+foreground as the service user. Keep its backing unit and stdout/stderr logs
+under `installation/`, with only an exclusive OS registration symlink. Its new
+broker token and private socket belong under `runtime/browser`. Stop/status use
+`systemctl stop/status loopino-browser.service`; do not start duplicate workers.
+The direct worker entry and recovery controller both require the same real,
+non-symlink `runtime/browser/lab-enabled` file containing `yes`. An app stop writes
+`no`; a subsequent service launch exits successfully without children until the
+owner explicitly enables the Lab. Service registration alone never enables it.
+
+Fresh app install hooks do not start a persistent worker. Provision/start the
+local Lab, confirm its active connection health, then install the standard app
+through the authenticated admin workspace-app API. A missing token or Playwright
+run-server must remain a failed health check. Public Lab inspection does not
+prove an authorized human Chrome connector or authenticated development context.

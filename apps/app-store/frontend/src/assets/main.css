@@ -919,7 +919,7 @@ h3 {
   padding: 24px;
   place-items: center;
   position: fixed;
-  z-index: 60;
+  z-index: 80;
 }
 
 .app-modal-backdrop.is-hidden {

@@ -37,6 +37,7 @@ The default-off M5 adapter may reuse only the authorized public catalog through 
 - Public identity is `public_store.public_app_uuid` in the app contract metadata. The App Store client generates and saves it before the first public submission when absent, then reuses it for updates; users do not type or edit this UUID.
 - Public publication can be submitted as `sealed` or `forkable`. Sealed packages rewrite the submitted contract distribution to `sealed`/`none` and omit common editable frontend source files; forkable packages rewrite it to `source_available`/`forkable` and include source suitable for customization.
 - The workspace-local promotion action is labeled "Promote to server app" to keep it distinct from public publication requests.
+- Management confirmation dialogs appear above the app carousel so promotion and deletion controls remain interactive while the carousel is open.
 
 ## SDK Flow
 

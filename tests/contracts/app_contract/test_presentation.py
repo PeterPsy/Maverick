@@ -52,4 +52,4 @@ class SidebarPresentationTests(unittest.TestCase):
             parsed = parse_app_contract_file(contract.parent)
             if not parsed.contract.presentation.sidebar_enabled:
                 disabled.append(parsed.app_id)
-        self.assertEqual(sorted(disabled), ["design-studio"])
+        self.assertEqual(sorted(disabled), ["browser", "design-studio", "openwa"])

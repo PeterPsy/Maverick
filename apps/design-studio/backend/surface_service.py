@@ -40,6 +40,8 @@ class SurfaceService:
 
     def dispatch(self, action: str, arguments: dict[str, Any]) -> dict[str, Any]:
         canonical = str(action or "state")
+        if canonical == "references.manifest":
+            return ProjectSurfaces(None, self.app_id).reference_manifest()
         delegation = DelegationService(
             self.payload,
             client=self._client,
@@ -78,8 +80,6 @@ class SurfaceService:
             return self.clear_custom_view()
         try:
             projects = ProjectSurfaces(self.client, self.app_id)
-            if canonical in {"references.manifest", "reference_manifest"}:
-                return projects.reference_manifest()
             if canonical in {"references.search", "reference_search"}:
                 return projects.reference_search(arguments)
             if canonical in {"references.resolve", "reference_resolve"}:

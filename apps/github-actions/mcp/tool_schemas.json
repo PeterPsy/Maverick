@@ -10,7 +10,9 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "reference_manifest": {"type": "object"}
+          "reference_manifest": {
+            "type": "object"
+          }
         }
       }
     },
@@ -25,7 +27,15 @@
             "github-app-private-key"
           ],
           "when": {
-            "action": ["dispatch", "dispatch_and_wait", "list_runs", "run_jobs", "run_status", "run_logs", "wait"]
+            "action": [
+              "dispatch",
+              "dispatch_and_wait",
+              "list_runs",
+              "run_jobs",
+              "run_status",
+              "run_logs",
+              "wait"
+            ]
           }
         }
       ],
@@ -34,26 +44,93 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["manifest", "dispatch", "dispatch_and_wait", "list_runs", "run_jobs", "run_status", "run_logs", "wait"],
+            "enum": [
+              "manifest",
+              "dispatch",
+              "dispatch_and_wait",
+              "list_runs",
+              "run_jobs",
+              "run_status",
+              "run_logs",
+              "wait"
+            ],
             "default": "manifest"
           },
-          "repository": {"type": "string"},
-          "owner": {"type": "string"},
-          "repo": {"type": "string"},
-          "workflow_id": {"type": "string", "default": "ios-install-device.yml"},
-          "workflow": {"type": "string"},
-          "ref": {"type": "string", "default": "loopino-integration"},
-          "branch": {"type": "string"},
-          "event": {"type": "string"},
-          "inputs": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean"]}},
-          "device_id": {"type": "string", "default": "00008120-00144CD90130201E"},
-          "launch_app": {"type": ["boolean", "string"], "default": "false"},
-          "run_id": {"type": ["integer", "string"]},
-          "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 7200},
-          "poll_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
-          "max_bytes": {"type": "integer", "minimum": 1000, "maximum": 200000},
-          "api_base": {"type": "string", "default": "https://api.github.com"}
+          "repository": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string",
+            "default": "ios-install-device.yml"
+          },
+          "workflow": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "launch_app": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "default": "false"
+          },
+          "run_id": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7200
+          },
+          "poll_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 200000
+          },
+          "api_base": {
+            "type": "string",
+            "default": "https://api.github.com"
+          }
         },
         "additionalProperties": false
       }

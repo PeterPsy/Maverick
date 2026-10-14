@@ -40,7 +40,7 @@ class ChatWidgetHostingTests(unittest.TestCase):
     def test_chat_declares_separate_shell_sidebar_primary_and_footer_widgets(self) -> None:
         contract_source = (REPO_ROOT / "apps/chat/app_contract.json").read_text()
         vite_source = (REPO_ROOT / "apps/chat/vite.config.ts").read_text()
-        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text() + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/ChatConversationPanel.tsx").read_text()
         footer_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/main.tsx").read_text()
 
         self.assertIn('"widget_id": "chat-sidebar"', contract_source)
@@ -52,11 +52,11 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertNotIn("New chat</span>", sidebar_source)
         self.assertIn("bs-chat-sidebar-footer__new-chat", footer_source)
         self.assertIn('const PRIMARY_ACTION_LABEL = "New chat";', footer_source)
-        self.assertIn("<span>{primaryActionLabel}</span>", footer_source)
+        self.assertIn("<span>{PRIMARY_ACTION_LABEL}</span>", footer_source)
         self.assertIn("loopino.widget.open-app", footer_source)
         self.assertIn("new_chat_request_id", footer_source)
 
-        footer_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/styles.css").read_text()
+        footer_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/styles.css").read_text() + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/selection-actions.css").read_text()
         self.assertIn("backdrop-filter: blur(18px) saturate(1.15);", footer_styles)
 
     def test_chat_declares_one_contextual_widget_for_all_placements(self) -> None:
@@ -69,13 +69,13 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn('aria-label="Return chat to overlay"', frame_source)
 
     def test_chat_sidebar_project_button_creates_without_opening_settings_panel(self) -> None:
-        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text() + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/ChatConversationPanel.tsx").read_text()
         project_actions_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/useSidebarProjectActions.ts").read_text()
         project_section_source = (
             (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/ProjectSection.tsx").read_text()
             + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/ProjectSectionHeader.tsx").read_text()
         )
-        sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
+        sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text() + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/conversation-panel.css").read_text()
 
         self.assertIn('const payload = await createProject("New project");', project_actions_source)
         self.assertIn("updateFromSidebarPayload(payload, setProjects);", project_actions_source)
@@ -86,7 +86,7 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertNotIn("bs-sidebar-floating-panel", sidebar_styles)
 
     def test_chat_sidebar_project_actions_are_inline(self) -> None:
-        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text() + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/ChatConversationPanel.tsx").read_text()
         project_state_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/useChatSidebarState.ts").read_text()
         project_actions_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/useSidebarProjectActions.ts").read_text()
         project_section_source = (
@@ -94,7 +94,7 @@ class ChatWidgetHostingTests(unittest.TestCase):
             + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/ProjectSectionHeader.tsx").read_text()
         )
         project_delete_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/ProjectDeleteConfirm.tsx").read_text()
-        sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
+        sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text() + (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/conversation-panel.css").read_text()
 
         self.assertIn("const [editingProject, setEditingProject]", project_actions_source)
         self.assertIn("cancelProjectEditFromOutside", project_actions_source)

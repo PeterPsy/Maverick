@@ -43,6 +43,22 @@
   "presentation": {
     "frontend_role": "workspace"
   },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
   "capabilities": {
     "mcp_tools": [],
     "cli_commands": [],
@@ -60,9 +76,12 @@
     "reference_entities": []
   },
   "entrypoints": {
-    "hooks": {},
+    "mcp": null,
+    "cli": null,
     "backend": "backend/app_backend.py",
-    "frontend": "frontend/dist"
+    "frontend": "frontend/dist",
+    "skills_root": null,
+    "hooks": {}
   },
   "storage": {
     "storage_kind": "json",
@@ -82,7 +101,6 @@
     ]
   },
   "hook_timeouts": {
-    "backend_seconds": 30,
     "install_seconds": 60,
     "upgrade_seconds": 120,
     "migrate_seconds": 300,

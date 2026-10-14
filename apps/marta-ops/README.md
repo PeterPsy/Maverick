@@ -77,3 +77,11 @@ loopino core cli run core.app-sdk.status --app-id marta-ops --json
 ```
 
 Backend tests cover old-data retention, validation, contact links, task completion/reopening, notes, sparse and filtered pipeline ordering, governed callbacks, draft/event reuse, verified Storage attachments and read-only sidebar counts/date validation. Frontend tests cover record editing/failure recovery, contact autofill, phase changes without dragging, task relationships, delivery status changes, administrative updates, integration controls, Storage picker returns, stacked-drawer saves, exact shell origin checks, refresh races, sidebar context failures, live badges, quick filters, retained section state, contextual footer/header actions and theme messages. Navigation regression tests relay the shell's accepted widget messages into the real app and check rendered views, filtered records and creation panels after clicks. Browser preview verification uses synthetic records with the real app backend in a temporary data root; it does not read or seed the workspace's production data.
+
+## SDK Flow
+
+Validate shared source with `loopino core cli run core.app-sdk.validate --app-root apps/marta-ops --json`. Rebuild a deliberately installed verification binding through `loopino app marta-ops frontend build --json`. Company-specific source is excluded from standard bootstrap, catalog export and bundled skill seeding.
+
+## Contract Notes
+
+Workspace business data and credentials belong to workspace data and request-scoped Core grants. Source stays in the platform repository; CLI/MCP schemas must match their entrypoints, and unavailable lifecycle hooks are not declared. Native UI acceptance remains separate from source/build validation.

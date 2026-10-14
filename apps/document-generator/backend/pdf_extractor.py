@@ -60,7 +60,7 @@ def _extract_pdf_text_with_pymupdf(path: Path) -> dict[str, object]:
 
 
 def _load_pymupdf():
-    import fitz  # type: ignore[import-not-found]
+    import pymupdf as fitz  # type: ignore[import-not-found]
 
     return fitz
 

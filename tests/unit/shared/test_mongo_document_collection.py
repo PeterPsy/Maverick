@@ -184,10 +184,10 @@ class MongoDocumentCollectionTestCase(unittest.TestCase):
 
         collection.update_one(
             {"secret_id": "s1"},
-            {"$set": {"value_format": "mvr3secret1"}, "$unset": {"raw_value": ""}},
+            {"$set": {"value_format": "loopino.secret-value.v1-aesgcm"}, "$unset": {"raw_value": ""}},
         )
 
-        self.assertEqual(collection.find_one({"secret_id": "s1"}), {"secret_id": "s1", "value_format": "mvr3secret1"})
+        self.assertEqual(collection.find_one({"secret_id": "s1"}), {"secret_id": "s1", "value_format": "loopino.secret-value.v1-aesgcm"})
 
     def test_delete_many_returns_the_native_deleted_count(self) -> None:
         fake = FakeMongoCollection()

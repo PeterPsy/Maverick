@@ -13,6 +13,11 @@ from surface_service import SurfaceService, app_events_for_action
 
 
 TOOL_ACTIONS = {
+    "design_studio_reference_manifest": "references.manifest",
+    "design_studio_reference_search": "references.search",
+    "design_studio_reference_resolve": "references.resolve",
+    "design_studio_reference_summarize": "references.summarize",
+
     "design_studio_delegate": "delegate",
     "design_studio_delegation_status": "delegation_status",
     "design_studio_cancel_delegation": "cancel_delegation",

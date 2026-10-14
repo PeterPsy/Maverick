@@ -429,7 +429,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
 
     def test_reviewed_tool_schema_preserves_sensitive_property_names(self) -> None:
         schema = {
-            "name": "mav_core_capability_cli_run_fixture",
+            "name": "loopino_core_capability_cli_run_fixture",
             "description": "Run one discovered Core command.",
             "input_schema": {
                 "type": "object",

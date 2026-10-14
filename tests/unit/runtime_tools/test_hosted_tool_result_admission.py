@@ -446,7 +446,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
 
         provider_result = make_agentic_tool_result(
             provider_tool_call_id="call-large-artifact",
-            provider_tool_name="mav_fixture_large",
+            provider_tool_name="loopino_fixture_large",
             result=projected,
             is_error=False,
             invocation=invocation,

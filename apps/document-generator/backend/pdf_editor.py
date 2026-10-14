@@ -398,7 +398,7 @@ def _hash_file(path: Path) -> str:
 
 def _load_pymupdf():
     try:
-        import fitz  # type: ignore[import-not-found]
+        import pymupdf as fitz  # type: ignore[import-not-found]
     except ModuleNotFoundError as error:
         raise DocumentValidationError(
             "PyMuPDF is not installed. Install Loopino runtime dependencies with `python3 -m pip install -e .`."

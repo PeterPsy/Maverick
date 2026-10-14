@@ -530,7 +530,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
     def test_health_hook_reports_degraded_when_pymupdf_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            blocker = root / "block_fitz"
+            blocker = root / "block_pymupdf"
             blocker.mkdir()
             (blocker / "sitecustomize.py").write_text(
                 "\n".join(
@@ -538,8 +538,8 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
                         "import builtins",
                         "_real_import = builtins.__import__",
                         "def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):",
-                        "    if name == 'fitz' or name.startswith('fitz.'):",
-                        "        raise ModuleNotFoundError(\"No module named 'fitz'\")",
+                        "    if name == 'pymupdf' or name.startswith('pymupdf.'):",
+                        "        raise ModuleNotFoundError(\"No module named 'pymupdf'\")",
                         "    return _real_import(name, globals, locals, fromlist, level)",
                         "builtins.__import__ = _guarded_import",
                     ]
@@ -574,7 +574,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             root = Path(temp)
             fake_dependency = root / "fake_dependency"
             fake_dependency.mkdir()
-            (fake_dependency / "fitz.py").write_text("__version__ = 'test-version'\n", encoding="utf-8")
+            (fake_dependency / "pymupdf.py").write_text("__version__ = 'test-version'\n", encoding="utf-8")
             env = dict(os.environ)
             env["PYTHONPATH"] = f"{fake_dependency}{os.pathsep}{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH', '')}"
 
@@ -692,7 +692,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
 
     def test_backend_patches_pdf_text_when_pymupdf_is_available(self) -> None:
         try:
-            import fitz  # type: ignore[import-not-found]
+            import pymupdf as fitz  # type: ignore[import-not-found]
         except ModuleNotFoundError:
             self.skipTest("PyMuPDF is not installed in this test environment.")
 

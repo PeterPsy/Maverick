@@ -233,12 +233,42 @@
     },
     "chat_learning_memory": {
       "effect_class": "mutating",
-      "effect_class_by_argument": {"argument_name": "command", "omitted_effect_class": "mutating", "value_effect_classes": {"inspect": "read", "commit": "mutating"}},
+      "effect_class_by_argument": {
+        "argument_name": "command",
+        "omitted_effect_class": "mutating",
+        "value_effect_classes": {
+          "inspect": "read",
+          "commit": "mutating"
+        }
+      },
       "description": "Inspect or commit an accepted Memory learning candidate from its assigned work chat. Writes exactly the approved fact and evidence through the pinned Memory provider; no arbitrary content or destination is accepted.",
-      "input_schema": {"type": "object", "properties": {"item_id": {"type": "string", "minLength": 1, "maxLength": 128}, "command": {"type": "string", "enum": ["inspect", "commit"]}}, "required": ["item_id", "command"], "additionalProperties": false},
-      "output_schema": {"type": "object"},
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "command": {
+            "type": "string",
+            "enum": [
+              "inspect",
+              "commit"
+            ]
+          }
+        },
+        "required": [
+          "item_id",
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
       "supports_idempotency": true,
-      "safe_to_retry": true
+      "safe_to_retry": false
     },
     "chat_operations_manifest": {
       "effect_class": "read",
@@ -252,15 +282,33 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "app_id": {"type": "string"},
-          "schema_version": {"type": "string"},
-          "default_action": {"type": "string"},
-          "recommended": {"type": "array"},
-          "operations": {"type": "object"},
-          "payload_profiles": {"type": "object"},
-          "examples": {"type": "object"},
-          "notes": {"type": "array"}
+          "status_code": {
+            "type": "integer"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "default_action": {
+            "type": "string"
+          },
+          "recommended": {
+            "type": "array"
+          },
+          "operations": {
+            "type": "object"
+          },
+          "payload_profiles": {
+            "type": "object"
+          },
+          "examples": {
+            "type": "object"
+          },
+          "notes": {
+            "type": "array"
+          }
         }
       }
     },
@@ -276,10 +324,18 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "app_id": {"type": "string"},
-          "schema_version": {"type": "string"},
-          "entity_types": {"type": "array"}
+          "status_code": {
+            "type": "integer"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "entity_types": {
+            "type": "array"
+          }
         }
       }
     },
@@ -289,21 +345,52 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project", "scheduled_chat"]},
-          "type": {"type": "string", "enum": ["project", "scheduled_chat"], "description": "Alias for entity_type."},
-          "query": {"type": "string"},
-          "q": {"type": "string", "description": "Alias for query."},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "scheduled_chat"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "scheduled_chat"
+            ],
+            "description": "Alias for entity_type."
+          },
+          "query": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string",
+            "description": "Alias for query."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          }
         },
-        "required": ["entity_type"],
+        "required": [
+          "entity_type"
+        ],
         "additionalProperties": false
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "results": {"type": "array"},
-          "payload_profile": {"type": "string"}
+          "status_code": {
+            "type": "integer"
+          },
+          "results": {
+            "type": "array"
+          },
+          "payload_profile": {
+            "type": "string"
+          }
         }
       }
     },
@@ -313,33 +400,93 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"]},
-          "type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"], "description": "Alias for entity_type."},
-          "entity_id": {"type": "string"},
-          "project_id": {"type": "string", "description": "Alias for entity_id."},
-          "thread_id": {"type": "string", "description": "Alias for entity_id for runtime-thread references."},
-          "id": {"type": "string", "description": "Alias for entity_id."}
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "thread",
+              "scheduled_chat"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "thread",
+              "scheduled_chat"
+            ],
+            "description": "Alias for entity_type."
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Alias for entity_id."
+          },
+          "thread_id": {
+            "type": "string",
+            "description": "Alias for entity_id for runtime-thread references."
+          },
+          "id": {
+            "type": "string",
+            "description": "Alias for entity_id."
+          }
         },
-        "required": ["entity_type"],
+        "required": [
+          "entity_type"
+        ],
         "anyOf": [
-          {"required": ["entity_id"]},
-          {"required": ["project_id"]},
-          {"required": ["thread_id"]},
-          {"required": ["id"]}
+          {
+            "required": [
+              "entity_id"
+            ]
+          },
+          {
+            "required": [
+              "project_id"
+            ]
+          },
+          {
+            "required": [
+              "thread_id"
+            ]
+          },
+          {
+            "required": [
+              "id"
+            ]
+          }
         ],
         "additionalProperties": false
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "exists": {"type": "boolean"},
-          "app_id": {"type": "string"},
-          "entity_type": {"type": "string"},
-          "entity_id": {"type": "string"},
-          "title": {"type": "string"},
-          "summary": {"type": "string"},
-          "deep_link": {"type": "string"}
+          "status_code": {
+            "type": "integer"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "deep_link": {
+            "type": "string"
+          }
         }
       }
     },
@@ -349,35 +496,99 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"]},
-          "type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"], "description": "Alias for entity_type."},
-          "entity_id": {"type": "string"},
-          "project_id": {"type": "string", "description": "Alias for entity_id."},
-          "thread_id": {"type": "string", "description": "Alias for entity_id for runtime-thread references."},
-          "id": {"type": "string", "description": "Alias for entity_id."}
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "thread",
+              "scheduled_chat"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "project",
+              "thread",
+              "scheduled_chat"
+            ],
+            "description": "Alias for entity_type."
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Alias for entity_id."
+          },
+          "thread_id": {
+            "type": "string",
+            "description": "Alias for entity_id for runtime-thread references."
+          },
+          "id": {
+            "type": "string",
+            "description": "Alias for entity_id."
+          }
         },
-        "required": ["entity_type"],
+        "required": [
+          "entity_type"
+        ],
         "anyOf": [
-          {"required": ["entity_id"]},
-          {"required": ["project_id"]},
-          {"required": ["thread_id"]},
-          {"required": ["id"]}
+          {
+            "required": [
+              "entity_id"
+            ]
+          },
+          {
+            "required": [
+              "project_id"
+            ]
+          },
+          {
+            "required": [
+              "thread_id"
+            ]
+          },
+          {
+            "required": [
+              "id"
+            ]
+          }
         ],
         "additionalProperties": false
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "exists": {"type": "boolean"},
-          "app_id": {"type": "string"},
-          "entity_type": {"type": "string"},
-          "entity_id": {"type": "string"},
-          "title": {"type": "string"},
-          "deep_link": {"type": "string"},
-          "summary": {"type": "string"},
-          "safe_fields": {"type": "object"},
-          "source_updated_at": {"type": "string"}
+          "status_code": {
+            "type": "integer"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "deep_link": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "safe_fields": {
+            "type": "object"
+          },
+          "source_updated_at": {
+            "type": "string"
+          }
         }
       }
     },
@@ -393,8 +604,12 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "state": {"type": "object"}
+          "status_code": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "object"
+          }
         }
       }
     },
@@ -404,9 +619,21 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "query": {"type": "string"},
-          "entity_type": {"type": "string", "enum": ["all", "thread", "project"]},
-          "preserve_custom": {"type": "boolean", "default": false}
+          "query": {
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "all",
+              "thread",
+              "project"
+            ]
+          },
+          "preserve_custom": {
+            "type": "boolean",
+            "default": false
+          }
         },
         "required": [],
         "additionalProperties": false
@@ -414,9 +641,15 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "state": {"type": "object"},
-          "app_events": {"type": "array"}
+          "status_code": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "object"
+          },
+          "app_events": {
+            "type": "array"
+          }
         }
       }
     },
@@ -426,31 +659,61 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "title": {"type": "string"},
-          "query": {"type": "string"},
-          "entity_type": {"type": "string", "enum": ["all", "thread", "project"]},
+          "title": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "all",
+              "thread",
+              "project"
+            ]
+          },
           "refs": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "entity_type": {"type": "string", "enum": ["project", "thread"]},
-                "entity_id": {"type": "string"}
+                "entity_type": {
+                  "type": "string",
+                  "enum": [
+                    "project",
+                    "thread"
+                  ]
+                },
+                "entity_id": {
+                  "type": "string"
+                }
               },
-              "required": ["entity_type", "entity_id"],
+              "required": [
+                "entity_type",
+                "entity_id"
+              ],
               "additionalProperties": false
             }
           }
         },
-        "required": ["refs"],
+        "required": [
+          "refs"
+        ],
         "additionalProperties": false
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "state": {"type": "object"},
-          "app_events": {"type": "array"}
+          "status_code": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "object"
+          },
+          "app_events": {
+            "type": "array"
+          }
         }
       }
     },
@@ -466,9 +729,15 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "state": {"type": "object"},
-          "app_events": {"type": "array"}
+          "status_code": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "object"
+          },
+          "app_events": {
+            "type": "array"
+          }
         }
       }
     }

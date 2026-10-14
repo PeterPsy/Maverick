@@ -226,9 +226,6 @@
           }
         },
         "additionalProperties": false
-      },
-      "output_schema": {
-        "type": "object"
       }
     },
     "chat": {
@@ -276,12 +273,20 @@
           },
           "entity_type": {
             "type": "string",
-            "enum": ["project", "thread", "scheduled_chat"],
+            "enum": [
+              "project",
+              "thread",
+              "scheduled_chat"
+            ],
             "description": "Reference entity type for reference operations."
           },
           "type": {
             "type": "string",
-            "enum": ["project", "thread", "scheduled_chat"],
+            "enum": [
+              "project",
+              "thread",
+              "scheduled_chat"
+            ],
             "description": "Alias for entity_type."
           },
           "entity_id": {
@@ -330,10 +335,22 @@
             "items": {
               "type": "object",
               "properties": {
-                "entity_type": {"type": "string", "enum": ["project", "thread", "scheduled_chat"]},
-                "entity_id": {"type": "string"}
+                "entity_type": {
+                  "type": "string",
+                  "enum": [
+                    "project",
+                    "thread",
+                    "scheduled_chat"
+                  ]
+                },
+                "entity_id": {
+                  "type": "string"
+                }
               },
-              "required": ["entity_type", "entity_id"],
+              "required": [
+                "entity_type",
+                "entity_id"
+              ],
               "additionalProperties": false
             }
           }

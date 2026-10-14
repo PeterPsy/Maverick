@@ -14,11 +14,7 @@ from urllib import error, parse, request
 import zipfile
 
 
-DEFAULT_OWNER = "giuntiocram"
-DEFAULT_REPO = "loopino-glasses-ios"
-DEFAULT_REF = "loopino-integration"
 DEFAULT_WORKFLOW = "ios-install-device.yml"
-DEFAULT_DEVICE_ID = "00008120-00144CD90130201E"
 DEFAULT_API_BASE = "https://api.github.com"
 
 REQUIRED_SECRETS = ("github-app-id", "github-installation-id", "github-app-private-key")
@@ -89,7 +85,7 @@ class GitHubActionsClient:
     def dispatch(self, arguments: dict[str, Any]) -> dict[str, Any]:
         owner, repo = _repo(arguments)
         workflow_id = _workflow(arguments)
-        ref = str(arguments.get("ref") or DEFAULT_REF)
+        ref = _required_ref(arguments)
         inputs = _workflow_inputs(arguments)
         before = _now()
         self._request(
@@ -115,7 +111,7 @@ class GitHubActionsClient:
         if not isinstance(run, dict) or not run.get("id"):
             owner, repo = _repo(arguments)
             workflow_id = _workflow(arguments)
-            branch = str(arguments.get("ref") or DEFAULT_REF)
+            branch = dispatch_result["ref"]
             found = self._wait_for_recent_run(owner=owner, repo=repo, workflow_id=workflow_id, branch=branch, timeout_seconds=60)
             if found:
                 run = _run_summary(found)
@@ -278,8 +274,8 @@ def _manifest() -> dict[str, Any]:
     return {
         "ok": True,
         "app_id": "github-actions",
-        "default_repository": f"{DEFAULT_OWNER}/{DEFAULT_REPO}",
-        "default_ref": DEFAULT_REF,
+        "repository_required": True,
+        "dispatch_ref_required": True,
         "default_workflow": DEFAULT_WORKFLOW,
         "required_secrets": list(REQUIRED_SECRETS),
         "actions": list(SUPPORTED_ACTIONS),
@@ -308,8 +304,18 @@ def _repo(arguments: dict[str, Any]) -> tuple[str, str]:
         if "/" not in repository:
             raise GitHubActionsError("repository must use owner/repo format.")
         owner, repo = repository.split("/", 1)
-        return owner, repo
-    return str(arguments.get("owner") or DEFAULT_OWNER), str(arguments.get("repo") or DEFAULT_REPO)
+    else:
+        owner, repo = str(arguments.get("owner") or ""), str(arguments.get("repo") or "")
+    if any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", value) for value in (owner, repo)):
+        raise GitHubActionsError("An explicit owner/repo repository is required.")
+    return owner, repo
+
+
+def _required_ref(arguments: dict[str, Any]) -> str:
+    ref = str(arguments.get("ref") or "").strip()
+    if not ref:
+        raise GitHubActionsError("An explicit ref or exact commit SHA is required for dispatch.")
+    return ref
 
 
 def _workflow(arguments: dict[str, Any]) -> str:
@@ -321,11 +327,12 @@ def _workflow_inputs(arguments: dict[str, Any]) -> dict[str, str]:
     inputs = {str(key): str(value) for key, value in raw.items()} if isinstance(raw, dict) else {}
     default_install_workflow = _workflow(arguments) == DEFAULT_WORKFLOW
     if "device_id" not in inputs and ("device_id" in arguments or default_install_workflow):
-        if arguments.get("device_id", DEFAULT_DEVICE_ID) is not None:
-            inputs["device_id"] = str(arguments.get("device_id") or DEFAULT_DEVICE_ID)
+        if arguments.get("device_id") is not None:
+            inputs["device_id"] = str(arguments["device_id"])
     if "launch_app" not in inputs and "launch_app" in arguments and arguments.get("launch_app") is not None:
         inputs["launch_app"] = "true" if arguments.get("launch_app") is True else str(arguments.get("launch_app"))
     if default_install_workflow:
+        inputs.setdefault("build_only", "true")
         inputs.setdefault("launch_app", "false")
     return inputs
 

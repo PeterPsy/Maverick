@@ -42,3 +42,11 @@ cd apps/openwa && npm test
 ```
 
 The provider is pinned to a specific upstream revision; license and local changes are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## SDK Flow
+
+Validate shared source with `loopino core cli run core.app-sdk.validate --app-root apps/openwa --json`, then rebuild through `loopino app openwa frontend build --json`. The standard catalog packages this exact source with SDK validation and an immutable checksum manifest; tenant gateway configuration is excluded.
+
+## Contract Notes
+
+The app owns session navigation and disables the shell sidebar. Backend, CLI and MCP dispatch the same bounded actions with request-scoped credentials. Canonical `references.manifest` metadata works before gateway configuration and declares an empty entity set. Gateway login, pairing and real send/recovery behavior still require functional verification with newly entered credentials.

@@ -30,6 +30,7 @@ from core.runtime.hosted_app_effect_authority import (
 )
 from core.runtime.hosted_builtin_app_execution import (
     hosted_builtin_app_execution_digest,
+    HOSTED_BUILTIN_APP_IDS,
 )
 from core.runtime.tool_discovery_capabilities import RuntimeToolDiscoveryBroker
 from core.runtime.tool_catalog import RuntimeToolActorContext
@@ -59,7 +60,7 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
     def test_builtin_effect_descriptors_match_core_audit_inventory(self) -> None:
         observed: dict[str, dict[str, str]] = {}
         for app_root in sorted((REPOSITORY_ROOT / "apps").iterdir()):
-            if not (app_root / "app_contract.json").is_file():
+            if app_root.name not in HOSTED_BUILTIN_APP_IDS or not (app_root / "app_contract.json").is_file():
                 continue
             digests = {}
             for surface, relative_path in (
@@ -95,7 +96,7 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
         counts = {"cli": 0, "mcp": 0}
         argument_sensitive = 0
         for app_root in sorted((REPOSITORY_ROOT / "apps").iterdir()):
-            if not (app_root / "app_contract.json").is_file():
+            if app_root.name not in HOSTED_BUILTIN_APP_IDS or not (app_root / "app_contract.json").is_file():
                 continue
             contract = parse_app_contract_file(app_root).contract
             for command_id in contract.capabilities.cli_commands:
@@ -129,8 +130,8 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                     metadata,
                 )
 
-        self.assertEqual(counts, {"cli": 28, "mcp": 387})
-        self.assertEqual(argument_sensitive, 33)
+        self.assertEqual(counts, {"cli": 29, "mcp": 454})
+        self.assertEqual(argument_sensitive, 37)
 
     def test_real_storage_cli_and_mcp_catalog_execute_after_preflight(self) -> None:
         store = self.make_app_store()

@@ -15,7 +15,9 @@ def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
     tool_name = str(payload.get("tool_name") or "")
-    if tool_name != "loopino_vault":
+    if tool_name == "vault_reference_manifest":
+        result = {"status_code": 200, "app_id": "vault", "reference_manifest": {"entity_types": []}, "redaction_safe": True}
+    elif tool_name != "loopino_vault":
         result = {
             "status_code": 404,
             "error": "unsupported_vault_tool",

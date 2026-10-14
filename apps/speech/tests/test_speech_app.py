@@ -175,9 +175,11 @@ class SpeechAppTests(unittest.TestCase):
                 publisher="loopino",
                 contract=build_app_contract(entrypoints=build_app_entrypoints(backend="backend/app_backend.py")),
             )
-            binding = SimpleNamespace(data_root=str(data_root), source_kind="platform")
+            binding = SimpleNamespace(data_root=str(data_root), source_kind="platform", workspace_id="default", app_id="speech")
             state = SimpleNamespace(
                 provider_store=SimpleNamespace(),
+                identity_store=None,
+                app_store=None,
                 workspace_store=None,
                 app_event_bus=None,
                 secret_store=None,
@@ -215,6 +217,7 @@ class SpeechAppTests(unittest.TestCase):
                     )
                 )
 
+        self.assertEqual(captured_payloads[-1].get("response_status"), "200 OK", response.decode("utf-8"))
         payload = next(item for item in captured_payloads if item.get("surface") == "backend")
         self.assertEqual(json.loads(response.decode("utf-8")), {"ok": True})
         self.assertEqual(

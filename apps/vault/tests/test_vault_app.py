@@ -197,7 +197,7 @@ class VaultAppTest(unittest.TestCase):
         self.assertEqual(contract.entrypoints.mcp, "mcp/server.py")
         self.assertEqual(contract.entrypoints.skills_root, "skills")
         self.assertEqual(contract.capabilities.cli_commands, ["vault"])
-        self.assertEqual(contract.capabilities.mcp_tools, ["loopino_vault"])
+        self.assertEqual(contract.capabilities.mcp_tools, ["loopino_vault", "vault_reference_manifest"])
         self.assertEqual(contract.capabilities.skills, ["vault-ops"])
         self.assertEqual(contract.storage.storage_kind, "none")
         self.assertEqual(contract.storage.primary_paths, [])

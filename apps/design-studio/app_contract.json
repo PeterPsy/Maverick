@@ -96,7 +96,11 @@
       "design_studio_view_filter",
       "design_studio_set_view_filter",
       "design_studio_set_custom_view",
-      "design_studio_clear_custom_view"
+      "design_studio_clear_custom_view",
+      "design_studio_reference_manifest",
+      "design_studio_reference_search",
+      "design_studio_reference_resolve",
+      "design_studio_reference_summarize"
     ],
     "cli_commands": [
       "design-studio",
@@ -163,17 +167,17 @@
     ]
   },
   "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
     "hooks": {
       "install": "hooks/install.py",
       "upgrade": "hooks/install.py",
       "migrate": "hooks/migrate.py",
       "health_check": "hooks/health_check.py"
-    },
-    "backend": "backend/app_backend.py",
-    "frontend": "frontend/dist",
-    "mcp": "mcp/server.py",
-    "cli": "cli/app_cli.py",
-    "skills_root": "skills"
+    }
   },
   "storage": {
     "storage_kind": "json+files",
@@ -261,9 +265,6 @@
         "data_mount": {
           "subpath": "opendesign-native"
         },
-        "diagnostics": {
-          "status_file": "native-host-status.json"
-        },
         "host_prepare": {
           "entrypoint": "hooks/sidecar_prepare.py",
           "timeout_seconds": 30,
@@ -271,11 +272,21 @@
             "LOOPINO_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
           ]
         },
+        "model_access": {
+          "api": true,
+          "cli": [
+            "codex"
+          ],
+          "required": false
+        },
         "prewarm": {
           "on_core_start": true,
           "on_install": true,
           "on_activation": true,
           "keep_alive": true
+        },
+        "diagnostics": {
+          "status_file": "native-host-status.json"
         },
         "process_policy": {
           "inherit_host_env": false,
@@ -594,13 +605,6 @@
         "logs": {
           "stdout": "logs/apps/design-studio/sidecar.log",
           "stderr": "logs/apps/design-studio/sidecar.log"
-        },
-        "model_access": {
-          "api": true,
-          "cli": [
-            "codex"
-          ],
-          "required": false
         }
       }
     ]

@@ -96,6 +96,9 @@ def _replace_stale_lock(path: Path, *, expected: os.stat_result) -> int:
         if (
             (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino)
             or current.st_ctime_ns != expected.st_ctime_ns
+            or current.st_mtime_ns != expected.st_mtime_ns
+            or current.st_size != expected.st_size
+            or (current.st_uid, current.st_gid, current.st_mode) != (expected.st_uid, expected.st_gid, expected.st_mode)
             or not stat.S_ISREG(current.st_mode)
             or current.st_nlink != 1
         ):

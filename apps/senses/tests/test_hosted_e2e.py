@@ -348,11 +348,17 @@ class SensesHostedE2ETest(unittest.TestCase):
         whisper_binary = speech_fixture / "whisper-cli"
         whisper_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         whisper_binary.chmod(0o700)
+        # The health hook checks both declared interfaces. Keep this fixture
+        # independent of host speech packages without contacting a provider.
+        synthesis_binary = speech_fixture / "espeak"
+        synthesis_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        synthesis_binary.chmod(0o700)
         whisper_model = speech_fixture / "model.bin"
         whisper_model.write_bytes(b"deterministic-test-model")
         with patch.dict(
             os.environ,
             {
+                "PATH": str(speech_fixture) + os.pathsep + os.environ.get("PATH", ""),
                 "LOOPINO_SPEECH_WHISPER_CPP_BINARY": str(whisper_binary),
                 "LOOPINO_SPEECH_WHISPER_CPP_MODEL": str(whisper_model),
             },

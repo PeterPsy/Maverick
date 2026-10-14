@@ -15,7 +15,9 @@ def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
     action = str(arguments.get("action") or "manifest").strip()
-    print(json.dumps(handle_operation(payload, action=action), ensure_ascii=False))
+    result = ({"app_id": "vault", "entity_types": [], "redaction_safe": True}
+              if action == "references.manifest" else handle_operation(payload, action=action))
+    print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":

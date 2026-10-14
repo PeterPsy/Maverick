@@ -11,6 +11,8 @@ def event(resource):
 def handle(payload, body=None):
     body = payload.body if body is None else body
     action = body.get("action", "status")
+    if action == "references.manifest":
+        return {"app_id": "openwa", "entity_types": []}
     user = payload.user_id
     if not user:
         raise GatewayError("A trusted Loopino user is required.", 403)
@@ -41,8 +43,6 @@ def handle(payload, body=None):
     if action == "notifications.dismiss":
         dismiss(payload.data_root, user, text(body, "id", 200))
         return {"ok": True, "app_events": [event("notifications")]}
-    if action == "reference_manifest":
-        return {"app_id": "openwa", "entity_types": []}
     if action not in READ_ACTIONS | WRITE_ACTIONS:
         raise GatewayError("Unknown operation.", 400)
     try:

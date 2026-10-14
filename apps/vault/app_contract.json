@@ -50,7 +50,8 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "loopino_vault"
+      "loopino_vault",
+      "vault_reference_manifest"
     ],
     "cli_commands": [
       "vault"
@@ -65,42 +66,6 @@
     "view_surfaces": [],
     "reference_entities": []
   },
-  "widgets": [
-    {
-      "widget_id": "vault-sidebar",
-      "host": "base-shell",
-      "content_kinds": [
-        "shell.sidebar.primary"
-      ],
-      "frontend": {
-        "kind": "iframe",
-        "mount": "frontend/dist/widgets/vault-sidebar",
-        "spa_fallback": true
-      },
-      "actions": {
-        "backend": false,
-        "mcp": false,
-        "cli": false
-      }
-    },
-    {
-      "widget_id": "vault-sidebar-footer",
-      "host": "base-shell",
-      "content_kinds": [
-        "shell.sidebar.footer"
-      ],
-      "frontend": {
-        "kind": "iframe",
-        "mount": "frontend/dist/widgets/vault-sidebar-footer",
-        "spa_fallback": true
-      },
-      "actions": {
-        "backend": false,
-        "mcp": false,
-        "cli": false
-      }
-    }
-  ],
   "entrypoints": {
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",
@@ -157,5 +122,41 @@
     "bundle": false,
     "data": false,
     "repair_only": false
-  }
+  },
+  "widgets": [
+    {
+      "widget_id": "vault-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/vault-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": false,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "vault-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/vault-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": false,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ]
 }

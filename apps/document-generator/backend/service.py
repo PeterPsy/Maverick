@@ -64,20 +64,20 @@ def app_events_for_result(action: str, result: dict[str, Any]) -> list[dict]:
 
 def _pymupdf_health() -> dict[str, Any]:
     try:
-        import fitz  # type: ignore[import-not-found]
+        import pymupdf as fitz  # type: ignore[import-not-found]
     except Exception as error:
         return {
             "available": False,
             "required": True,
             "package": "PyMuPDF",
-            "module": "fitz",
+            "module": "pymupdf",
             "detail": str(error),
         }
     return {
         "available": True,
         "required": True,
         "package": "PyMuPDF",
-        "module": "fitz",
+        "module": "pymupdf",
         "version": str(getattr(fitz, "__version__", "") or ""),
     }
 

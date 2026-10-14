@@ -1,7 +1,7 @@
 {
   "commands": {
     "platform-connectors": {
-      "effect_class": "mutating",
+      "effect_class": "destructive",
       "effect_class_by_argument": {
         "argument_name": "action",
         "omitted_effect_class": "read",

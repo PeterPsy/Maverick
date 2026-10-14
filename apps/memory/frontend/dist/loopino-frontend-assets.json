@@ -1,0 +1,72 @@
+{
+  "build_id": "d5b50170647e7c7b48219f7017734b353abae5230ac8a2e1e5556c3d6fbb3b94",
+  "entrypoints": [
+    "index.html",
+    "widgets/memory-sidebar/index.html",
+    "widgets/memory-sidebar-footer/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/ForceGraphScene-BeFMHwkG.js",
+      "sha256": "54de366b8fc72854561ee140ad2314199376e60211f203cfcf09c4c0647dd601",
+      "size_bytes": 189366
+    },
+    {
+      "path": "assets/activeMemorySelection-CwFyXC8j.js",
+      "sha256": "a1e0d049b315c8f4998e536a98fc2fbf976af4a6be5f8c9d9925eeb3dfd3f286",
+      "size_bytes": 5967
+    },
+    {
+      "path": "assets/app-DZf1jxzr.js",
+      "sha256": "d0e5f7fa65b32e15f710aa906128b5d4e006b26417ee9a2ae64bb84d26c19953",
+      "size_bytes": 1939
+    },
+    {
+      "path": "assets/app-K2uTYbmm.js",
+      "sha256": "8443619bd7c38c24fc09cc2891c265290a800af722331f497c70882244d5dcf6",
+      "size_bytes": 6689
+    },
+    {
+      "path": "assets/app-Oxsbek8t.css",
+      "sha256": "cf40336c2f8b5cef1b80a7467edf0c53ed93f2b39838733a4699a54e23a38e40",
+      "size_bytes": 15686
+    },
+    {
+      "path": "assets/app-vVTuTwb2.js",
+      "sha256": "0f88f0abb86fc8ce9ce9a770805e60f31110fb368f03a06727f8762cbb34c2d3",
+      "size_bytes": 40637
+    },
+    {
+      "path": "assets/memoryApi-uVrwRiDj.js",
+      "sha256": "0137b646058782a1a1f682338519df75a547ca76198bb96e6963c404cbb4efcc",
+      "size_bytes": 197305
+    },
+    {
+      "path": "assets/plus-ED71En4G.js",
+      "sha256": "b9e585dc43ea5fd193563fff319e3389990d879a83b8452ce7f323949e32cfaa",
+      "size_bytes": 158
+    },
+    {
+      "path": "assets/sidebar-widget-C9TmZ5Sg.css",
+      "sha256": "4acff5fc51bb815825f2121a7e455568fdedac4cc19e0f1f613c9b038dbd1f09",
+      "size_bytes": 7584
+    },
+    {
+      "path": "index.html",
+      "sha256": "8a67b35c225a9323d75fab01c855f850f612e15a1a480ab0058999edb9850da9",
+      "size_bytes": 722
+    },
+    {
+      "path": "widgets/memory-sidebar/index.html",
+      "sha256": "3864c831234c5f9a9498d9c9ef963e9635817e26e2b7a002560ead51d4fe2a37",
+      "size_bytes": 669
+    },
+    {
+      "path": "widgets/memory-sidebar-footer/index.html",
+      "sha256": "6bf034e8cb2b3fc652e84acc96868cb07e8c49f4e7e82eacb0b8cf36599a9d64",
+      "size_bytes": 666
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

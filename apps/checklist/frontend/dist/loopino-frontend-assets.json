@@ -1,0 +1,83 @@
+{
+  "build_id": "54cb3847ca6d111b92cdc1156829ca578b20450d4ab8bae2d5bb7713098ae760",
+  "entrypoints": [
+    "index.html",
+    "widgets/checklist-sidebar/index.html",
+    "widgets/checklist-sidebar-footer/index.html",
+    "widgets/design-checklist/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/activeChecklistSelection-BBN0ETfv.js",
+      "sha256": "66a3aeb5e9d5b688ad623646efdd48294ca05dcc9a665b5ff2d19caa8e66508b",
+      "size_bytes": 1612
+    },
+    {
+      "path": "assets/api-DNkwnkRX.js",
+      "sha256": "0c9ff3abcb16fa6d15953cb9bcad94aa65747ec2b18150ba5472e02183392b00",
+      "size_bytes": 1017
+    },
+    {
+      "path": "assets/app-56j03nbL.js",
+      "sha256": "85b6e6e63f10f0bc3b672914fe04e57a47ae940e256243eadf227df11f8e3c58",
+      "size_bytes": 7029
+    },
+    {
+      "path": "assets/app-CO9GsJeo.js",
+      "sha256": "b89d6eb103d8089a1eaa19c1f40df64a46da29cdc022552c33aa45eb64b7b476",
+      "size_bytes": 6023
+    },
+    {
+      "path": "assets/app-DsUrd7DD.js",
+      "sha256": "32587099211867b2d24735366f59d6ba390db20e4481560137ac19f757b02c63",
+      "size_bytes": 1169
+    },
+    {
+      "path": "assets/app-UL5cycrb.js",
+      "sha256": "0819d06e82b4029245a8ff3797c8182bed5f05eb8b5737ec9e74170d702a8590",
+      "size_bytes": 4105
+    },
+    {
+      "path": "assets/createLucideIcon-BZ1Fd3_Z.js",
+      "sha256": "12e2180f6bd58ea535d64d566896ef68cb9c0973b404c908132b311db3d02150",
+      "size_bytes": 194468
+    },
+    {
+      "path": "assets/main-BllPyVM4.css",
+      "sha256": "307dedbfe431a3460e3294e3082815fdff97f95aa973f4362fa93c138262e1cd",
+      "size_bytes": 34920
+    },
+    {
+      "path": "assets/main-DiniN3cc.js",
+      "sha256": "38994e1844a950243cad250875a542ed4b80011cd3b764f4ac1ea0365dc42981",
+      "size_bytes": 150083
+    },
+    {
+      "path": "assets/sidebar-widget-Ba-89Vo2.css",
+      "sha256": "445d130c86ab02e4b9b3cccdcbca565464db265636e23a22e4cde943d85715a5",
+      "size_bytes": 7246
+    },
+    {
+      "path": "index.html",
+      "sha256": "5edac0640a21cd96a460cba97c107a2132a0b16487702dfed30e8dadda7eedbc",
+      "size_bytes": 832
+    },
+    {
+      "path": "widgets/checklist-sidebar/index.html",
+      "sha256": "e8c39a1da717ae8674acf18c03adbcd5ba0111089c37ac86d3d2c812d523e551",
+      "size_bytes": 778
+    },
+    {
+      "path": "widgets/checklist-sidebar-footer/index.html",
+      "sha256": "21afd5b68765978c224b7565162718ea4e4dee333f79a0318665e78cfe384014",
+      "size_bytes": 593
+    },
+    {
+      "path": "widgets/design-checklist/index.html",
+      "sha256": "24048d0335d944e5c50b2725dde23d83e98b4ce82bfb254f90426732a3dc9f3e",
+      "size_bytes": 759
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

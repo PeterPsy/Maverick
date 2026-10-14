@@ -1,0 +1,52 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "129d20a0de0d38d4a363accfefff6726e7c24c0c93aba2343adb30af39921ec8",
+  "entrypoints": [
+    "index.html",
+    "widgets/settings-sidebar/index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/app-CDa218OI.js",
+      "sha256": "d7895cce068a27b2ed0dddb3263f4af302f2042e1e9c63d0791695b0b4cb33ba",
+      "size_bytes": 194428
+    },
+    {
+      "path": "assets/app-CejmVPaD.css",
+      "sha256": "1d770475cf4a6163b93ee515eba1499e947b51ca23d647d0dc8079b8e4524f30",
+      "size_bytes": 77884
+    },
+    {
+      "path": "assets/index-C-KkVWwV.css",
+      "sha256": "4e6bffb0ca0e2cb70f426fc9932abfcd1068fe3a775db3f76ca1eb6fb3326c9d",
+      "size_bytes": 7599
+    },
+    {
+      "path": "assets/pages-D4vzaPOW.js",
+      "sha256": "a214f4e6273a1a8bd80f93f233c3bc5e390c5818d87fc69c25b0488b5324c30b",
+      "size_bytes": 6414
+    },
+    {
+      "path": "assets/usageVisualizations-DmZ4oN5T.js",
+      "sha256": "0df7efda58461752847305cf43f4012a6827b67a5247020ea6ba4b8f36bb999d",
+      "size_bytes": 198617
+    },
+    {
+      "path": "assets/widgets/settings-sidebar/index-CjblQCva.js",
+      "sha256": "0b246c557ccb1abfa3f1d923a2463ee310b79a756b357ff18abe27603a1ada09",
+      "size_bytes": 4564
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "index.html",
+      "sha256": "2b817e523c600a93c8c06103e6a46aa2a394906c9bd480efb941ca0e81926fa3",
+      "size_bytes": 1064
+    },
+    {
+      "path": "widgets/settings-sidebar/index.html",
+      "sha256": "5820c53a89787e87deb5cd3127146b36accf09ac347b43d9e3c26b60b887091f",
+      "size_bytes": 1124
+    }
+  ]
+}

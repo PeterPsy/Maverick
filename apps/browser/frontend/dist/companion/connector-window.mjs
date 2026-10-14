@@ -1,4 +1,4 @@
-// The user's Connect action may bring any existing Maverick shell to Browser.
+// The user's Connect action may bring any existing Loopino shell to Browser.
 const isShell = (value, origin) => {
   try {
     const url = new URL(value);
@@ -24,7 +24,7 @@ export async function openConnectorWindow(url, {sourceTabId, reuse = true} = {})
       await chrome.windows.update(connector.windowId, {focused: true});
       return connector;
     }
-    // Fresh setup uses the existing Chrome window rather than a Maverick popup.
+    // Fresh setup uses the existing Chrome window rather than a Loopino popup.
     const target=windows.filter(w=>w.type === "normal").sort((a,b)=>Number(b.focused)-Number(a.focused))[0];
     if(target) {
       const connector=await chrome.tabs.create({windowId:target.id,url:url.href,active:true});

@@ -88,7 +88,7 @@ export async function analyzeVideo(adapter,p) {
         playback_end_time_seconds:last};recording=false;
     }
     return {video_index:index,duration_seconds:duration,covered_seconds:covered,truncated:duration>covered,frames,audio,
-      observed_at:new Date().toISOString(),source:"user_shared_chrome",coverage:"Sampled visible frames and, when requested, audio actually played in the shared tab. A transcript is generated locally by Maverick Speech."};
+      observed_at:new Date().toISOString(),source:"user_shared_chrome",coverage:"Sampled visible frames and, when requested, audio actually played in the shared tab. A transcript is generated locally by Loopino Speech."};
   } finally {
     const cleanup=adapter.cleanup || ((a,p)=>a === "video.restore" ? adapter.dom(a,p) : adapter.capture(a,p));
     if(recording)await cleanup("audio.stop",{}).catch(()=>{});

@@ -1,0 +1,184 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "2170bb62cbabeded4ee963c554a6937163b98514a6327b6163c9fdbd353e50fd",
+  "entrypoints": [
+    "companion/agent-tab.html",
+    "companion/offscreen.html",
+    "companion/popup.html",
+    "index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/index-B945fU83.js",
+      "sha256": "c237fd54efc2103a502535d0c9644849ef350a7eb915b6e671b28375ba43b004",
+      "size_bytes": 31877
+    },
+    {
+      "path": "assets/index-D0vbS6wb.css",
+      "sha256": "2018117d4afb95884c16cf4696b3bd908516b49e4d30284ed5eb5e0d1bdb123f",
+      "size_bytes": 8540
+    },
+    {
+      "path": "assets/loopino-browser-companion-CFI2OSDA.zip",
+      "sha256": "a71780d0b0ee2b179fa0772d1e8ce468a62fa0b5089df37c06dad1764781240c",
+      "size_bytes": 41012
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "companion/agent-tab.css",
+      "sha256": "3873a576d5e66787c7174dd1be5e48db82ac8592457b417a3ee850fcb8ba2149",
+      "size_bytes": 900
+    },
+    {
+      "path": "companion/agent-tab.html",
+      "sha256": "2a8e24a889c5843c3111498f136ca47820a05d75aefc70357053abeb6c9d32bf",
+      "size_bytes": 1394
+    },
+    {
+      "path": "companion/agent-tab.mjs",
+      "sha256": "aae761bcd3806276eaedf8718d0484de2dd5ed9e0e4e0894c28bbdf3b158c0ee",
+      "size_bytes": 1467
+    },
+    {
+      "path": "companion/background-connector.mjs",
+      "sha256": "0c44e35079c1a2cf80372830e88ec04186ea4ed3cbddc144f27174fb506b1d39",
+      "size_bytes": 5017
+    },
+    {
+      "path": "companion/connector-frame.mjs",
+      "sha256": "ce07963a605795403bb0163e8e65a26d832e541af6fbbf9532389b03e1d8f1af",
+      "size_bytes": 1800
+    },
+    {
+      "path": "companion/connector-session.mjs",
+      "sha256": "9b43234d6db1222e6ce98a06a66d933e36f0f8c0afd2d60edccf8fc584c3aa51",
+      "size_bytes": 3020
+    },
+    {
+      "path": "companion/connector-window.mjs",
+      "sha256": "0f4dc01dca12b3bd0947c85a7ded83517a92b498513af6939fafe4d53cbb4131",
+      "size_bytes": 2124
+    },
+    {
+      "path": "companion/content.js",
+      "sha256": "45aa09b93bce65474f6467c76df67a212c7eb206871d27adde0dda0d5d989706",
+      "size_bytes": 1303
+    },
+    {
+      "path": "companion/dom-actions.mjs",
+      "sha256": "68eba08d33095cc50dfda8c128000d979e16b3c40ccf4c947922c5639db22d01",
+      "size_bytes": 7172
+    },
+    {
+      "path": "companion/interaction-controller.mjs",
+      "sha256": "31663910c454421d35b0cd5b4ee600e169fc4c2a5573cb901cf3776868da9734",
+      "size_bytes": 4481
+    },
+    {
+      "path": "companion/interaction-dom.mjs",
+      "sha256": "c1d13d27b0246df7b8881676e6efeca8455f6ea97926274e723107d5b9ea5dbb",
+      "size_bytes": 7775
+    },
+    {
+      "path": "companion/interaction-inputs.mjs",
+      "sha256": "20a70dc6cd42c85464a13f804d9fd5539e9440a14f18fdaed9481e29baa76202",
+      "size_bytes": 1697
+    },
+    {
+      "path": "companion/manifest.json",
+      "sha256": "49954797609ee4401ca45a43d0d9322db5a56d383c1386b4d15785c94d0c6fab",
+      "size_bytes": 575
+    },
+    {
+      "path": "companion/offscreen.html",
+      "sha256": "c5c49687f5b49d63db93b9380cf875eeaa0350e09c123e9942b365ff9a3fb439",
+      "size_bytes": 215
+    },
+    {
+      "path": "companion/offscreen.mjs",
+      "sha256": "bb75b19991aeb362a55300804df8fada99784152251b85ee3668161d4d62a2a1",
+      "size_bytes": 5662
+    },
+    {
+      "path": "companion/platforms.json",
+      "sha256": "a7f148a90c152375507e069b662c1e8d0298f3e3e434cbbed93106b3909e2b60",
+      "size_bytes": 2463
+    },
+    {
+      "path": "companion/platforms.mjs",
+      "sha256": "a996986ea934cce8ac347e0fbe3eff5262024ed6387f2a2fbdc63270b96005b7",
+      "size_bytes": 2545
+    },
+    {
+      "path": "companion/popup.css",
+      "sha256": "3d7f258b2a5d9ab8c63c9665cc9069b4132773984a09df1950dedc61708476e4",
+      "size_bytes": 3585
+    },
+    {
+      "path": "companion/popup.html",
+      "sha256": "6a4c42c9a02411689b147c9c6f8a0387f7d1eaf076deae9ed2dba039a6e27645",
+      "size_bytes": 3392
+    },
+    {
+      "path": "companion/popup.mjs",
+      "sha256": "0b9acac4c00d8755a17e41a28ac9670e02362376efad84242c8a9ee9a18bb16e",
+      "size_bytes": 3574
+    },
+    {
+      "path": "companion/reader.js",
+      "sha256": "5a1cd375b84ba09e0c5957eb4403be6a1d241b5abdd8c18b230010fa3e243f21",
+      "size_bytes": 2918
+    },
+    {
+      "path": "companion/scope.mjs",
+      "sha256": "581c9e91242dbc96c6cefac227ad0ba21715b1c2418059c546b0309886007887",
+      "size_bytes": 8507
+    },
+    {
+      "path": "companion/setup.mjs",
+      "sha256": "e9c3c8681bdcb69a7da74beedcf0cc5148682d0502149bdf0981dd9ad3daf211",
+      "size_bytes": 2256
+    },
+    {
+      "path": "companion/share-setup.mjs",
+      "sha256": "e0c6ec7c130cd79f777caff1d70899ea2be1ad2f19c2902033075fdad040ea77",
+      "size_bytes": 894
+    },
+    {
+      "path": "companion/shell-bridge.js",
+      "sha256": "fb99c7776fb0d39d095c14f9cf6af3c603be1f5031726e663fd1a1b3fe15b1e1",
+      "size_bytes": 783
+    },
+    {
+      "path": "companion/theme.css",
+      "sha256": "57348ca3d477780a6e3dbe14b0450219ede436640495fd87ef23843866ea51d3",
+      "size_bytes": 1619
+    },
+    {
+      "path": "companion/website-scope.mjs",
+      "sha256": "fca00f067c351e5060241c650b957ec84dfa43f7a8726f006d67a48e9b4a449a",
+      "size_bytes": 1161
+    },
+    {
+      "path": "companion/worker.mjs",
+      "sha256": "1baa399374378e5d5478170e291d1282e82d6a27717701cd60f4d6e21b802338",
+      "size_bytes": 17237
+    },
+    {
+      "path": "companion/workflows.mjs",
+      "sha256": "030c6a70092eb1ca86391d5066c9163ea17a34fc57168e09b8fe8b4522011c87",
+      "size_bytes": 6375
+    },
+    {
+      "path": "icon.svg",
+      "sha256": "01d0ca6aa8f7ba8b775db6f46b23fdcd214d44dc66db59e7c7fcfe33371343ed",
+      "size_bytes": 270
+    },
+    {
+      "path": "index.html",
+      "sha256": "20e4af0e9dfc61f45852b661b30efacc4561de8544521b5ee9c72126c4a8887e",
+      "size_bytes": 897
+    }
+  ]
+}

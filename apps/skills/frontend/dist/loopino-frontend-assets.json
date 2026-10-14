@@ -1,0 +1,62 @@
+{
+  "build_id": "eba323c2d7b9ec21705fa4e969493da2f3c4f76fa787e9fcafdae8fe84a78431",
+  "entrypoints": [
+    "index.html",
+    "widgets/skills-sidebar/index.html",
+    "widgets/skills-sidebar-footer/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/activeSkillSelection-njNLSBMI.js",
+      "sha256": "af9897b0433385c2174658dd3281c421af85d0e408a99b5b7a7d071fcdfc7ab7",
+      "size_bytes": 1703
+    },
+    {
+      "path": "assets/app-Cr_YRcqe.js",
+      "sha256": "9e49daf66461b2e63be9037058d618b7d012c06e72114a91aec7103e9131ea01",
+      "size_bytes": 146988
+    },
+    {
+      "path": "assets/app-DosX7i0r.js",
+      "sha256": "c26d50948be47729b907d7f71d03918047e34485364b868f2eee416c801abe22",
+      "size_bytes": 1550
+    },
+    {
+      "path": "assets/app-VaTMmNHy.css",
+      "sha256": "1f6b4165825dbe58a8967261a44bae7f33204c69adf1d43ab6defb700a419ddf",
+      "size_bytes": 21164
+    },
+    {
+      "path": "assets/app-hEhv0VwU.js",
+      "sha256": "8a5252fc82b883c7b7ba66781165a395ec18b482d03d130edeb919b3fd19a964",
+      "size_bytes": 5334
+    },
+    {
+      "path": "assets/createLucideIcon-BZ1Fd3_Z.js",
+      "sha256": "12e2180f6bd58ea535d64d566896ef68cb9c0973b404c908132b311db3d02150",
+      "size_bytes": 194468
+    },
+    {
+      "path": "assets/sidebar-widget-C2Z2Iw5D.css",
+      "sha256": "8091d482b98ef979485d75f4781d6a790c942a54472c5e13251d1408dd5fa4a9",
+      "size_bytes": 6459
+    },
+    {
+      "path": "index.html",
+      "sha256": "809704a1f03c25401b76e743f336f87539367fbea740319b39caf94a0d9fc532",
+      "size_bytes": 809
+    },
+    {
+      "path": "widgets/skills-sidebar/index.html",
+      "sha256": "dd56a3ea2744cd57a2989958aa07762a0b19549604d3b2fed1e023a6e396c573",
+      "size_bytes": 843
+    },
+    {
+      "path": "widgets/skills-sidebar-footer/index.html",
+      "sha256": "03beb798c3e3e2b7670315279abbeadba4949d0a2069f18d4d423c920c7b91fc",
+      "size_bytes": 586
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

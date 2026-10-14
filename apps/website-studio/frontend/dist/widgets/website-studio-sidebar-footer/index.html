@@ -26,25 +26,25 @@
     <script>
       const widgetId = 'website-studio-sidebar-footer';
       function openCreateFlow() {
-        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { new_website_request_id: crypto.randomUUID() } }, window.location.origin);
-        window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+        window.parent?.postMessage({ type: 'loopino.widget.open-app', app_id: 'website-studio', params: { new_website_request_id: crypto.randomUUID() } }, window.location.origin);
+        window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, window.location.origin);
       }
       function openInfoPanel() {
-        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { website_info: '1', app_page: 'info' } }, window.location.origin);
-        window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+        window.parent?.postMessage({ type: 'loopino.widget.open-app', app_id: 'website-studio', params: { website_info: '1', app_page: 'info' } }, window.location.origin);
+        window.parent?.postMessage({ type: 'loopino.shell.sidebar.close' }, window.location.origin);
       }
       function postState() {
-        window.parent?.postMessage({ type: 'maverick.widget.primary-action.state', owner_app_id: 'website-studio', widget_id: widgetId, available: true, label: 'New' }, window.location.origin);
+        window.parent?.postMessage({ type: 'loopino.widget.primary-action.state', owner_app_id: 'website-studio', widget_id: widgetId, available: true, label: 'New' }, window.location.origin);
       }
       function requestResize() {
-        window.parent?.postMessage({ type: 'maverick.widget.resize', owner_app_id: 'website-studio', widget_id: widgetId, height: '2.65rem' }, window.location.origin);
+        window.parent?.postMessage({ type: 'loopino.widget.resize', owner_app_id: 'website-studio', widget_id: widgetId, height: '2.65rem' }, window.location.origin);
       }
       document.getElementById('create').addEventListener('click', openCreateFlow);
       document.getElementById('info').addEventListener('click', openInfoPanel);
       window.addEventListener('message', event => {
         if (event.origin !== window.location.origin || !event.data || event.data.owner_app_id !== 'website-studio' || event.data.widget_id !== widgetId) return;
-        if (event.data.type === 'maverick.widget.primary-action.query') postState();
-        if (event.data.type === 'maverick.widget.primary-action.invoke') openCreateFlow();
+        if (event.data.type === 'loopino.widget.primary-action.query') postState();
+        if (event.data.type === 'loopino.widget.primary-action.invoke') openCreateFlow();
       });
       requestResize();
       postState();

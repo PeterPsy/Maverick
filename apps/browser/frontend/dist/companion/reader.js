@@ -1,4 +1,4 @@
-globalThis.maverickBrowserRead=function collectRenderedContent({ maxChars, maxItems }) {
+globalThis.loopinoBrowserRead=function collectRenderedContent({ maxChars, maxItems }) {
   const text = document.body?.innerText || "";
   const httpUrl = (value) => {
     if (typeof value !== "string" || !value.trim()) return null;

@@ -1,0 +1,46 @@
+{
+  "build_id": "cfbe4b5daffd7a09b58cd87e461838c3256758585384fe77fb554a1932ffce59",
+  "entrypoints": [
+    "index.html",
+    "widgets/senses-sidebar/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-BxLhg2w9.js",
+      "sha256": "fdffc529759ee6d4c00c69334a7a8f1004dc0a405c5af00d29957a02fe73c787",
+      "size_bytes": 56663
+    },
+    {
+      "path": "assets/app-X7Z8Dsej.css",
+      "sha256": "3a0fff47deb2974047daf07268d0d8c2510aeb2db8e11958ed8e1abb14249c04",
+      "size_bytes": 18340
+    },
+    {
+      "path": "assets/app-yVOjOAS6.js",
+      "sha256": "eb744f456f3a5a54350e0e0b9dbd7d93c48aceb0b92e7e00f2dd1386002d5564",
+      "size_bytes": 3244
+    },
+    {
+      "path": "assets/index-B7DiKdvZ.css",
+      "sha256": "7611caf233e5f6f42e8de1a1652ae3d07fe38ca551dad9980d44a291a73eacda",
+      "size_bytes": 5781
+    },
+    {
+      "path": "assets/index-CrtjZ5Xz.js",
+      "sha256": "3d4fde50d37a95524887ec00eab28ab29b72294a14f983689db4f002df92dc64",
+      "size_bytes": 193083
+    },
+    {
+      "path": "index.html",
+      "sha256": "10e2b343a5a1729cf7590879c6d572264506271e6fb0944a7d33a39f097dffa6",
+      "size_bytes": 519
+    },
+    {
+      "path": "widgets/senses-sidebar/index.html",
+      "sha256": "26f74fdd2ab04745f544d30e05a0085834674d109df1333e3d49f61e809414d5",
+      "size_bytes": 719
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

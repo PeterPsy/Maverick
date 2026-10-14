@@ -7,37 +7,37 @@
       (function () {
         var search = new URLSearchParams(window.location.search);
         var hash = new URLSearchParams(window.location.hash.charAt(0) === "#" ? window.location.hash.slice(1) : window.location.hash);
-        var effective = search.get("maverick_theme") || hash.get("maverick_theme");
+        var effective = search.get("loopino_theme") || hash.get("loopino_theme");
         if (effective !== "dark" && effective !== "light") {
-          var scheme = search.get("maverick_color_scheme") || hash.get("maverick_color_scheme");
+          var scheme = search.get("loopino_color_scheme") || hash.get("loopino_color_scheme");
           effective = scheme === "light" ? "light" : "dark";
         }
-        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.loopinoTheme = effective;
         document.documentElement.dataset.theme = effective;
         document.documentElement.style.colorScheme = effective;
       })();
     </script>
-    <style id="maverick-first-paint">
+    <style id="loopino-first-paint">
       html, body, #root { width: 100%; height: 100%; margin: 0; background: #070708; }
-      html[data-maverick-theme="light"], html[data-maverick-theme="light"] body,
-      html[data-maverick-theme="light"] #root { background: #f7f8fb; }
+      html[data-loopino-theme="light"], html[data-loopino-theme="light"] body,
+      html[data-loopino-theme="light"] #root { background: #f7f8fb; }
     </style>
     <title>Chat Floating Widget</title>
-    <script type="module" crossorigin src="/apps/chat/assets/widgets/chat-floating/index-sBjwzRys.js"></script>
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-DoBAX1pK.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/sourceAppPresentation-CIw5CG5w.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/widgets-BtEfqmSg.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/main-BoKrwX5Z.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/index-CCtv6SOv.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-BFhbsKVk.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/chatSidebarSelectionChannel-A26_FZmM.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/transcript-Cb6FJ2KE.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useChatSidebarState-B42X-7L1.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/ChatSelectionActions-cAfON1S9.js">
-    <link rel="stylesheet" crossorigin href="/apps/chat/assets/main-Ch3JyL5s.css">
-    <link rel="stylesheet" crossorigin href="/apps/chat/assets/useChatSidebarState-Dkvusuj-.css">
-    <link rel="stylesheet" crossorigin href="/apps/chat/assets/ChatSelectionActions-0pASNPvM.css">
-    <link rel="stylesheet" crossorigin href="/apps/chat/assets/index-D8aYRALY.css">
+    <script type="module" crossorigin src="/apps/chat/assets/widgets/chat-floating/index-BTig8XrE.js"></script>
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-CZz3RvS6.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/sourceAppPresentation-BiX6iY91.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/widgets-Cclf0rvN.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/main-d3neGWF4.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/index-CfnlCy5u.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-C4PRLCKv.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/chatSidebarSelectionChannel-CKOgfnTa.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/transcript-CqbaFsqK.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useChatSidebarState-wEY8lb3L.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/ChatSelectionActions-BV5kbeuo.js">
+    <link rel="stylesheet" crossorigin href="/apps/chat/assets/main-BZLPeAkW.css">
+    <link rel="stylesheet" crossorigin href="/apps/chat/assets/useChatSidebarState-D2WQ8fVw.css">
+    <link rel="stylesheet" crossorigin href="/apps/chat/assets/ChatSelectionActions-Dgnf9G48.css">
+    <link rel="stylesheet" crossorigin href="/apps/chat/assets/index-of1X_5T1.css">
   </head>
   <body>
     <div id="root"></div>

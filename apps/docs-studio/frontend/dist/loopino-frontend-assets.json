@@ -1,0 +1,46 @@
+{
+  "build_id": "856138a495901e585d25ef05c420b12c9c13415049225db5d2ffd1f3c146b366",
+  "entrypoints": [
+    "index.html",
+    "widgets/docs-studio-sidebar/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-BG2LBskn.css",
+      "sha256": "16545f3eb2e88df3ef0d923c837c229c265b1ac54fe6654a7a9a383434a02d13",
+      "size_bytes": 9453
+    },
+    {
+      "path": "assets/app-Bwg1n2ui.js",
+      "sha256": "a56e46b131dcea13115409013274fbff000bb6547c62dd413c52bb2eb68213b0",
+      "size_bytes": 7916
+    },
+    {
+      "path": "assets/app-CSQCdivx.js",
+      "sha256": "cac4a26fe3b5e4153a52a23529ca25cb6ffe2ea221aef65d315a9ecb7ab99a6d",
+      "size_bytes": 12752
+    },
+    {
+      "path": "assets/docNavigationParams-CPBYWkJr.js",
+      "sha256": "b5c0cf17ba12443ce059011f9cb2f6ce108e8def2ca337fb1c3cbd088ae64ff6",
+      "size_bytes": 194897
+    },
+    {
+      "path": "assets/index-DmZkljr2.css",
+      "sha256": "1dd22f5e8f8773755e78d05581c5dee0ca7a0197e6fc5fc14a067bf9edb78048",
+      "size_bytes": 7773
+    },
+    {
+      "path": "index.html",
+      "sha256": "925a7e6a8ab2151021ffbc21a8bfb44fb0773ec2e6fad365e52c271dfe8792f7",
+      "size_bytes": 581
+    },
+    {
+      "path": "widgets/docs-studio-sidebar/index.html",
+      "sha256": "1c960918374b404a5c5080cd462b5abfc1b501f2a1d080420350a3d5f26c784e",
+      "size_bytes": 611
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

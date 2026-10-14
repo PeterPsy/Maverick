@@ -11,12 +11,12 @@
   },
   {
     "before": "apps/base-shell/frontend/dist/maverick-logotype.svg",
-    "after": "apps/base-shell/frontend/dist/maverick-logotype.svg",
+    "after": "apps/base-shell/frontend/dist/loopino-logotype.svg",
     "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003"
   },
   {
     "before": "apps/base-shell/frontend/dist/maverick-mark.svg",
-    "after": "apps/base-shell/frontend/dist/maverick-mark.svg",
+    "after": "apps/base-shell/frontend/dist/loopino-mark.svg",
     "sha256": "443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983"
   },
   {
@@ -131,12 +131,12 @@
   },
   {
     "before": "apps/openwa/frontend/dist/maverick-icon-compact.png",
-    "after": "apps/openwa/frontend/dist/maverick-icon-compact.png",
+    "after": "apps/openwa/frontend/dist/loopino-icon-compact.png",
     "sha256": "9e1f9e136254b61f02195a0f8ae9e9491788cc11f566d62fc397277eec87dee4"
   },
   {
     "before": "apps/openwa/frontend/dist/maverick-icon-compact.svg",
-    "after": "apps/openwa/frontend/dist/maverick-icon-compact.svg",
+    "after": "apps/openwa/frontend/dist/loopino-icon-compact.svg",
     "sha256": "fdfe70fe14a68099dcc4eb7dab7099a406ea9147d195c23612e42506bdaf749d"
   },
   {

@@ -1,8 +1,8 @@
 {
-  "name": "Maverick",
-  "short_name": "Maverick",
+  "name": "Loopino",
+  "short_name": "Loopino",
   "id": "/",
-  "description": "Maverick workspace shell",
+  "description": "Loopino workspace shell",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

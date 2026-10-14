@@ -1,0 +1,15 @@
+{
+  "build_id": "6ca6217fe4e90a4eb5b2647ab8786475ab24bac28ca586843f6119bed3b7c69a",
+  "entrypoints": [
+    "index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "index.html",
+      "sha256": "50795760b392138cfcef42d2e6fb1fc594e266ebff2dc25e312c9cbba3adcf5a",
+      "size_bytes": 958
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

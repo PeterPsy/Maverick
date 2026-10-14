@@ -1,0 +1,88 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "d63b8611b4f8a24308b8683506651e2c651eba84aa10dbad51dd6be2e60d5d1c",
+  "entrypoints": [
+    "index.html",
+    "widgets/crm-external-settings/index.html",
+    "widgets/crm-sidebar/index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/WorkspaceSidebar-B-Fo-r9v.js",
+      "sha256": "403e15cfed4fa7b3764a2cc03f9fa223dd62ca8918d1f7bc91def1317f53b57e",
+      "size_bytes": 56990
+    },
+    {
+      "path": "assets/app-BK3UQISt.js",
+      "sha256": "db219123bd5fb96ee04459cd53b06626705d80fc7df12b8a6cb7beb523f425fa",
+      "size_bytes": 317992
+    },
+    {
+      "path": "assets/app-pvoiYMom.css",
+      "sha256": "50e08163b21e3466f891538d4a5246ab601e4644b5c7030277a52e597313a675",
+      "size_bytes": 59272
+    },
+    {
+      "path": "assets/index-CV2xJN0g.css",
+      "sha256": "166db06fa5e13c4e4d2f4c3aecadc6a786eb75bc98acedbb32c900287d8e279c",
+      "size_bytes": 5932
+    },
+    {
+      "path": "assets/index-CzQiFYCq.css",
+      "sha256": "1175abb9742ca8958fda2afcba3fb72055ba3bfecf7b6001438401e3237eb50a",
+      "size_bytes": 3067
+    },
+    {
+      "path": "assets/shellMessaging-Cm-zOfg_.js",
+      "sha256": "86c529b08051f9856e3a26e7d006474c7a5980069b52ee7ed220056144ea7f24",
+      "size_bytes": 207063
+    },
+    {
+      "path": "assets/sidebar-logo-ChGjrOzk.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "path": "assets/sidebar-logo-black-Bpsc9PsK.svg",
+      "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f",
+      "size_bytes": 6750
+    },
+    {
+      "path": "assets/styles-C4A9cFP5.js",
+      "sha256": "dd72a5802e56f50a12e002ab55e59179211025bcdec3a52c1377ab3e576a2d53",
+      "size_bytes": 1123
+    },
+    {
+      "path": "assets/widgets/crm-external-settings/index-DxeHLhcR.js",
+      "sha256": "afe32e2f6a4d77a7ff488a12d79d544d1d77296e828f2cd35eaa3c402febeb0d",
+      "size_bytes": 8705
+    },
+    {
+      "path": "assets/widgets/crm-sidebar/index-NFRh5QFL.js",
+      "sha256": "f1d3f802727d0b7c7044c41e3b36939e9b56b0479784ad68f2407d2f9b53a11e",
+      "size_bytes": 1699
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "assets/styles-DsdMaiy3.css",
+      "sha256": "3479a44a5f7097b467bcc53fbad0a44bebe5e041e41b1c50b12cd00c03232e2a",
+      "size_bytes": 19948
+    },
+    {
+      "path": "index.html",
+      "sha256": "8cfb65e2db6d36e4abf4f81919d03c92acd2bc0385b2cc5008b1799464cb5622",
+      "size_bytes": 762
+    },
+    {
+      "path": "widgets/crm-external-settings/index.html",
+      "sha256": "62118f0bd3544a5ffddb8717582bcfb6b9f2ae374b2bf16fc1714126f81528b0",
+      "size_bytes": 679
+    },
+    {
+      "path": "widgets/crm-sidebar/index.html",
+      "sha256": "29e6a8a657e9edbf5844a9b832d013f88e8f22fa38e008b1eb255e646ccb9037",
+      "size_bytes": 636
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "e6fcf6aaec6ecc3da394567ac2564b4783d0260712f692340f59618502e9f186",
+  "entrypoints": [
+    "index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/index-0jcdCnBR.css",
+      "sha256": "87fc8c3f68777290f622056160fdf565594a66ce3223ea37d3ab5b7a10bb74ef",
+      "size_bytes": 15433
+    },
+    {
+      "path": "assets/index-DSso9Zpy.js",
+      "sha256": "d2575279f6b8ac0fcfdd20ff06fd41529e90dfebe2c59c920a4e4b6961837099",
+      "size_bytes": 259770
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "index.html",
+      "sha256": "ddd6d46cb850613abe8bfe2d5b4b0766930a01c77b769c2564f11b5a0fd21b95",
+      "size_bytes": 798
+    },
+    {
+      "path": "loopino-icon-compact.png",
+      "sha256": "9e1f9e136254b61f02195a0f8ae9e9491788cc11f566d62fc397277eec87dee4",
+      "size_bytes": 4698
+    },
+    {
+      "path": "loopino-icon-compact.svg",
+      "sha256": "fdfe70fe14a68099dcc4eb7dab7099a406ea9147d195c23612e42506bdaf749d",
+      "size_bytes": 1236
+    }
+  ]
+}

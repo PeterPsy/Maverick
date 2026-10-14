@@ -1,0 +1,73 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "029353da74219db2c4c9462d93e7c9db06894b35c3db04583551dc62e72be4cc",
+  "entrypoints": [
+    "index.html",
+    "widgets/marta-ops-sidebar/index.html",
+    "widgets/marta-ops-sidebar-footer/index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/api-BBuxOtUY.js",
+      "sha256": "1024a4ae85b5f76e8128ab82cbc0b90567c58e07b513a4ef405018662ac26eca",
+      "size_bytes": 6819
+    },
+    {
+      "path": "assets/app-Bb87nSrc.js",
+      "sha256": "51ca4d52f1bca9d92c07f0437ac2182a74844b5f7eae57d055a09e74197b5448",
+      "size_bytes": 3213
+    },
+    {
+      "path": "assets/app-BfGfnoRF.css",
+      "sha256": "ac6e8a7c826bdd723bdf1feeecacc2d398d9b1f20ea9ec610f17b6b9242ef67e",
+      "size_bytes": 38633
+    },
+    {
+      "path": "assets/app-CmQ5uUox.js",
+      "sha256": "aaecc723322258b9961ee58fd39a2013c654e1b06113f20a736a13709cae3e7a",
+      "size_bytes": 196619
+    },
+    {
+      "path": "assets/app-lcCarL62.js",
+      "sha256": "b15deec4df3d6c74887d8cee0dfa02c24a537bdb356b436859dccd7d9739df2c",
+      "size_bytes": 1278
+    },
+    {
+      "path": "assets/shellTheme-PynioFqF.js",
+      "sha256": "6a1d1f5aa5d65d10a35e6e37430750db59dd7bc4c450c921698505160806b925",
+      "size_bytes": 228098
+    },
+    {
+      "path": "assets/sidebar-widget-W6ZH_sDV.js",
+      "sha256": "156fddd4e4237fe1a41d55c1cc57aabc70c21506fbef8d9d684ddc104fc05a3c",
+      "size_bytes": 1863
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "assets/sidebar-widget-BzXggk2q.css",
+      "sha256": "fad4fdda1592b61ffeaed7dfc03a3d3b58af53ac7c22092cb90dafb72d371ed8",
+      "size_bytes": 7032
+    },
+    {
+      "path": "atomic-crm-license.txt",
+      "sha256": "1774c14a7b97aa0ce5e866f895ddb421db6dfb4769dee9ab40416681d0390316",
+      "size_bytes": 1105
+    },
+    {
+      "path": "index.html",
+      "sha256": "8e4ef5bea6e961cb43ec63785bc89864ae63acf96e40ad231610b1832016e622",
+      "size_bytes": 1247
+    },
+    {
+      "path": "widgets/marta-ops-sidebar/index.html",
+      "sha256": "acaf73d8f99d14ea78d2fea116d79874018f65b63b4a0cd435e4d1101fe98280",
+      "size_bytes": 1418
+    },
+    {
+      "path": "widgets/marta-ops-sidebar-footer/index.html",
+      "sha256": "6647e3fbca9b35f328da2c9f92e997954d8c4c22a2ea03fe397c2fac9f18fdc6",
+      "size_bytes": 1343
+    }
+  ]
+}

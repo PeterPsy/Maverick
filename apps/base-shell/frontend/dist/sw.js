@@ -1,11 +1,11 @@
 "use strict";
 
-const BUILD_ID = "85722d93c1a6711e553ff3f11d6bb547b688cb421f83ee141fb22994dbbab439";
-const PRECACHE = [{"url":"/","path":"index.html","sha256":"ccdb3a51fa92f7b212ff0ee02aaadaec0de8ce568d283478c0d6430a0857961a","size_bytes":2376},{"url":"/apps/base-shell/app-icon-lightcolor.png","path":"app-icon-lightcolor.png","sha256":"5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0","size_bytes":95846},{"url":"/apps/base-shell/assets/index-BO06JeNq.js","path":"assets/index-BO06JeNq.js","sha256":"be0fa471d50eed232896732dda25a5414254eec6a77194de3dc39ff617233883","size_bytes":598642},{"url":"/apps/base-shell/assets/index-Hh8UVsnL.css","path":"assets/index-Hh8UVsnL.css","sha256":"4459a8cca6435f463fe21b160f303f3cc82816dc824e3d2cb979ec76577ab9cb","size_bytes":117536},{"url":"/apps/base-shell/assets/installation-D9odMyOn.js","path":"assets/installation-D9odMyOn.js","sha256":"ba9453ec41d7fd12a2fe5d5dc223016e65851b6467264e10936d63a83a77ed36","size_bytes":17347},{"url":"/apps/base-shell/assets/installation-DSSY1HGs.css","path":"assets/installation-DSSY1HGs.css","sha256":"b383ff66fa18d428ab52794e9bffc215a17debb3c7bdc34ae0d8f29e8c89eb02","size_bytes":5996},{"url":"/apps/base-shell/assets/LoginPaperBackground-DE-K3494.js","path":"assets/LoginPaperBackground-DE-K3494.js","sha256":"3fd98bda952c1cbe8a87df15ed1ef309aa4ff6e1b54726a167565190c4ddb040","size_bytes":25132},{"url":"/apps/base-shell/assets/modulepreload-polyfill-B5Qt9EMX.js","path":"assets/modulepreload-polyfill-B5Qt9EMX.js","sha256":"d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0","size_bytes":711},{"url":"/apps/base-shell/maverick-logotype.svg","path":"maverick-logotype.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/apps/base-shell/maverick-mark.svg","path":"maverick-mark.svg","sha256":"443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983","size_bytes":17902},{"url":"/apps/base-shell/pwa-apple-touch-icon.png","path":"pwa-apple-touch-icon.png","sha256":"13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb","size_bytes":4075},{"url":"/apps/base-shell/pwa-logo-192.png","path":"pwa-logo-192.png","sha256":"d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24","size_bytes":4429},{"url":"/apps/base-shell/pwa-logo.png","path":"pwa-logo.png","sha256":"1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10","size_bytes":16936},{"url":"/apps/base-shell/pwa-maskable-logo.png","path":"pwa-maskable-logo.png","sha256":"5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031","size_bytes":17394},{"url":"/apps/base-shell/sidebar-logo-black.svg","path":"sidebar-logo-black.svg","sha256":"e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f","size_bytes":6750},{"url":"/apps/base-shell/sidebar-logo.svg","path":"sidebar-logo.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/favicon.ico","path":"favicon.ico","sha256":"fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912","size_bytes":270622},{"url":"/manifest.webmanifest","path":"manifest.webmanifest","sha256":"68094b835f2838d27849bd900f816e09370984de8c3646619c0b10ee3d5f5695","size_bytes":627},{"url":"/material-symbols-rounded.woff2","path":"material-symbols-rounded.woff2","sha256":"aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97","size_bytes":414656}];
-const IMMUTABLE_SHELL_ASSETS = [{"url":"/apps/base-shell/assets/LoginPaperBackground-DE-K3494.js","sha256":"3fd98bda952c1cbe8a87df15ed1ef309aa4ff6e1b54726a167565190c4ddb040","size_bytes":25132},{"url":"/apps/base-shell/assets/index-BO06JeNq.js","sha256":"be0fa471d50eed232896732dda25a5414254eec6a77194de3dc39ff617233883","size_bytes":598642},{"url":"/apps/base-shell/assets/index-Hh8UVsnL.css","sha256":"4459a8cca6435f463fe21b160f303f3cc82816dc824e3d2cb979ec76577ab9cb","size_bytes":117536},{"url":"/apps/base-shell/assets/installation-D9odMyOn.js","sha256":"ba9453ec41d7fd12a2fe5d5dc223016e65851b6467264e10936d63a83a77ed36","size_bytes":17347},{"url":"/apps/base-shell/assets/installation-DSSY1HGs.css","sha256":"b383ff66fa18d428ab52794e9bffc215a17debb3c7bdc34ae0d8f29e8c89eb02","size_bytes":5996},{"url":"/apps/base-shell/assets/modulepreload-polyfill-B5Qt9EMX.js","sha256":"d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0","size_bytes":711}];
-const STATIC_CACHE_PREFIX = "maverick-static-v2:";
+const BUILD_ID = "19e5f8152cb2d54e57149a6a29736a391aedaa7b19469dd37d1f582f3c109516";
+const PRECACHE = [{"url":"/","path":"index.html","sha256":"3d7694591d0d427e3e40258755785d9457bf4eca6d2b104375ac8c51888993f4","size_bytes":2367},{"url":"/apps/base-shell/app-icon-lightcolor.png","path":"app-icon-lightcolor.png","sha256":"5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0","size_bytes":95846},{"url":"/apps/base-shell/assets/index-BH_nig2_.css","path":"assets/index-BH_nig2_.css","sha256":"6bb10974415dd4132134d81418578e7fee9b73b1cd848d87f57b38182e49633b","size_bytes":117102},{"url":"/apps/base-shell/assets/index-BOwgEqjK.js","path":"assets/index-BOwgEqjK.js","sha256":"a4d5b0688f470eb4b63bd43ce9c2ffb130ac3e6ebc32056a8cefe509206a94d7","size_bytes":598428},{"url":"/apps/base-shell/assets/installation-CSiKA517.css","path":"assets/installation-CSiKA517.css","sha256":"c90f14a42cee8f0c0ae91bb99c1f6d0761211c3772a2169ccf5d8ee0956575db","size_bytes":5967},{"url":"/apps/base-shell/assets/installation-DZ824cWC.js","path":"assets/installation-DZ824cWC.js","sha256":"1503addfb62accd46b7553f849ea550c77d390ae5ddac46e1d7ea78c0c7f6d7b","size_bytes":17337},{"url":"/apps/base-shell/assets/LoginPaperBackground-Cu89fDyy.js","path":"assets/LoginPaperBackground-Cu89fDyy.js","sha256":"81ed0d058c09119023f792afb1953c9959945b9fa8fc1443791952bf933b51d7","size_bytes":25132},{"url":"/apps/base-shell/assets/modulepreload-polyfill-B5Qt9EMX.js","path":"assets/modulepreload-polyfill-B5Qt9EMX.js","sha256":"d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0","size_bytes":711},{"url":"/apps/base-shell/loopino-logotype.svg","path":"loopino-logotype.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/apps/base-shell/loopino-mark.svg","path":"loopino-mark.svg","sha256":"443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983","size_bytes":17902},{"url":"/apps/base-shell/pwa-apple-touch-icon.png","path":"pwa-apple-touch-icon.png","sha256":"13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb","size_bytes":4075},{"url":"/apps/base-shell/pwa-logo-192.png","path":"pwa-logo-192.png","sha256":"d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24","size_bytes":4429},{"url":"/apps/base-shell/pwa-logo.png","path":"pwa-logo.png","sha256":"1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10","size_bytes":16936},{"url":"/apps/base-shell/pwa-maskable-logo.png","path":"pwa-maskable-logo.png","sha256":"5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031","size_bytes":17394},{"url":"/apps/base-shell/sidebar-logo-black.svg","path":"sidebar-logo-black.svg","sha256":"e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f","size_bytes":6750},{"url":"/apps/base-shell/sidebar-logo.svg","path":"sidebar-logo.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/favicon.ico","path":"favicon.ico","sha256":"fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912","size_bytes":270622},{"url":"/manifest.webmanifest","path":"manifest.webmanifest","sha256":"36bbf4c23cc0ad0831b32374f522cd8fa2dd90dc74a633bb1afbb5e3dd959b2d","size_bytes":624},{"url":"/material-symbols-rounded.woff2","path":"material-symbols-rounded.woff2","sha256":"aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97","size_bytes":414656}];
+const IMMUTABLE_SHELL_ASSETS = [{"url":"/apps/base-shell/assets/LoginPaperBackground-Cu89fDyy.js","sha256":"81ed0d058c09119023f792afb1953c9959945b9fa8fc1443791952bf933b51d7","size_bytes":25132},{"url":"/apps/base-shell/assets/index-BH_nig2_.css","sha256":"6bb10974415dd4132134d81418578e7fee9b73b1cd848d87f57b38182e49633b","size_bytes":117102},{"url":"/apps/base-shell/assets/index-BOwgEqjK.js","sha256":"a4d5b0688f470eb4b63bd43ce9c2ffb130ac3e6ebc32056a8cefe509206a94d7","size_bytes":598428},{"url":"/apps/base-shell/assets/installation-CSiKA517.css","sha256":"c90f14a42cee8f0c0ae91bb99c1f6d0761211c3772a2169ccf5d8ee0956575db","size_bytes":5967},{"url":"/apps/base-shell/assets/installation-DZ824cWC.js","sha256":"1503addfb62accd46b7553f849ea550c77d390ae5ddac46e1d7ea78c0c7f6d7b","size_bytes":17337},{"url":"/apps/base-shell/assets/modulepreload-polyfill-B5Qt9EMX.js","sha256":"d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0","size_bytes":711}];
+const STATIC_CACHE_PREFIX = "loopino-static-v2:";
 const STATIC_CACHE_NAME = `${STATIC_CACHE_PREFIX}${BUILD_ID}`;
-const LEGACY_STATIC_CACHE_NAMES = new Set(["maverick-app-static-v2", "maverick-base-shell-v3"]);
+const LEGACY_STATIC_CACHE_NAMES = new Set(["loopino-app-static-v2", "loopino-base-shell-v3"]);
 const SHELL_NAVIGATION_URL = "/";
 const NAVIGATION_TIMEOUT_MS = 5_000;
 const PRECACHE_BY_URL = new Map(PRECACHE.map((record) => [record.url, record]));
@@ -217,7 +217,7 @@ async function broadcast(message) {
 
 async function sendMetricToOneClient(metric) {
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
-  clients[0]?.postMessage({ type: "MAVERICK_PWA_METRIC", metric });
+  clients[0]?.postMessage({ type: "LOOPINO_PWA_METRIC", metric });
 }
 
 function emitMetric(metric) {
@@ -253,7 +253,7 @@ self.addEventListener("activate", (event) => {
           .map((key) => caches.delete(key)),
       );
       await self.clients.claim();
-      await broadcast({ type: "MAVERICK_SW_ACTIVATED", build_id: BUILD_ID });
+      await broadcast({ type: "LOOPINO_SW_ACTIVATED", build_id: BUILD_ID });
     })(),
   );
 });
@@ -284,25 +284,25 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("message", (event) => {
   const payload = event.data && typeof event.data === "object" ? event.data : {};
-  if (payload.type === "MAVERICK_SKIP_WAITING") {
+  if (payload.type === "LOOPINO_SKIP_WAITING") {
     event.waitUntil(self.skipWaiting());
     return;
   }
-  if (payload.type === "MAVERICK_GET_VERSION") {
-    event.source?.postMessage({ type: "MAVERICK_SW_VERSION", build_id: BUILD_ID });
+  if (payload.type === "LOOPINO_GET_VERSION") {
+    event.source?.postMessage({ type: "LOOPINO_SW_VERSION", build_id: BUILD_ID });
     return;
   }
-  if (payload.type === "MAVERICK_DISABLE") {
+  if (payload.type === "LOOPINO_DISABLE") {
     event.waitUntil(
       (async () => {
         await deleteKnownStaticCaches();
         await self.registration.unregister();
-        await broadcast({ type: "MAVERICK_SW_DISABLED", build_id: BUILD_ID });
+        await broadcast({ type: "LOOPINO_SW_DISABLED", build_id: BUILD_ID });
       })(),
     );
     return;
   }
-  if (payload.type === "MAVERICK_RECOVER") {
+  if (payload.type === "LOOPINO_RECOVER") {
     event.waitUntil(
       (async () => {
         try {
@@ -310,11 +310,11 @@ self.addEventListener("message", (event) => {
           // verified entries that still make the active shell usable.
           await recoverPrecache();
           await sendMetricToOneClient("pwa_sw_recovery");
-          await broadcast({ type: "MAVERICK_SW_RECOVERED", build_id: BUILD_ID });
+          await broadcast({ type: "LOOPINO_SW_RECOVERED", build_id: BUILD_ID });
         } catch {
           emitMetric("pwa_sw_error");
-          await broadcast({ type: "MAVERICK_SW_RECOVERY_FAILED", build_id: BUILD_ID });
-          throw new Error("Maverick static cache recovery failed.");
+          await broadcast({ type: "LOOPINO_SW_RECOVERY_FAILED", build_id: BUILD_ID });
+          throw new Error("Loopino static cache recovery failed.");
         }
       })(),
     );

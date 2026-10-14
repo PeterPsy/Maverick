@@ -1,0 +1,58 @@
+{
+  "build_id": "cf59430161eee551a684b59fd032059aaadaabf5a89de4803aceb7b375a65dfc",
+  "entrypoints": [
+    "index.html",
+    "preview-runtime/index.html",
+    "widgets/website-studio-sidebar-footer/index.html",
+    "widgets/website-studio-sitemap-sidebar/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/api-DbsvDtPb.js",
+      "sha256": "2d50d606cfa4cc7d56aecb5b526205a4d0fbd475a1a7427ded7db6451c7e5e35",
+      "size_bytes": 223656
+    },
+    {
+      "path": "assets/app-BbOhO3m0.css",
+      "sha256": "8aa668a4b0288c311e218184a6b7dc2a86a93202bd0d7949f8094d34177720bb",
+      "size_bytes": 9530
+    },
+    {
+      "path": "assets/app-ChNYpRlr.js",
+      "sha256": "5c18355ccdc1ebb3cf8d82a8dba57f2347a28dc1013f1252f2eaab6e310303ee",
+      "size_bytes": 15894
+    },
+    {
+      "path": "assets/index-Dta2uEcR.css",
+      "sha256": "0c6a7c1e3f173dd896e9f60fb6ff58218fd01f37696d64120e62abe8710eff4d",
+      "size_bytes": 7055
+    },
+    {
+      "path": "assets/widgets/website-studio-sitemap-sidebar/index-Cr8TdJqK.js",
+      "sha256": "455c9c02649c022a80d4f02a1df197b1b93207292a1d535e9eff9c062babf810",
+      "size_bytes": 43691
+    },
+    {
+      "path": "index.html",
+      "sha256": "9d2d601ed1474f2ace8e0de4171f47fc4eb2cca232a4b45f24226911efa58696",
+      "size_bytes": 529
+    },
+    {
+      "path": "preview-runtime/index.html",
+      "sha256": "72a712e7228b5cbe9f94adad84cb39c5db744a061c252841cff67a29467e43b5",
+      "size_bytes": 50953
+    },
+    {
+      "path": "widgets/website-studio-sidebar-footer/index.html",
+      "sha256": "ab508d520dadc1981b0530599bd8fd3d3ca813bb397bb56fe6e15529f2bf0cae",
+      "size_bytes": 3754
+    },
+    {
+      "path": "widgets/website-studio-sitemap-sidebar/index.html",
+      "sha256": "73a79000e57576267370b6c65e08e0c8ecdb82e2c095a0f15f712f809dee7a2d",
+      "size_bytes": 629
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

@@ -4,16 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f0f10" />
-    <meta name="application-name" content="Maverick" />
+    <meta name="application-name" content="Loopino" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Maverick" />
+    <meta name="apple-mobile-web-app-title" content="Loopino" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <script>
       (function () {
         var mode = "dark";
         try {
-          var raw = window.localStorage && window.localStorage.getItem("maverick:base-shell:session");
+          var raw = window.localStorage && window.localStorage.getItem("loopino:base-shell:session");
           var parsed = raw ? JSON.parse(raw) : {};
           if (parsed.themeMode === "dark" || parsed.themeMode === "light" || parsed.themeMode === "system") {
             mode = parsed.themeMode;
@@ -25,24 +25,24 @@
         if (mode === "system") {
           effective = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
         }
-        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.loopinoTheme = effective;
         document.documentElement.dataset.theme = effective;
         document.documentElement.style.colorScheme = effective;
       })();
     </script>
-    <style id="maverick-first-paint">
+    <style id="loopino-first-paint">
       html, body, #root { width: 100%; height: 100%; margin: 0; background: #070708; }
-      html[data-maverick-theme="light"], html[data-maverick-theme="light"] body,
-      html[data-maverick-theme="light"] #root { background: #f7f8fb; }
+      html[data-loopino-theme="light"], html[data-loopino-theme="light"] body,
+      html[data-loopino-theme="light"] #root { background: #f7f8fb; }
     </style>
     <link rel="manifest" href="/manifest.webmanifest"  />
     <link rel="icon" href="/favicon.ico" sizes="any"  />
     <link rel="icon" type="image/png" sizes="512x512" href="/apps/base-shell/pwa-logo.png" />
     <link rel="apple-touch-icon" href="/apps/base-shell/pwa-apple-touch-icon.png" />
-    <title>Maverick</title>
-    <script type="module" crossorigin src="/apps/base-shell/assets/index-BO06JeNq.js"></script>
+    <title>Loopino</title>
+    <script type="module" crossorigin src="/apps/base-shell/assets/index-BOwgEqjK.js"></script>
     <link rel="modulepreload" crossorigin href="/apps/base-shell/assets/modulepreload-polyfill-B5Qt9EMX.js">
-    <link rel="stylesheet" crossorigin href="/apps/base-shell/assets/index-Hh8UVsnL.css">
+    <link rel="stylesheet" crossorigin href="/apps/base-shell/assets/index-BH_nig2_.css">
   </head>
   <body>
     <div id="root"></div>

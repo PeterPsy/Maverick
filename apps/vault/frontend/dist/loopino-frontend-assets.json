@@ -1,0 +1,62 @@
+{
+  "build_id": "4080acd8ec979e2f2930a99e95794c0c5b8c7cd889bbbba9ddad2a71b8390c07",
+  "entrypoints": [
+    "index.html",
+    "widgets/vault-sidebar/index.html",
+    "widgets/vault-sidebar-footer/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-Bh37nTM6.css",
+      "sha256": "e963071a25bd555f8036f3a1509465e42d7fa67c62c6d798514b0681dc5018b7",
+      "size_bytes": 12071
+    },
+    {
+      "path": "assets/app-Dp8CR_QA.js",
+      "sha256": "c056de7587dc6ffcc941fc276388ea541de4bc17d9cd79eeb724bd4717f6f51a",
+      "size_bytes": 22216
+    },
+    {
+      "path": "assets/download-DExHHmX6.js",
+      "sha256": "1ae2f3b71a7fdd8cf40c6267cde7ce77dce6bac57b498c82dbf8176af7889d3e",
+      "size_bytes": 268
+    },
+    {
+      "path": "assets/vaultViewState-iK0TaJ4q.js",
+      "sha256": "a52d082bf2302156048c1a24884d5b967645619e2e11177f913fd37072e1addc",
+      "size_bytes": 197775
+    },
+    {
+      "path": "assets/widget-styles-B_OXj_-M.css",
+      "sha256": "a8d5b56db1e2b7faba048043e33a09c2ccfa3a58185538f90fd457303aee1931",
+      "size_bytes": 9639
+    },
+    {
+      "path": "assets/widgets/vault-sidebar/index-DEGmzspL.js",
+      "sha256": "e6068f2dbd1a3d908d1e2f3b8c1fd82c9feeeb6f8b613876a480b3e8f1d814f8",
+      "size_bytes": 6868
+    },
+    {
+      "path": "assets/widgets/vault-sidebar-footer/index-B1scXZdW.js",
+      "sha256": "4b0eeb3d8ef59755cd15f17ba6e92a5e8ec95d18465760bcdda9bfa04d3b39a4",
+      "size_bytes": 7173
+    },
+    {
+      "path": "index.html",
+      "sha256": "8f8f7ceef1acd44f8322f1c572e66b49b4736afeaa13d3a13d8192866f3c72cb",
+      "size_bytes": 594
+    },
+    {
+      "path": "widgets/vault-sidebar/index.html",
+      "sha256": "4012d098cdd907bce1b5480d2cb3b79aecd69a50697d91603a828b6f471b2279",
+      "size_bytes": 585
+    },
+    {
+      "path": "widgets/vault-sidebar-footer/index.html",
+      "sha256": "a98ee44c0b13f159f5ab226162217db580f20fd528499fe19de18d88713070fa",
+      "size_bytes": 696
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

@@ -1,1 +1,0 @@
-import{r as t,m as a,o as c}from"./storageApi-C4Ov6JYT.js";import{S as f}from"./storageNavigationParams-Ca_5kmjk.js";function p(i){const e=t.useRef(new f).current,o=t.useRef(i);return o.current=i,t.useEffect(()=>{let r=a();e.setVisible(r);const u=c(s=>{s!==r&&(r=s,e.setVisible(s),s&&o.current())});return()=>{e.dispose(),u()}},[e]),e}export{p as u};

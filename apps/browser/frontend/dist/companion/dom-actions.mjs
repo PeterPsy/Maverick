@@ -48,7 +48,7 @@ export async function observe(action, p) {
     return presentedTime;
   };
   if (["snapshot", "content.read"].includes(action)) {
-    const result = globalThis.maverickBrowserRead({maxChars:p.max_chars ?? 40000,maxItems:p.max_items ?? 100});
+    const result = globalThis.loopinoBrowserRead({maxChars:p.max_chars ?? 40000,maxItems:p.max_items ?? 100});
     const redact = (value, navigation=false) => {
       if (!value) return null;
       const url = new URL(value);
@@ -95,8 +95,8 @@ export async function observe(action, p) {
   }
   if (action === "video.prepare") {
     const element=video();
-    if (globalThis.maverickVideoState) throw new Error("video_already_in_use");
-    globalThis.maverickVideoState = [...document.querySelectorAll("video")].map(e => ({element:e,time:e.currentTime,paused:e.paused,muted:e.muted,volume:e.volume,rate:e.playbackRate}));
+    if (globalThis.loopinoVideoState) throw new Error("video_already_in_use");
+    globalThis.loopinoVideoState = [...document.querySelectorAll("video")].map(e => ({element:e,time:e.currentTime,paused:e.paused,muted:e.muted,volume:e.volume,rate:e.playbackRate}));
     for (const e of document.querySelectorAll("video")) e.pause();
     element.scrollIntoView({block:"center",inline:"center",behavior:"instant"});
     // There is no decoded frame at duration; replaying an ended video starts at
@@ -112,14 +112,14 @@ export async function observe(action, p) {
   }
   if (action === "video.pause") {const e=video();e.pause();return metadata(e);}
   if (action === "video.restore") {
-    for (const saved of globalThis.maverickVideoState || []) {
+    for (const saved of globalThis.loopinoVideoState || []) {
       const e=saved.element;
       if (!e.isConnected) continue;
       e.pause();e.muted=saved.muted;e.volume=saved.volume;e.playbackRate=saved.rate;
       if (Number.isFinite(e.duration)) e.currentTime=Math.min(saved.time,e.duration);
       if (!saved.paused) await e.play().catch(()=>{});
     }
-    delete globalThis.maverickVideoState;
+    delete globalThis.loopinoVideoState;
     return {restored:true};
   }
   throw new Error("observation_unavailable");

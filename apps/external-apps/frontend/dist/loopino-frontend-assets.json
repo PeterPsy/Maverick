@@ -1,0 +1,47 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "92534e9cdf8cec67a3205bc3678fc2d1eb9f80c4492db7a91859957899ef38c7",
+  "entrypoints": [
+    "index.html",
+    "widgets/external-surfaces-settings/index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/app-BpkvpZur.js",
+      "sha256": "57887019e04abdcc769814d58d29859299ecb6593c91556bddae97556a157f52",
+      "size_bytes": 155
+    },
+    {
+      "path": "assets/externalSettings-Dd10ZRNG.js",
+      "sha256": "8f7a9c5d88151ed08d2633359ead0f40453a01fc9e38ce5e4d230d286fa5e156",
+      "size_bytes": 1147
+    },
+    {
+      "path": "assets/externalSettings-tmjyjPtE.css",
+      "sha256": "fbefaef5f5c8037b576fdb6b169185ec2ec9ca04ae2f482ae9853731b21c13b0",
+      "size_bytes": 718
+    },
+    {
+      "path": "assets/styles-D79ed97I.js",
+      "sha256": "8445dc9a6cf8b854fa1b972e1c903e062c09f132d3fe073da6714bd8cb6b9b81",
+      "size_bytes": 238930
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "assets/styles-dVdNvzy6.css",
+      "sha256": "4bdbc66d3ce59b3a80c5d1fb501cba648c1d385cec92116a1919c9c4cd8b2a67",
+      "size_bytes": 4583
+    },
+    {
+      "path": "index.html",
+      "sha256": "670855b5ba738d8c5bffcf6bf34ebb20450b82df094b115b431bea50955986e1",
+      "size_bytes": 716
+    },
+    {
+      "path": "widgets/external-surfaces-settings/index.html",
+      "sha256": "cc76aadea9c893b7d4ab1d3a243cf408eefcabd01e3d22480dea2e8da192950c",
+      "size_bytes": 790
+    }
+  ]
+}

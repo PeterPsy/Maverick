@@ -1,0 +1,234 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "19e5f8152cb2d54e57149a6a29736a391aedaa7b19469dd37d1f582f3c109516",
+  "entrypoints": [
+    "index.html",
+    "installation.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/LoginPaperBackground-Cu89fDyy.js",
+      "sha256": "81ed0d058c09119023f792afb1953c9959945b9fa8fc1443791952bf933b51d7",
+      "size_bytes": 25132
+    },
+    {
+      "path": "assets/index-BH_nig2_.css",
+      "sha256": "6bb10974415dd4132134d81418578e7fee9b73b1cd848d87f57b38182e49633b",
+      "size_bytes": 117102
+    },
+    {
+      "path": "assets/index-BOwgEqjK.js",
+      "sha256": "a4d5b0688f470eb4b63bd43ce9c2ffb130ac3e6ebc32056a8cefe509206a94d7",
+      "size_bytes": 598428
+    },
+    {
+      "path": "assets/installation-CSiKA517.css",
+      "sha256": "c90f14a42cee8f0c0ae91bb99c1f6d0761211c3772a2169ccf5d8ee0956575db",
+      "size_bytes": 5967
+    },
+    {
+      "path": "assets/installation-DZ824cWC.js",
+      "sha256": "1503addfb62accd46b7553f849ea550c77d390ae5ddac46e1d7ea78c0c7f6d7b",
+      "size_bytes": 17337
+    },
+    {
+      "path": "assets/modulepreload-polyfill-B5Qt9EMX.js",
+      "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0",
+      "size_bytes": 711
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "app-icon-lightcolor.png",
+      "sha256": "5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0",
+      "size_bytes": 95846
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912",
+      "size_bytes": 270622
+    },
+    {
+      "path": "index.html",
+      "sha256": "3d7694591d0d427e3e40258755785d9457bf4eca6d2b104375ac8c51888993f4",
+      "size_bytes": 2367
+    },
+    {
+      "path": "installation.html",
+      "sha256": "1ded0389d42d7705f22703562976d81a7c5f2f70c9728c539ac9ea81e02d4496",
+      "size_bytes": 921
+    },
+    {
+      "path": "loopino-logotype.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "path": "loopino-mark.svg",
+      "sha256": "443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983",
+      "size_bytes": 17902
+    },
+    {
+      "path": "manifest.webmanifest",
+      "sha256": "36bbf4c23cc0ad0831b32374f522cd8fa2dd90dc74a633bb1afbb5e3dd959b2d",
+      "size_bytes": 624
+    },
+    {
+      "path": "material-symbols-rounded.woff2",
+      "sha256": "aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97",
+      "size_bytes": 414656
+    },
+    {
+      "path": "pwa-apple-touch-icon.png",
+      "sha256": "13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb",
+      "size_bytes": 4075
+    },
+    {
+      "path": "pwa-logo-192.png",
+      "sha256": "d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24",
+      "size_bytes": 4429
+    },
+    {
+      "path": "pwa-logo.png",
+      "sha256": "1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10",
+      "size_bytes": 16936
+    },
+    {
+      "path": "pwa-maskable-logo.png",
+      "sha256": "5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031",
+      "size_bytes": 17394
+    },
+    {
+      "path": "sidebar-logo-black.svg",
+      "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f",
+      "size_bytes": 6750
+    },
+    {
+      "path": "sidebar-logo.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "path": "sw.js",
+      "sha256": "0747a39d92e28822d0d69103b1393b6751d793d8dc50010735931da3078045a9",
+      "size_bytes": 14184
+    }
+  ],
+  "navigation_fallback": "index.html",
+  "precache": [
+    {
+      "url": "/",
+      "path": "index.html",
+      "sha256": "3d7694591d0d427e3e40258755785d9457bf4eca6d2b104375ac8c51888993f4",
+      "size_bytes": 2367
+    },
+    {
+      "url": "/apps/base-shell/app-icon-lightcolor.png",
+      "path": "app-icon-lightcolor.png",
+      "sha256": "5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0",
+      "size_bytes": 95846
+    },
+    {
+      "url": "/apps/base-shell/assets/index-BH_nig2_.css",
+      "path": "assets/index-BH_nig2_.css",
+      "sha256": "6bb10974415dd4132134d81418578e7fee9b73b1cd848d87f57b38182e49633b",
+      "size_bytes": 117102
+    },
+    {
+      "url": "/apps/base-shell/assets/index-BOwgEqjK.js",
+      "path": "assets/index-BOwgEqjK.js",
+      "sha256": "a4d5b0688f470eb4b63bd43ce9c2ffb130ac3e6ebc32056a8cefe509206a94d7",
+      "size_bytes": 598428
+    },
+    {
+      "url": "/apps/base-shell/assets/installation-CSiKA517.css",
+      "path": "assets/installation-CSiKA517.css",
+      "sha256": "c90f14a42cee8f0c0ae91bb99c1f6d0761211c3772a2169ccf5d8ee0956575db",
+      "size_bytes": 5967
+    },
+    {
+      "url": "/apps/base-shell/assets/installation-DZ824cWC.js",
+      "path": "assets/installation-DZ824cWC.js",
+      "sha256": "1503addfb62accd46b7553f849ea550c77d390ae5ddac46e1d7ea78c0c7f6d7b",
+      "size_bytes": 17337
+    },
+    {
+      "url": "/apps/base-shell/assets/LoginPaperBackground-Cu89fDyy.js",
+      "path": "assets/LoginPaperBackground-Cu89fDyy.js",
+      "sha256": "81ed0d058c09119023f792afb1953c9959945b9fa8fc1443791952bf933b51d7",
+      "size_bytes": 25132
+    },
+    {
+      "url": "/apps/base-shell/assets/modulepreload-polyfill-B5Qt9EMX.js",
+      "path": "assets/modulepreload-polyfill-B5Qt9EMX.js",
+      "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0",
+      "size_bytes": 711
+    },
+    {
+      "url": "/apps/base-shell/loopino-logotype.svg",
+      "path": "loopino-logotype.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "url": "/apps/base-shell/loopino-mark.svg",
+      "path": "loopino-mark.svg",
+      "sha256": "443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983",
+      "size_bytes": 17902
+    },
+    {
+      "url": "/apps/base-shell/pwa-apple-touch-icon.png",
+      "path": "pwa-apple-touch-icon.png",
+      "sha256": "13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb",
+      "size_bytes": 4075
+    },
+    {
+      "url": "/apps/base-shell/pwa-logo-192.png",
+      "path": "pwa-logo-192.png",
+      "sha256": "d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24",
+      "size_bytes": 4429
+    },
+    {
+      "url": "/apps/base-shell/pwa-logo.png",
+      "path": "pwa-logo.png",
+      "sha256": "1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10",
+      "size_bytes": 16936
+    },
+    {
+      "url": "/apps/base-shell/pwa-maskable-logo.png",
+      "path": "pwa-maskable-logo.png",
+      "sha256": "5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031",
+      "size_bytes": 17394
+    },
+    {
+      "url": "/apps/base-shell/sidebar-logo-black.svg",
+      "path": "sidebar-logo-black.svg",
+      "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f",
+      "size_bytes": 6750
+    },
+    {
+      "url": "/apps/base-shell/sidebar-logo.svg",
+      "path": "sidebar-logo.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "url": "/favicon.ico",
+      "path": "favicon.ico",
+      "sha256": "fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912",
+      "size_bytes": 270622
+    },
+    {
+      "url": "/manifest.webmanifest",
+      "path": "manifest.webmanifest",
+      "sha256": "36bbf4c23cc0ad0831b32374f522cd8fa2dd90dc74a633bb1afbb5e3dd959b2d",
+      "size_bytes": 624
+    },
+    {
+      "url": "/material-symbols-rounded.woff2",
+      "path": "material-symbols-rounded.woff2",
+      "sha256": "aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97",
+      "size_bytes": 414656
+    }
+  ]
+}

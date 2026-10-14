@@ -1,0 +1,72 @@
+{
+  "build_id": "21258fe138d18590583764095b8788bcaabc152c6ebd0fd3baf4365af5b203f8",
+  "entrypoints": [
+    "index.html",
+    "widgets/dynamic-view/index.html",
+    "widgets/dynamic-views-sidebar/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/api-DQfX268d.js",
+      "sha256": "dfd9ff2eedad1373eaef78fd71fa69cd631db9cfe5db5a9d7d6cef09607246df",
+      "size_bytes": 194062
+    },
+    {
+      "path": "assets/app-CKX71I0x.js",
+      "sha256": "1f210247cb40977ebe4c28fac36f7785afc1461109d2a1a9ea48d9999833a286",
+      "size_bytes": 6138
+    },
+    {
+      "path": "assets/app-O9rutgYT.css",
+      "sha256": "c1dffc87e8b2da310c1591ea2658c43c34e3a083ca6de9d8469c1f0aae404475",
+      "size_bytes": 15067
+    },
+    {
+      "path": "assets/dynamicViewFrame-CfYtxmKG.js",
+      "sha256": "332a96b85b4d72c154dfa7546d78d8232d7ced016cc206d9b40429400e7524d5",
+      "size_bytes": 6377
+    },
+    {
+      "path": "assets/dynamicViewNavigationParams-BWuM-XMa.js",
+      "sha256": "fe99e412ef8c2c225a58dbb3e48a41d5d125ad0b2f79751ae86aee246e97a15f",
+      "size_bytes": 1119
+    },
+    {
+      "path": "assets/index-D6bKIKyr.css",
+      "sha256": "7378cd5ba739a74cf4278b42407a4ab7efce609b4f26a803613fc15b963a5bed",
+      "size_bytes": 6411
+    },
+    {
+      "path": "assets/index-FXUcIEae.css",
+      "sha256": "c3df9f465d693d24f0a3ad1153f4bdeb4b0db1c9b50f435bee0b0184ac865d11",
+      "size_bytes": 9078
+    },
+    {
+      "path": "assets/widgets/dynamic-view/index-DP6yeeB2.js",
+      "sha256": "4c6e86528a7a3561298a730387646bd24d6e50d2d2755f10c955a102738253f1",
+      "size_bytes": 2442
+    },
+    {
+      "path": "assets/widgets/dynamic-views-sidebar/index-1YaLZ5x3.js",
+      "sha256": "505c1b26d1ffda464d490ac12f4e315de5f319263dfc71eb239f78c340b3c554",
+      "size_bytes": 7122
+    },
+    {
+      "path": "index.html",
+      "sha256": "2bb6bc5284360fb5868641bde883bd1657f1366341050df9e014ba12bfc4bcdd",
+      "size_bytes": 1063
+    },
+    {
+      "path": "widgets/dynamic-view/index.html",
+      "sha256": "e1e41239cda828d7f81fc7f8600a3bddb5b8030fda08f58bd3ac9b48a5baa852",
+      "size_bytes": 989
+    },
+    {
+      "path": "widgets/dynamic-views-sidebar/index.html",
+      "sha256": "fd4754da1bc27aa02799a4d5cf91a97e8c1c61141ec9eaa0658ad8989b4b6e7b",
+      "size_bytes": 902
+    }
+  ],
+  "schema": "loopino.frontend-assets.v2"
+}

@@ -11,21 +11,21 @@
         var search = new URLSearchParams(window.location.search);
         var hash = new URLSearchParams(window.location.hash.slice(1));
         var theme =
-          search.get("maverick_theme") ||
-          hash.get("maverick_theme") ||
-          search.get("maverick_color_scheme") ||
-          hash.get("maverick_color_scheme");
+          search.get("loopino_theme") ||
+          hash.get("loopino_theme") ||
+          search.get("loopino_color_scheme") ||
+          hash.get("loopino_color_scheme");
         var effective = theme === "light" ? "light" : "dark";
-        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.loopinoTheme = effective;
         document.documentElement.dataset.theme = effective;
         document.documentElement.style.colorScheme = effective;
       })();
     </script>
     <title>Marta Ops Sidebar Footer</title>
-    <script type="module" crossorigin src="/apps/marta-ops/assets/app-qiidrE1D.js"></script>
-    <link rel="modulepreload" crossorigin href="/apps/marta-ops/assets/shellTheme-DTgZYmUU.js">
-    <link rel="modulepreload" crossorigin href="/apps/marta-ops/assets/sidebar-widget-BU3Myes3.js">
-    <link rel="stylesheet" crossorigin href="/apps/marta-ops/assets/sidebar-widget-CML_J6jn.css">
+    <script type="module" crossorigin src="/apps/marta-ops/assets/app-lcCarL62.js"></script>
+    <link rel="modulepreload" crossorigin href="/apps/marta-ops/assets/shellTheme-PynioFqF.js">
+    <link rel="modulepreload" crossorigin href="/apps/marta-ops/assets/sidebar-widget-W6ZH_sDV.js">
+    <link rel="stylesheet" crossorigin href="/apps/marta-ops/assets/sidebar-widget-BzXggk2q.css">
   </head>
   <body>
     <div id="marta-ops-sidebar-footer-root"></div>

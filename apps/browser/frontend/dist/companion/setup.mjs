@@ -1,12 +1,12 @@
 import {sharedTabUrl} from "./scope.mjs";
 import {platforms} from "./platforms.mjs";
 
-// Official Maverick installation. Other installations can change Connection settings.
-export const defaultConnectorUrl = "https://maverick.loopino.ai/app/browser?connector=1";
+// Official Loopino installation. Other installations can change Connection settings.
+export const defaultConnectorUrl = "https://loopino.giuntitrail.com/app/browser?connector=1";
 
 export function selectedAgentTab(tab, agentTabUrl, identity) {
   if (!Number.isInteger(tab?.id) || typeof tab.url !== "string") throw new Error("active_tab_unavailable");
-  if (tab.url === agentTabUrl) return {id:tab.id, url:"", title:"Maverick agent tab", allowed_platforms:Object.keys(platforms),website_scope:"https"};
+  if (tab.url === agentTabUrl) return {id:tab.id, url:"", title:"Loopino agent tab", allowed_platforms:Object.keys(platforms),website_scope:"https"};
   if (identity?.tabId === tab.id && identity.allowedPlatforms?.length) {
     return {id:tab.id, url:sharedTabUrl(tab.url, identity, agentTabUrl), title:tab.title || "Agent tab", allowed_platforms:identity.allowedPlatforms, website_scope:identity.websiteScope, reconnect:true};
   }
@@ -21,7 +21,7 @@ export function setupError(error) {
     return "Return the agent tab to a supported platform home page, profile, post or video, then reconnect. Sign-in, messages and settings pages require you to act directly in Chrome.";
   if (["website_scope_required","invalid_website_url"].includes(code)) return "Return the agent tab to an HTTPS website, then reconnect. Chrome pages, files and local network addresses cannot be controlled.";
   if (["browser_connector_url_required", "secure_connector_url_required", "invalid_frame_domain"].includes(code) || error instanceof TypeError)
-    return "Check the Maverick address in Connection settings. For another installation, use its Browser connector address ending with /app/browser?connector=1.";
+    return "Check the Loopino address in Connection settings. For another installation, use its Browser connector address ending with /app/browser?connector=1.";
   if (code === "permission_denied") return "Allow HTTPS website access when Chrome asks, then connect the agent tab again.";
   return code || "The agent tab could not connect. Reload the extension in chrome://extensions and try again on the agent tab.";
 }

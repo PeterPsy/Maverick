@@ -1,0 +1,124 @@
+{
+  "schema": "loopino.frontend-assets.v2",
+  "build_id": "bd9629888d72d97158084128b0475ae575a82903c9bf1bf4086815b3e0fbff18",
+  "entrypoints": [
+    "index.html",
+    "widgets/file-preview/index.html",
+    "widgets/storage-sidebar/index.html",
+    "widgets/storage-sidebar-footer/index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/PdfViewer-D18_uL8i.js",
+      "sha256": "e8f235e61a2135a5d119f8b579fae4af654b8879dd7c6ac635e455b6ae3be2d9",
+      "size_bytes": 418779
+    },
+    {
+      "path": "assets/app-D0oF2HuU.css",
+      "sha256": "cbfe5e2b06cd1779253bc29223a77bc699a35c6e9e696336a0decfeb05871221",
+      "size_bytes": 43811
+    },
+    {
+      "path": "assets/app-hBlE8eRq.js",
+      "sha256": "528e596aa5f9cadbe4ec4cc7d6cee09b99c53873ad3c65368cd9ed4900ef8c71",
+      "size_bytes": 109269
+    },
+    {
+      "path": "assets/docx-preview-DUVmj_be.js",
+      "sha256": "b822104c9008e00d5c04a6c169d0d575c8508558de38335ee18a58e8be9171a4",
+      "size_bytes": 172976
+    },
+    {
+      "path": "assets/externalUrlBroker-Dg-33CY2.js",
+      "sha256": "cfefc4d4db6d6b5644dad071abf0de703f7be587eb6ead3b7d5bb6246b25b3be",
+      "size_bytes": 947
+    },
+    {
+      "path": "assets/index-Clf0VVol.css",
+      "sha256": "760c88eb32b710a3bac5f7bfa145b02b83c444fb6c72a6339578d70764728ce2",
+      "size_bytes": 9341
+    },
+    {
+      "path": "assets/pdf.worker.min-iDqQPrd3.mjs",
+      "sha256": "52fadd5b81b6abd1eb665bab0c3749a8ad6a293fcb6ee9d9e0309f29d4f82619",
+      "size_bytes": 1232303
+    },
+    {
+      "path": "assets/sidebar-widget-6Wub5Q8A.js",
+      "sha256": "3e7487341f89067a302b005a91d9b651d9604f591bc955954f484c84ee50680c",
+      "size_bytes": 351
+    },
+    {
+      "path": "assets/storageApi-BGOtR4Dl.js",
+      "sha256": "c8a4d245ee0df11812ebf8557dd0250db4753cac15cb2fb651d975063ca90939",
+      "size_bytes": 244737
+    },
+    {
+      "path": "assets/storageNavigationParams-BVpeXRau.js",
+      "sha256": "03b47fdce14422f68fa75d91bc3f1e6afc2a75cb3b1e99bb93146ab0a304c6a5",
+      "size_bytes": 11483
+    },
+    {
+      "path": "assets/storageOAuthRuntime-JMj5OjL_.js",
+      "sha256": "3a1a4d8b8a34dd97f5240dea6491b77d215289360f324998ae4938ff9ee326c7",
+      "size_bytes": 776
+    },
+    {
+      "path": "assets/storageViewFilterEvents-bPyY-5tr.js",
+      "sha256": "c235117f1a46929bc1b202c5be9eada6a5ee94573e2a28e423099b09173f0709",
+      "size_bytes": 181612
+    },
+    {
+      "path": "assets/useStorageVisibility-Dft-qeZd.js",
+      "sha256": "fb5172a48a50476f5aa46595688ba46378b97f7276b42382a35f7013241153a4",
+      "size_bytes": 14632
+    },
+    {
+      "path": "assets/widgets/file-preview/index-BRSyq_zt.js",
+      "sha256": "49c961c47599e723ef31dc055b22ab9c92affd01f4ca69a080e32cea5af14684",
+      "size_bytes": 10677
+    },
+    {
+      "path": "assets/widgets/storage-sidebar/index-B6FhB5-Q.js",
+      "sha256": "e2bfef8afb82092521f543234b40d488768630395617550d0d68b074eb15fc1a",
+      "size_bytes": 31257
+    },
+    {
+      "path": "assets/widgets/storage-sidebar-footer/index-C84ABEE7.js",
+      "sha256": "39e7c00ce4f5811f37730c3daf69b681f3c3c98ada73534de0f25f47915f168b",
+      "size_bytes": 10141
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "assets/sidebar-widget-BKenEqMO.css",
+      "sha256": "c0aec179804c832dd152d02c81598296c006230cebaaf2505722e4477bf95c67",
+      "size_bytes": 23538
+    },
+    {
+      "path": "assets/useStorageVisibility-BVXz3tWr.css",
+      "sha256": "482299e7d514b31b259b94ca6ad5f9a4d294f7a66b31bc98d25cc4cc1a604fe6",
+      "size_bytes": 4157
+    },
+    {
+      "path": "index.html",
+      "sha256": "ff384f17e61ea7517846a8e15c4b038727297da3d1fac98ce00f42066626badb",
+      "size_bytes": 1160
+    },
+    {
+      "path": "widgets/file-preview/index.html",
+      "sha256": "0ad07d99cc710e809b6ca9759799c665b5d73484da4893608c5ef1d9db37b416",
+      "size_bytes": 874
+    },
+    {
+      "path": "widgets/storage-sidebar/index.html",
+      "sha256": "322cebd86c26ae89ea7ddf36e0aa73f7754103afc10303090f9c691f3de8b6fc",
+      "size_bytes": 906
+    },
+    {
+      "path": "widgets/storage-sidebar-footer/index.html",
+      "sha256": "f8ecbb508a8d5583c4e833f6625166b2a1563b190e2ea8206406c9ac44dc0ba4",
+      "size_bytes": 999
+    }
+  ]
+}

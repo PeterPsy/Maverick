@@ -1,0 +1,1 @@
+import{r as t,l as a,o as c}from"./storageApi-BGOtR4Dl.js";import{S as f}from"./storageNavigationParams-BVpeXRau.js";function p(o){const e=t.useRef(new f).current,i=t.useRef(o);return i.current=o,t.useEffect(()=>{let r=a();e.setVisible(r);const u=c(s=>{s!==r&&(r=s,e.setVisible(s),s&&i.current())});return()=>{e.dispose(),u()}},[e]),e}export{p as u};

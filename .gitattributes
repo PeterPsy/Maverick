@@ -1,1 +1,3 @@
 apps/design-studio/service/patches/*.patch -whitespace
+# Built bundles can retain intentional spaces inside upstream template strings.
+apps/*/frontend/dist/** whitespace=-blank-at-eol

@@ -89,4 +89,3 @@ def _find(items: list[dict[str, Any]], item_id: str, label: str) -> dict[str, An
         if str(item.get("id") or "") == item_id:
             return item
     raise MartaOpsError(f"{label} non trovato.", status_code=404)
-

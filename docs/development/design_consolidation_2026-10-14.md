@@ -77,6 +77,12 @@ whose source directories no longer exist.
 - Business-data hashes and governed dependency selections are preserved.
 - Git whitespace checks pass before each source checkpoint.
 
+The imported backend's extra EOF line was removed in a corrective checkpoint.
+Generated frontend bundles contain intentional whitespace inside upstream CSS
+template strings; `.gitattributes` excludes only end-of-line whitespace for
+committed `frontend/dist` files while retaining ordinary source checks. Bundle
+content remains the official build output, including its asset manifest.
+
 The repository-wide unused-import scan also scans ignored downloaded source.
 It reports four existing imports inside the untracked OpenWA upstream SDK;
 that external checkout is not modified by this consolidation. Verification of

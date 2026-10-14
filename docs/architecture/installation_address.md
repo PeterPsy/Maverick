@@ -54,6 +54,20 @@ template; it is not an agent-owned detached task.
 
 ## Operations and deployment
 
+The current destination's canonical real installation root is
+`/root/projects/loopino`. An offline relocation stops all installation writers,
+preserves tenant identities and encrypted envelopes, and rebases only declared
+technical paths. `core.installation.relocation` changes AppStore source paths,
+workspace binding data roots and explicit local-project roots through adapters;
+it validates all candidate paths before writing. Paths must be absolute, without
+traversal, and match complete root components. Reapplying the move is idempotent,
+even when the new prefix contains the old prefix as text. Tenant text,
+attachments, secret AAD, grants and membership identities are not path fields.
+Native environment and Certbot renewal configuration require their own typed
+updates; OS registrations remain exclusive symlinks to protected backing files.
+See [the relocation checkpoint](../development/loopino_root_relocation_status.md)
+for the actual destination, receipts and remaining acceptance gates.
+
 HTTP administration is under `/api/admin/installation`: GET the base path or
 `/verify`; POST `/plan`, `/apply`, `/status`, `/confirm`, `/retry`, `/rollback`.
 All require a human administrator session. CLI/MCP ids are
@@ -135,7 +149,7 @@ hours. Fresh/unmanaged setup defaults to that detected IP, including when an old
 host-local and should not be copied as tenant data to a new server.
 
 Loopino phase 1 keeps every new installation-owned file inside
-`/projects/loopino`. Main and wildcard Certbot operations, including dry-run
+`/root/projects/loopino`. Main and wildcard Certbot operations, including dry-run
 renewal and the Core worker, pass the same explicit config/work/log directories
 under `installation/tls/certbot`. Private DNS credential projections are limited
 to `installation/tls/credentials` (0600 files, 0700 directory, no symlinks).

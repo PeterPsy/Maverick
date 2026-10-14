@@ -47,7 +47,7 @@ When a task mentions an app id, first resolve app source from the Loopino root
 repository:
 
 ```text
-/projects/loopino/apps/<app_id>
+/root/projects/loopino/apps/<app_id>
 ```
 
 Built-in and general apps under root `apps/` are the primary source of truth for
@@ -59,7 +59,7 @@ root `apps/`, or when the user explicitly says the task is about a
 workspace-local app/fork:
 
 ```text
-/projects/loopino/workspaces/<workspace_id>/apps/<app_id>
+/root/projects/loopino/workspaces/<workspace_id>/apps/<app_id>
 ```
 
 Do not start app code discovery inside `workspaces/default/apps` for built-in or

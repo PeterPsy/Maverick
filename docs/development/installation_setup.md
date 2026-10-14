@@ -1,5 +1,10 @@
 # Installation setup verification
 
+> Historical snapshot: paths, branch names and live observations below belong to
+> their recorded checkpoint or predecessor installation. Current destination and
+> acceptance evidence are in [the root relocation report](loopino_root_relocation_status.md);
+> they do not prove the new destination or its pending human setup gates.
+
 Historical evidence: the dated live checks below describe the predecessor
 installation on its original server, before this rebrand. They do not establish
 that `/projects/loopino` on this destination has been deployed or verified. New

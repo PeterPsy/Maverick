@@ -93,7 +93,7 @@ data for crash reconciliation; it does not need write access to other apps.
 After operator DNS/TLS/ingress setup, run in the foreground:
 
 ```bash
-python3 scripts/external_apps_supervisor.py --config /projects/loopino/installation/config/external-apps.json
+python3 scripts/external_apps_supervisor.py --config /root/projects/loopino/installation/config/external-apps.json
 ```
 
 An operator may manage this command in their normal service manager. This app

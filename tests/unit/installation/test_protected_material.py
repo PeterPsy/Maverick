@@ -34,7 +34,8 @@ class ProtectedMaterialTests(unittest.TestCase):
                 os.setgroups([])
                 os.setgid(65534)
                 os.setuid(65534)
-            script = '''import pathlib, sys
+            script = '''import os, pathlib, sys
+os.fchdir(int(sys.argv[2]))
 path = pathlib.Path(sys.argv[1])
 assert path.read_text() == "LOOPINO_PORT=8014\\n"
 for operation in (lambda: path.write_text("PYTHONPATH=untrusted"), lambda: path.unlink(),
@@ -45,8 +46,14 @@ for operation in (lambda: path.write_text("PYTHONPATH=untrusted"), lambda: path.
         continue
     raise AssertionError("Unprivileged environment modification succeeded")
 '''
-            result = subprocess.run(["/usr/bin/python3", "-I", "-S", "-c", script, str(env)],
-                                    preexec_fn=unprivileged, capture_output=True, text=True)
+            # Give the child only this fixture directory, without granting the
+            # synthetic UID traversal through a private installation ancestor.
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                result = subprocess.run(["/usr/bin/python3", "-I", "-S", "-c", script, env.name, str(descriptor)],
+                                        preexec_fn=unprivileged, pass_fds=(descriptor,), capture_output=True, text=True)
+            finally:
+                os.close(descriptor)
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_root_environment_is_group_readable_and_never_service_owned(self):
@@ -143,7 +150,7 @@ for operation in (lambda: path.write_text("PYTHONPATH=untrusted"), lambda: path.
             self.assertIn(f"{root}/installation/logs/nginx/main-access.log", content)
             self.assertIn("location = /catalog/api/apps", content)
             self.assertIn("/.well-known/acme-challenge/", content)
-        self.assertIn("StandardOutput=append:/migration/projects/loopino/installation/logs/systemd/", render_service(Path("/projects/loopino"), root_directory="/migration"))
+        self.assertIn("StandardOutput=append:/migration/root/projects/loopino/installation/logs/systemd/", render_service(Path("/root/projects/loopino"), root_directory="/migration"))
 
     def test_service_handoff_does_not_chown_host_logs_or_source(self):
         with tempfile.TemporaryDirectory() as folder:

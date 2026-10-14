@@ -10,7 +10,7 @@ describe("storage link helpers", () => {
   it("normalizes absolute filesystem links without exposing host roots", () => {
     expect(
       workspaceStoragePathFromTarget(
-        "/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1",
+        "/root/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1",
       ),
     ).toBe("storage/generated/agents-cli-mcp-speed-report.md");
   });
@@ -22,7 +22,7 @@ describe("storage link helpers", () => {
   });
 
   it("rejects non-storage and traversal links", () => {
-    expect(workspaceStoragePathFromTarget("/projects/loopino/workspaces/default/tmp/report.md")).toBe("");
+    expect(workspaceStoragePathFromTarget("/root/projects/loopino/workspaces/default/tmp/report.md")).toBe("");
     expect(workspaceStoragePathFromTarget("storage/generated/../secret.md")).toBe("");
   });
 

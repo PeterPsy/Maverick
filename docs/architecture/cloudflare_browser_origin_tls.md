@@ -22,7 +22,7 @@ canonical Core Secrets platform-delivery resolver. It does not bootstrap the
 backend or deliver the token through a workspace app grant. It only emits
 metadata; dependency exception messages and tracebacks are withheld.
 
-The consumer projects the token to `/projects/loopino/installation/tls/credentials/cloudflare.ini`
+The consumer projects the token to `/root/projects/loopino/installation/tls/credentials/cloudflare.ini`
 (root-owned, mode 0600, parent 0700), inside the ignored installation-owned TLS directory. Certbot receives
 the path rather than the token in command arguments. A lineage pre-hook refreshes
 the projection on renewal, so Vault rotation takes effect automatically. A
@@ -84,7 +84,7 @@ of agent turns; it is part of the requested unattended TLS maintenance.
 - Status: `systemctl status loopino-wildcard-tls.timer loopino-wildcard-tls.service`.
 - Stop: `systemctl disable --now loopino-wildcard-tls.timer`.
 - Interrupt an in-progress maintenance run: `systemctl stop loopino-wildcard-tls.service`.
-- Credential-free job status: `/projects/loopino/data/wildcard-maintenance/status.json`.
+- Credential-free job status: `/root/projects/loopino/data/wildcard-maintenance/status.json`.
 - Manual check: start `loopino-wildcard-tls.service`; it honors the persisted deadline.
 
 The timer checks every fifteen minutes. Valid certificates are retained without

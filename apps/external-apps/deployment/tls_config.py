@@ -6,9 +6,9 @@ import re
 import stat
 import time
 
-TLS_ROOT = Path("/projects/loopino/data/external-apps-tls")
-ACME_ROOT = Path("/projects/loopino/data/external-apps-acme")
-PROXY = "/projects/loopino/installation/nginx/loopino-external-apps-proxy.conf"
+TLS_ROOT = Path("/root/projects/loopino/data/external-apps-tls")
+ACME_ROOT = Path("/root/projects/loopino/data/external-apps-acme")
+PROXY = "/root/projects/loopino/installation/nginx/loopino-external-apps-proxy.conf"
 
 
 def read_json(path, limit=2 * 1024 * 1024):
@@ -56,8 +56,8 @@ def render_hosts(certificates, proxy=PROXY):
     for hosts, lineage in certificates:
         blocks.append("server {\n    listen 443 ssl;\n    listen [::]:443 ssl;\n"
                       + "    server_name " + " ".join(sorted(hosts)) + ";\n"
-                      + "    access_log /projects/loopino/installation/logs/nginx/external-apps-access.log;\n"
-                      + "    error_log /projects/loopino/installation/logs/nginx/external-apps-error.log;\n"
+                      + "    access_log /root/projects/loopino/installation/logs/nginx/external-apps-access.log;\n"
+                      + "    error_log /root/projects/loopino/installation/logs/nginx/external-apps-error.log;\n"
                       + f"    ssl_certificate {lineage}/fullchain.pem;\n"
                       + f"    ssl_certificate_key {lineage}/privkey.pem;\n"
                       + f"    include {proxy};\n}}\n")

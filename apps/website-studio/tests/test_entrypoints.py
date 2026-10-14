@@ -4087,7 +4087,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
     def test_phase3a_runtime_logs_redact_host_paths_and_secrets(self) -> None:
         summary = _bounded_log(
-            "failed at /projects/loopino/workspaces/default/data/website-studio/.tmp/runtime_build_x token=abc ghp_123456789012345678901234"
+            "failed at /root/projects/loopino/workspaces/default/data/website-studio/.tmp/runtime_build_x token=abc ghp_123456789012345678901234"
         )
 
         self.assertNotIn("/home/ubuntu", summary)
@@ -4127,7 +4127,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     (
                         "build_redact",
                         site_id,
-                        "Error: /projects/loopino/workspaces/default/data/website-studio/.tmp/build token=abc",
+                        "Error: /root/projects/loopino/workspaces/default/data/website-studio/.tmp/build token=abc",
                     ),
                 )
 

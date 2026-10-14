@@ -384,7 +384,7 @@ describe("runtime event transcript projection", () => {
         event_id: "delta-with-file",
         event_type: "runtime.output.delta",
         payload: {
-          text: "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
+          text: "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/root/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
         },
       }),
       event({
@@ -398,7 +398,7 @@ describe("runtime event transcript projection", () => {
       {
         role: "agent",
         content:
-          "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
+          "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/root/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
         status: "complete",
       },
       {

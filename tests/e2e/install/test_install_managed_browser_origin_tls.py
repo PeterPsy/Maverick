@@ -55,8 +55,8 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
             ),
             hosted_sidecars=True,
             browser_origin_tls_mode="managed_exact",
-            browser_origin_tls_root="/projects/loopino/data/browser-origin-tls",
-            browser_origin_acme_webroot="/projects/loopino/data/browser-origin-acme",
+            browser_origin_tls_root="/root/projects/loopino/data/browser-origin-tls",
+            browser_origin_acme_webroot="/root/projects/loopino/data/browser-origin-acme",
         )
 
         rendered = render_install_plan(config, force_https_nginx=True)
@@ -65,14 +65,14 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         manifest = json.loads(rendered[config.output_root / "install-manifest.json"])
 
         self.assertIn("location ^~ /.well-known/acme-challenge/", nginx)
-        self.assertIn("root /projects/loopino/data/browser-origin-acme;", nginx)
+        self.assertIn("root /root/projects/loopino/data/browser-origin-acme;", nginx)
         self.assertIn("map $ssl_server_name $loopino_browser_origin_cert_host", nginx)
         self.assertIn(
             "~^(?<reserved_browser_origin>(?:af|sc)-[a-f0-9]{24}\\.sidecars\\.loopino\\.example\\.test)$",
             nginx,
         )
         self.assertIn(
-            "ssl_certificate /projects/loopino/data/browser-origin-tls/served/hosts/"
+            "ssl_certificate /root/projects/loopino/data/browser-origin-tls/served/hosts/"
             "$loopino_browser_origin_cert_host/current/fullchain.pem;",
             nginx,
         )
@@ -80,12 +80,12 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
         self.assertNotIn("loopino.example.test-sidecars/fullchain.pem", nginx)
         self.assertIn("LOOPINO_BROWSER_ORIGIN_TLS_MODE=managed_exact", environment)
         self.assertIn(
-            "LOOPINO_BROWSER_ORIGIN_TLS_ROOT=/projects/loopino/data/browser-origin-tls",
+            "LOOPINO_BROWSER_ORIGIN_TLS_ROOT=/root/projects/loopino/data/browser-origin-tls",
             environment,
         )
         self.assertEqual(manifest["browser_origin_tls_mode"], "managed_exact")
 
-    def test_managed_mode_can_bootstrap_without_an_external_wildcard(self) -> None:
+    def test_root_operator_managed_mode_can_bootstrap_without_an_external_wildcard(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = replace(
             make_installer_config(
@@ -94,6 +94,8 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
                 local_only=False,
             ),
             hosted_sidecars=True,
+            service_user="root",
+            service_group="root",
             browser_origin_tls_mode="managed_exact",
             sidecar_tls_cert_path="/missing/external-wildcard.pem",
             sidecar_tls_key_path="/missing/external-wildcard.key",

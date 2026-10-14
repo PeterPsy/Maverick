@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives import serialization
 
 from tls_config import ACME_ROOT, TLS_ROOT, certificate_requests, installation_domain, read_json, render_hosts, valid_host
 
-CERTBOT = Path("/projects/loopino/scripts/deploy/loopino-certbot")
+CERTBOT = Path("/root/projects/loopino/scripts/deploy/loopino-certbot")
 
 
 def atomic_text(path, value, mode=0o600):
@@ -123,7 +123,7 @@ def activate(contents, *, root=TLS_ROOT, runner=subprocess.run):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="/projects/loopino/installation/config/external-apps.json")
+    parser.add_argument("--config", default="/root/projects/loopino/installation/config/external-apps.json")
     args = parser.parse_args()
     config = read_json(Path(args.config), 16384)
     domain = installation_domain(config["installation_domain"])

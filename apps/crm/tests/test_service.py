@@ -54,7 +54,7 @@ class CrmServiceTest(unittest.TestCase):
                     "body_text": "Body",
                     "confirm": True,
                 },
-                loopino_command="/projects/loopino",
+                loopino_command="/root/projects/loopino",
             )
 
         self.assertTrue(result["result"]["sent"])

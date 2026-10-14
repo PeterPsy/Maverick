@@ -26,12 +26,12 @@ class AzureRecoveryPlanTestCase(unittest.TestCase):
                 f"etc/systemd/system/{service}",
                 "[Service]\nUser=ubuntu\nGroup=ubuntu\n"
                 "WorkingDirectory=/home/ubuntu/projects/loopino\n"
-                "EnvironmentFile=/projects/loopino/.env\n"
-                "ExecStart=/projects/loopino/.venv/bin/python -m uvicorn\n",
+                "EnvironmentFile=/root/projects/loopino/.env\n"
+                "ExecStart=/root/projects/loopino/.venv/bin/python -m uvicorn\n",
             )
         self._write(
             "etc/systemd/system/loopino-core.service.d/50-sqlite-runtime.conf",
-            "[Service]\nEnvironment=LD_LIBRARY_PATH=/projects/loopino/.loopino/sqlite/3.51.3/lib\n",
+            "[Service]\nEnvironment=LD_LIBRARY_PATH=/root/projects/loopino/.loopino/sqlite/3.51.3/lib\n",
         )
 
     def _write(self, relative_path: str, content: str) -> None:
@@ -45,9 +45,9 @@ class AzureRecoveryPlanTestCase(unittest.TestCase):
     def test_environment_file_uses_host_path_but_execution_paths_stay_inside_chroot(self) -> None:
         self.render()
         unit = (self.output / "systemd/loopino-core.service").read_text()
-        self.assertIn(f"EnvironmentFile={self.migration}/projects/loopino/.env\n", unit)
+        self.assertIn(f"EnvironmentFile={self.migration}/root/projects/loopino/.env\n", unit)
         self.assertIn("WorkingDirectory=/home/ubuntu/projects/loopino\n", unit)
-        self.assertIn("ExecStart=/projects/loopino/.venv/bin/python", unit)
+        self.assertIn("ExecStart=/root/projects/loopino/.venv/bin/python", unit)
         dropins = self.output / "systemd/loopino-core.service.d"
         override = (dropins / "zz-azure-migration.conf").read_text()
         self.assertIn(f"RootDirectory={self.migration}\n", override)
@@ -79,8 +79,8 @@ class AzureRecoveryPlanTestCase(unittest.TestCase):
         self.assertNotIn("proxy_pass", http)
         self.assertNotIn("ssl_certificate", http)
         self.assertNotIn("{{", http)
-        self.assertIn("root /projects/loopino/data/acme-webroot;", http)
-        self.assertIn("root /projects/loopino/data/browser-origin-acme;", http)
+        self.assertIn("root /root/projects/loopino/data/acme-webroot;", http)
+        self.assertIn("root /root/projects/loopino/data/browser-origin-acme;", http)
         self._write("etc/nginx/azure-runtime.conf", runtime)
         self.render()
         self.assertEqual((self.output / "azure-runtime.conf").read_text().count(RECOVERY_INCLUDE), 1)

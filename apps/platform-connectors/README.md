@@ -75,7 +75,7 @@ Created through the official SDK, the app is installation-level source under
 `apps/platform-connectors`:
 
 ```bash
-loopino core cli run core.app-sdk.validate --app-id platform-connectors --app-root /projects/loopino/apps/platform-connectors --workspace default --json
+loopino core cli run core.app-sdk.validate --app-id platform-connectors --app-root /root/projects/loopino/apps/platform-connectors --workspace default --json
 ```
 
 Install/upgrade hooks initialize SQLite and install `yt-dlp[default]==2026.8.19`

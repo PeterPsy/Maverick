@@ -318,7 +318,7 @@ live router. An existing installation can switch without rerunning bootstrap:
 ```bash
 sudo .venv/bin/python scripts/deploy/activate_browser_origin_wildcard.py \
   --hostname <installation-domain> \
-  --certificate-dir /projects/loopino/installation/tls/certbot/config/live/<installation-domain>-sidecars-wildcard \
+  --certificate-dir /root/projects/loopino/installation/tls/certbot/config/live/<installation-domain>-sidecars-wildcard \
   --nginx-config /etc/nginx/sites-enabled/loopino-sidecars.<installation-domain>.conf
 ```
 

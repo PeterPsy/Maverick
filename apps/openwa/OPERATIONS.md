@@ -6,7 +6,7 @@ The native app runs through Loopino's official SDK entrypoints. Its persistent W
 
 `provider/local_gateway.py` launches the pinned provider with bubblewrap: private user, PID, IPC and UTS namespaces; read-only source/system mounts; a private writable data directory; and a temporary filesystem. It deliberately retains host networking for WhatsApp. This is filesystem/process isolation, not a network sandbox. The app validates and pins public remote gateway addresses separately.
 
-Source belongs to `/projects/loopino/apps/openwa`. Inspect and preserve the active source branch; the clean-install candidate is `loopino/phase1`, while `design` is historical predecessor evidence. The default workspace is bound to the registered platform source. PM2 uses the private `workspaces/default/data/openwa/supervisor` namespace and a minimal environment. Provider state remains under `workspaces/default/data/openwa/gateway`; app configuration and actor-scoped notification receipts remain in `data/openwa/app.sqlite`. The provider's linked-device profile is private engine-owned state. Do not expose or export it through app tools.
+Source belongs to `/root/projects/loopino/apps/openwa`. Inspect and preserve the active source branch; the clean-install candidate is `loopino/phase1`, while `design` is historical predecessor evidence. The default workspace is bound to the registered platform source. PM2 uses the private `workspaces/default/data/openwa/supervisor` namespace and a minimal environment. Provider state remains under `workspaces/default/data/openwa/gateway`; app configuration and actor-scoped notification receipts remain in `data/openwa/app.sqlite`. The provider's linked-device profile is private engine-owned state. Do not expose or export it through app tools.
 
 ## Install and maintain
 
@@ -40,13 +40,13 @@ The reproducible installer binds NestJS to loopback, suppresses bootstrap plaint
 
 The provider uses the wwebjs engine, SQLite and bounded concurrent sessions. Its opt-in session-age send governor is disabled for this personal linked-device installation: linking an established account creates a young provider session, and synchronised outgoing history also spends that governor's daily allowance. This could refuse the first app send even though the user had sent nothing through Loopino. The upstream HTTP rate limits and typing delay retain their defaults. Optional Redis, queue and cache services are disabled for this installation.
 
-The clean destination pins PM2 7.0.4 under `.toolchains/pm2-7.0.4`, Node under `.toolchains/node`, and Puppeteer 24.38.0 Chrome 146.0.7680.31 under `.toolchains/puppeteer`. The namespace mounts the protected `.toolchains` tree read-only and selects these exact executables, with installation-owned extracted shared libraries. Install Puppeteer browsers with `PUPPETEER_CACHE_DIR=/projects/loopino/.toolchains/puppeteer`; never adopt `/opt/google/chrome` or a global Node/PM2 installation. `npm ci` uses the checked-in lock, including the distinct WASI resolver dependency versions required by npm 11.
+The clean destination pins PM2 7.0.4 under `.toolchains/pm2-7.0.4`, Node under `.toolchains/node`, and Puppeteer 24.38.0 Chrome 146.0.7680.31 under `.toolchains/puppeteer`. The namespace mounts the protected `.toolchains` tree read-only and selects these exact executables, with installation-owned extracted shared libraries. Install Puppeteer browsers with `PUPPETEER_CACHE_DIR=/root/projects/loopino/.toolchains/puppeteer`; never adopt `/opt/google/chrome` or a global Node/PM2 installation. `npm ci` uses the checked-in lock, including the distinct WASI resolver dependency versions required by npm 11.
 
 ## Verification and limits
 
 ```bash
 python3 -m unittest discover -s apps/openwa/tests -v
-loopino core cli run core.app-sdk.validate --app-root /projects/loopino/apps/openwa --json
+loopino core cli run core.app-sdk.validate --app-root /root/projects/loopino/apps/openwa --json
 loopino core cli run core.app-sdk.status --app-id openwa --workspace default --json
 loopino app openwa cli run openwa --action sessions.list --json
 ```

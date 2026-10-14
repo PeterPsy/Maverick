@@ -44,15 +44,15 @@ class DeploymentContractTests(unittest.TestCase):
 
     def test_tls_and_vhosts_have_installation_owned_backing_and_logs(self):
         unit = (DEPLOYMENT / "loopino-external-apps-tls.service").read_text()
-        self.assertIn("/projects/loopino/.venv/bin/python -I -B /projects/loopino/installation/libexec/external-apps/tls.py", unit)
-        self.assertIn("StandardError=append:/projects/loopino/installation/logs/systemd/", unit)
+        self.assertIn("/root/projects/loopino/.venv/bin/python -I -B /root/projects/loopino/installation/libexec/external-apps/tls.py", unit)
+        self.assertIn("StandardError=append:/root/projects/loopino/installation/logs/systemd/", unit)
         ingress = render_ingress("loopino.example.com")
-        exact = render_hosts([({PUBLIC_HOST}, Path("/projects/loopino/data/external-apps-tls/config/live/test"))])
+        exact = render_hosts([({PUBLIC_HOST}, Path("/root/projects/loopino/data/external-apps-tls/config/live/test"))])
         for content in (ingress, exact):
             self.assertEqual(content.count("access_log "), content.count("server_name "))
             self.assertEqual(content.count("error_log "), content.count("server_name "))
-            self.assertIn("/projects/loopino/installation/logs/nginx/", content)
-        self.assertIn("include /projects/loopino/installation/nginx/loopino-external-apps-proxy.conf;", exact)
+            self.assertIn("/root/projects/loopino/installation/logs/nginx/", content)
+        self.assertIn("include /root/projects/loopino/installation/nginx/loopino-external-apps-proxy.conf;", exact)
 
 
 class Upstream(socketserver.StreamRequestHandler):
@@ -102,14 +102,14 @@ class NginxIngressTests(unittest.TestCase):
             proxy.write_text((DEPLOYMENT / 'nginx-proxy.conf').read_text())
             exact = render_hosts([({PUBLIC_HOST, 'apps.loopino.example.com'}, root)], str(proxy))
             template = render_ingress('loopino.example.com').replace(
-                'include /projects/loopino/data/external-apps-tls/hosts.conf;', exact)
+                'include /root/projects/loopino/data/external-apps-tls/hosts.conf;', exact)
             template = (template.replace("listen 80;", f"listen 127.0.0.1:{plain};")
                         .replace("listen [::]:80;", "")
                         .replace("listen 443 ssl;", f"listen 127.0.0.1:{tls} ssl;")
                         .replace("listen [::]:443 ssl;", "")
-                        .replace('/projects/loopino/data/external-apps-acme', str(root / 'acme'))
-                        .replace('/projects/loopino/installation/logs/nginx', str(root))
-                        .replace("/projects/loopino/runtime/external-apps-listener/public.sock", str(root / "public.sock")))
+                        .replace('/root/projects/loopino/data/external-apps-acme', str(root / 'acme'))
+                        .replace('/root/projects/loopino/installation/logs/nginx', str(root))
+                        .replace("/root/projects/loopino/runtime/external-apps-listener/public.sock", str(root / "public.sock")))
             # Existing private/default hosts must not be taken over by the template.
             private = (f"server {{ listen 127.0.0.1:{plain} default_server; "
                        f"listen 127.0.0.1:{tls} ssl default_server; server_name private.example.net; "

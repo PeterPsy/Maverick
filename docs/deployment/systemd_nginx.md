@@ -21,6 +21,19 @@ python3.12 scripts/install_loopino.py --hostname loopino.<host>.com --install-ro
 
 `--install-root` currently must be the checkout root that the installer is running from.
 Clone Loopino directly into the intended install root before running the installer.
+
+The current installation uses `/root/projects/loopino`. `/root` remains private:
+named ACL traversal is limited to service UID997 and the dedicated host Nginx
+`loopino-ingress` group. Other existing root-home entries and sibling projects
+deny these roles at blocker ancestors, with default denies for future children.
+Host www-data has the ingress group; container UID33 does not. This preserves
+the Giuntitrail container's existing bind-mount access without exposing its data
+to host Nginx or Loopino. Source, toolchains and privileged configuration remain
+root-owned and nonwritable by Core; `.env.loopino` is root:loopino0640.
+ACL metadata and native integration links are documented OS registration
+exceptions, not product backing files. The private relocation operations directory
+contains exact metadata restores and rollback instructions. Never make `/root`
+globally traversable or recursively hand the installation to the service user.
 The installer fails instead of rendering systemd units that point at a different tree from the one it bootstrapped.
 
 In interactive mode the installer asks for missing values, then prompts before:
@@ -73,8 +86,8 @@ Provision a wildcard certificate with DNS-01 before live apply, then run:
 python3.12 scripts/install_loopino.py \
   --hostname loopino.example.com \
   --hosted-sidecars \
-  --sidecar-tls-cert /projects/loopino/installation/tls/certbot/config/live/loopino.example.com-sidecars/fullchain.pem \
-  --sidecar-tls-key /projects/loopino/installation/tls/certbot/config/live/loopino.example.com-sidecars/privkey.pem \
+  --sidecar-tls-cert /root/projects/loopino/installation/tls/certbot/config/live/loopino.example.com-sidecars/fullchain.pem \
+  --sidecar-tls-key /root/projects/loopino/installation/tls/certbot/config/live/loopino.example.com-sidecars/privkey.pem \
   --skip-tls
 ```
 
@@ -110,7 +123,7 @@ under every routed sidecar hostname. Before Core returns a browser launch
 ticket, it asks Certbot for a public certificate containing only exact
 Core-derived `af-*` or `sc-*` names, validates the SAN/validity/key pair, and
 atomically publishes the pair under
-`/projects/loopino/data/browser-origin-tls/served`. Private ACME state remains below
+`/root/projects/loopino/data/browser-origin-tls/served`. Private ACME state remains below
 the service-only `private` directory; Nginx receives group read access only to
 published keys. The installer obtains both reserved probe names before its
 final Nginx reload and public health pass.
@@ -119,8 +132,8 @@ Override the storage paths only when the service user and Nginx worker can
 retain the same permission boundary:
 
 ```bash
-  --browser-origin-tls-root /projects/loopino/data/browser-origin-tls \
-  --browser-origin-acme-webroot /projects/loopino/data/browser-origin-acme \
+  --browser-origin-tls-root /root/projects/loopino/data/browser-origin-tls \
+  --browser-origin-acme-webroot /root/projects/loopino/data/browser-origin-acme \
   --browser-origin-tls-nginx-group www-data
 ```
 
@@ -193,7 +206,7 @@ Do not continue with a wrong `Service user`, `Service group`, or `Install root`.
 ## Recovering the Azure migration
 
 The Azure host runs `migrated-nginx.service` with
-`RootDirectory=/projects/loopino/operations/migration/loopino-root` and
+`RootDirectory=/root/projects/loopino/operations/migration/loopino-root` and
 `/etc/nginx/azure-runtime.conf` inside that root. This configuration includes
 `azure-loopino-unified.conf` instead of `sites-enabled/*`. Migrated Loopino
 virtual hosts and systemd units therefore need explicit activation on the new
@@ -210,7 +223,7 @@ Review `.loopino/install/azure-recovery/`, then run from an administrative
 terminal on the Azure host:
 
 ```bash
-sudo bash /projects/loopino/operations/migration/loopino-root/projects/loopino/scripts/deploy/restore_azure_loopino.sh --apply
+sudo bash /root/projects/loopino/operations/migration/loopino-root/projects/loopino/scripts/deploy/restore_azure_loopino.sh --apply
 ```
 
 This first-install recovery refuses to overwrite existing host Loopino

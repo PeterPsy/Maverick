@@ -18,7 +18,7 @@ Environment=PATH=/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1
 Environment=LOOPINO_CONTROL_STORE=json
 Environment=LOOPINO_JSON_CONTROL_STORE_ROOT={{CONTROL_STORE_ROOT}}
-ExecStart=/usr/bin/python3 -B {{INSTALL_ROOT}}/scripts/external_apps_supervisor.py --config /projects/loopino/installation/config/external-apps.json
+ExecStart=/usr/bin/python3 -B {{INSTALL_ROOT}}/scripts/external_apps_supervisor.py --config /root/projects/loopino/installation/config/external-apps.json
 ReadWritePaths={{INSTALL_ROOT}}/runtime/external-apps-state {{INSTALL_ROOT}}/runtime/external-apps-listener
 UMask=0007
 NoNewPrivileges=yes

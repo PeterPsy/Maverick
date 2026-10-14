@@ -329,7 +329,7 @@ Browser is a built-in app under the Loopino repository root. Validate its
 source contract through the official SDK before rebuilding:
 
 ```bash
-loopino core cli run core.app-sdk.validate --app-id browser --app-root /projects/loopino/apps/browser --workspace default --json
+loopino core cli run core.app-sdk.validate --app-id browser --app-root /root/projects/loopino/apps/browser --workspace default --json
 ```
 
 Core invokes the declared install, migrate and recovery hooks to manage the

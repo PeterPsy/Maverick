@@ -1,5 +1,10 @@
 # Loopino phase 1 deployment checkpoint
 
+> Historical snapshot: paths, branch names and live observations below belong to
+> their recorded checkpoint or predecessor installation. Current destination and
+> acceptance evidence are in [the root relocation report](loopino_root_relocation_status.md);
+> they do not prove the new destination or its pending human setup gates.
+
 2026-10-14. The new destination serves main HTTPS, login, standalone `/setup`
 and the generic catalog. All 26 standard apps are registered and enabled.
 This is a deployment review checkpoint, not phase 1 completion: new Cloudflare

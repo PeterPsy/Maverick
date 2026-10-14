@@ -1,5 +1,10 @@
 # PWA cache release execution, 2026-09-21/22
 
+> Historical snapshot: paths, branch names and live observations below belong to
+> their recorded checkpoint or predecessor installation. Current destination and
+> acceptance evidence are in [the root relocation report](loopino_root_relocation_status.md);
+> they do not prove the new destination or its pending human setup gates.
+
 ## Outcome
 
 The structured PWA data cache is live on `https://loopino.giuntitrail.com` for the

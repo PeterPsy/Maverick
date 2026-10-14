@@ -331,11 +331,11 @@ class HostedTextGenerationTest(unittest.TestCase):
                 TextGenerationRequest(
                     model_id="google/gemma-4-31b-it:free",
                     messages=[
-                        TextGenerationMessage(role="user", content="Earlier path /projects/loopino/workspaces/default/data"),
+                        TextGenerationMessage(role="user", content="Earlier path /root/projects/loopino/workspaces/default/data"),
                         TextGenerationMessage(role="assistant", content="Acknowledged."),
                         TextGenerationMessage(role="user", content="Now answer normally."),
                     ],
-                    workspace_root="/projects/loopino/workspaces/default",
+                    workspace_root="/root/projects/loopino/workspaces/default",
                     workspace_id="default",
                 )
             )

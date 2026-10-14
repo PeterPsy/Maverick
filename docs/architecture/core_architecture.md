@@ -3404,7 +3404,7 @@ lifecycle. Settings and Base Shell own UI; the Core remains headless.
 
 ## Loopino installation source and material boundaries
 
-The phase 1 installation root is `/projects/loopino`. Installation-owned app
+The phase 1 installation root is `/root/projects/loopino`. Installation-owned app
 artifact namespaces default to `data/app-artifacts` below that root. Resolution
 rejects symlink components throughout the real ancestor chain, including the app
 parent, and checks protected store/app parent ownership against the namespace

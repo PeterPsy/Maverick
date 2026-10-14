@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 import tempfile
@@ -91,7 +92,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
         nginx_conf = render_nginx_config(config, force_https=True)
 
         self.assertIn("listen 443 ssl", nginx_conf)
-        self.assertIn("ssl_certificate /projects/loopino/installation/tls/certbot/config/live/loopino.example.test/fullchain.pem;", nginx_conf)
+        self.assertIn("ssl_certificate /root/projects/loopino/installation/tls/certbot/config/live/loopino.example.test/fullchain.pem;", nginx_conf)
         self.assertIn("ssl_session_cache shared:LoopinoSSL:10m;", nginx_conf)
         self.assertNotIn("shared:SSL:", nginx_conf)
         self.assertIn('Permissions-Policy "camera=(), geolocation=()"', nginx_conf)
@@ -105,7 +106,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
         nginx_conf = rendered[config.nginx_conf_path]
 
         self.assertIn("listen 443 ssl", nginx_conf)
-        self.assertIn("ssl_certificate /projects/loopino/installation/tls/certbot/config/live/loopino.example.test/fullchain.pem;", nginx_conf)
+        self.assertIn("ssl_certificate /root/projects/loopino/installation/tls/certbot/config/live/loopino.example.test/fullchain.pem;", nginx_conf)
 
     def test_hosted_sidecars_render_wildcard_vhost_and_core_environment(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
@@ -446,11 +447,15 @@ class InstallerFlowTestCase(unittest.TestCase):
 
     def test_installer_main_applies_live_plan_when_confirmed(self) -> None:
         with tempfile.TemporaryDirectory(prefix="loopino-install-") as temp_dir:
+            # Exercise the real ownership checks in an isolated installation.
+            templates = Path(__file__).resolve().parents[3] / "scripts/deploy"
+            for directory in ("nginx", "systemd"):
+                shutil.copytree(templates / directory, Path(temp_dir) / "scripts/deploy" / directory)
             output_root = Path(temp_dir) / "install"
             live_systemd_dir = Path(temp_dir) / "live-systemd"
             live_nginx_conf = Path(temp_dir) / "sites-available" / "loopino.example.test.conf"
             live_nginx_enabled = Path(temp_dir) / "sites-enabled" / "loopino.example.test.conf"
-            with patch("core.shared.installer.run_privileged_command") as mocked_runner, patch(
+            with patch("scripts.install_loopino.default_install_root", return_value=Path(temp_dir)), patch("core.shared.installer.run_privileged_command") as mocked_runner, patch(
                 "scripts.install_loopino.check_health",
                 return_value={"http://127.0.0.1:8014/health": True},
             ), patch(
@@ -476,7 +481,7 @@ class InstallerFlowTestCase(unittest.TestCase):
                         "--skip-tls",
                         "--force",
                         *self.admin_password_args(output_root),
-                        *self.secret_args(output_root),
+                        *self.secret_args(Path(temp_dir) / "data"),
                     ]
                 )
 
@@ -488,9 +493,13 @@ class InstallerFlowTestCase(unittest.TestCase):
 
     def test_installer_main_fails_when_post_apply_health_check_fails(self) -> None:
         with tempfile.TemporaryDirectory(prefix="loopino-install-") as temp_dir:
+            # Exercise the real ownership checks in an isolated installation.
+            templates = Path(__file__).resolve().parents[3] / "scripts/deploy"
+            for directory in ("nginx", "systemd"):
+                shutil.copytree(templates / directory, Path(temp_dir) / "scripts/deploy" / directory)
             output_root = Path(temp_dir) / "install"
             live_systemd_dir = Path(temp_dir) / "live-systemd"
-            with patch("core.shared.installer.run_privileged_command"), patch(
+            with patch("scripts.install_loopino.default_install_root", return_value=Path(temp_dir)), patch("core.shared.installer.run_privileged_command"), patch(
                 "scripts.install_loopino.check_health",
                 return_value={"http://127.0.0.1:8014/health": False},
             ), patch(
@@ -510,7 +519,7 @@ class InstallerFlowTestCase(unittest.TestCase):
                         "--yes",
                         "--force",
                         *self.admin_password_args(output_root),
-                        *self.secret_args(output_root),
+                        *self.secret_args(Path(temp_dir) / "data"),
                     ]
                 )
 

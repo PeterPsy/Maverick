@@ -501,7 +501,7 @@ class ProvidersTestCase(unittest.TestCase):
             start_path=repo_root,
         )
 
-        with patch.dict(os.environ, {"LOOPINO_CODEX_COMMAND": "/projects/loopino/codex-fixture"}, clear=False):
+        with patch.dict(os.environ, {"LOOPINO_CODEX_COMMAND": "/root/projects/loopino/codex-fixture"}, clear=False):
             register_builtin_providers(provider_store)
             configure_workspace_provider(provider_store, workspace_id="default", provider_id="codex")
             _provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(
@@ -509,7 +509,7 @@ class ProvidersTestCase(unittest.TestCase):
                 session=session,
             )
 
-        self.assertEqual(runtime_adapter.codex_command, "/projects/loopino/codex-fixture")
+        self.assertEqual(runtime_adapter.codex_command, "/root/projects/loopino/codex-fixture")
 
     def test_configure_workspace_provider_rejects_hosted_api_without_runtime_adapter(self) -> None:
         provider_store = self.make_provider_store()

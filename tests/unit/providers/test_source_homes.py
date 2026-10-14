@@ -16,5 +16,5 @@ class SourceHomeTests(unittest.TestCase):
             self.assertEqual(antigravity_source_home(), root / 'data/provider-auth/antigravity')
 
     def test_explicit_product_home_is_respected(self):
-        with patch.dict(os.environ, {'LOOPINO_CODEX_HOME': '/projects/loopino/data/provider-auth/test'}):
-            self.assertEqual(codex_source_home(), Path('/projects/loopino/data/provider-auth/test'))
+        with patch.dict(os.environ, {'LOOPINO_CODEX_HOME': '/root/projects/loopino/data/provider-auth/test'}):
+            self.assertEqual(codex_source_home(), Path('/root/projects/loopino/data/provider-auth/test'))

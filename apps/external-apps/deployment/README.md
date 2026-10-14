@@ -30,7 +30,7 @@ always derived as `apps.<installation_domain>`. An existing nonempty catalog
 blocks a domain change, rather than rewriting approved URLs. No site is published
 by infrastructure setup; exact-plan human UI approval is still mandatory.
 
-Render `supervisor.example.json` into `/projects/loopino/installation/config/external-apps.json` with the
+Render `supervisor.example.json` into `/root/projects/loopino/installation/config/external-apps.json` with the
 same installation hostname and only explicitly selected workspace/app ids.
 Render `loopino-external-apps.service.example`, replacing:
 
@@ -55,19 +55,19 @@ other agent/operator is editing them. Validate and enable only this service:
 
 ```bash
 systemd-analyze verify ./loopino-external-apps.service
-sudo install -d -o root -g root -m 0755 /projects/loopino/installation/{config,systemd,nginx,libexec/external-apps}
-sudo /projects/loopino/.venv/bin/python -c 'from pathlib import Path; from core.installation.protected_material import prepare_host_logs; prepare_host_logs(Path("/projects/loopino"))'
-sudo install -m 0644 ./external-apps.json /projects/loopino/installation/config/external-apps.json
-sudo install -m 0644 ./loopino-external-apps.service /projects/loopino/installation/systemd/
+sudo install -d -o root -g root -m 0755 /root/projects/loopino/installation/{config,systemd,nginx,libexec/external-apps}
+sudo /root/projects/loopino/.venv/bin/python -c 'from pathlib import Path; from core.installation.protected_material import prepare_host_logs; prepare_host_logs(Path("/root/projects/loopino"))'
+sudo install -m 0644 ./external-apps.json /root/projects/loopino/installation/config/external-apps.json
+sudo install -m 0644 ./loopino-external-apps.service /root/projects/loopino/installation/systemd/
 # Refuse any unrelated OS registration; create only an absent exact symlink.
-sudo ln -s /projects/loopino/installation/systemd/loopino-external-apps.service /etc/systemd/system/loopino-external-apps.service
+sudo ln -s /root/projects/loopino/installation/systemd/loopino-external-apps.service /etc/systemd/system/loopino-external-apps.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now loopino-external-apps.service
-sudo -u www-data curl --unix-socket /projects/loopino/runtime/external-apps-listener/public.sock \
+sudo -u www-data curl --unix-socket /root/projects/loopino/runtime/external-apps-listener/public.sock \
   -sS -o /dev/null -w '%{http_code}\n' -H 'Host: invalid' http://localhost/
 ```
 
-Expect 404. Confirm `/projects/loopino/runtime/external-apps-state/mounts.json` has the intended
+Expect 404. Confirm `/root/projects/loopino/runtime/external-apps-state/mounts.json` has the intended
 namespace and fresh expiry. A healthy socket with an empty mount list does not
 prove workspace availability.
 
@@ -82,7 +82,7 @@ SAN certificates only for catalog-derived names, never arbitrary incoming SNI.
 From this directory, render the dedicated ingress in a staging directory:
 
 ```bash
-/projects/loopino/.venv/bin/python -B -c 'from tls_config import render_ingress; print(render_ingress("loopino.example.com"))' > /projects/loopino/installation/nginx/loopino-external-apps.conf
+/root/projects/loopino/.venv/bin/python -B -c 'from tls_config import render_ingress; print(render_ingress("loopino.example.com"))' > /root/projects/loopino/installation/nginx/loopino-external-apps.conf
 ```
 
 Use the actual installation hostname. Keep the generated upstream, HTTP-01 root,
@@ -100,16 +100,16 @@ review the existing owner's values; do not add duplicate global directives.
 Install root-owned operator material (not writable by the app/public child):
 
 ```bash
-sudo install -d -m 0700 /projects/loopino/data/external-apps-tls
-sudo install -d -m 0755 /projects/loopino/data/external-apps-acme
-sudo install -d -o root -g root -m 0755 /projects/loopino/installation/{libexec/external-apps,nginx,systemd}
-sudo install -m 0644 tls.py tls_config.py /projects/loopino/installation/libexec/external-apps/
-sudo install -m 0644 nginx-proxy.conf /projects/loopino/installation/nginx/loopino-external-apps-proxy.conf
+sudo install -d -m 0700 /root/projects/loopino/data/external-apps-tls
+sudo install -d -m 0755 /root/projects/loopino/data/external-apps-acme
+sudo install -d -o root -g root -m 0755 /root/projects/loopino/installation/{libexec/external-apps,nginx,systemd}
+sudo install -m 0644 tls.py tls_config.py /root/projects/loopino/installation/libexec/external-apps/
+sudo install -m 0644 nginx-proxy.conf /root/projects/loopino/installation/nginx/loopino-external-apps-proxy.conf
 # First installation ONLY; never truncate an existing hosts.conf:
-sudo test -e /projects/loopino/data/external-apps-tls/hosts.conf || \
-  sudo install -m 0644 /dev/null /projects/loopino/data/external-apps-tls/hosts.conf
+sudo test -e /root/projects/loopino/data/external-apps-tls/hosts.conf || \
+  sudo install -m 0644 /dev/null /root/projects/loopino/data/external-apps-tls/hosts.conf
 # Backing configuration above remains in installation/nginx.
-sudo ln -s /projects/loopino/installation/nginx/loopino-external-apps.conf /etc/nginx/sites-available/loopino-external-apps.conf
+sudo ln -s /root/projects/loopino/installation/nginx/loopino-external-apps.conf /etc/nginx/sites-available/loopino-external-apps.conf
 # Create the matching sites-enabled symlink only if absent.
 sudo nginx -t && sudo systemctl reload nginx
 ```
@@ -123,7 +123,7 @@ install an untrusted staging certificate in production nginx. Then install
 `systemctl enable --now loopino-external-apps-tls.timer`. For initial provisioning,
 `systemctl start loopino-external-apps-tls.service` runs one pass synchronously.
 
-The worker uses its own `/projects/loopino/data/external-apps-tls/{config,work,logs}`;
+The worker uses its own `/root/projects/loopino/data/external-apps-tls/{config,work,logs}`;
 existing `/etc/letsencrypt` lineages and `certbot.timer` are untouched. It checks
 fresh supervisor intent and renews within 30 days of expiry, once per minute.
 Certificates group up to 100 names per app namespace, plus a separate base lineage.
@@ -159,11 +159,11 @@ Local tests/base TLS are not proof of a published application.
 
 ```bash
 sudo systemctl status loopino-external-apps.service loopino-external-apps-tls.timer
-sudo tail -n 30 /projects/loopino/installation/logs/systemd/external-apps-tls-error.log
-sudo /projects/loopino/scripts/deploy/loopino-certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
-  --config-dir /projects/loopino/data/external-apps-tls/config \
-  --work-dir /projects/loopino/data/external-apps-tls/work \
-  --logs-dir /projects/loopino/data/external-apps-tls/logs
+sudo tail -n 30 /root/projects/loopino/installation/logs/systemd/external-apps-tls-error.log
+sudo /root/projects/loopino/scripts/deploy/loopino-certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
+  --config-dir /root/projects/loopino/data/external-apps-tls/config \
+  --work-dir /root/projects/loopino/data/external-apps-tls/work \
+  --logs-dir /root/projects/loopino/data/external-apps-tls/logs
 # Stop future issuance/renewal; this does not revoke already served content:
 sudo systemctl disable --now loopino-external-apps-tls.timer
 sudo systemctl stop loopino-external-apps-tls.service

@@ -27,7 +27,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
         harness.read_result = {
             "workspace_file": f"{harness.session.workspace_root}/AGENTS.md",
             "host_reference": (
-                "The installation root is `/projects/loopino`."
+                "The installation root is `/root/projects/loopino`."
             ),
         }
         client = DeterministicFakeAgenticClient(tool_name=harness.read_tool_name)
@@ -50,7 +50,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
         )
         self.assertEqual(
             exported["host_reference"],
-            "The installation root is `/projects/loopino`.",
+            "The installation root is `/root/projects/loopino`.",
         )
         decisions = harness.store.list_egress_decisions(session_id="session-hosted")
         tool_result = next(

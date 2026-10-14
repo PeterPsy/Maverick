@@ -24,7 +24,7 @@ environment. This requires the protected installation distribution and mount
 namespace capability; an ordinary source checkout does not promise either.
 
 Use a short ignored in-root temporary directory for nested sidecar test
-repositories (`/projects/loopino/.t` in this installation). Unix socket names
+repositories (`/root/projects/loopino/.t` in this installation). Unix socket names
 include workspace/service namespaces and have a kernel length limit. Never
 shorten them through an out-of-root fallback or relax the runtime path check.
 A snapshot fixture that mutates same-sized file content explicitly advances its

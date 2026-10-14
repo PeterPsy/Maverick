@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 
 
-MIGRATION_ROOT = Path("/projects/loopino/operations/migration/loopino-root")
+MIGRATION_ROOT = Path("/root/projects/loopino/operations/migration/loopino-root")
 HOSTNAME = "loopino.giuntitrail.com"
 SERVICES = ("loopino-core.service", "loopino-rescue.service")
 RECOVERY_INCLUDE = "    include /etc/nginx/azure-loopino-recovery.conf;\n"
@@ -83,9 +83,9 @@ def render_plan(migration_root: Path, repository_root: Path, output_root: Path) 
     http += (templates / "loopino.sidecars.managed.http.conf").read_text()
     for key, value in (
         ("{{HOSTNAME}}", HOSTNAME),
-        ("{{INSTALL_ROOT}}", "/projects/loopino"),
-        ("{{ACME_ROOT}}", "/projects/loopino/data/acme-webroot"),
-        ("{{BROWSER_ORIGIN_ACME_WEBROOT}}", "/projects/loopino/data/browser-origin-acme"),
+        ("{{INSTALL_ROOT}}", "/root/projects/loopino"),
+        ("{{ACME_ROOT}}", "/root/projects/loopino/data/acme-webroot"),
+        ("{{BROWSER_ORIGIN_ACME_WEBROOT}}", "/root/projects/loopino/data/browser-origin-acme"),
     ):
         http = http.replace(key, value)
     if "{{" in http or "ssl_certificate" in http or "proxy_pass" in http:
@@ -100,11 +100,11 @@ def render_plan(migration_root: Path, repository_root: Path, output_root: Path) 
         "include /etc/nginx/sites-available/loopino-sidecars.loopino.ai.conf;\n"
     )
     (output_root / "renewal.conf").write_text(
-        "[Service]\nExecStart=/projects/loopino/scripts/deploy/loopino-certbot renew --quiet --non-interactive "
-        f"--cert-name {HOSTNAME} --webroot -w /projects/loopino/data/acme-webroot "
-        "--config-dir /projects/loopino/installation/tls/certbot/config "
-        "--work-dir /projects/loopino/installation/tls/certbot/work "
-        "--logs-dir /projects/loopino/installation/tls/certbot/logs\n"
+        "[Service]\nExecStart=/root/projects/loopino/scripts/deploy/loopino-certbot renew --quiet --non-interactive "
+        f"--cert-name {HOSTNAME} --webroot -w /root/projects/loopino/data/acme-webroot "
+        "--config-dir /root/projects/loopino/installation/tls/certbot/config "
+        "--work-dir /root/projects/loopino/installation/tls/certbot/work "
+        "--logs-dir /root/projects/loopino/installation/tls/certbot/logs\n"
     )
 
 

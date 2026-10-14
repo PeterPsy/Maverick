@@ -1,5 +1,10 @@
 # Loopino phase 1 source gate snapshot (historical)
 
+> Historical snapshot: paths, branch names and live observations below belong to
+> their recorded checkpoint or predecessor installation. Current destination and
+> acceptance evidence are in [the root relocation report](loopino_root_relocation_status.md);
+> they do not prove the new destination or its pending human setup gates.
+
 This retained snapshot describes the accepted source gate before live deployment.
 For current destination status, see [the deployment report](loopino_phase1_deployment_status.md).
 

@@ -13,7 +13,7 @@ WorkingDirectory={{REPOSITORY}}
 Environment=PATH=/usr/bin:/bin PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1
 Environment=LOOPINO_CONTROL_STORE=json
 Environment=LOOPINO_JSON_CONTROL_STORE_ROOT={{REPOSITORY}}/data/control-plane/json
-ExecStart=/usr/bin/python3 -B {{REPOSITORY}}/scripts/crm_public_supervisor.py --config /projects/loopino/installation/config/crm-public.json
+ExecStart=/usr/bin/python3 -B {{REPOSITORY}}/scripts/crm_public_supervisor.py --config /root/projects/loopino/installation/config/crm-public.json
 RuntimeDirectory=loopino-crm-public-state loopino-crm-public-listener
 RuntimeDirectoryMode=0750
 UMask=0007

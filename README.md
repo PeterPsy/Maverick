@@ -59,7 +59,7 @@ installs and runtime checks before direct Node-backed npm scripts.
 Run Loopino locally:
 
 ```bash
-cd /projects/loopino
+cd /root/projects/loopino
 
 ./scripts/bootstrap_local.sh
 source .venv/bin/activate

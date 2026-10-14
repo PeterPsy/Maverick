@@ -28,7 +28,7 @@ first; never silently substitute another domain.
    `{"installation_domain":"loopino.example.com"}`. Create `access.json` with
    `{"enabled":false,"access":"read-only","revision":0}`. This metadata is
    non-secret and app-owned. Settings never chooses a hostname or workspace.
-2. Write `/projects/loopino/installation/config/crm-public.json` (root-owned) with `installation_domain`,
+2. Write `/root/projects/loopino/installation/config/crm-public.json` (root-owned) with `installation_domain`,
    `workspace_id`, `state_directory=/run/loopino-crm-public-state` and
    `listener_directory=/run/loopino-crm-public-listener`.
 3. Render `service.example` with the canonical repository/workspace and review
@@ -40,10 +40,10 @@ first; never silently substitute another domain.
 
    ```sh
    certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
-     --webroot -w /projects/loopino/data/external-apps-acme \
-     --config-dir /projects/loopino/data/crm-public-tls/config \
-     --work-dir /projects/loopino/data/crm-public-tls/work \
-     --logs-dir /projects/loopino/data/crm-public-tls/logs \
+     --webroot -w /root/projects/loopino/data/external-apps-acme \
+     --config-dir /root/projects/loopino/data/crm-public-tls/config \
+     --work-dir /root/projects/loopino/data/crm-public-tls/work \
+     --logs-dir /root/projects/loopino/data/crm-public-tls/logs \
      --cert-name crm-public -d crm.apps.<installation-domain>
    ```
 

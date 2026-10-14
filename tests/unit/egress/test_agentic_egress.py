@@ -288,7 +288,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
             content={
                 "workspace_file": "/srv/loopino/workspaces/default/AGENTS.md",
                 "host_reference": (
-                    "The installation root is `/projects/loopino`."
+                    "The installation root is `/root/projects/loopino`."
                 ),
             },
             destination_provider_id="fixture-provider",
@@ -332,7 +332,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
             ),
             content=(
                 "Use /srv/loopino/workspaces/default for workspace files and "
-                "/projects/loopino for the installation root."
+                "/root/projects/loopino for the installation root."
             ),
             destination_provider_id="fixture-provider",
             destination_upstream_id=None,

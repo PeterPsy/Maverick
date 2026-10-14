@@ -68,7 +68,7 @@ describe("MarkdownMessage", () => {
         root?.render(
           <MarkdownMessage
             content={
-              "[agents-cli-mcp-speed-report.md](/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)"
+              "[agents-cli-mcp-speed-report.md](/root/projects/loopino/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)"
             }
           />,
         );

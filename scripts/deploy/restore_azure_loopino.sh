@@ -2,7 +2,7 @@
 # Restore the existing Loopino installation inside the migrated Azure root.
 set -Eeuo pipefail
 
-migration_root=/projects/loopino/operations/migration/loopino-root
+migration_root=/root/projects/loopino/operations/migration/loopino-root
 hostname=loopino.giuntitrail.com
 repository_root="$migration_root/projects/loopino"
 plan_root="$repository_root/.loopino/install/azure-recovery"
@@ -96,8 +96,8 @@ apply_plan() {
         groupadd --gid "$operating_group" loopino-migrated-data
     fi
     chroot "$migration_root" /usr/bin/env \
-        LD_LIBRARY_PATH=/projects/loopino/.loopino/sqlite/3.51.3/lib \
-        /projects/loopino/.venv/bin/python -c 'import ssl, sqlite3, uvicorn, cryptography'
+        LD_LIBRARY_PATH=/root/projects/loopino/.loopino/sqlite/3.51.3/lib \
+        /root/projects/loopino/.venv/bin/python -c 'import ssl, sqlite3, uvicorn, cryptography'
     nginx_check
     python3 "$repository_root/scripts/deploy/render_azure_recovery.py"
 
@@ -134,19 +134,19 @@ PYBACKUP
     install -m 0644 "$plan_root/azure-runtime.conf" "$runtime_conf"
     nginx_check
     systemctl reload migrated-nginx.service
-    chroot "$migration_root" /projects/loopino/scripts/deploy/loopino-certbot renew --non-interactive \
-        --cert-name "$hostname" --webroot -w /projects/loopino/data/acme-webroot \
-        --config-dir /projects/loopino/installation/tls/certbot/config \
-        --work-dir /projects/loopino/installation/tls/certbot/work \
-        --logs-dir /projects/loopino/installation/tls/certbot/logs
+    chroot "$migration_root" /root/projects/loopino/scripts/deploy/loopino-certbot renew --non-interactive \
+        --cert-name "$hostname" --webroot -w /root/projects/loopino/data/acme-webroot \
+        --config-dir /root/projects/loopino/installation/tls/certbot/config \
+        --work-dir /root/projects/loopino/installation/tls/certbot/work \
+        --logs-dir /root/projects/loopino/installation/tls/certbot/logs
     chroot "$migration_root" /usr/bin/openssl x509 \
-        -in "/projects/loopino/installation/tls/certbot/config/live/$hostname/fullchain.pem" -noout -checkhost "$hostname" -checkend 0
+        -in "/root/projects/loopino/installation/tls/certbot/config/live/$hostname/fullchain.pem" -noout -checkhost "$hostname" -checkend 0
     chroot "$migration_root" /usr/sbin/runuser --user ubuntu -- /bin/sh -c '
-        cd /projects/loopino
+        cd /root/projects/loopino
         exec .venv/bin/python -m core.shared.browser_origin_tls \
             --installation-domain loopino.giuntitrail.com \
-            --tls-root /projects/loopino/data/browser-origin-tls \
-            --acme-webroot /projects/loopino/data/browser-origin-acme \
+            --tls-root /root/projects/loopino/data/browser-origin-tls \
+            --acme-webroot /root/projects/loopino/data/browser-origin-acme \
             --group-key browser-origin-probes:loopino.giuntitrail.com \
             --host af-000000000000000000000000.sidecars.loopino.giuntitrail.com \
             --host sc-000000000000000000000000.sidecars.loopino.giuntitrail.com

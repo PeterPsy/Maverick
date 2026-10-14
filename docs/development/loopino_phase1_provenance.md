@@ -1,5 +1,10 @@
 # Loopino phase 1 source provenance and rename decisions
 
+> Historical snapshot: paths, branch names and live observations below belong to
+> their recorded checkpoint or predecessor installation. Current destination and
+> acceptance evidence are in [the root relocation report](loopino_root_relocation_status.md);
+> they do not prove the new destination or its pending human setup gates.
+
 This is a clean installation, not a migration. Installation-owned source,
 operational records, toolchains, dependencies, caches and runtime material are
 rooted at `/projects/loopino`. Tenant data and provider credentials are created

@@ -35,7 +35,7 @@ The shared source lives under `apps/openwa` in the platform repository, register
 ## Validate
 
 ```bash
-loopino core cli run core.app-sdk.validate --app-root /projects/loopino/apps/openwa --json
+loopino core cli run core.app-sdk.validate --app-root /root/projects/loopino/apps/openwa --json
 loopino core cli run core.app-sdk.status --app-id openwa --workspace default --json
 python3 -m unittest discover -s apps/openwa/tests -v
 cd apps/openwa && npm test

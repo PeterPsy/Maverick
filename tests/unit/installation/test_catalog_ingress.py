@@ -11,7 +11,7 @@ from tests.unit.shared.test_installer_systemd import _make_config
 
 class CatalogIngressTests(unittest.TestCase):
     def test_exact_static_routes_have_separate_cache_contracts(self):
-        root = Path('/projects/loopino')
+        root = Path('/root/projects/loopino')
         locations = render_catalog_locations(root)
         self.assertIn('location = /catalog/api/apps', locations)
         self.assertIn('add_header Cache-Control "no-cache"', locations)
@@ -20,7 +20,7 @@ class CatalogIngressTests(unittest.TestCase):
         self.assertIn('location /catalog/ { return 404; }', locations)
         self.assertNotIn('proxy_pass', locations)
         self.assertNotIn('autoindex on', locations)
-        for path in (Path('relative'),Path('/projects/loopino;injected')):
+        for path in (Path('relative'),Path('/root/projects/loopino;injected')):
             with self.assertRaises(ValueError):
                 render_catalog_locations(path)
 

@@ -37,6 +37,7 @@ inter-agent-maf = [
 ]
 speech = [
     "faster-whisper>=1.1,<2",
+    "av>=11,<19",
 ]
 mongo = [
     "pymongo>=4.6",

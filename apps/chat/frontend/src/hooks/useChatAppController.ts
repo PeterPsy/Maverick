@@ -27,6 +27,7 @@ import { useChatControllerPresentation } from "./useChatControllerPresentation";
 import type { HistoryRestoreRequest } from './useRuntimeHistoryWindow';
 import { useChatDependencies } from "./useChatDependencies";
 import { useChatHibernation } from "./useChatHibernation";
+import { useChatDraftRecovery } from "./useChatDraftRecovery";
 import { useChatVisibility } from "./useChatVisibility";
 import { useChatNavigation } from "./useChatNavigation";
 import { useChatReadReceipts } from "./useChatReadReceipts";
@@ -708,6 +709,13 @@ export function useChatAppController({
   }
 
   const composerReady = initialDependenciesReady && targetConversationResolved;
+
+  useChatDraftRecovery({
+    ready: composerReady && !isBootstrapping,
+    workspaceId, navigationScope,
+    conversationKey: activeThread ? activeConversationKey : `${activeConversationKey}:${draftChat?.projectId || ""}`,
+    composer, setComposer,
+  });
 
   useQueuedMessageMemory({
     activeConversationKey,

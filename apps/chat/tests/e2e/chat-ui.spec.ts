@@ -99,6 +99,40 @@ const RUN_ID = "run-chat-e2e";
 const RESEARCHER_AGENT_ID = "agent-type-researcher";
 
 test.describe("Chat app browser smoke", () => {
+  test("mobile composer survives background and document recovery without sending", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const state = await installChatMocks(page);
+    state.threads = [chatThread({ title: "Mobile draft" })];
+    const url = new URL(`/apps/chat/?thread_id=${THREAD_ID}`, String(testInfo.project.use.baseURL));
+    url.hostname = "af-0123456789abcdef01234567.localhost";
+    let submissions = 0;
+    page.on("request", request => {
+      if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/turns")) submissions++;
+    });
+    await page.goto(url.href);
+    const composer = page.getByRole("textbox");
+    await expect(composer).toBeEditable();
+    await composer.fill("Bozza mobile da conservare");
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage)
+      .filter(key => key.startsWith("maverick.chat.composerDraft.v1:")).length)).toBe(1);
+    const otherApp = await page.context().newPage();
+    await otherApp.bringToFront();
+    await page.bringToFront();
+    await expectComposerText(page, "Bozza mobile da conservare");
+    await page.reload();
+    await expect(composer).toBeEditable();
+    await expectComposerText(page, "Bozza mobile da conservare");
+    expect(submissions).toBe(0);
+    await composer.fill("");
+    await expect.poll(() => page.evaluate(() => Object.entries(localStorage)
+      .filter(([key]) => key.startsWith("maverick.chat.composerDraft.v1:")))).toEqual([]);
+    await page.reload();
+    await expect(composer).toBeEditable();
+    await expectComposerText(page, "");
+    expect(submissions).toBe(0);
+    await otherApp.close();
+  });
+
   for (const width of [900, 390]) {
     test(`streams a collapsible navigable action timeline at ${width}px`, async ({ page }) => {
       test.setTimeout(60_000);

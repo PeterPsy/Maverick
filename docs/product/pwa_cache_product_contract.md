@@ -78,8 +78,15 @@ must not reveal expired data merely because transport is unavailable.
 ## Mutation contract
 
 No action is complete until the server confirms it. This rollout introduces no
-persistent mutation queue, background replay, durable draft, or generic retry
+persistent mutation queue, background replay, or generic retry
 of `POST` requests.
+
+Chat's mobile-resume exception saves only editable, unsent composer text in its
+Core session-bound isolated origin. It restores after live initialization,
+expires after 24 hours, and is bounded to 20 drafts of 64 Ki characters each.
+It never persists file bytes, references, credentials, runtime state or a send
+request. Clearing/submitting the composer removes that text; restoration cannot
+submit it. This app-owned draft store is independent of PWA cache rollout flags.
 
 A mutation may retry in the current RAM session only when it carries a stable
 idempotency key and the server provides deduplication. Otherwise the feature

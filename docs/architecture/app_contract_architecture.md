@@ -3320,7 +3320,9 @@ Catalog changes, terminal events and reconnect invalidate the approved resource.
 The existing local/session-storage projects, raw transcripts and send queues are
 deleted without migration. Pending/queued UI messages survive navigation only in
 RAM within the current document and are cleared at controller teardown; reload
-cannot replay a deferred send. Calendar/project pagination follows revalidation
+cannot replay a deferred send. Editable composer text has a separate, bounded,
+session-origin-scoped recovery store described in [mobile_resume.md](mobile_resume.md);
+it contains no queued send, references or runtime authority. Calendar/project pagination follows revalidation
 growth and shrink without silently dropping newly available pages.
 
 Schema-maintenance publication epochs are scoped to the resource principal,

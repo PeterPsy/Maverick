@@ -17,7 +17,6 @@ const listeners = new Set<() => void>();
 let waitingRegistration: ServiceWorkerRegistration | null = null;
 let reloadOnControllerChange = false;
 let lifecycleListenersInstalled = false;
-let controlledWhenListenersInstalled = false;
 let updateState: ShellPwaUpdateState = {
   applying: false,
   available: false,
@@ -89,6 +88,7 @@ export async function disableShellServiceWorker(): Promise<void> {
     );
   }
   waitingRegistration = null;
+  reloadOnControllerChange = false;
   setUpdateState({ applying: false, available: false, buildId: null, recovery: "idle" });
 }
 
@@ -193,11 +193,11 @@ function installServiceWorkerLifecycleListeners(): void {
     return;
   }
   lifecycleListenersInstalled = true;
-  controlledWhenListenersInstalled = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloadOnControllerChange || controlledWhenListenersInstalled) {
+    // Other tabs and WebKit recovery can change the controller while this
+    // document still owns unsent work. Only an explicit update reloads it.
+    if (reloadOnControllerChange) {
       reloadOnControllerChange = false;
-      controlledWhenListenersInstalled = false;
       window.location.reload();
     }
   });

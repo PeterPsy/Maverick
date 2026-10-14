@@ -141,6 +141,12 @@ describe("AppShell bootstrap", () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     window.history.replaceState(null, "", "/");
     vi.clearAllMocks();
+    // The admin installation gate precedes frame publication. Keep this
+    // bootstrap fixture independent of a real HTTP server.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (input === "/api/admin/installation") return jsonResponse({ configured: true, setup_required: false });
+      throw new Error(`Unexpected fixture HTTP request: ${String(input)}`);
+    });
     dataCacheBrokerHost.frameScope = null;
     dataCacheBrokerHost.principal = null;
     container = document.createElement("div");
@@ -359,7 +365,7 @@ describe("AppShell bootstrap", () => {
     });
 
     expect(api.getSession).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter(([path]) => path !== "/api/admin/installation")).toHaveLength(2);
     expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
@@ -367,6 +373,7 @@ describe("AppShell bootstrap", () => {
   it("keeps deferred workspace state loading and retries it after transport recovery", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse({ configured: true, setup_required: false }))
       .mockRejectedValueOnce(new TypeError("transport interrupted"))
       .mockResolvedValueOnce(jsonResponse({ items: [workspace("recovered")] }));
     api.listWorkspaces.mockImplementation((signal: AbortSignal, retryKey: string) => (
@@ -393,7 +400,7 @@ describe("AppShell bootstrap", () => {
     });
 
     expect(api.listWorkspaces).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter(([path]) => path !== "/api/admin/installation")).toHaveLength(2);
     expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-workspaces-loading")).toBe("false");
     expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-workspace-count")).toBe("1");
   });
@@ -427,7 +434,7 @@ describe("AppShell bootstrap", () => {
     });
 
     expect(api.getSession).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter(([path]) => path !== "/api/admin/installation")).toHaveLength(2);
     expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
@@ -465,12 +472,31 @@ describe("AppShell bootstrap", () => {
   it("refreshes renewed expiry without replacing the frame generation", async () => {
     await renderShell();
     const frame = container.querySelector("[data-testid='mounted-app-frame']");
+    expect(frame).not.toBeNull();
     const generation = dataCacheBrokerHost.frameScope?.sessionGeneration;
     api.getSession.mockResolvedValueOnce({ ...sessionPayload(), expires_at: "2026-08-08T00:00:00Z" });
     await act(async () => { window.dispatchEvent(new Event("focus")); });
     expect(dataCacheBrokerHost.frameScope?.sessionGeneration).toBe(generation);
     expect(container.querySelector("[data-testid='mounted-app-frame']")).toBe(frame);
     expect(dataCacheBrokerHost.principal?.sessionExpiresAt).toBe("2026-08-08T00:00:00Z");
+    expect(api.listApps).toHaveBeenCalledOnce();
+  });
+
+  it("retains mounted app state across background, foreground and native session hints", async () => {
+    await renderShell();
+    const frame = container.querySelector<HTMLIFrameElement>("[data-testid='mounted-app-frame']")!;
+    expect(frame).not.toBeNull();
+    frame.dataset.fixtureDraft = "Unsent mobile message";
+    const scope = dataCacheBrokerHost.frameScope;
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    hidden.mockReturnValue(false);
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => window.dispatchEvent(new Event("pageshow")));
+    await act(async () => window.dispatchEvent(new Event("maverick.session-changed")));
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBe(frame);
+    expect(frame.dataset.fixtureDraft).toBe("Unsent mobile message");
+    expect(dataCacheBrokerHost.frameScope).toBe(scope);
     expect(api.listApps).toHaveBeenCalledOnce();
   });
 

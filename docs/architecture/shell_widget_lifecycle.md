@@ -45,7 +45,14 @@ to overlay restores the stack. Drafts, references, attachments, transcript scrol
 agent selections and pending submission identities stay in the same RAM objects.
 There is no serialized draft handoff, persistent send queue or replay on reload.
 The persisted v1 layout contains only ids, collapsed state and draft project
-metadata; reload does not restore unsent text or file bytes.
+metadata. A separate Chat-owned composer store recovers unsent text after a
+necessary document reload; file bytes and references remain in RAM. Its isolated
+origin is Core-bound to the user, workspace, app generation, platform session and
+parent origin. Workspace, stable window id, project and conversation keys further
+separate drafts. Live composer initialization must resolve the target before
+restoration; text is never submitted automatically. The store expires entries
+after 24 hours and retains at most 20 drafts of 64 Ki characters each. Shared
+platform-origin documents cannot use this store.
 
 The conversation picker composes Chat's sidebar search, thread rows and editor
 with their shared stylesheets. The editor retains project choices, mutation errors,

@@ -118,6 +118,14 @@ the browser; it must never receive generated fallback HTML.
    the two exact legacy caches. Unrelated Cache API entries, IndexedDB, and OPFS
    remain.
 
+An unsolicited `controllerchange`, including activation requested by another
+tab or WebKit controller recovery after background suspension, must leave the
+current shell and app documents mounted. Only the document that explicitly calls
+`applyShellServiceWorkerUpdate` reloads on the subsequent controller change.
+Test with an unsent Chat draft and verify it remains editable. Necessary browser
+process recovery restores composer text through Chat's session-bound draft store,
+after live initialization; it never replays a send.
+
 ## Corruption and recovery drill
 
 1. While online, delete or replace one response in the active versioned cache.

@@ -4,6 +4,8 @@ After=network.target loopino-rescue.service
 Wants=loopino-rescue.service
 
 [Service]
+StandardOutput=append:{{INSTALL_ROOT}}/installation/logs/systemd/backend-watchdog.log
+StandardError=append:{{INSTALL_ROOT}}/installation/logs/systemd/backend-watchdog-error.log
 Type=oneshot
 User={{SERVICE_USER}}
 Group={{SERVICE_GROUP}}

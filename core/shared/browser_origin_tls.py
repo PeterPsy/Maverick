@@ -9,7 +9,7 @@ atomically published copies; ACME account material remains private to Core.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import fcntl
 from hashlib import sha256
@@ -28,6 +28,8 @@ from cryptography.hazmat.primitives import hashes as cryptography_hashes, serial
 from core.shared.browser_origin_tls_backoff import (
     clear_issuance_backoff, issuance_retry_at, record_issuance_failure,
 )
+from core.shared.installation_material import certbot_executable, validate_certbot_executable
+from core.shared.repository import installation_paths
 
 EXTERNAL_WILDCARD_TLS_MODE = "external_wildcard"
 MANAGED_EXACT_TLS_MODE = "managed_exact"
@@ -52,9 +54,13 @@ class BrowserOriginTlsSettings:
     installation_domain: str
     tls_root: Path
     acme_webroot: Path
-    certbot_command: str = "certbot"
+    repository_root: Path = field(default_factory=lambda: installation_paths().repository_root)
     acme_ca: str = ""
     timeout_seconds: int = 120
+
+    @property
+    def certbot_command(self) -> str:
+        return str(certbot_executable(self.repository_root))
 
     @property
     def private_root(self) -> Path:
@@ -100,10 +106,7 @@ class BrowserOriginTlsSettings:
             acme_webroot=Path(
                 os.environ.get("LOOPINO_BROWSER_ORIGIN_ACME_WEBROOT", str(default_webroot))
             ),
-            certbot_command=(
-                os.environ.get("LOOPINO_BROWSER_ORIGIN_CERTBOT_COMMAND", "certbot").strip()
-                or "certbot"
-            ),
+            repository_root=repository_root,
             acme_ca=os.environ.get("LOOPINO_BROWSER_ORIGIN_ACME_CA", "").strip(),
             timeout_seconds=timeout_seconds,
         )
@@ -253,6 +256,7 @@ def _issue_and_publish(
         command.append("--expand")
     try:
         if run_command is None:
+            validate_certbot_executable(settings.repository_root)
             subprocess.run(
                 command,
                 check=True,
@@ -262,7 +266,7 @@ def _issue_and_publish(
             )
         else:
             run_command(command)
-    except (OSError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         record_issuance_failure(settings.private_root, settings.installation_domain, settings.acme_ca, error)
         raise BrowserOriginTlsError("Managed browser-origin certificate issuance failed.") from error
 
@@ -415,7 +419,6 @@ def _main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--acme-webroot", type=Path, required=True)
     parser.add_argument("--group-key", required=True)
     parser.add_argument("--host", action="append", required=True)
-    parser.add_argument("--certbot-command", default="certbot")
     parser.add_argument("--acme-ca", default="")
     args = parser.parse_args(argv)
     ensure_browser_origin_tls(
@@ -426,7 +429,6 @@ def _main(argv: Sequence[str] | None = None) -> int:
             installation_domain=args.installation_domain,
             tls_root=args.tls_root,
             acme_webroot=args.acme_webroot,
-            certbot_command=args.certbot_command,
             acme_ca=args.acme_ca,
         ),
     )

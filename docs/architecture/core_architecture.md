@@ -2715,7 +2715,7 @@ The first implementation supports:
 
 Grant creation must validate that the referenced secret exists and is active, the target app is installed, enabled, and surface-resolvable in the current workspace, `app.backend` logical names are declared by the target app under `permissions.secrets.read`, the logical name is unique among non-expired active grants for that app, optional expiry is in the future, and target patterns are either `*`, normalized HTTP/HTTPS URL patterns without query strings or fragments, or the platform delivery target family `loopino://app.backend/*`. Resource-specific platform delivery target patterns must match the grant's own `resource_type` and `resource_id` scope. Empty or omitted target patterns may default to `*` only for internal `app.backend` delivery grants; external or user-directed actions such as browser autofill require explicit target patterns. `*` is valid only for single-action grants; mixed-action grants must use explicit target patterns because targets are grant-wide rather than per-action. Query strings supplied by runtime targets are ignored for matching and stripped from persisted audit payloads. Creating a secret refuses existing secret ids and aliases; value replacement must use rotation. Disabling or revoking a secret explicitly revokes active grants linked to that secret in the secret service layer, regardless of whether the mutation came through HTTP, CLI, MCP, or another core caller, and records cascade audit entries in each impacted grant workspace when an audit-capable surface is present. Secret grant target discovery belongs to an admin-only Core Secrets surface such as `/api/secret-grant-targets`; generic workspace app registry responses such as `/api/apps` must not expose secret permission logical names.
 
-Secret value envelopes use authenticated encryption. The JSON control-plane adapter stores values as AES-GCM envelopes with a value format, nonce, ciphertext, and key id; AAD binds the ciphertext to the value format, secret id, and key id. The active key comes from the operator-managed secret-store key material, and `LOOPINO_SECRET_STORE_PREVIOUS_KEYS` may provide previous decrypt-only keys during rotation. Legacy `mvr3secret1` values remain readable for migration.
+Secret value envelopes use authenticated encryption. The JSON control-plane adapter stores values as AES-GCM envelopes with a value format, nonce, ciphertext, and key id; AAD binds the ciphertext to the value format, secret id, and key id. The active key comes from the operator-managed secret-store key material, and `LOOPINO_SECRET_STORE_PREVIOUS_KEYS` may provide previous decrypt-only keys during rotation. Fresh envelopes use `loopino.secret-value.v1-aesgcm`; predecessor AES-GCM, HMAC/XOR and plaintext shapes are rejected. Phase 2 must decrypt with original AAD and verified existing keyring, then re-encrypt with the new AAD and fresh nonce while preserving secret/grant IDs and verifying recovery. Metadata-only relabeling is invalid; no production migration is performed in phase 1.
 
 #### Recommended first file layout
 
@@ -3421,9 +3421,23 @@ HTTP-01 ACME webroots.
 Clean provisioning transfers only declared mutable service directories and
 generated private files to the dedicated service account: tenant workspaces,
 control-plane/runtime/log/cache state, service HOME, initially empty provider
-homes, and 0600 bootstrap secrets/key/environment. Source, immutable app artifacts
+homes, and 0600 bootstrap secrets/key. The shared `.env.loopino` is executable
+root-worker configuration: root owns it at 0640, the Core group may read it,
+and every real parent is root-owned without group/world write. Core cannot
+write, unlink or rename it. Only root typed installation-address updates commit
+or restore address keys; the worker rejects unprotected configuration before
+loading it. Mutable tenant data never grants environment write authority.
+Source, immutable app artifacts
 and `.toolchains` remain protected; recursive installation-root ownership changes
 are forbidden. Actual non-root Bubblewrap/AppArmor checks remain deployment gates.
+
+All service/worker stdout and stderr have explicit backing paths under
+`installation/logs/systemd`; owned Nginx vhosts use `installation/logs/nginx`.
+These real root-owned parents are separate from service-writable application
+logs under `logs/platform` and `logs/runtime`. Core must not rename privileged
+log parents. Recovery snapshots are limited to exclusive timestamped namespaces
+under `installation/backups/{wildcard,azure}`. Existing host log directives and
+general OS unit registration/status metadata remain OS-owned.
 `LOOPINO_APP_ARTIFACT_STORE_ROOT` accepts only that designated absolute path;
 no other repository subtree or symlink component, including `data`, is allowed.
 The same namespace identity, ownership, protection and read-only mount checks apply.

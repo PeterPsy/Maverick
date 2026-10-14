@@ -18,6 +18,8 @@ from cryptography.hazmat.primitives import serialization
 
 from tls_config import ACME_ROOT, TLS_ROOT, certificate_requests, installation_domain, read_json, render_hosts, valid_host
 
+CERTBOT = Path("/projects/loopino/.venv/bin/certbot")
+
 
 def atomic_text(path, value, mode=0o600):
     temporary = path.with_suffix(path.suffix + ".new")
@@ -46,7 +48,7 @@ def certificate(lineage, namespace, domain):
 
 
 def certbot_command(lineage_name, hosts, root, webroot, acme_server=""):
-    command = ["/usr/bin/certbot", "certonly", "--non-interactive", "--agree-tos",
+    command = [str(CERTBOT), "certonly", "--non-interactive", "--agree-tos",
                "--register-unsafely-without-email", "--no-eff-email", "--webroot", "--webroot-path", str(webroot),
                "--preferred-challenges", "http", "--config-dir", str(root / "config"),
                "--work-dir", str(root / "work"), "--logs-dir", str(root / "logs"),

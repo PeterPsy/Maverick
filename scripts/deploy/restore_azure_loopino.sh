@@ -101,8 +101,16 @@ apply_plan() {
     nginx_check
     python3 "$repository_root/scripts/deploy/render_azure_recovery.py"
 
-    mkdir -p /var/backups
-    backup_root=$(mktemp -d /var/backups/loopino-azure.XXXXXXXX)
+    # Only root-owned real installation parents may hold recovery snapshots.
+    backup_root=$("$repository_root/.venv/bin/python" - "$repository_root" <<'PYBACKUP'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from core.installation.protected_material import create_recovery_backup
+from datetime import datetime, timezone
+print(create_recovery_backup(Path(sys.argv[1]), "azure", datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")))
+PYBACKUP
+    )
     changed_paths=("$runtime_conf" "$recovery_conf"
         /etc/systemd/system/loopino-core.service /etc/systemd/system/loopino-core.service.d
         /etc/systemd/system/loopino-rescue.service /etc/systemd/system/loopino-rescue.service.d
@@ -121,13 +129,16 @@ apply_plan() {
     trap 'rollback 129' HUP
 
     # HTTP-01 must be routed before requesting or renewing any certificate.
-    mkdir -p "$migration_root/var/www/$hostname/.well-known/acme-challenge"
+    mkdir -p "$migration_root/projects/loopino/data/acme-webroot/.well-known/acme-challenge"
     install -m 0644 "$plan_root/http.conf" "$recovery_conf"
     install -m 0644 "$plan_root/azure-runtime.conf" "$runtime_conf"
     nginx_check
     systemctl reload migrated-nginx.service
-    chroot "$migration_root" /usr/bin/certbot renew --non-interactive \
-        --cert-name "$hostname" --webroot -w "/var/www/$hostname"
+    chroot "$migration_root" /projects/loopino/.venv/bin/certbot renew --non-interactive \
+        --cert-name "$hostname" --webroot -w /projects/loopino/data/acme-webroot \
+        --config-dir /projects/loopino/installation/tls/certbot/config \
+        --work-dir /projects/loopino/installation/tls/certbot/work \
+        --logs-dir /projects/loopino/installation/tls/certbot/logs
     chroot "$migration_root" /usr/bin/openssl x509 \
         -in "/projects/loopino/installation/tls/certbot/config/live/$hostname/fullchain.pem" -noout -checkhost "$hostname" -checkend 0
     chroot "$migration_root" /usr/sbin/runuser --user ubuntu -- /bin/sh -c '

@@ -293,7 +293,7 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
             installation_domain=self.domain,
             tls_root=root / "tls",
             acme_webroot=root / "acme",
-            certbot_command="/usr/bin/certbot",
+            repository_root=Path(__file__).resolve().parents[3],
             acme_ca="https://acme.test/directory",
             timeout_seconds=30,
         )

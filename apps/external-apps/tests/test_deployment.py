@@ -31,9 +31,28 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("KillMode=mixed", unit)
         self.assertIn("NoNewPrivileges=yes", unit)
         self.assertIn("ProtectSystem=strict", unit)
+        self.assertIn("StandardOutput=append:{{INSTALL_ROOT}}/installation/logs/systemd/", unit)
+        self.assertIn("StandardError=append:{{INSTALL_ROOT}}/installation/logs/systemd/", unit)
         writes = [line for line in unit.splitlines() if line.startswith("ReadWritePaths=")]
-        self.assertEqual(len(writes), 4)
-        self.assertTrue(all(line.endswith(".lock") for line in writes[1:]))
+        self.assertEqual(writes, [
+            'ReadWritePaths={{INSTALL_ROOT}}/runtime/external-apps-state {{INSTALL_ROOT}}/runtime/external-apps-listener',
+            'ReadWritePaths={{APP_DATA_ROOT}}',
+            'ReadWritePaths={{CONTROL_STORE_ROOT}}/apps/.app_sources.json.lock',
+            'ReadWritePaths={{CONTROL_STORE_ROOT}}/apps/.workspace_app_bindings.json.lock',
+            'ReadWritePaths={{CONTROL_STORE_ROOT}}/workspaces/.workspaces.json.lock',
+        ])
+
+    def test_tls_and_vhosts_have_installation_owned_backing_and_logs(self):
+        unit = (DEPLOYMENT / "loopino-external-apps-tls.service").read_text()
+        self.assertIn("/projects/loopino/.venv/bin/python -B /projects/loopino/installation/libexec/external-apps/tls.py", unit)
+        self.assertIn("StandardError=append:/projects/loopino/installation/logs/systemd/", unit)
+        ingress = render_ingress("loopino.example.com")
+        exact = render_hosts([({PUBLIC_HOST}, Path("/projects/loopino/data/external-apps-tls/config/live/test"))])
+        for content in (ingress, exact):
+            self.assertEqual(content.count("access_log "), content.count("server_name "))
+            self.assertEqual(content.count("error_log "), content.count("server_name "))
+            self.assertIn("/projects/loopino/installation/logs/nginx/", content)
+        self.assertIn("include /projects/loopino/installation/nginx/loopino-external-apps-proxy.conf;", exact)
 
 
 class Upstream(socketserver.StreamRequestHandler):
@@ -89,7 +108,8 @@ class NginxIngressTests(unittest.TestCase):
                         .replace("listen 443 ssl;", f"listen 127.0.0.1:{tls} ssl;")
                         .replace("listen [::]:443 ssl;", "")
                         .replace('/projects/loopino/data/external-apps-acme', str(root / 'acme'))
-                        .replace("/run/loopino-external-apps-listener/public.sock", str(root / "public.sock")))
+                        .replace('/projects/loopino/installation/logs/nginx', str(root))
+                        .replace("/projects/loopino/runtime/external-apps-listener/public.sock", str(root / "public.sock")))
             # Existing private/default hosts must not be taken over by the template.
             private = (f"server {{ listen 127.0.0.1:{plain} default_server; "
                        f"listen 127.0.0.1:{tls} ssl default_server; server_name private.example.net; "

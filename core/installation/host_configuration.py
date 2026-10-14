@@ -9,6 +9,7 @@ from core.installation.catalog_ingress import render_catalog_locations
 from core.installation.errors import InstallationError
 from core.installation.validation import record_id, hostname
 from core.installation.private_state import write_private
+from core.installation.protected_material import prepare_host_logs, require_root_environment_update
 from core.installation.registrations import installation_backing_path, registration_exists, register_file, unregister_file
 from core.shared.env_file import read_env_file, service_env_path
 from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
@@ -24,6 +25,8 @@ def render_nginx(host: str, certificates: dict, port: int, *, repository_root: P
     listen 80;
     listen [::]:80;
     server_name {name};
+    access_log {repository_root}/installation/logs/nginx/{kind}-access.log;
+    error_log {repository_root}/installation/logs/nginx/{kind}-error.log;
     location ^~ /.well-known/acme-challenge/ {{ root {acme_root}; }}
     location / {{ return 301 https://$host$request_uri; }}
 }}
@@ -31,6 +34,8 @@ server {{
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name {name};
+    access_log {repository_root}/installation/logs/nginx/{kind}-access.log;
+    error_log {repository_root}/installation/logs/nginx/{kind}-error.log;
     ssl_certificate {pair['fullchain']};
     ssl_certificate_key {pair['private_key']};
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -65,6 +70,7 @@ def managed_nginx_registration(service, host: str) -> Path:
 
 
 def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
+    prepare_host_logs(service.store.repository_root)
     configuration = service.configuration()
     identifier = configuration["installation_id"]
     if identifier == "uninitialized":
@@ -103,6 +109,7 @@ def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
 
 def commit_environment(service, plan: dict, private: Path) -> bool:
     path = service_env_path(service.store.repository_root)
+    require_root_environment_update(path)
     before = read_env_file(path)
     snapshot = private / "environment-before.json"
     if not snapshot.exists():
@@ -135,4 +142,5 @@ def restore_host(service, private: Path) -> None:
     snapshot = private / "environment-before.json"
     if snapshot.exists():
         path = service_env_path(service.store.repository_root)
+        require_root_environment_update(path)
         atomic_replace(path, address_environment(path.read_text(), json.loads(snapshot.read_text())).encode())

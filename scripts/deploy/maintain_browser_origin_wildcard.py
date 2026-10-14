@@ -22,7 +22,8 @@ from core.shared.browser_origin_tls_backoff import (
     clear_issuance_backoff, issuance_retry_at, record_issuance_failure,
 )
 from core.shared.env_file import read_env_file, service_env_path
-from core.shared.installation_material import certbot_root, certbot_directory_arguments
+from core.installation.protected_material import require_service_environment
+from core.shared.installation_material import certbot_root, certbot_directory_arguments, certbot_executable, validate_certbot_executable
 from scripts.deploy.refresh_cloudflare_dns_credentials import DEFAULT_CREDENTIALS, refresh_credentials
 
 CA = "https://acme-v02.api.letsencrypt.org/directory"
@@ -45,20 +46,21 @@ def verify_wildcard_https(hostname: str) -> None:
 
 
 def certbot_command(hostname: str, email: str) -> list[str]:
-    return ["/usr/bin/certbot", "certonly", "--non-interactive", "--agree-tos",
+    return [str(certbot_executable(ROOT)), "certonly", "--non-interactive", "--agree-tos",
             "--email", email, "--keep-until-expiring", "--no-directory-hooks",
             "--cert-name", hostname + "-sidecars-wildcard", "--dns-cloudflare",
             "--dns-cloudflare-credentials", str(DEFAULT_CREDENTIALS),
             "--dns-cloudflare-propagation-seconds", "60",
             "-d", "*.sidecars." + hostname,
             "--pre-hook", f"{ROOT}/.venv/bin/python {ROOT}/scripts/deploy/refresh_cloudflare_dns_credentials.py",
-            "--deploy-hook", f"{ROOT}/.venv/bin/python {ROOT}/scripts/deploy/reload_nginx.py"]
+            "--deploy-hook", f"{ROOT}/.venv/bin/python {ROOT}/scripts/deploy/reload_nginx.py"] + certbot_directory_arguments(ROOT)
 
 
 def maintain(hostname: str, email: str, nginx_config: Path, state_root: Path, *, runner=subprocess.run) -> dict:
     retry = issuance_retry_at(state_root, hostname, CA)
     if retry is not None and retry > datetime.now(timezone.utc):
         return {"status": "waiting", "retry_at": retry.isoformat()}
+    validate_certbot_executable(ROOT)
     refresh_credentials(DEFAULT_CREDENTIALS)
     result = runner(certbot_command(hostname, email), capture_output=True, text=True, timeout=300)
     if result.returncode:
@@ -70,7 +72,7 @@ def maintain(hostname: str, email: str, nginx_config: Path, state_root: Path, *,
     clear_issuance_backoff(state_root, hostname, CA)
     verified = state_root / ("renewal-verified-" + hostname)
     if not verified.exists():
-        renewal = runner(["/usr/bin/certbot", "renew", "--non-interactive", "--dry-run",
+        renewal = runner([str(certbot_executable(ROOT)), "renew", "--non-interactive", "--dry-run",
                           "--no-random-sleep-on-renew",
                           "--no-directory-hooks", "--run-deploy-hooks",
                           "--cert-name", hostname + "-sidecars-wildcard"] + certbot_directory_arguments(ROOT),
@@ -121,7 +123,9 @@ def main():
             parser.error("Use absolute installation paths without symlink ancestors")
     args.state_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     args.state_root.chmod(0o700)
-    os.environ.update(read_env_file(service_env_path(ROOT)))
+    environment_path = service_env_path(ROOT)
+    require_service_environment(environment_path)
+    os.environ.update(read_env_file(environment_path))
     os.chdir(ROOT)
     with (args.state_root / "maintenance.lock").open("a") as lock:
         try:

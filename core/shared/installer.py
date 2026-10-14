@@ -40,7 +40,7 @@ from core.shared.installer_tls import (
 )
 from core.shared.node_runtime import node_runtime_diagnostic
 from core.shared.repository import installation_paths
-from core.shared.installation_material import certbot_root, certbot_directory_arguments
+from core.shared.installation_material import certbot_root, certbot_directory_arguments, certbot_executable, certbot_preflight
 from core.workspaces.store import WorkspaceDocumentStore
 
 DEFAULT_MONGODB_PASSWORD_REF = "platform:secret-alias/mongodb-password"
@@ -384,6 +384,11 @@ def build_install_manifest(config: InstallerConfig) -> dict[str, Any]:
 def write_install_plan(files: dict[Path, str]) -> None:
     """Persist rendered installer files."""
     for path, content in files.items():
+        if path.name in {"loopino.env", ".env.loopino", ".env"}:
+            from core.installation.protected_material import require_protected_parents
+            require_protected_parents(path)
+            if path.exists() and (path.stat().st_uid != 0 or path.stat().st_mode & 0o022):
+                raise ValueError("Refusing untrusted service environment content")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         if path.name in {"loopino.env", ".env.loopino", ".env"}:
@@ -470,8 +475,11 @@ def preflight_check(
         errors.append("systemctl not found in PATH")
     if live_apply and not config.local_only and shutil.which("nginx") is None:
         errors.append("nginx not found in PATH")
-    if request_tls and shutil.which("certbot") is None:
-        errors.append("certbot not found in PATH")
+    if request_tls:
+        try:
+            certbot_preflight(config.install_root)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            errors.append(f"Installation Certbot preflight failed: {error}")
     if config.hosted_sidecars:
         hosted_origin_valid = (
             not config.local_only
@@ -595,7 +603,7 @@ def request_tls_certificate(config: InstallerConfig, *, run_command: Any = None)
     runner(["mkdir", "-p", str(config.acme_root)])
     runner(
         [
-            "certbot",
+            str(certbot_executable(config.install_root)),
             "certonly",
             "--webroot",
             "-w",

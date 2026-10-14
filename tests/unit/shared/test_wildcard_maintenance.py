@@ -44,6 +44,10 @@ class WildcardMaintenanceTests(unittest.TestCase):
             state = Path(folder)
             result = maintenance.maintain("example.test", "admin@example.test", Path("/nginx.conf"), state, runner=runner)
             self.assertIn("*.sidecars.example.test", calls[0])
+            for command in calls[:2]:
+                self.assertEqual(command[0], str(maintenance.ROOT / ".venv/bin/certbot"))
+                for flag, name in (("--config-dir", "config"), ("--work-dir", "work"), ("--logs-dir", "logs")):
+                    self.assertEqual(command[command.index(flag) + 1], str(maintenance.ROOT / "installation/tls/certbot" / name))
             self.assertIn("--dry-run", calls[1])
             self.assertIn("--apply", calls[2])
             self.assertTrue((state / "restart-required").exists())

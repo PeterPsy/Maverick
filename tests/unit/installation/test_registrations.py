@@ -56,6 +56,7 @@ class InstallationRegistrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             config = replace(_make_config(root), live_systemd_dir=root / "os/systemd")
+            config.install_env_path.write_text("KEY=value\n")
             self.assertEqual(default_output_root(root), root / "installation")
             source = config.systemd_dir / "loopino-core.service"
             backing = root / "installation/systemd/loopino-core.service"
@@ -106,10 +107,14 @@ class InstallationRegistrationTests(unittest.TestCase):
             root = Path(folder)
             config = replace(_make_config(root), service_user="loopino", service_group="loopino")
             key = root / config.secret_key_file
+            config.install_env_path.write_text("KEY=value\n")
             calls = []
             provision_service_paths(config, {key:"key", config.install_env_path:"env"}, calls.append)
             self.assertIn(["chown", "loopino:loopino", str(key)], calls)
             self.assertIn(["chmod", "0600", str(key)], calls)
+            self.assertIn(["chown", "root:loopino", str(config.install_env_path)], calls)
+            self.assertIn(["chmod", "0640", str(config.install_env_path)], calls)
+            self.assertNotIn(["chown", "loopino:loopino", str(config.install_env_path)], calls)
             self.assertTrue(all("-R" not in command for command in calls))
             self.assertTrue(all(str(root / "data/app-artifacts") not in command for command in calls))
             for value in ("core/key", "data/app-artifacts/key", ".toolchains/key", "../key"):

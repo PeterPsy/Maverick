@@ -55,9 +55,12 @@ other agent/operator is editing them. Validate and enable only this service:
 
 ```bash
 systemd-analyze verify ./loopino-external-apps.service
-sudo install -d -m 0755 /etc/loopino
+sudo install -d -o root -g root -m 0755 /projects/loopino/installation/{config,systemd,nginx,libexec/external-apps}
+sudo /projects/loopino/.venv/bin/python -c 'from pathlib import Path; from core.installation.protected_material import prepare_host_logs; prepare_host_logs(Path("/projects/loopino"))'
 sudo install -m 0644 ./external-apps.json /projects/loopino/installation/config/external-apps.json
-sudo install -m 0644 ./loopino-external-apps.service /etc/systemd/system/
+sudo install -m 0644 ./loopino-external-apps.service /projects/loopino/installation/systemd/
+# Refuse any unrelated OS registration; create only an absent exact symlink.
+sudo ln -s /projects/loopino/installation/systemd/loopino-external-apps.service /etc/systemd/system/loopino-external-apps.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now loopino-external-apps.service
 sudo -u www-data curl --unix-socket /projects/loopino/runtime/external-apps-listener/public.sock \
@@ -70,15 +73,16 @@ prove workspace availability.
 
 ## 3. HTTP-01 and exact HTTPS hosts
 
-Prerequisites: nginx with `ssl_reject_handshake`, Certbot, system Python with
-`cryptography`, public port 80 for HTTP-01 and port 443 for HTTPS. No port 53, DNS
+Prerequisites: nginx with `ssl_reject_handshake` and the protected installation
+`.venv/bin/certbot` (install `.[installation]`, including dns-cloudflare). Use the
+installation Python with `cryptography`, public port 80 for HTTP-01 and port 443 for HTTPS. No port 53, DNS
 API token or wildcard certificate is needed. The root-owned timer issues exact
 SAN certificates only for catalog-derived names, never arbitrary incoming SNI.
 
 From this directory, render the dedicated ingress in a staging directory:
 
 ```bash
-python3 -B -c 'from tls_config import render_ingress; print(render_ingress("loopino.example.com"))' > /tmp/external-apps-nginx.conf
+/projects/loopino/.venv/bin/python -B -c 'from tls_config import render_ingress; print(render_ingress("loopino.example.com"))' > /projects/loopino/installation/nginx/loopino-external-apps.conf
 ```
 
 Use the actual installation hostname. Keep the generated upstream, HTTP-01 root,
@@ -88,8 +92,9 @@ base certificate serves only a runtime 404; it is not an application.
 
 Review nginx's existing `http`-context hash policy: long exact publication names
 need `server_names_hash_bucket_size 256`; the 64 × 100 cap is covered by
-`server_names_hash_max_size 8192`. If neither directive already exists, install
-`nginx-http.conf` as `/etc/nginx/conf.d/loopino-external-apps-hash.conf`. Otherwise
+`server_names_hash_max_size 8192`. If neither directive already exists, keep
+`nginx-http.conf` root-owned at `installation/nginx/loopino-external-apps-hash.conf`
+and register only its exact symlink at `/etc/nginx/conf.d/loopino-external-apps-hash.conf`. Otherwise
 review the existing owner's values; do not add duplicate global directives.
 
 Install root-owned operator material (not writable by the app/public child):
@@ -97,13 +102,14 @@ Install root-owned operator material (not writable by the app/public child):
 ```bash
 sudo install -d -m 0700 /projects/loopino/data/external-apps-tls
 sudo install -d -m 0755 /projects/loopino/data/external-apps-acme
-sudo install -d -m 0755 /usr/local/libexec/loopino-external-apps /etc/nginx/snippets
-sudo install -m 0644 tls.py tls_config.py /usr/local/libexec/loopino-external-apps/
-sudo install -m 0644 nginx-proxy.conf /etc/nginx/snippets/loopino-external-apps-proxy.conf
+sudo install -d -o root -g root -m 0755 /projects/loopino/installation/{libexec/external-apps,nginx,systemd}
+sudo install -m 0644 tls.py tls_config.py /projects/loopino/installation/libexec/external-apps/
+sudo install -m 0644 nginx-proxy.conf /projects/loopino/installation/nginx/loopino-external-apps-proxy.conf
 # First installation ONLY; never truncate an existing hosts.conf:
 sudo test -e /projects/loopino/data/external-apps-tls/hosts.conf || \
   sudo install -m 0644 /dev/null /projects/loopino/data/external-apps-tls/hosts.conf
-sudo install -m 0644 /tmp/external-apps-nginx.conf /etc/nginx/sites-available/loopino-external-apps.conf
+# Backing configuration above remains in installation/nginx.
+sudo ln -s /projects/loopino/installation/nginx/loopino-external-apps.conf /etc/nginx/sites-available/loopino-external-apps.conf
 # Create the matching sites-enabled symlink only if absent.
 sudo nginx -t && sudo systemctl reload nginx
 ```
@@ -111,7 +117,8 @@ sudo nginx -t && sudo systemctl reload nginx
 The ACME challenge path must now be reachable. Test staging HTTP-01 against the
 same webroot, using separate temporary Certbot config/work/log directories; never
 install an untrusted staging certificate in production nginx. Then install
-`loopino-external-apps-tls.service` and `.timer` in `/etc/systemd/system/`, run
+`loopino-external-apps-tls.service` and `.timer` as root-owned backing files in
+`installation/systemd`, register only exclusive symlinks in `/etc/systemd/system/`, run
 `systemd-analyze verify`, `systemctl daemon-reload`, and
 `systemctl enable --now loopino-external-apps-tls.timer`. For initial provisioning,
 `systemctl start loopino-external-apps-tls.service` runs one pass synchronously.
@@ -152,8 +159,8 @@ Local tests/base TLS are not proof of a published application.
 
 ```bash
 sudo systemctl status loopino-external-apps.service loopino-external-apps-tls.timer
-sudo journalctl -u loopino-external-apps-tls.service -n 30 --no-pager
-sudo certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
+sudo tail -n 30 /projects/loopino/installation/logs/systemd/external-apps-tls-error.log
+sudo /projects/loopino/.venv/bin/certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
   --config-dir /projects/loopino/data/external-apps-tls/config \
   --work-dir /projects/loopino/data/external-apps-tls/work \
   --logs-dir /projects/loopino/data/external-apps-tls/logs
@@ -173,3 +180,10 @@ The former sslip.io profile is retired. Its certificate renewal and uniquely
 scoped DNS-01 port-53 firewall/tag must be removed only after migration. Retain an
 HTTP-close/TLS-reject tombstone for its old namespace while that DNS still resolves
 here, so old public links cannot fall through to the private default host.
+
+Application/worker stdout and stderr use `installation/logs/systemd`; every owned
+vhost uses `installation/logs/nginx`. Prepare these real root-owned parents
+before enabling units; Core must not write or rename them. The root TLS unit
+retains access to existing Nginx logs only for the full `nginx -t` check; no other
+vhost log directive or host log policy is changed. Recovery backups belong to
+`installation/backups`; never use global backup or Certbot directories.

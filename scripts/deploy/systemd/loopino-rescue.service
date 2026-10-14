@@ -3,6 +3,8 @@ Description=Loopino rescue host
 After=network.target
 
 [Service]
+StandardOutput=append:{{INSTALL_ROOT}}/installation/logs/systemd/rescue.log
+StandardError=append:{{INSTALL_ROOT}}/installation/logs/systemd/rescue-error.log
 Type=simple
 User={{SERVICE_USER}}
 Group={{SERVICE_GROUP}}

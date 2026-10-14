@@ -152,3 +152,37 @@ upstream company's catalog are not enabled. Source templates are prepared in
 tranche 1; no live Nginx configuration is applied before deployment review.
 The hosted worker and CLI share `LOOPINO_SERVICE_ENV_FILE`, defaulting to the
 installation's `.env.loopino`; address commits never write a second env file.
+This shared worker/Core configuration is root-owned, Core-group-readable at
+0640, beneath real root-owned parents without group/world writes. The service
+account receives no write/rename authority. Root worker installation verifies
+this boundary before activation; typed address commits/restoration preserve
+ownership, mode and unrelated bytes. A service-owned environment is rejected,
+not adopted as trusted root startup configuration. Fresh root provisioning
+writes trusted settings before enabling either unit.
+
+Explicit stdout/stderr files for Core, rescue, watchdog and privileged workers
+live under `installation/logs/systemd`. Each owned main/sidecar vhost explicitly
+selects access/error files under `installation/logs/nginx`, including worker
+renders and HTTP-only ACME templates. Prepare these real root-owned parents
+before activation; never chown them to Core. Existing Giuntitrail log directives
+and host log policy remain unchanged. Systemd registration/status metadata is
+OS-managed. Application-internal mutable logs remain in the separate `logs/`
+tree. Recovery helpers back up only their selected configuration/env files in
+exclusive private `installation/backups/wildcard` or `installation/backups/azure`
+directories; global `/var/backups` is not a Loopino destination.
+
+The source tests verify root ownership/mode, synthetic group read with non-root
+write/unlink/rename denial, protected parent and symlink rejection, and typed
+update preservation. Deployment must repeat this with the actual Core account
+and test non-root Bubblewrap/AppArmor execution; source tests are not live proof.
+
+Every installer, native address/TLS worker, browser-origin client and operator TLS
+oneshot selects the explicit installation `.venv/bin/certbot`, never global PATH
+or `/usr/bin/certbot`. Install `.[installation]` into the protected isolated venv
+(Certbot and dns-cloudflare 5.8.0). Preflight verifies real root-owned executable
+and ancestor paths without group/world writes, and lists the Cloudflare plugin
+using the same rooted config/work/log arguments. Arbitrary browser-origin Certbot
+command overrides are removed. Giuntitrail's global Certbot, plugins, lineage,
+logs and renewal service remain independent. Plugin listing is prerequisite
+evidence only; issuance/renewal still requires authorized deployment and the new
+human-entered token.

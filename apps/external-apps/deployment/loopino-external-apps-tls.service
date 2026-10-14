@@ -4,7 +4,9 @@ After=network-online.target nginx.service loopino-external-apps.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 -B /usr/local/libexec/loopino-external-apps/tls.py
+ExecStart=/projects/loopino/.venv/bin/python -B /projects/loopino/installation/libexec/external-apps/tls.py
+StandardOutput=append:/projects/loopino/installation/logs/systemd/external-apps-tls.log
+StandardError=append:/projects/loopino/installation/logs/systemd/external-apps-tls-error.log
 User=root
 Group=root
 UMask=0077
@@ -16,5 +18,5 @@ PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
 # nginx -t checks that its existing PID file can be opened, without changing it.
-ReadWritePaths=/projects/loopino/data/external-apps-tls /projects/loopino/data/external-apps-acme /var/log/nginx /run/nginx.pid
+ReadWritePaths=/projects/loopino/data/external-apps-tls /projects/loopino/data/external-apps-acme /projects/loopino/installation/logs/nginx /var/log/nginx /run/nginx.pid
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

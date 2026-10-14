@@ -9,7 +9,7 @@ from core.installation.errors import InstallationError
 from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 from core.shared.browser_origin_tls_backoff import issuance_retry_at, record_issuance_failure, clear_issuance_backoff
-from core.shared.installation_material import certbot_root, certbot_directory_arguments, dns_credentials_root
+from core.shared.installation_material import certbot_root, certbot_directory_arguments, dns_credentials_root, certbot_executable, validate_certbot_executable
 from scripts.deploy.refresh_cloudflare_dns_credentials import refresh_credentials
 
 CA = "https://acme-v02.api.letsencrypt.org/directory"
@@ -30,6 +30,7 @@ def prepare_certificates(service, job: dict, plan: dict, private: Path, *, runne
     if retry and retry > datetime.now(timezone.utc):
         return {"waiting": True, "retry_at": retry.isoformat()}
     root = service.store.repository_root
+    validate_certbot_executable(root)
     credentials = dns_credentials_root(root) / ("installation-" + job["job_id"] + ".ini")
     reference = plan["dns_secret_ref"]
     def resolve():
@@ -45,7 +46,7 @@ def prepare_certificates(service, job: dict, plan: dict, private: Path, *, runne
     reload_hook = shlex.join([str(root / ".venv/bin/python"), str(root / "scripts/deploy/reload_nginx.py")])
     paths = certificate_paths(certificate_names(plan["hostname"]), repository_root=root)
     for kind, identifier in [("main", plan["hostname"]), ("apps", "*.sidecars." + plan["hostname"])]:
-        command = ["/usr/bin/certbot", "certonly", "--non-interactive", "--agree-tos",
+        command = [str(certbot_executable(root)), "certonly", "--non-interactive", "--agree-tos",
             "--register-unsafely-without-email", "--keep-until-expiring", "--no-directory-hooks",
             "--cert-name", paths[kind]["cert_name"], "--dns-cloudflare",
             "--dns-cloudflare-credentials", str(credentials), "--dns-cloudflare-propagation-seconds", "60",
@@ -59,7 +60,7 @@ def prepare_certificates(service, job: dict, plan: dict, private: Path, *, runne
             return {"waiting": True, "retry_at": retry.isoformat() if retry else None}
         verified = private / ("renewal-verified-" + kind)
         if not verified.exists():
-            result = runner(["/usr/bin/certbot", "renew", "--dry-run", "--non-interactive",
+            result = runner([str(certbot_executable(root)), "renew", "--dry-run", "--non-interactive",
                 "--no-random-sleep-on-renew", "--no-directory-hooks", "--cert-name", paths[kind]["cert_name"],
                 "--dns-cloudflare", "--dns-cloudflare-credentials", str(credentials), "--pre-hook", hook,
                 "--deploy-hook", reload_hook, "--run-deploy-hooks"] + certbot_directory_arguments(root), capture_output=True, text=True, timeout=300)

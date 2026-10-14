@@ -27,6 +27,9 @@ def _service_identity(migration_root: Path) -> tuple[int, int]:
 def _adapt_environment_files(content: str, migration_root: Path) -> str:
     lines = []
     for line in content.splitlines(keepends=True):
+        if line.startswith(("StandardOutput=append:", "StandardError=append:")):
+            key, filename = line.split("=append:", 1)
+            line = f"{key}=append:{migration_root}{filename.strip()}\n"
         if line.startswith("EnvironmentFile="):
             value = line.removeprefix("EnvironmentFile=").strip()
             optional = "-" if value.startswith("-") else ""
@@ -80,7 +83,8 @@ def render_plan(migration_root: Path, repository_root: Path, output_root: Path) 
     http += (templates / "loopino.sidecars.managed.http.conf").read_text()
     for key, value in (
         ("{{HOSTNAME}}", HOSTNAME),
-        ("{{ACME_ROOT}}", f"/var/www/{HOSTNAME}"),
+        ("{{INSTALL_ROOT}}", "/projects/loopino"),
+        ("{{ACME_ROOT}}", "/projects/loopino/data/acme-webroot"),
         ("{{BROWSER_ORIGIN_ACME_WEBROOT}}", "/projects/loopino/data/browser-origin-acme"),
     ):
         http = http.replace(key, value)
@@ -96,8 +100,11 @@ def render_plan(migration_root: Path, repository_root: Path, output_root: Path) 
         "include /etc/nginx/sites-available/loopino-sidecars.loopino.ai.conf;\n"
     )
     (output_root / "renewal.conf").write_text(
-        "[Service]\nExecStart=/usr/bin/certbot renew --quiet --non-interactive "
-        f"--cert-name {HOSTNAME} --webroot -w /var/www/{HOSTNAME}\n"
+        "[Service]\nExecStart=/projects/loopino/.venv/bin/certbot renew --quiet --non-interactive "
+        f"--cert-name {HOSTNAME} --webroot -w /projects/loopino/data/acme-webroot "
+        "--config-dir /projects/loopino/installation/tls/certbot/config "
+        "--work-dir /projects/loopino/installation/tls/certbot/work "
+        "--logs-dir /projects/loopino/installation/tls/certbot/logs\n"
     )
 
 

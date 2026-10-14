@@ -13,6 +13,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from core.shared.installer_tls import hosted_sidecar_tls_errors
+from core.shared.env_file import service_env_path
+from core.installation.protected_material import create_recovery_backup, prepare_host_logs, require_root_environment_update
 from scripts.deploy.reload_nginx import check_nginx, reload_nginx
 
 
@@ -91,6 +93,7 @@ def main() -> int:
     for placeholder, value in {
         "{{HOSTNAME}}": args.hostname, "{{SIDECAR_TLS_CERT_PATH}}": str(certificate),
         "{{SIDECAR_TLS_CERT_KEY_PATH}}": str(key), "{{BIND_HOST}}": "127.0.0.1", "{{CORE_PORT}}": "8014",
+        "{{INSTALL_ROOT}}": str(ROOT),
     }.items():
         content = content.replace(placeholder, value)
     if "{{" in content:
@@ -98,14 +101,18 @@ def main() -> int:
     if args.apply:
         if os.geteuid() != 0:
             parser.error("Apply requires root privileges for nginx configuration.")
-        nginx_path, env_path = args.nginx_config.resolve(strict=True), args.env_file.resolve(strict=True)
+        env_path = args.env_file
+        if env_path != service_env_path(ROOT):
+            parser.error("Use the protected installation service environment.")
+        require_root_environment_update(env_path)
+        prepare_host_logs(ROOT)
+        nginx_path = args.nginx_config.resolve(strict=True)
         environment_changed = external_tls_environment(env_path.read_text()).encode() != env_path.read_bytes()
         if not environment_changed and nginx_path.read_text() == content:
             print(json.dumps({"status": "already_active", "mode": "external_wildcard",
                 "certificate": str(certificate), "backend_restart_required": False}))
             return 0
-        backup = Path("/var/backups/loopino-wildcard") / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        backup.mkdir(parents=True, mode=0o700)
+        backup = create_recovery_backup(ROOT, "wildcard", datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
         for source, name in [(nginx_path, "sidecars.conf"), (env_path, "installation.env")]:
             destination = backup / name
             destination.write_bytes(source.read_bytes())

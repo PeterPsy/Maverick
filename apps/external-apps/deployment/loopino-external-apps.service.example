@@ -8,6 +8,8 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
+StandardOutput=append:{{INSTALL_ROOT}}/installation/logs/systemd/external-apps.log
+StandardError=append:{{INSTALL_ROOT}}/installation/logs/systemd/external-apps-error.log
 User={{SERVICE_USER}}
 Group={{INGRESS_GROUP}}
 SupplementaryGroups={{SERVICE_GROUP}}

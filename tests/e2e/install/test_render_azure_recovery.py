@@ -79,7 +79,7 @@ class AzureRecoveryPlanTestCase(unittest.TestCase):
         self.assertNotIn("proxy_pass", http)
         self.assertNotIn("ssl_certificate", http)
         self.assertNotIn("{{", http)
-        self.assertIn(f"root /var/www/{HOSTNAME};", http)
+        self.assertIn("root /projects/loopino/data/acme-webroot;", http)
         self.assertIn("root /projects/loopino/data/browser-origin-acme;", http)
         self._write("etc/nginx/azure-runtime.conf", runtime)
         self.render()

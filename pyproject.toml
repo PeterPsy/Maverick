@@ -24,6 +24,10 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+installation = [
+    "certbot==5.8.0",
+    "certbot-dns-cloudflare==5.8.0",
+]
 document-generator = [
     "docling>=2.93,<3",
 ]

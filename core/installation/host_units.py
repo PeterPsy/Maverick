@@ -26,7 +26,9 @@ WorkingDirectory={inside}
 {chroot}Environment=PATH={inside}/.venv/bin:{inside}/.toolchains/bin:{inside}/.toolchains/node/bin:/usr/local/bin:/usr/bin:/bin
 Environment=LD_LIBRARY_PATH={inside}/.toolchains/sqlite/3.51.3/lib
 Environment=TMPDIR={inside}/.cache/tmp
-EnvironmentFile=-{env}
+EnvironmentFile={env}
+StandardOutput=append:{host_root}/installation/logs/systemd/installation.log
+StandardError=append:{host_root}/installation/logs/systemd/installation-error.log
 ExecStart=/usr/bin/env -- {inside}/.venv/bin/python {inside}/scripts/deploy/installation_worker.py
 ExecStartPost={after_tick}
 TimeoutStartSec=15min

@@ -27,7 +27,7 @@ spec.loader.exec_module(provider_hook)
 class ProviderTests(unittest.TestCase):
     def test_root_source_keeps_provider_data_in_the_workspace(self):
         self.assertEqual(local_gateway.DATA_ROOT, APP_ROOT.parents[1] / 'workspaces/default/data/openwa/gateway')
-        self.assertEqual(local_gateway.SOURCE_ROOT, APP_ROOT / 'provider/upstream')
+        self.assertEqual(local_gateway.SOURCE_ROOT, APP_ROOT.parents[1] / '.toolchains/openwa-0.24.0')
 
     def test_linking_an_existing_account_does_not_enable_new_account_send_caps(self):
         environment = local_gateway.environment()
@@ -35,6 +35,15 @@ class ProviderTests(unittest.TestCase):
         self.assertNotIn('RATE_LIMIT_SHORT_LIMIT', environment)
         self.assertNotIn('RATE_LIMIT_MEDIUM_LIMIT', environment)
         self.assertNotIn('RATE_LIMIT_LONG_LIMIT', environment)
+
+    def test_provider_uses_installation_toolchains_without_operator_credentials(self):
+        environment = local_gateway.environment()
+        self.assertTrue(Path(environment['PUPPETEER_EXECUTABLE_PATH']).is_relative_to(local_gateway.TOOLCHAINS))
+        self.assertTrue(Path(environment['LD_LIBRARY_PATH']).is_relative_to(local_gateway.TOOLCHAINS))
+        self.assertNotIn('/root', environment['PATH'])
+        self.assertEqual(environment['HOME'], '/data')
+        self.assertNotIn('API_MASTER_KEY', environment)
+        self.assertTrue(provider_service.PM2.is_relative_to(local_gateway.TOOLCHAINS))
 
     def test_only_trusted_default_workspace_admin_can_manage_provider(self):
         payload = SimpleNamespace(user_id='admin', platform_role='admin', workspace_id='default',

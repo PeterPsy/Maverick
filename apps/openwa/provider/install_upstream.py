@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 APP = Path(__file__).resolve().parents[1]
-TARGET = APP / 'provider' / 'upstream'
+TARGET = APP.parents[1] / '.toolchains' / 'openwa-0.24.0'
 REPOSITORY = 'https://github.com/rmyndharis/OpenWA'
 COMMIT = '8a45366a287750cf52c2658b0b783747cf51fad2'
 
@@ -21,7 +21,8 @@ def install():
             print(json.dumps({'status':'already_installed','commit':COMMIT}))
             return
         raise RuntimeError('An incomplete or different provider build exists. Stop its supervisor and preserve it before reinstalling.')
-    with tempfile.TemporaryDirectory(prefix='openwa-source-') as temporary:
+    TARGET.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=TARGET.parent, prefix='.openwa-source-') as temporary:
         source=Path(temporary)/'source'
         run(['git','clone','--no-checkout',REPOSITORY,str(source)], APP)
         run(['git','checkout','--detach',COMMIT], source)

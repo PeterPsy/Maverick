@@ -9,13 +9,14 @@ import subprocess
 import tempfile
 import time
 
-from local_gateway import APP_ROOT, DATA_ROOT, SOURCE_ROOT
+from local_gateway import APP_ROOT, DATA_ROOT, SOURCE_ROOT, TOOLCHAINS, NODE
 from gateway import GatewayError, check_readiness
 
 NAME = 'loopino-openwa-default'
 APP_DATA = DATA_ROOT.parent
 SUPERVISOR = APP_DATA / 'supervisor'
 CONTROL = APP_DATA / 'provider-control.json'
+PM2 = TOOLCHAINS / 'pm2-7.0.4/node_modules/pm2/bin/pm2'
 
 
 class ProviderServiceError(RuntimeError):
@@ -23,9 +24,9 @@ class ProviderServiceError(RuntimeError):
 
 
 def _run(args):
-    env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8', 'PM2_HOME': str(SUPERVISOR)}
+    env = {'PATH': f'{NODE.parent}:{TOOLCHAINS}/bin:/usr/bin:/bin', 'LANG': 'C.UTF-8', 'PM2_HOME': str(SUPERVISOR)}
     try:
-        result = subprocess.run(['pm2', *args], env=env, capture_output=True, text=True, timeout=20)
+        result = subprocess.run([str(NODE), str(PM2), *args], env=env, capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.TimeoutExpired):
         raise ProviderServiceError('The dedicated OpenWA supervisor could not be reached.') from None
     if result.returncode:

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 import re
 import unicodedata
 
 from core.execution_policy.service import resolve_workspace_execution_profile
-from core.workspaces.errors import WorkspaceNotFoundError
+from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
 from core.workspaces.models import (
     ActiveWorkspaceSelection,
     WorkspacePaths,
@@ -214,6 +215,17 @@ def ensure_workspace_membership(
     now: datetime | None = None,
 ) -> WorkspaceMembershipRecord:
     """Ensure one user has an active membership in one workspace."""
+    role = "admin" if role == "admin" else "member"
+    try:
+        existing = store.get_membership(user_id=user_id, workspace_id=workspace_id)
+    except WorkspaceMembershipError:
+        existing = None
+    if existing is not None:
+        if existing.role == role and existing.status == "active":
+            return existing
+        return store.save_membership(
+            replace(existing, role=role, status="active", updated_at=now or utcnow())
+        )
     record = build_workspace_membership(
         membership_id=membership_id,
         workspace_id=workspace_id,

@@ -96,6 +96,12 @@ The governance plane does not define the internal content of an app.
 
 Control-plane persistence for workspace registry, membership, governance, quota, and active workspace selection may target JSON, MongoDB, or a future adapter, but their semantics must not depend on adapter-specific documents or driver APIs.
 
+Repeated host bootstrap preserves an existing membership's id and creation time.
+An active membership with the requested normalized role is not rewritten. Role
+changes and reactivation update only role, status and modification time; every
+role input other than `admin` normalizes to `member`, including for existing
+records. Relocating an installation does not recreate users or memberships.
+
 Rules:
 
 - workspace records keep domain meaning regardless of persistence backend

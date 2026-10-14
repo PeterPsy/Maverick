@@ -29,6 +29,9 @@ from core.recovery.backend_service import restart_backend_service
 from core.usage.migration import usage_status
 from core.usage.handoff import selected_adapter
 from core.shared.env_file import quote_env_value, read_env_file
+from core.shared.env_file import service_env_path
+from core.installation.protected_material import require_root_environment_update
+from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
 
 
 _MIGRATION_LOCK = RLock()
@@ -89,6 +92,9 @@ def handle_persistence_admin_api(
                 source_collections=state.control_plane_collections,
                 target_payload=body,
             )
+        except PermissionError as error:
+            return json_response(start_response, {"error": "host_operator_required", "detail": str(error)},
+                                 status="403 Forbidden")
         except (RuntimeError, ValueError) as error:
             return json_response(
                 start_response,
@@ -213,6 +219,7 @@ def apply_persistence_migration(
     if delete_source and not restart_backend:
         raise ValueError("Deleting source storage requires `restart_backend=true`.")
     with _MIGRATION_LOCK:
+        _require_host_cutover_authority(repository_root)
         target_collections = build_control_plane_collections(target_settings)
         copied = _copy_collections(source_collections, target_collections)
         env_result = _write_cutover_env_file(repository_root=repository_root, target_settings=target_settings)
@@ -349,20 +356,20 @@ def _mongo_driver_available() -> bool:
 
 
 def _service_env_file(repository_root: Path) -> Path:
-    configured = os.environ.get("LOOPINO_SERVICE_ENV_FILE", "").strip()
-    return Path(configured) if configured else repository_root / ".env.loopino"
+    return service_env_path(repository_root)
+
+
+def _require_host_cutover_authority(repository_root: Path) -> None:
+    try:
+        require_root_environment_update(_service_env_file(repository_root))
+    except (OSError, ValueError) as error:
+        raise PermissionError("Persistence cutover requires a trusted root host operator and protected service environment; run the operator CLI during maintenance.") from error
 
 
 def _write_cutover_env_file(*, repository_root: Path, target_settings: ControlStoreSettings) -> dict[str, Any]:
+    _require_host_cutover_authority(repository_root)
     env_file = _service_env_file(repository_root)
     updates = _target_env_values(repository_root=repository_root, target_settings=target_settings)
-    if not env_file.exists():
-        return {
-            "path": str(env_file),
-            "updated": False,
-            "missing": True,
-            "updates": updates,
-        }
     existing = read_env_file(env_file)
     for key in _CONTROL_STORE_ENV_KEYS:
         existing.pop(key, None)
@@ -372,8 +379,7 @@ def _write_cutover_env_file(*, repository_root: Path, target_settings: ControlSt
         "# Contains local bootstrap credentials and secret refs; keep permissions restricted.",
     ]
     lines.extend(f"{key}={quote_env_value(str(value))}" for key, value in existing.items())
-    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    env_file.chmod(0o600)
+    atomic_replace(env_file, ("\n".join(lines) + "\n").encode())
     return {
         "path": str(env_file),
         "updated": True,

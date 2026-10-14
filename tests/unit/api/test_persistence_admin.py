@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 from core.api.persistence_admin import (
     _collection_counts,
     apply_persistence_migration,
+    handle_persistence_admin_api,
     dry_run_persistence_migration,
     target_settings_from_payload,
 )
@@ -27,6 +28,31 @@ from core.runtime.runtime_session import RuntimeApiTokenRecord
 
 
 class PersistenceAdminTestCase(unittest.TestCase):
+    def test_service_apply_is_denied_before_target_open_or_data_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._make_repo_root(Path(folder) / "loopino")
+            with patch("core.api.persistence_admin.os.geteuid", return_value=1234), \
+                 patch("core.api.persistence_admin.build_control_plane_collections") as build, \
+                 patch("core.api.persistence_admin._copy_collections") as copy, \
+                 patch("core.api.persistence_admin._write_cutover_env_file") as write:
+                with self.assertRaisesRegex(PermissionError, "trusted root host operator"):
+                    apply_persistence_migration(repository_root=root,
+                        source_settings=ControlStoreSettings(kind="json", json_root=root / "source-control"),
+                        source_collections=SimpleNamespace(), target_payload={"kind": "json", "json_root": "target-control"})
+                build.assert_not_called()
+                copy.assert_not_called()
+                write.assert_not_called()
+                self.assertFalse((root / "target-control").exists())
+                statuses = []
+                response = handle_persistence_admin_api(SimpleNamespace(repository_root=root,
+                    control_store_settings=ControlStoreSettings(kind="json", json_root=root / "source-control"),
+                    control_plane_collections=SimpleNamespace()), None,
+                    "/api/admin/persistence/migrations/apply", "POST", {"kind": "json", "json_root": "target-control"},
+                    lambda status, headers: statuses.append(status))
+                self.assertEqual(statuses, ["403 Forbidden"])
+                self.assertEqual(json.loads(b"".join(response))["error"], "host_operator_required")
+                build.assert_not_called()
+                copy.assert_not_called()
     def test_collection_counts_use_adapter_native_counts(self) -> None:
         collection = SimpleNamespace(
             count_documents=Mock(return_value=42),
@@ -78,6 +104,7 @@ class PersistenceAdminTestCase(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            env_file.chmod(0o640)
             with patch.dict(
                 os.environ,
                 {

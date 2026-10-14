@@ -52,12 +52,15 @@ def persistence_command_specs(*, start_path: Path | None = None) -> list[tuple[C
         root = _repository_root()
         settings = ControlStoreSettings.from_environment(repository_root=root)
         collections = build_control_plane_collections(settings)
-        return apply_persistence_migration(
-            repository_root=root,
-            source_settings=settings,
-            source_collections=collections,
-            target_payload=arguments,
-        )
+        try:
+            return apply_persistence_migration(
+                repository_root=root,
+                source_settings=settings,
+                source_collections=collections,
+                target_payload=arguments,
+            )
+        except PermissionError as error:
+            return {"error": "host_operator_required", "status_code": 403, "detail": str(error)}
 
     return [
         (core_cli_command(command_id="core.persistence.usage-status",

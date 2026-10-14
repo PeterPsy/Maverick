@@ -186,3 +186,12 @@ command overrides are removed. Giuntitrail's global Certbot, plugins, lineage,
 logs and renewal service remain independent. Plugin listing is prerequisite
 evidence only; issuance/renewal still requires authorized deployment and the new
 human-entered token.
+
+Persistence adapter cutover also requires trusted host-operator authority. The
+service-user HTTP/CLI apply returns `host_operator_required` before opening the
+target or copying any collections. Dry-run/status remain available to authorized
+admins. During explicitly authorized drained maintenance, a root operator may
+use the official persistence CLI with the protected service environment, review
+the plan, apply, and verify restart/adapter state. Cutover atomically preserves
+root ownership and 0640 mode; Core receives no environment write grant and no new
+privilege bridge. This phase uses JSON and performs no production migration.

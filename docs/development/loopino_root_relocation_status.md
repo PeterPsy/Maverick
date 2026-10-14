@@ -13,10 +13,14 @@ The accepted pre-move platform was `9d906b2b38ac46270b621ba6f47fbde476151431`,
 with Apple `95909ece47b0a14dce255c905d26a1f604676715`. Both histories retain
 `loopino/phase1`. The membership correction is checkpoint `c1f0be18`.
 Apple's subsequent change documents the server path and Mac-last order only.
-Exact final commits, backing configuration hashes, toolchain/model identities,
-artifact sets and live receipts are recorded in the ignored
-`operations/phase1/relocation/verification/deployment-manifest.json`.
-The coordinator publishes bundles using source-side Git authority.
+Principal checkpoint commits, backing configuration hashes, toolchain/model
+identities, artifact sets and live receipts are recorded in the ignored
+`operations/phase1/relocation/verification/deployment-manifest.json`. The later
+coordinator documentation checkpoint is recorded separately in
+`operations/phase1/relocation/coordinator-final.json`.
+The coordinator published both checkpoint branches using source-side Git authority;
+no repository authentication was transferred. The subsequent no-alias closure and
+publication are recorded in the private relocation checkpoint trail.
 
 Settled implementation checkpoints:
 
@@ -51,8 +55,12 @@ regular files / 724,301,010 bytes with no missing or mismatching files. Initial
 failed attempts involving terminal Speech sockets are retained as failed receipts.
 No tenant text, attachments, chat, database bytes or encrypted envelopes were
 blanket-replaced. AppStore adapters, running as UID997, changed only 28 registered
-source paths and 26 workspace binding data roots. Native environment fields and
-Certbot ConfigObj renewal path fields were rebased separately, preserving the
+source paths and 26 workspace binding data roots. The subsequent normal built-in
+bootstrap refreshed the 28 sources' technical registration timestamps, matching
+unchanged pre-move behavior; their IDs and other metadata stayed identical.
+Workspace binding fields, including timestamps, changed only at `data_root`.
+Native environment fields and Certbot ConfigObj renewal path fields were rebased
+separately, preserving the
 existing main key/certificate/account. Python runtime distribution versions were
 preserved while editable metadata and console entrypoints were reinstalled.
 
@@ -127,19 +135,25 @@ credential references. No DNS job was invented or applied without confirmed new
 credential state. Public login screenshots were inspected at desktop and mobile sizes: the form
 fits both viewports and explicitly reports Google sign-in unconfigured. Conserved
 logotype lettering remains the agreed graphical-byte exception. Default Browser
-snapshots work; newly observed optional `max_chars`/`max_items` fields are advertised
-by discovery but rejected by the unchanged app action. Original 400 receipts are
-retained for independent app-contract review; no gate was relaxed. Authenticated
+snapshots work. The retained 400 attempts supplied the optional Chrome snapshot
+bounds `max_chars`/`max_items` to a Lab session. Lab snapshots use defaults; bounded
+Lab reading uses `browser_read_content`. The shared discovery description does not
+express that mode distinction. This is not a relocation regression, and shared
+human Chrome behavior remains unverified. No gate was relaxed. Authenticated
 Browser/Companion, workspace desktop/mobile visual, PWA and native/hardware
 acceptance remain explicitly scoped in the manifest.
 
 Mac account, signing, build/device configuration is LAST after remaining server
 work and human server setup; unsigned compilation is not signed acceptance.
-Independent final delta/live review and coordinator publication remain required.
+Independent review and publication are recorded in the private relocation
+checkpoint trail. Their acceptance covers the canonical-root move; the human
+and client acceptance gates above remain open.
 
-The temporary old-root alias exists only for this foreground supervisor. Product
-roles are denied access and every product path uses the new real root. After this
-CLI exits, the coordinator must verify `/projects/loopino` is a symlink whose exact
-target is `/root/projects/loopino`, unlink that alias only, and repeat independent
-checks from the real root. It is not retained product compatibility. Exact stop,
-status and data-preserving rollback steps are in the private relocation record.
+After the external principal CLI exited normally, the coordinator verified and
+removed the temporary `/projects/loopino` symlink at 23:43:42 UTC on 2026-10-14.
+The old alias is absent. Checks from the real root passed for service-user CLI
+execution from `/`, native links and backing hashes, four services and timers,
+main HTTPS/setup, the 26-app catalog, and unchanged neighbor registrations.
+The isolated privileged HTTP-01 renewal dry-run also passed with no alias.
+Receipts are under `operations/phase1/relocation/no-alias/`; exact stop, status
+and data-preserving rollback steps remain in the private relocation record.

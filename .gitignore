@@ -1,4 +1,9 @@
 # Python
+/clients/apple/
+/operations/
+/.toolchains/
+/.cache/
+/installation/
 __pycache__/
 *.pyc
 *.pyo

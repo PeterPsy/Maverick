@@ -75,7 +75,25 @@ whose source directories no longer exist.
 - The App Store and Marta Ops official frontend builds pass.
 - Promotion succeeds through the mounted App Store after the dialog repair.
 - Business-data hashes and governed dependency selections are preserved.
-- Git whitespace checks pass before each source checkpoint.
+- The final source delta and Git whitespace checks pass.
+- All 2,286 repository-owned Python files pass the unused-import check.
+- Mounted Marta Ops renders without an alert; the App Store renders at a
+  390 x 844 mobile viewport without an alert.
+
+## Final repository state
+
+The archival merge is `03655258`. All 48 distinct original branch/worktree
+heads are ancestors of `design`, and the merge leaves the production tree
+unchanged. The complete reference inventory and migration results are retained
+in [`design_consolidation_refs_2026-10-14.json`](design_consolidation_refs_2026-10-14.json).
+
+Only the root checkout and the local `design` branch remain. Five linked
+checkouts were removed, 26 obsolete registrations were pruned, and 23 redundant
+local branch refs were retired after ancestry verification. The nested
+workspace `.git` directory is removed, so Git operations from the default
+workspace resolve to the same root `design` repository. Nine remote-tracking
+refs for deleted Dependabot branches were pruned through an ordinary fetch.
+Two uninstalled app directories contained only Python caches and were removed.
 
 The imported backend's extra EOF line was removed in a corrective checkpoint.
 Generated frontend bundles contain intentional whitespace inside upstream CSS

@@ -3470,3 +3470,11 @@ system-runtime trust. The hosted workspace overlay requires Bubblewrap 0.11+
 (the prepared toolchain is 0.11.2, built without setuid support).
 Browser install/migrate hooks initialize app state only; Lab startup requires
 an explicit app action, so source validation cannot leave an unsolicited worker.
+
+The declared Bubblewrap binary is `.toolchains/bubblewrap-0.11.2-install/bin/bwrap`.
+Like the declared Node executable, it requires a real root-owned executable and
+protected real ancestors; arbitrary repository binaries are denied. This source
+admission does not authorize an AppArmor change. Actual non-root confinement
+remains a deployment gate. Privileged installation and Certbot processes use the
+separate root-owned context described in `installation_address`; Core HOME and
+provider authentication remain unprivileged tenant/runtime material.

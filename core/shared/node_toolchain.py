@@ -1,7 +1,7 @@
 """Narrow trust declaration for the installation's isolated Node distribution."""
 
 from pathlib import Path
-import stat
+from core.shared.protected_executable import is_protected_executable
 
 from core.shared.repository import discover_repository_root
 
@@ -18,16 +18,4 @@ def is_protected_installation_node(node_binary: Path) -> bool:
     root = installation_node_toolchain_root()
     if node_binary != root / "bin/node":
         return False
-    try:
-        for path in (node_binary, *node_binary.parents):
-            metadata = path.lstat()
-            expected_kind = stat.S_ISREG if path == node_binary else stat.S_ISDIR
-            if (
-                not expected_kind(metadata.st_mode)
-                or metadata.st_uid != 0
-                or metadata.st_mode & 0o022
-            ):
-                return False
-        return bool(node_binary.stat().st_mode & stat.S_IXUSR)
-    except OSError:
-        return False
+    return is_protected_executable(node_binary)

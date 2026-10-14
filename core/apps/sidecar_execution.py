@@ -694,13 +694,16 @@ def _trusted_bubblewrap_binary() -> str:
     except OSError as error:
         raise AppHostingError("The bubblewrap executable is unavailable.") from error
     trusted_parents = {Path("/usr/bin"), Path("/usr/local/bin")}
+    from core.shared.protected_executable import is_protected_executable
+    declared = Path(__file__).resolve().parents[2] / ".toolchains/bubblewrap-0.11.2-install/bin/bwrap"
     if (
-        path.parent not in trusted_parents
+        (path.parent not in trusted_parents and path != declared)
         or not stat.S_ISREG(metadata.st_mode)
         or metadata.st_uid != 0
         or metadata.st_mode & 0o022
+        or not is_protected_executable(path)
     ):
-        raise AppHostingError("bubblewrap must be a root-owned, non-writable executable in a trusted system bin directory.")
+        raise AppHostingError("bubblewrap must be root-owned, non-writable, with protected ancestors in a trusted system bin directory or the declared installation distribution.")
     return str(path)
 
 

@@ -1,6 +1,7 @@
 import { useMemo, type ComponentProps } from "react";
 import type { FloatingChatHost } from "./FloatingChatHost";
 import { WidgetSlot } from "./WidgetSlot";
+import { appLogoPresentation } from "./AppLogo";
 
 export type FloatingChatPlacement = "overlay" | "fixed-right" | "mobile-fullscreen";
 
@@ -18,6 +19,7 @@ export function FloatingChatWidget({ placement, visible, ...props }: Props) {
     active_app: props.activeApp ? {
       app_id: props.activeApp.app_id,
       description: props.activeApp.description,
+      logo: appLogoPresentation(props.activeApp),
       name: props.activeApp.name,
       params: props.activeAppParams,
       views: props.activeApp.views,

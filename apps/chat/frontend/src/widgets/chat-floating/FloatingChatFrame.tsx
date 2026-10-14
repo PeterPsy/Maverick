@@ -8,6 +8,7 @@ import { filesFromDataTransfer, hasFileDropData } from "../../lib/fileDropAttach
 import { appReferenceMentionItemsFromDataTransfer, hasAppReferenceDragData } from "../../lib/storageDragReferences";
 import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
 import { FloatingLauncher } from "./FloatingLauncher";
+import { AppContextButton } from "./AppContextButton";
 import { FloatingThreadMenu } from "./FloatingThreadMenu";
 import type { FloatingChatWindow } from "./floatingState";
 
@@ -155,12 +156,8 @@ export function FloatingChatFrame({
             threads={threads}
             windowItem={windowItem}
           />
-          <button type="button" className="chat-floating-widget-shell__source-badge"
-            aria-label={pinnedContext ? "Follow app context" : "Pin app context"} aria-pressed={Boolean(pinnedContext)}
-            disabled={!effectiveContext} title={`${pinnedContext ? "Pinned context" : "Current context"}: ${effectiveContext?.name || "General"}${effectiveContext?.params ? " · " + Object.values(effectiveContext.params).filter(Boolean).join(" · ") : ""}`}
-            onClick={() => setPinnedContext(pinnedContext ? null : activeAppContext)}>
-            {pinnedContext ? "Pinned · " : ""}{effectiveContext?.name || "General"}
-          </button>
+          <AppContextButton context={effectiveContext} isPinned={Boolean(pinnedContext)}
+            onToggle={() => setPinnedContext(pinnedContext ? null : activeAppContext)} />
         </div>
         <div className="chat-floating-widget-shell__actions">
           <button

@@ -62,6 +62,10 @@ multi-window minimized frame also reserves two rem for navigation.
 The window header shows the operational app context and can pin its app/params
 snapshot. Pinning changes only that window's context; following navigation again
 uses the current host context without changing draft or thread identity.
+The host includes registry logo metadata in that snapshot. Chat renders the app
+icon in the context control, keeps the name in its tooltip and accessible label,
+and marks pinned context with a small pin. Cross-app public images use the
+Core-injected platform origin; compact identity images inherit the Chat theme.
 
 A repeated context update is not a thread-selection command. Existing window
 identity wins over the shell's remembered thread id; active-thread changes are

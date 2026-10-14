@@ -134,7 +134,10 @@ describe("FloatingChatHost mount gate", () => {
     });
 
     expect(widgetSlotMock.mock.calls[0][0]).toMatchObject({
-      content: { active_app: { app_id: "design-studio", params: { od_project_id: "od_project_1" } } },
+      content: { active_app: {
+        app_id: "design-studio", logo: { kind: "glyph", value: "design_services" },
+        params: { od_project_id: "od_project_1" },
+      } },
     });
   });
 });

@@ -128,11 +128,11 @@ describe("FloatingWindow", () => {
     const crm = { app_id: "crm", name: "CRM", description: "", views: [] };
     await renderFloatingWindow(floatingWindow(), storage);
     const draft = container!.querySelector("input");
-    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Pin app context"]')!.click());
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Pin app context: Storage"]')!.click());
     await renderFloatingWindow(floatingWindow(), crm);
     expect(vi.mocked(App).mock.calls.at(-1)?.[0]).toMatchObject({ activeAppContextOverride: storage });
     expect(container!.querySelector("input")).toBe(draft);
-    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Follow app context"]')!.click());
+    await act(async () => container!.querySelector<HTMLButtonElement>('[aria-label="Follow app context: Storage"]')!.click());
     expect(vi.mocked(App).mock.calls.at(-1)?.[0]).toMatchObject({ activeAppContextOverride: crm });
   });
 

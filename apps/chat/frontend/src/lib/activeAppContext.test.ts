@@ -10,6 +10,7 @@ import {
 const activeApp = {
   app_id: "storage",
   description: "Workspace files",
+  logo: { kind: "glyph" as const, value: "cloud" },
   name: "Storage",
   views: ["sidebar"],
 };
@@ -23,6 +24,7 @@ describe("active app context helpers", () => {
             active_app: {
               app_id: " storage ",
               description: "Workspace files",
+              logo: { kind: "glyph", value: "cloud" },
               name: " Storage ",
               views: ["sidebar", 42],
             },

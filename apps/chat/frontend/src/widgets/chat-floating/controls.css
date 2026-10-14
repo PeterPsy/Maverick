@@ -88,12 +88,13 @@
   color: var(--maverick-text-muted);
 }
 
-.chat-floating-thread-menu button:focus-visible, .chat-floating-widget-shell__button:focus-visible, .chat-floating-widget-launcher:focus-visible {
+.chat-floating-thread-menu button:focus-visible, .chat-floating-widget-shell__button:focus-visible, .chat-floating-widget-launcher:focus-visible, .chat-floating-widget-shell__source-badge:focus-visible {
   outline: 2px solid var(--maverick-text);
   outline-offset: -2px;
 }
 
-.chat-floating-widget-shell--mobile-fullscreen .chat-floating-widget-shell__button {
+.chat-floating-widget-shell--mobile-fullscreen .chat-floating-widget-shell__button,
+.chat-floating-widget-shell--mobile-fullscreen .chat-floating-widget-shell__source-badge {
   min-width: 44px;
   min-height: 44px;
 }
@@ -117,14 +118,6 @@
   pointer-events: none;
 }
 
-
-.chat-floating-widget-shell__source-badge {
-  background: var(--chat-sidebar-soft-surface);
-  max-width: 6.5rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
 
 .chat-floating-thread-picker.is-shell-mobile .bs-instance-menu__trigger {
   min-width: 44px;

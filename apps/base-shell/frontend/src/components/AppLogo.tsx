@@ -1,10 +1,11 @@
 import { AppRegistryItem } from "../api";
 
 export function AppLogo({ app, className = "" }: { app: AppRegistryItem; className?: string }) {
-  if (app.logo?.kind === "image" && app.logo.value) {
+  const logo = appLogoPresentation(app);
+  if (logo.kind === "image") {
     // SDK compact assets are transparent silhouettes; native frames own their colour.
-    if (/^\/apps\/[^/]+\/maverick-icon-compact\.png(?:[?#].*)?$/.test(app.logo.value)) {
-      const mask = `url(${JSON.stringify(app.logo.value)}) center / contain no-repeat`;
+    if (/^\/apps\/[^/]+\/maverick-icon-compact\.png(?:[?#].*)?$/.test(logo.value)) {
+      const mask = `url(${JSON.stringify(logo.value)}) center / contain no-repeat`;
       return (
         <span className={`bs-app-logo is-glyph ${className}`}>
           <span aria-hidden="true" className="bs-app-logo__compact" style={{
@@ -16,15 +17,20 @@ export function AppLogo({ app, className = "" }: { app: AppRegistryItem; classNa
     }
     return (
       <span className={`bs-app-logo is-image ${className}`}>
-        <img alt="" loading="lazy" src={app.logo.value} />
+        <img alt="" loading="lazy" src={logo.value} />
       </span>
     );
   }
   return (
     <span className={`bs-app-logo is-glyph ${className}`}>
-      <span aria-hidden="true" className="material-symbols-rounded">{app.logo?.value || defaultIcon(app)}</span>
+      <span aria-hidden="true" className="material-symbols-rounded">{logo.value}</span>
     </span>
   );
+}
+
+/** The same effective identity is used by the rail and contextual Chat. */
+export function appLogoPresentation(app: AppRegistryItem): NonNullable<AppRegistryItem["logo"]> {
+  return app.logo?.value ? app.logo : { kind: "glyph", value: defaultIcon(app) };
 }
 
 function defaultIcon(app: AppRegistryItem): string {

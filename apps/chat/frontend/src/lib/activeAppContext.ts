@@ -4,6 +4,7 @@ import { MentionItem, referenceKey } from "./mentions";
 export type ActiveAppContext = {
   app_id: string;
   description: string;
+  logo?: { kind: "glyph" | "image"; value: string };
   name: string;
   params?: Record<string, string | boolean | null>;
   views: string[];
@@ -50,9 +51,12 @@ export function activeAppContextFromWidgetContext(context: Record<string, unknow
     return null;
   }
   const params = scalarParams(record.params);
+  const logo = record.logo as Partial<NonNullable<ActiveAppContext["logo"]>> | null;
   return {
     app_id: appId,
     description: typeof record.description === "string" ? record.description : "",
+    ...((logo?.kind === "glyph" || logo?.kind === "image") && typeof logo.value === "string" && logo.value.trim()
+      ? { logo: { kind: logo.kind, value: logo.value.trim() } } : {}),
     name: typeof record.name === "string" && record.name.trim() ? record.name.trim() : appId,
     ...(Object.keys(params).length ? { params } : {}),
     views: Array.isArray(record.views) ? record.views.filter((item): item is string => typeof item === "string") : [],

@@ -13,6 +13,16 @@ and full output in ignored operator logs. A retry must identify the failed group
 and retain the original result; passing a focused retry does not change the
 original command's exit status.
 
+Fake-runner TLS command-flow tests mock only host installation metadata and
+declare the supported operator role. Separate unit tests retain executable trust
+rejections and non-root managed-exact denial. Real privileged Python startup,
+Certbot namespace isolation and installed plugin discovery are explicit operator
+checks, not default-fast prerequisites. On a prepared root-operated installation,
+run `LOOPINO_OPERATOR_SMOKE=1 .venv/bin/python -m unittest
+tests.unit.installation.test_privileged_startup` with the isolated toolchain
+environment. This requires the protected installation distribution and mount
+namespace capability; an ordinary source checkout does not promise either.
+
 Use a short ignored in-root temporary directory for nested sidecar test
 repositories (`/projects/loopino/.t` in this installation). Unix socket names
 include workspace/service namespaces and have a kernel length limit. Never

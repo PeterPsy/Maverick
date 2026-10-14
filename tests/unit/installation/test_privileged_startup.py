@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 @unittest.skipUnless(os.geteuid() == 0, "Privileged namespace/startup verification requires root")
+@unittest.skipUnless(os.environ.get("LOOPINO_OPERATOR_SMOKE") == "1",
+                     "Installed Certbot/namespace checks require LOOPINO_OPERATOR_SMOKE=1")
 class PrivilegedStartupTests(unittest.TestCase):
     def test_system_after_tick_and_worker_ignore_core_user_site_before_imports(self):
         with tempfile.TemporaryDirectory() as folder:

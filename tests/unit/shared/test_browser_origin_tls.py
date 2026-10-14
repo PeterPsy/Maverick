@@ -30,6 +30,11 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
     app_host = "af-111111111111111111111111.sidecars.loopino.example.test"
     other_host = "af-222222222222222222222222.sidecars.loopino.example.test"
 
+    def setUp(self) -> None:
+        operator_role = patch("core.shared.browser_origin_tls.os.geteuid", return_value=0)
+        operator_role.start()
+        self.addCleanup(operator_role.stop)
+
     def test_service_user_managed_exact_is_denied_before_any_write_or_subprocess(self) -> None:
         with tempfile.TemporaryDirectory() as folder, patch("core.shared.browser_origin_tls.os.geteuid", return_value=1234):
             settings = self._settings(Path(folder))

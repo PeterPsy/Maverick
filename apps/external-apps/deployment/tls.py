@@ -11,14 +11,17 @@ import hashlib
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
 from tls_config import ACME_ROOT, TLS_ROOT, certificate_requests, installation_domain, read_json, render_hosts, valid_host
 
-CERTBOT = Path("/projects/loopino/.venv/bin/certbot")
+CERTBOT = Path("/projects/loopino/scripts/deploy/loopino-certbot")
 
 
 def atomic_text(path, value, mode=0o600):

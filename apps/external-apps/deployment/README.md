@@ -74,7 +74,7 @@ prove workspace availability.
 ## 3. HTTP-01 and exact HTTPS hosts
 
 Prerequisites: nginx with `ssl_reject_handshake` and the protected installation
-`.venv/bin/certbot` (install `.[installation]`, including dns-cloudflare). Use the
+`scripts/deploy/loopino-certbot` (install `.[installation]`, including dns-cloudflare). Use the
 installation Python with `cryptography`, public port 80 for HTTP-01 and port 443 for HTTPS. No port 53, DNS
 API token or wildcard certificate is needed. The root-owned timer issues exact
 SAN certificates only for catalog-derived names, never arbitrary incoming SNI.
@@ -160,7 +160,7 @@ Local tests/base TLS are not proof of a published application.
 ```bash
 sudo systemctl status loopino-external-apps.service loopino-external-apps-tls.timer
 sudo tail -n 30 /projects/loopino/installation/logs/systemd/external-apps-tls-error.log
-sudo /projects/loopino/.venv/bin/certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
+sudo /projects/loopino/scripts/deploy/loopino-certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
   --config-dir /projects/loopino/data/external-apps-tls/config \
   --work-dir /projects/loopino/data/external-apps-tls/work \
   --logs-dir /projects/loopino/data/external-apps-tls/logs
@@ -187,3 +187,10 @@ before enabling units; Core must not write or rename them. The root TLS unit
 retains access to existing Nginx logs only for the full `nginx -t` check; no other
 vhost log directive or host log policy is changed. Recovery backups belong to
 `installation/backups`; never use global backup or Certbot directories.
+
+The Certbot launcher uses a private mount namespace to mask ambient host/user
+CLI defaults and a root-owned `installation/privileged-home` context. It runs
+Python with `-I`; do not bypass it with the vendor console script or a global
+Certbot command. Prepare the privileged context with
+`core.installation.privileged_context.prepare_privileged_context` before enabling
+the root TLS unit. No Core-owned HOME/XDG configuration is read for issuance.

@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 from core.installation.host_units import render_service, TIMER
 from core.installation.protected_material import prepare_host_logs, protect_service_environment
+from core.installation.privileged_context import prepare_privileged_context
 from core.shared.env_file import service_env_path
 from core.shared.installer import run_privileged_command
 from core.installation.registrations import installation_backing_path, registration_exists, register_file, unregister_file
@@ -74,6 +75,7 @@ def install(core_unit):
     os.chown(metadata, *owner)
     protect_service_environment(service_env_path(ROOT), str(owner[1]), run_privileged_command)
     prepare_host_logs(ROOT)
+    prepare_privileged_context(ROOT)
     def activate():
         manager.Reload()
         manager.EnableUnitFiles(["loopino-installation.timer"], False, False)

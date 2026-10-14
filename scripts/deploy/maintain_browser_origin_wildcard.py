@@ -23,6 +23,7 @@ from core.shared.browser_origin_tls_backoff import (
 )
 from core.shared.env_file import read_env_file, service_env_path
 from core.installation.protected_material import require_service_environment
+from core.installation.privileged_context import enter_privileged_context
 from core.shared.installation_material import certbot_root, certbot_directory_arguments, certbot_executable, validate_certbot_executable
 from scripts.deploy.refresh_cloudflare_dns_credentials import DEFAULT_CREDENTIALS, refresh_credentials
 
@@ -126,6 +127,7 @@ def main():
     environment_path = service_env_path(ROOT)
     require_service_environment(environment_path)
     os.environ.update(read_env_file(environment_path))
+    enter_privileged_context(ROOT)
     os.chdir(ROOT)
     with (args.state_root / "maintenance.lock").open("a") as lock:
         try:

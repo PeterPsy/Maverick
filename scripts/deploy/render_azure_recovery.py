@@ -100,7 +100,7 @@ def render_plan(migration_root: Path, repository_root: Path, output_root: Path) 
         "include /etc/nginx/sites-available/loopino-sidecars.loopino.ai.conf;\n"
     )
     (output_root / "renewal.conf").write_text(
-        "[Service]\nExecStart=/projects/loopino/.venv/bin/certbot renew --quiet --non-interactive "
+        "[Service]\nExecStart=/projects/loopino/scripts/deploy/loopino-certbot renew --quiet --non-interactive "
         f"--cert-name {HOSTNAME} --webroot -w /projects/loopino/data/acme-webroot "
         "--config-dir /projects/loopino/installation/tls/certbot/config "
         "--work-dir /projects/loopino/installation/tls/certbot/work "

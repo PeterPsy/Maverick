@@ -27,7 +27,7 @@ class CertbotRuntimeTests(unittest.TestCase):
         self.assertTrue(result["renewal_verified"])
         self.assertEqual(len(calls),4)
         for command in calls:
-            self.assertEqual(command[0],str(root / ".venv/bin/certbot"))
+            self.assertEqual(command[0],str(root / "scripts/deploy/loopino-certbot"))
             for flag, leaf in (("--config-dir","config"),("--work-dir","work"),("--logs-dir","logs")):
                 self.assertEqual(command[command.index(flag)+1],str(root / "installation/tls/certbot" / leaf))
             self.assertIn("--dns-cloudflare",command)
@@ -48,6 +48,9 @@ class CertbotRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);path=certbot_executable(root)
             path.parent.mkdir(parents=True);path.write_text("#!/bin/sh\nexit 0\n");path.chmod(0o755)
+            vendor=root / ".venv/bin/certbot"
+            vendor.parent.mkdir(parents=True);vendor.write_text("#!/bin/sh\nexit 0\n");vendor.chmod(0o755)
+            (path.parent / "isolated_certbot.py").write_text("# protected launcher implementation\n")
             validate_certbot_executable(root)
             path.chmod(0o775)
             with self.assertRaisesRegex(ValueError,"protected"):

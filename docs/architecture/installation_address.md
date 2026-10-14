@@ -177,7 +177,8 @@ update preservation. Deployment must repeat this with the actual Core account
 and test non-root Bubblewrap/AppArmor execution; source tests are not live proof.
 
 Every installer, native address/TLS worker, browser-origin client and operator TLS
-oneshot selects the explicit installation `.venv/bin/certbot`, never global PATH
+oneshot selects `scripts/deploy/loopino-certbot`, a protected source-owned
+launcher for the isolated `.venv` distribution, never global PATH
 or `/usr/bin/certbot`. Install `.[installation]` into the protected isolated venv
 (Certbot and dns-cloudflare 5.8.0). Preflight verifies real root-owned executable
 and ancestor paths without group/world writes, and lists the Cloudflare plugin
@@ -195,3 +196,33 @@ use the official persistence CLI with the protected service environment, review
 the plan, apply, and verify restart/adapter state. Cutover atomically preserves
 root ownership and 0640 mode; Core receives no environment write grant and no new
 privilege bridge. This phase uses JSON and performs no production migration.
+
+Certbot 5.8.0/configargparse reads `/etc/letsencrypt/cli.ini` and the HOME/XDG
+user CLI default before an explicit `--config`; storage-directory arguments do
+not suppress these reads. The source-owned launcher enters a private mount
+namespace (`unshare --mount --propagation private`), masks the host default with
+an empty read-only installation directory, and masks the privileged user's
+implicit default. It supplies only root-controlled
+`installation/tls/certbot/cli.ini`, rejecting external CLI-config selectors.
+The installed third-party distribution and host files remain untouched. Mount
+namespace support is a fail-closed prerequisite; no host security policy is
+relaxed. All issuance, renewal, plugin preflight, native job actions and offered
+operator commands share this launcher and explicit in-root config/work/log paths.
+
+Privileged processes use `installation/privileged-home` and protected XDG/cache/
+tmp children, all root-owned with real protected ancestors. Systemd ExecStart
+and ExecStartPost use explicit `env` assignments after EnvironmentFile processing
+and Python `-I` before imports; the system interpreter retains D-Bus support.
+Worker env reload restores this context before privileged work. Core's writable
+`data/service-home` and empty provider homes stay separate. Tests use harmless
+synthetic host/user defaults in a private outer namespace and actual plugin
+discovery, and verify isolated system/venv Python startup excludes user site.
+
+`managed_exact` runtime issuance is root-operator-only with this launcher. A
+service-user Core fails before directory creation or an ACME subprocess with
+`managed_exact_operator_required`; installer preflight reports the unsupported
+service role/mode combination. Root operator exact-host issuance remains
+available. No sudo bridge, same-origin fallback or unprotected issuer is added.
+The authorized `loopino.giuntitrail.com` deployment uses `external_wildcard` and
+the trusted root installation worker, with the new human-entered DNS token.
+Non-root managed_exact functional acceptance is not claimed.

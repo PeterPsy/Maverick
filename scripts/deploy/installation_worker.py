@@ -16,6 +16,7 @@ from core.installation.worker import InstallationWorker
 from core.secrets.store import SecretDocumentStore
 from core.shared.env_file import read_env_file, service_env_path
 from core.installation.protected_material import require_service_environment
+from core.installation.privileged_context import enter_privileged_context
 
 
 def main() -> int:
@@ -26,6 +27,7 @@ def main() -> int:
         environment_path = service_env_path(ROOT)
         require_service_environment(environment_path)
         os.environ.update(read_env_file(environment_path))
+        enter_privileged_context(ROOT)
         collections = build_control_plane_collections(ControlStoreSettings.from_environment(repository_root=ROOT))
         service = InstallationService(ROOT, secret_store=SecretDocumentStore(collections.secrets))
         private = service.store.root / "private"

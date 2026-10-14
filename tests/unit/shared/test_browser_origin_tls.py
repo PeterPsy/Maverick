@@ -30,6 +30,31 @@ class BrowserOriginTlsTestCase(unittest.TestCase):
     app_host = "af-111111111111111111111111.sidecars.loopino.example.test"
     other_host = "af-222222222222222222222222.sidecars.loopino.example.test"
 
+    def test_service_user_managed_exact_is_denied_before_any_write_or_subprocess(self) -> None:
+        with tempfile.TemporaryDirectory() as folder, patch("core.shared.browser_origin_tls.os.geteuid", return_value=1234):
+            settings = self._settings(Path(folder))
+            with self.assertRaisesRegex(BrowserOriginTlsError, "managed_exact_operator_required"):
+                ensure_browser_origin_tls([self.app_host], group_key="session:one", settings=settings,
+                                          run_command=lambda _: self.fail("must not invoke issuer"))
+            self.assertFalse(settings.tls_root.exists())
+
+    def test_service_user_external_wildcard_needs_no_issuer(self) -> None:
+        with tempfile.TemporaryDirectory() as folder, patch("core.shared.browser_origin_tls.os.geteuid", return_value=1234):
+            ensure_browser_origin_tls([self.app_host], group_key="session:one",
+                settings=self._settings(Path(folder), mode="external_wildcard"),
+                run_command=lambda _: self.fail("wildcard must not invoke issuer"))
+
+    def test_installer_reports_unsupported_service_user_managed_exact(self) -> None:
+        from dataclasses import replace
+        from core.shared.installer import preflight_check
+        from tests.unit.shared.test_installer_systemd import _make_config
+        root = Path(__file__).resolve().parents[3]
+        config = replace(_make_config(root), service_user="loopino", hosted_sidecars=True,
+                         browser_origin_tls_mode="managed_exact", local_only=False,
+                         hostname="loopino.example.test", public_scheme="https")
+        report = preflight_check(config, live_apply=False, request_tls=False)
+        self.assertTrue(any("managed_exact_operator_required" in error for error in report.errors))
+
     def test_external_wildcard_mode_never_runs_certbot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = self._settings(Path(temp_dir), mode="external_wildcard")

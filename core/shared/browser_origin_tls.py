@@ -3,7 +3,8 @@
 The managed mode is an HTTP-01 alternative for installations that cannot
 provision a wildcard with DNS-01.  Core may request certificates only for its
 reserved, internally derived ``af-*`` and ``sc-*`` hostnames.  Nginx reads the
-atomically published copies; ACME account material remains private to Core.
+atomically published copies; issuance requires a root operator. Ordinary
+service-user managed_exact issuance has no privileged bridge.
 """
 
 from __future__ import annotations
@@ -141,6 +142,8 @@ def ensure_browser_origin_tls(
     if resolved.mode == EXTERNAL_WILDCARD_TLS_MODE:
         return
     _validate_settings(resolved)
+    if os.geteuid() != 0:
+        raise BrowserOriginTlsError("managed_exact_operator_required: exact-host issuance requires a trusted root operator; service-user issuance is unsupported.")
     requested = _validated_hosts(hosts, installation_domain=resolved.installation_domain)
     required = requested if required_hosts is None else _validated_hosts(
         required_hosts, installation_domain=resolved.installation_domain,

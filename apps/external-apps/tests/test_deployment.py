@@ -44,7 +44,7 @@ class DeploymentContractTests(unittest.TestCase):
 
     def test_tls_and_vhosts_have_installation_owned_backing_and_logs(self):
         unit = (DEPLOYMENT / "loopino-external-apps-tls.service").read_text()
-        self.assertIn("/projects/loopino/.venv/bin/python -B /projects/loopino/installation/libexec/external-apps/tls.py", unit)
+        self.assertIn("/projects/loopino/.venv/bin/python -I -B /projects/loopino/installation/libexec/external-apps/tls.py", unit)
         self.assertIn("StandardError=append:/projects/loopino/installation/logs/systemd/", unit)
         ingress = render_ingress("loopino.example.com")
         exact = render_hosts([({PUBLIC_HOST}, Path("/projects/loopino/data/external-apps-tls/config/live/test"))])

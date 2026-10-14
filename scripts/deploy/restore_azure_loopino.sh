@@ -134,7 +134,7 @@ PYBACKUP
     install -m 0644 "$plan_root/azure-runtime.conf" "$runtime_conf"
     nginx_check
     systemctl reload migrated-nginx.service
-    chroot "$migration_root" /projects/loopino/.venv/bin/certbot renew --non-interactive \
+    chroot "$migration_root" /projects/loopino/scripts/deploy/loopino-certbot renew --non-interactive \
         --cert-name "$hostname" --webroot -w /projects/loopino/data/acme-webroot \
         --config-dir /projects/loopino/installation/tls/certbot/config \
         --work-dir /projects/loopino/installation/tls/certbot/work \

@@ -481,6 +481,8 @@ def preflight_check(
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             errors.append(f"Installation Certbot preflight failed: {error}")
     if config.hosted_sidecars:
+        if config.browser_origin_tls_mode == MANAGED_EXACT_TLS_MODE and config.service_user not in {"root", "0"}:
+            errors.append("managed_exact_operator_required: ordinary Core service users cannot issue exact-host certificates; configure external_wildcard with the trusted installation worker.")
         hosted_origin_valid = (
             not config.local_only
             and config.public_scheme == "https"

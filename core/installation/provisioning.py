@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from core.installation.protected_material import prepare_host_logs, protect_service_environment
+from core.installation.privileged_context import prepare_privileged_context
 
 
 def provision_service_paths(config, rendered_files: dict[Path, str], runner) -> None:
@@ -20,6 +21,7 @@ def provision_service_paths(config, rendered_files: dict[Path, str], runner) -> 
 
     protect_service_environment(config.install_env_path, config.service_group, runner)
     prepare_host_logs(root)
+    prepare_privileged_context(root)
     secret_root = owned_path(config.bootstrap_secret_store_root)
     key = owned_path(config.secret_key_file)
     directories = [

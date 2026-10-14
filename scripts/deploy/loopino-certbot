@@ -1,0 +1,8 @@
+#!/bin/sh
+# Own entrypoint: no third-party file changes, no ambient Certbot configuration.
+set -eu
+loopino_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+exec /usr/bin/unshare --mount --propagation private \
+    /usr/bin/env -- HOME="$loopino_root/installation/privileged-home" \
+    XDG_CONFIG_HOME="$loopino_root/installation/privileged-home/config" PYTHONNOUSERSITE=1 \
+    "$loopino_root/.venv/bin/python" -I "$loopino_root/scripts/deploy/isolated_certbot.py" "$@"

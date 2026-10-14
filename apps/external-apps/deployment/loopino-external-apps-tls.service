@@ -4,7 +4,7 @@ After=network-online.target nginx.service loopino-external-apps.service
 
 [Service]
 Type=oneshot
-ExecStart=/projects/loopino/.venv/bin/python -B /projects/loopino/installation/libexec/external-apps/tls.py
+ExecStart=/usr/bin/env -- HOME=/projects/loopino/installation/privileged-home XDG_CONFIG_HOME=/projects/loopino/installation/privileged-home/config PYTHONNOUSERSITE=1 /projects/loopino/.venv/bin/python -I -B /projects/loopino/installation/libexec/external-apps/tls.py
 StandardOutput=append:/projects/loopino/installation/logs/systemd/external-apps-tls.log
 StandardError=append:/projects/loopino/installation/logs/systemd/external-apps-tls-error.log
 User=root

@@ -7,18 +7,19 @@ import subprocess
 
 def certbot_executable(repository_root: Path) -> Path:
     """Select only the installation's explicit isolated Certbot entrypoint."""
-    return repository_root / ".venv/bin/certbot"
+    return repository_root / "scripts/deploy/loopino-certbot"
 
 
 def validate_certbot_executable(repository_root: Path) -> None:
     path = certbot_executable(repository_root)
     if not path.is_absolute():
         raise ValueError("Certbot requires an absolute installation root")
-    for component in (path, *path.parents):
-        metadata = component.lstat()
-        expected = stat.S_ISREG if component == path else stat.S_ISDIR
-        if not expected(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
-            raise ValueError("Certbot must have protected root-owned real executable/ancestor paths")
+    for executable in (path, repository_root / ".venv/bin/certbot", repository_root / "scripts/deploy/isolated_certbot.py"):
+        for component in (executable, *executable.parents):
+            metadata = component.lstat()
+            expected = stat.S_ISREG if component == executable else stat.S_ISDIR
+            if not expected(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
+                raise ValueError("Certbot must have protected root-owned real executable/ancestor paths")
     if not path.stat().st_mode & 0o111:
         raise ValueError("Installation Certbot is not executable")
 

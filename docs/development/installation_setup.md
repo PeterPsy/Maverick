@@ -1,5 +1,11 @@
 # Installation setup verification
 
+Historical evidence: the dated live checks below describe the predecessor
+installation on its original server, before this rebrand. They do not establish
+that `/projects/loopino` on this destination has been deployed or verified. New
+Loopino source/build evidence and remaining deployment gates are recorded in
+`loopino_phase1_status.md`; no live Nginx/systemd changes have been applied here.
+
 The implementation is described by the published Developer Context document
 `installation_address`. Settings → Installation and the top-level `/setup` page
 share `packages/installation-ui`. The workspace Skills app seeds

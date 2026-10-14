@@ -32,8 +32,12 @@ Do not leave the repository in a state where the implementation has moved but th
 
 ## App Source Priority
 
-This installation develops all first-party app source on the `design` branch
-under root `apps/`, including `github-actions` and `marta-ops`. The `default`
+This installation develops all first-party app source under root `apps/`,
+including `github-actions` and `marta-ops`. Inspect `git status -sb`, the current
+branch and deployed commit before work, and preserve the active source branch.
+Never automatically switch to a historical branch. The current clean-install
+candidate is `loopino/phase1`; local `design` is the historical predecessor
+baseline, not an instruction to check it out. The `default`
 workspace no longer owns a separate app Git repository. Keep its business data,
 Storage files, and runtime material outside source commits. Workspace-local
 projects remain an explicit platform capability for future custom forks; do

@@ -31,7 +31,7 @@ from core.usage.handoff import selected_adapter
 from core.shared.env_file import quote_env_value, read_env_file
 from core.shared.env_file import service_env_path
 from core.installation.protected_material import require_root_environment_update
-from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
+from core.installation.protected_material import atomic_replace
 
 
 _MIGRATION_LOCK = RLock()

@@ -10,7 +10,7 @@ from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 from core.shared.browser_origin_tls_backoff import issuance_retry_at, record_issuance_failure, clear_issuance_backoff
 from core.shared.installation_material import certbot_root, certbot_directory_arguments, dns_credentials_root, certbot_executable, validate_certbot_executable
-from scripts.deploy.refresh_cloudflare_dns_credentials import refresh_credentials
+from core.installation.dns_credentials import refresh_credentials
 
 CA = "https://acme-v02.api.letsencrypt.org/directory"
 

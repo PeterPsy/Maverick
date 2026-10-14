@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import stat
+import tempfile
 
 
 def require_protected_parents(path: Path) -> None:
@@ -59,3 +60,18 @@ def create_recovery_backup(root: Path, kind: str, name: str) -> Path:
     backup = parent / name
     backup.mkdir(mode=0o700)
     return backup
+
+
+def atomic_replace(path: Path, data: bytes) -> None:
+    metadata = path.stat()
+    handle, temporary = tempfile.mkstemp(prefix=".wildcard-", dir=path.parent)
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, metadata.st_mode & 0o777)
+        os.chown(temporary, metadata.st_uid, metadata.st_gid)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)

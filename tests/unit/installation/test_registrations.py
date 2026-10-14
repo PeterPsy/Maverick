@@ -105,6 +105,7 @@ class InstallationRegistrationTests(unittest.TestCase):
     def test_service_ownership_is_narrow_and_secrets_are_private(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
+            (root / "data/app-artifacts").mkdir(parents=True, mode=0o750)
             config = replace(_make_config(root), service_user="loopino", service_group="loopino")
             key = root / config.secret_key_file
             config.install_env_path.write_text("KEY=value\n")
@@ -120,3 +121,18 @@ class InstallationRegistrationTests(unittest.TestCase):
             for value in ("core/key", "data/app-artifacts/key", ".toolchains/key", "../key"):
                 with self.subTest(value=value), self.assertRaises(ValueError):
                     provision_service_paths(replace(config, secret_key_file=value), {}, calls.append)
+
+    def test_fresh_install_initializes_only_the_designated_artifact_publisher_and_socket_parent(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            config = replace(_make_config(root), service_user="loopino", service_group="loopino")
+            config.install_env_path.write_text("KEY=value\n")
+            calls = []
+            provision_service_paths(config, {}, calls.append)
+            self.assertIn(["install", "-d", "-o", "loopino", "-g", "loopino", "-m", "0750",
+                           str(root / "data/app-artifacts")], calls)
+            self.assertIn(["install", "-d", "-o", "loopino", "-g", "loopino", "-m", "0700",
+                           str(root / "tmp")], calls)
+            self.assertIn(["install", "-d", "-o", "loopino", "-g", "loopino", "-m", "0700",
+                           str(root / "runtime")], calls)
+            self.assertFalse(any("-R" in command for command in calls))

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from core.apps.artifact_mounts import platform_artifact_store_root
 from core.installation.protected_material import prepare_host_logs, protect_service_environment
 from core.installation.privileged_context import prepare_privileged_context
 
@@ -14,7 +15,7 @@ def provision_service_paths(config, rendered_files: dict[Path, str], runner) -> 
         path = path if path.is_absolute() else root / path
         if not path.is_relative_to(root) or ".." in path.parts or any(p.is_symlink() for p in (path, *path.parents)):
             raise ValueError("Service material must use real paths within the installation")
-        mutable_roots = [root / name for name in ("data", "workspaces", "logs", ".cache", ".loopino/installation")]
+        mutable_roots = [root / name for name in ("data", "workspaces", "logs", "runtime", "tmp", ".cache", ".loopino/installation")]
         if not any(path.is_relative_to(base) for base in mutable_roots) or path.is_relative_to(root / "data/app-artifacts"):
             raise ValueError("Protected installation material cannot be handed to the service")
         return path
@@ -22,10 +23,14 @@ def provision_service_paths(config, rendered_files: dict[Path, str], runner) -> 
     protect_service_environment(config.install_env_path, config.service_group, runner)
     prepare_host_logs(root)
     prepare_privileged_context(root)
+    # Core publishes governed namespaces; never re-own existing immutable material.
+    artifact_store = platform_artifact_store_root(root)
+    if not artifact_store.exists():
+        runner(["install", "-d", "-o", config.service_user, "-g", config.service_group, "-m", "0750", str(artifact_store)])
     secret_root = owned_path(config.bootstrap_secret_store_root)
     key = owned_path(config.secret_key_file)
     directories = [
-        root / ".loopino/installation", root / "workspaces",
+        root / ".loopino/installation", root / "workspaces", root / "runtime", root / "tmp",
         root / "logs/platform", root / "logs/runtime", root / ".cache", root / ".cache/tmp",
         root / "data/service-home", root / "data/provider-auth", root / "data/provider-auth/codex",
         root / "data/provider-auth/antigravity", root / "data/runtime", secret_root, key.parent,

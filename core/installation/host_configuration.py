@@ -12,8 +12,8 @@ from core.installation.private_state import write_private
 from core.installation.protected_material import prepare_host_logs, require_root_environment_update
 from core.installation.registrations import installation_backing_path, registration_exists, register_file, unregister_file
 from core.shared.env_file import read_env_file, service_env_path
-from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
-from scripts.deploy.reload_nginx import check_nginx, reload_nginx
+from core.installation.protected_material import atomic_replace
+from core.installation.nginx_control import check_nginx, reload_nginx
 
 
 def render_nginx(host: str, certificates: dict, port: int, *, repository_root: Path) -> str:

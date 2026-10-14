@@ -8,14 +8,14 @@ import os
 from pathlib import Path
 import re
 import sys
-import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from core.shared.installer_tls import hosted_sidecar_tls_errors
 from core.shared.env_file import service_env_path
 from core.installation.protected_material import create_recovery_backup, prepare_host_logs, require_root_environment_update
-from scripts.deploy.reload_nginx import check_nginx, reload_nginx
+from core.installation.nginx_control import check_nginx, reload_nginx
+from core.installation.protected_material import atomic_replace
 
 
 def external_tls_environment(content: str) -> str:
@@ -36,21 +36,6 @@ def external_tls_environment(content: str) -> str:
             output[-1] += "\n"
         output.append("LOOPINO_BROWSER_ORIGIN_TLS_MODE=external_wildcard\n")
     return "".join(output)
-
-
-def atomic_replace(path: Path, data: bytes) -> None:
-    metadata = path.stat()
-    handle, temporary = tempfile.mkstemp(prefix=".wildcard-", dir=path.parent)
-    try:
-        with os.fdopen(handle, "wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.chmod(temporary, metadata.st_mode & 0o777)
-        os.chown(temporary, metadata.st_uid, metadata.st_gid)
-        os.replace(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
 
 
 def apply_transition(nginx_path: Path, env_path: Path, nginx_content: str, *, tester=check_nginx, reloader=reload_nginx) -> None:

@@ -5,7 +5,7 @@ import signal
 import tempfile
 import unittest
 
-from scripts.deploy.reload_nginx import reload_nginx, running_master
+from core.installation.nginx_control import reload_nginx, running_master
 
 
 class NginxReloadTests(unittest.TestCase):

@@ -62,9 +62,9 @@ For example, inspect `core.installation.plan` for its current schema, then suppl
 `address`, `target_ip`, and `dns_secret_ref`. `apply` accepts a `plan_id`, returns
 a durable `job_id` and is idempotent. `confirm` accepts only known `action_ids`.
 
-On a Linux systemd/Nginx host, install the Certbot Cloudflare plugin
-(`python3-certbot-dns-cloudflare`) and the system Python D-Bus package
-(`python3-dbus`). From the repository root, run:
+On a Linux systemd/Nginx host, install `.[installation]` into the protected
+installation `.venv` for Certbot and its Cloudflare plugin. The host system Python
+requires D-Bus (`python3-dbus`). From the repository root, run:
 
 ```sh
 sudo /usr/bin/python3 scripts/deploy/install_installation_worker.py
@@ -79,7 +79,7 @@ credential projections inside the ignored installation-owned TLS directory. Stat
 
 ```sh
 systemctl status loopino-installation.timer loopino-installation.service
-journalctl -u loopino-installation.service
+tail -n 50 installation/logs/systemd/installation-error.log
 systemctl stop loopino-installation.timer
 ```
 
@@ -159,6 +159,20 @@ this boundary before activation; typed address commits/restoration preserve
 ownership, mode and unrelated bytes. A service-owned environment is rejected,
 not adopted as trusted root startup configuration. Fresh root provisioning
 writes trusted settings before enabling either unit.
+
+Fresh provisioning creates the designated `data/app-artifacts` store at 0750 for
+the Core publisher only when absent. Existing artifact owners, immutable material
+and generation markers are never re-owned recursively; resolution retains the
+protected namespace/ancestor checks and sandbox mounts remain read-only. The
+separate private `tmp/` directory belongs to Core for its local control sockets;
+`runtime/` holds installation-local app service state such as Browser's Lab worker.
+Neither operation transfers source or toolchain ownership to the service account.
+
+Core owns the shared atomic configuration writer, verified Nginx master control
+and DNS credential projection in `core/installation`. Deployment scripts import
+these implementations as command entrypoints. Installed CLI/Core imports must
+work without the repository `scripts` namespace on Python's import path; neither
+operator `PYTHONPATH` nor a service-owned source directory supplies privileged code.
 
 Explicit stdout/stderr files for Core, rescue, watchdog and privileged workers
 live under `installation/logs/systemd`. Each owned main/sidecar vhost explicitly

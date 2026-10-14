@@ -55,7 +55,10 @@
       "OPTIONS"
     ],
     "retryable_http_statuses": [
+      408,
+      425,
       429,
+      500,
       502,
       503,
       504

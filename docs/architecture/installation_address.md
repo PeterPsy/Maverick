@@ -143,3 +143,12 @@ They cannot target source, tenant storage or another site's Certbot lineage.
 Browser exact-origin and External Apps use their separate installation-local
 `data/` TLS roots. The existing host's Giuntitrail Nginx defaults, TLS lineage,
 renewal, Docker services and Centrino services are outside this change.
+
+The installer and address worker share the public catalog ingress renderer.
+Only the main hostname serves the exact `/catalog/api/apps` JSON with
+revalidation and checksum-named `/catalog/artifacts/` bundles with immutable
+caching. Other catalog paths return 404; directory browsing and proxying to an
+upstream company's catalog are not enabled. Source templates are prepared in
+tranche 1; no live Nginx configuration is applied before deployment review.
+The hosted worker and CLI share `LOOPINO_SERVICE_ENV_FILE`, defaulting to the
+installation's `.env.loopino`; address commits never write a second env file.

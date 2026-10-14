@@ -578,6 +578,9 @@ def _replace_sidecar_diagnostics_file(
         if (
             (stale.st_dev, stale.st_ino) != (expected.st_dev, expected.st_ino)
             or stale.st_ctime_ns != expected.st_ctime_ns
+            or stale.st_mtime_ns != expected.st_mtime_ns
+            or stale.st_size != expected.st_size
+            or (stale.st_uid, stale.st_gid, stale.st_mode) != (expected.st_uid, expected.st_gid, expected.st_mode)
             or not stat.S_ISREG(stale.st_mode)
             or stale.st_nlink != 1
         ):
@@ -604,6 +607,7 @@ def _replace_sidecar_diagnostics_file(
         current = path.lstat()
         if (
             (current.st_dev, current.st_ino) != (stale.st_dev, stale.st_ino)
+            or (current.st_ctime_ns, current.st_mtime_ns, current.st_size) != (stale.st_ctime_ns, stale.st_mtime_ns, stale.st_size)
             or not stat.S_ISREG(current.st_mode)
             or current.st_nlink != 1
         ):

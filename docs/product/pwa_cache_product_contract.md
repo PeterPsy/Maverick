@@ -72,7 +72,7 @@ must not reveal expired data merely because transport is unavailable.
 - Logout, unmount, user/workspace change, and scope revision cancel pending
   attempts and prevent late results from updating the new scope.
 - `401`, `403`, `409`, and `422` are terminal for this classification; cleanup latency cannot rewrite a received authorization response as a transport timeout.
-- A `429` or selected `502`/`503`/`504` response is retryable only where an
+- A `408`, `425`, `429`, or selected `500`/`502`/`503`/`504` response is retryable only where an
   explicit resource policy permits it and honors `Retry-After` when present.
 
 ## Mutation contract

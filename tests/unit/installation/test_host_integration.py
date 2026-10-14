@@ -61,6 +61,7 @@ class HostIntegrationTests(unittest.TestCase):
             old_private, new_private = root / 'old-private', root / 'new-private'
             old_private.mkdir(); new_private.mkdir()
             with patch('core.installation.host_configuration.managed_nginx_path', side_effect=lambda service, host: root / (host + '.conf')), \
+                 patch('core.installation.host_configuration.managed_nginx_registration', side_effect=lambda service, host: root / 'os' / (host + '.conf')), \
                  patch('core.installation.host_configuration.check_nginx'), patch('core.installation.host_configuration.reload_nginx'):
                 stage_host(service, {'hostname': old}, certificates, old_private)
                 before = (root / (old + '.conf')).read_bytes()

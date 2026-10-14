@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from dataclasses import replace
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.api.provider_api import workspace_provider_status
 from core.api.runtime_api import _session_payload
@@ -30,7 +31,8 @@ from tests.support.collections import FakeCollection
 
 
 class AgenticProfileApiTest(unittest.TestCase):
-    def test_status_exposes_redaction_safe_per_session_profiles(self) -> None:
+    @patch("core.providers.provider_codex_research.codex_research_runtime_version", return_value="0.159.2")
+    def test_status_exposes_redaction_safe_per_session_profiles(self, _version) -> None:
         provider_store = ProviderDocumentStore(
             ProviderCollections(
                 definitions=FakeCollection(),

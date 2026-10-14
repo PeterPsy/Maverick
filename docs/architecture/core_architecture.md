@@ -3405,7 +3405,25 @@ lifecycle. Settings and Base Shell own UI; the Core remains headless.
 ## Loopino installation source and material boundaries
 
 The phase 1 installation root is `/projects/loopino`. Installation-owned app
-artifact namespaces default to `data/app-artifacts` below that root.
+artifact namespaces default to `data/app-artifacts` below that root. Resolution
+rejects symlink components throughout the real ancestor chain, including the app
+parent, and checks protected store/app parent ownership against the namespace
+marker before supplying a lexical bind path to Bubblewrap.
+
+Nginx and systemd backing files belong to `installation/nginx` and
+`installation/systemd`. OS integration directories contain only explicitly owned
+symlink registrations. Generic installation and the address/TLS worker share this
+layout; neither overwrites unrelated files or links. Failed staging restores the
+previous backing bytes and removes only newly created registrations. Address
+rendering retains the static `/catalog` distribution route and installation-owned
+HTTP-01 ACME webroots.
+
+Clean provisioning transfers only declared mutable service directories and
+generated private files to the dedicated service account: tenant workspaces,
+control-plane/runtime/log/cache state, service HOME, initially empty provider
+homes, and 0600 bootstrap secrets/key/environment. Source, immutable app artifacts
+and `.toolchains` remain protected; recursive installation-root ownership changes
+are forbidden. Actual non-root Bubblewrap/AppArmor checks remain deployment gates.
 `LOOPINO_APP_ARTIFACT_STORE_ROOT` accepts only that designated absolute path;
 no other repository subtree or symlink component, including `data`, is allowed.
 The same namespace identity, ownership, protection and read-only mount checks apply.

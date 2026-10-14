@@ -128,7 +128,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 state.provider_registry,
                 workspace_id="default",
                 provider_id="codex",
-                model_id="gpt-5.6-sol",
+                model_id="gpt-6.1-sol",
                 model_reasoning_effort="max",
             )
             app = PlatformHost(state, start_path=repo_root)
@@ -180,7 +180,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             self.assertEqual(session["source_app_id"], source_app_id)
             self.assertNotIn("device_use_binding", session)
             self.assertEqual(session["execution_binding"]["runtime_engine_id"], "codex")
-            self.assertEqual(session["execution_binding"]["model_id"], "gpt-5.6-sol")
+            self.assertEqual(session["execution_binding"]["model_id"], "gpt-6.1-sol")
             self.assertEqual(session["execution_binding"]["reasoning_effort"], "max")
             self.assertEqual(session["requested_mode"], "full-access")
             self.assertEqual(session["effective_mode"], "full-access")

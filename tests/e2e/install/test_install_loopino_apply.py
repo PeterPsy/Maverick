@@ -10,12 +10,12 @@ from unittest.mock import patch
 
 from core.shared.installer import (
     InstallerConfig,
-    _ensure_symlink,
     _write_file,
     apply_install_plan,
     render_install_plan,
     request_tls_certificate,
 )
+from core.installation.registrations import register_file
 from scripts.install_loopino import LIVE_APPLY_FAILED_EXIT_CODE, main as installer_main
 
 
@@ -70,7 +70,7 @@ class InstallerApplyTestCase(unittest.TestCase):
             output_root = temp_root / "install"
             config = InstallerConfig(
                 repository_root=repo_root,
-                install_root=repo_root,
+                install_root=temp_root,
                 output_root=output_root,
                 service_user="ubuntu",
                 service_group="ubuntu",
@@ -90,8 +90,8 @@ class InstallerApplyTestCase(unittest.TestCase):
                 live_nginx_conf_path=temp_root / "sites-available" / "loopino.example.test.conf",
                 live_nginx_enabled_path=temp_root / "sites-enabled" / "loopino.example.test.conf",
                 build_frontends=False,
-                secret_key_file=str(temp_root / "bootstrap-secrets" / "secret-store.key"),
-                bootstrap_secret_store_root=str(temp_root / "bootstrap-secrets"),
+                secret_key_file=str(temp_root / "data/bootstrap-secrets" / "secret-store.key"),
+                bootstrap_secret_store_root=str(temp_root / "data/bootstrap-secrets"),
             )
             rendered = render_install_plan(config)
             for path, content in rendered.items():
@@ -115,7 +115,7 @@ class InstallerApplyTestCase(unittest.TestCase):
             live_nginx_conf = temp_root / "sites-available" / "loopino.example.test.conf"
             config = InstallerConfig(
                 repository_root=repo_root,
-                install_root=repo_root,
+                install_root=temp_root,
                 output_root=output_root,
                 service_user="ubuntu",
                 service_group="ubuntu",
@@ -141,7 +141,7 @@ class InstallerApplyTestCase(unittest.TestCase):
             request_tls_certificate(config, run_command=commands.append)
 
             self.assertIn(
-                "ssl_certificate /projects/loopino/installation/tls/certbot/config/live/loopino.example.test/fullchain.pem;",
+                f"ssl_certificate {temp_root}/installation/tls/certbot/config/live/loopino.example.test/fullchain.pem;",
                 live_nginx_conf.read_text(encoding="utf-8"),
             )
             self.assertIn(["nginx", "-t"], commands)
@@ -159,13 +159,14 @@ class InstallerApplyTestCase(unittest.TestCase):
             self.assertEqual(commands[0][:4], ["install", "-D", "-m", "0644"])
             self.assertEqual(commands[0][-1], str(target))
 
-    def test_ensure_symlink_skips_when_link_and_target_are_same_path(self) -> None:
+    def test_registration_rejects_a_regular_file_even_if_named_as_the_target(self) -> None:
         with tempfile.TemporaryDirectory(prefix="loopino-install-") as temp_dir:
             target = Path(temp_dir) / "loopino.conf"
             target.write_text("nginx\n", encoding="utf-8")
             commands: list[list[str]] = []
 
-            _ensure_symlink(target, target, run_command=commands.append)
+            with self.assertRaises(FileExistsError):
+                register_file(target, target, run_command=commands.append)
 
             self.assertEqual(commands, [])
             self.assertFalse(target.is_symlink())

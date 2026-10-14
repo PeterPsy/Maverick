@@ -128,7 +128,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
             self.state = bootstrap_platform_state(start_path=root)
         profile = configure_workspace_agentic_default(
             self.state.provider_store, self.state.provider_registry, workspace_id="default",
-            provider_id="codex", model_id="gpt-5.6-sol", model_reasoning_effort="max",
+            provider_id="codex", model_id="gpt-6.1-sol", model_reasoning_effort="max",
         )
         self.app = PlatformHost(self.state, start_path=root)
         self.cookie = self._login(self.app)

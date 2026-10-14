@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -129,16 +130,16 @@ def main(argv=None) -> int:
         if not args.env_file.is_file():
             raise FileNotFoundError("Installation environment is missing")
         os.environ.update(read_env_file(args.env_file))
-        os.chdir(ROOT)
-        if args.inspect_zone:
-            result = inspect_zone(args.inspect_zone)
-        else:
-            from core.installation.validation import secret_ref
-            reference = secret_ref(args.secret_ref)
-            refresh_credentials(args.credentials, resolver=lambda: resolve_token(reference))
-            result = {"credentials": str(args.credentials), "secret_ref": reference}
-        print(json.dumps({"status": "ready", **result}))
-        return 0
+        with contextlib.chdir(ROOT):
+            if args.inspect_zone:
+                result = inspect_zone(args.inspect_zone)
+            else:
+                from core.installation.validation import secret_ref
+                reference = secret_ref(args.secret_ref)
+                refresh_credentials(args.credentials, resolver=lambda: resolve_token(reference))
+                result = {"credentials": str(args.credentials), "secret_ref": reference}
+            print(json.dumps({"status": "ready", **result}))
+            return 0
     except Exception as error:
         # Exception strings/tracebacks may contain credentials from dependencies.
         print(json.dumps({"status": "blocked", "error_type": type(error).__name__}))

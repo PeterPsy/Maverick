@@ -459,7 +459,7 @@ class ProviderApiTest(unittest.TestCase):
             method="POST",
             body={
                 "provider_id": "codex",
-                "model_id": "gpt-5.6-sol",
+                "model_id": "gpt-6.1-sol",
                 "model_reasoning_effort": "high",
             },
             state=state,
@@ -467,7 +467,7 @@ class ProviderApiTest(unittest.TestCase):
 
         self.assertEqual(status, "200 OK")
         self.assertEqual(payload["active_provider"]["provider_id"], "codex")
-        self.assertEqual(payload["model_settings"]["selected_model_id"], "gpt-5.6-sol")
+        self.assertEqual(payload["model_settings"]["selected_model_id"], "gpt-6.1-sol")
         self.assertIsNone(payload["model_settings"]["selected_reasoning_effort"])
         self.assertEqual(payload["model_settings"]["default_reasoning_effort"], "xhigh")
         self.assertIsNone(

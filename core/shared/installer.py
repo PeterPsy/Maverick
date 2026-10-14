@@ -17,6 +17,7 @@ from urllib import error, request
 
 from core.api.control_store import ControlStoreSettings, build_control_plane_collections
 from core.installation.host_units import render_service, TIMER
+from core.installation.catalog_ingress import render_catalog_locations
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
 from core.shared.env_file import quote_env_value, read_env_file, unquote_env_value
@@ -265,7 +266,9 @@ def _render_bootstrap_secret_files(config: InstallerConfig, *, key_text: str) ->
     existing = read_env_file(config.install_env_path)
     runtime_raw_value = existing.get("LOOPINO_RUNTIME_API_SECRET") or secrets.token_urlsafe(32)
     widget_raw_value = existing.get("LOOPINO_WIDGET_CONTEXT_SECRET") or secrets.token_urlsafe(32)
-    with tempfile.TemporaryDirectory(prefix="loopino-bootstrap-secrets-") as temp_dir:
+    temporary_root = config.install_root / ".cache/tmp"
+    temporary_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.TemporaryDirectory(dir=temporary_root, prefix="loopino-bootstrap-secrets-") as temp_dir:
         temp_root = Path(temp_dir)
         store = SecretDocumentStore(
             SecretCollections(
@@ -527,16 +530,45 @@ def apply_install_plan(
 ) -> None:
     """Apply the rendered install plan to live system paths."""
     runner = run_command or run_privileged_command
-    _write_tree(rendered_files, source_root=config.systemd_dir, destination_root=config.live_systemd_dir, run_command=runner)
+    from core.installation.registrations import installation_backing_path, registration_exists, register_file, unregister_file
+    from core.installation.provisioning import provision_service_paths
+    entries = []
+    for source, content in rendered_files.items():
+        if source.parent == config.systemd_dir:
+            backing = installation_backing_path(config.install_root, "systemd", source.name)
+            entries.append((config.live_systemd_dir / source.name, backing, content))
     if config.nginx_conf_path is not None and config.live_nginx_conf_path is not None:
         nginx_content = rendered_files.get(config.nginx_conf_path)
         if nginx_content is None and config.nginx_conf_path.is_file():
             nginx_content = config.nginx_conf_path.read_text(encoding="utf-8")
         if nginx_content is None:
             raise FileNotFoundError(f"Rendered nginx config missing at `{config.nginx_conf_path}`.")
-        _write_file(config.live_nginx_conf_path, nginx_content, run_command=runner)
+        backing = installation_backing_path(config.install_root, "nginx", config.nginx_conf_path.name)
+        entries.append((config.live_nginx_conf_path, backing, nginx_content))
         if config.live_nginx_enabled_path is not None:
-            _ensure_symlink(config.live_nginx_enabled_path, config.live_nginx_conf_path, run_command=runner)
+            entries.append((config.live_nginx_enabled_path, config.live_nginx_conf_path, None))
+    snapshots = [(link, target, registration_exists(link, target), target.read_text() if content is not None and target.exists() else None)
+                 for link, target, content in entries]
+    try:
+        for link, target, content in entries:
+            if content is not None:
+                _write_file(target, content, run_command=runner)
+            register_file(link, target, run_command=runner)
+        provision_service_paths(config, rendered_files, runner)
+        _activate_installation(config, runner)
+    except BaseException:
+        for (link, target, existed, previous), (_, _, content) in reversed(list(zip(snapshots, entries))):
+            if not existed:
+                unregister_file(link, target, run_command=runner)
+            if content is not None:
+                if previous is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    _write_file(target, previous, run_command=runner)
+        raise
+
+
+def _activate_installation(config: InstallerConfig, runner) -> None:
     if config.acme_root is not None:
         runner(["mkdir", "-p", str(config.acme_root)])
     runner(["install", "-d", "-o", config.service_user, "-g", config.service_group, "-m", "0700",
@@ -576,9 +608,12 @@ def request_tls_certificate(config: InstallerConfig, *, run_command: Any = None)
         prepare_managed_browser_origin_tls(config, run_command=runner)
         runner(managed_browser_origin_probe_command(config))
     if config.live_nginx_conf_path is not None:
-        _write_file(config.live_nginx_conf_path, render_nginx_config(config, force_https=True), run_command=runner)
+        from core.installation.registrations import installation_backing_path, register_file
+        backing = installation_backing_path(config.install_root, "nginx", config.nginx_conf_path.name)
+        _write_file(backing, render_nginx_config(config, force_https=True), run_command=runner)
+        register_file(config.live_nginx_conf_path, backing, run_command=runner)
         if config.live_nginx_enabled_path is not None:
-            _ensure_symlink(config.live_nginx_enabled_path, config.live_nginx_conf_path, run_command=runner)
+            register_file(config.live_nginx_enabled_path, config.live_nginx_conf_path, run_command=runner)
     runner(["nginx", "-t"])
     runner(["systemctl", "reload", "nginx"])
 
@@ -683,7 +718,7 @@ def check_health(
 
 def default_output_root(repository_root: Path) -> Path:
     """Return the default installer output root inside the repository."""
-    return repository_root / ".loopino" / "install"
+    return repository_root / "installation"
 
 
 def default_systemd_dir(output_root: Path) -> Path:
@@ -758,6 +793,7 @@ def _template_substitutions(config: InstallerConfig) -> dict[str, str]:
         .removeprefix("https://")
         .removesuffix("/"),
         "{{ENV_FILE}}": str(config.install_env_path),
+        "{{CATALOG_LOCATIONS}}": render_catalog_locations(config.install_root),
     }
 
 
@@ -808,50 +844,24 @@ def run_privileged_command(command: list[str]) -> None:
     subprocess.run(["sudo", *command], check=True)
 
 
-def _write_tree(files: dict[Path, str], *, source_root: Path, destination_root: Path, run_command: Any = None) -> None:
-    for source_path, content in files.items():
-        if not _is_relative_to(source_path, source_root):
-            continue
-        target_path = destination_root / source_path.relative_to(source_root)
-        _write_file(target_path, content, run_command=run_command)
-
-
 def _write_file(path: Path, content: str, *, run_command: Any = None, mode: str = "0644") -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+        path.chmod(int(mode, 8))
     except PermissionError:
         runner = run_command or run_privileged_command
         temporary_path: Path | None = None
         try:
-            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            temporary_root = installation_paths().repository_root / ".cache/tmp"
+            temporary_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            with tempfile.NamedTemporaryFile("w", dir=temporary_root, encoding="utf-8", delete=False) as handle:
                 temporary_path = Path(handle.name)
                 handle.write(content)
             runner(["install", "-D", "-m", mode, str(temporary_path), str(path)])
         finally:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
-
-
-def _ensure_symlink(link_path: Path, target_path: Path, *, run_command: Any = None) -> None:
-    if _same_path(link_path, target_path):
-        return
-    try:
-        link_path.parent.mkdir(parents=True, exist_ok=True)
-        if link_path.is_symlink() or link_path.exists():
-            link_path.unlink()
-        link_path.symlink_to(target_path)
-    except PermissionError:
-        runner = run_command or run_privileged_command
-        runner(["mkdir", "-p", str(link_path.parent)])
-        runner(["ln", "-sfn", str(target_path), str(link_path)])
-
-
-def _same_path(left: Path, right: Path) -> bool:
-    try:
-        return left.resolve(strict=False) == right.resolve(strict=False)
-    except OSError:
-        return str(left) == str(right)
 
 
 def _url_is_healthy(url: str, *, timeout_seconds: float) -> bool:

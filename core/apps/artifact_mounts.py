@@ -40,6 +40,8 @@ def platform_artifact_store_root(repository_root: Path) -> Path:
     if candidate != designated or any(path.is_symlink() for path in (candidate, *candidate.parents)):
         raise AppHostingError("The platform app-artifact store must use the designated installation data/app-artifacts path without symlinks.")
     resolved = candidate.resolve(strict=False)
+    if designated.parent.exists():
+        _real_protected_directory(designated.parent, label="app-artifact data ancestor")
     return resolved
 
 
@@ -68,7 +70,7 @@ def create_artifact_namespace(
             "owner_gid": os.getegid(),
         }
         _write_new_marker(marker_path, payload)
-    _validate_namespace(namespace, app_id=app_id, artifact_id=artifact_id)
+    _validate_namespace(namespace, store_root=store_root, app_id=app_id, artifact_id=artifact_id)
     return namespace
 
 
@@ -92,6 +94,7 @@ def resolve_artifact_mounts(
         namespace = store / app_id / declaration.artifact_id
         marker = _validate_namespace(
             namespace,
+            store_root=store,
             app_id=app_id,
             artifact_id=declaration.artifact_id,
         )
@@ -111,7 +114,13 @@ def _validate_namespace_ids(*, app_id: str, artifact_id: str) -> None:
         raise AppHostingError("App artifact namespace ids must be canonical lowercase ids.")
 
 
-def _validate_namespace(namespace: Path, *, app_id: str, artifact_id: str) -> dict[str, object]:
+def _validate_namespace(namespace: Path, *, store_root: Path, app_id: str, artifact_id: str) -> dict[str, object]:
+    if namespace != store_root / app_id / artifact_id or any(
+        path.is_symlink() for path in (namespace, *namespace.parents)
+    ):
+        raise AppHostingError("The app artifact namespace must have a real ancestor chain in the designated store.")
+    store = _real_protected_directory(store_root, label="platform app-artifact store")
+    app_root = _real_protected_directory(store / app_id, label="app artifact parent")
     root = _real_protected_directory(namespace, label="app artifact namespace")
     marker_path = root / ARTIFACT_NAMESPACE_MARKER
     try:
@@ -144,6 +153,10 @@ def _validate_namespace(namespace: Path, *, app_id: str, artifact_id: str) -> di
         or marker_metadata.st_gid != payload["owner_gid"]
         or root_metadata.st_uid != payload["owner_uid"]
         or root_metadata.st_gid != payload["owner_gid"]
+        or any(
+            parent.stat().st_uid != payload["owner_uid"] or parent.stat().st_gid != payload["owner_gid"]
+            for parent in (store, app_root)
+        )
         or marker_metadata.st_mode & 0o022
         or root_metadata.st_mode & 0o022
     ):

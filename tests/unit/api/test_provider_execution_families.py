@@ -48,7 +48,8 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             workspace_store=SimpleNamespace(get_governance=lambda _workspace_id: None),
         )
 
-    def test_catalog_and_codex_use_the_exact_native_family(self) -> None:
+    @patch("core.providers.provider_codex_research.codex_research_runtime_version", return_value="0.159.2")
+    def test_catalog_and_codex_use_the_exact_native_family(self, _version) -> None:
         state = self.make_state()
         payload = workspace_provider_status(state, workspace_id="default")
 
@@ -86,7 +87,8 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertTrue(admin["enable_eligible"])
         self.assertIsNone(admin["enable_blocked_reason"])
 
-    def test_new_codex_catalog_model_inherits_direct_runtime_profile(self) -> None:
+    @patch("core.providers.provider_codex_research.codex_research_runtime_version", return_value="0.159.2")
+    def test_new_codex_catalog_model_inherits_direct_runtime_profile(self, _version) -> None:
         state = self.make_state()
         codex = state.provider_registry.get_provider_definition("codex")
         astra = replace(

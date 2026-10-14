@@ -60,8 +60,10 @@ class CloudflareCredentialsTests(unittest.TestCase):
             env = Path(folder, "installation.env")
             env.write_text("")
             output = io.StringIO()
+            previous_cwd = Path.cwd()
             with patch.object(credentials.os, "geteuid", return_value=0), patch.object(credentials, "refresh_credentials", side_effect=RuntimeError("secret-token-value")), contextlib.redirect_stdout(output):
                 result = credentials.main(["--env-file", str(env)])
+            self.assertEqual(Path.cwd(), previous_cwd)
             self.assertEqual(result, 1)
             self.assertEqual(json.loads(output.getvalue()), {"status": "blocked", "error_type": "RuntimeError"})
 

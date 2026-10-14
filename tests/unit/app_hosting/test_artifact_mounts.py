@@ -102,6 +102,35 @@ class SidecarArtifactMountTests(unittest.TestCase):
                     create_artifact_namespace(repository_root=root, app_id=app_id, artifact_id=artifact_id)
             self.assertFalse((root / "data/app-artifacts").exists())
 
+    def test_resolve_rejects_replaced_app_parent_even_with_valid_namespace_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = self._repository(Path(temp_dir))
+            with patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": ""}):
+                namespace = create_artifact_namespace(
+                    repository_root=root, app_id="design-studio", artifact_id="opendesign",
+                )
+                moved = Path(temp_dir) / "moved-app"
+                namespace.parent.rename(moved)
+                namespace.parent.symlink_to(moved, target_is_directory=True)
+                with self.assertRaisesRegex(AppHostingError, "real ancestor chain"):
+                    resolve_artifact_mounts(
+                        repository_root=root, app_id="design-studio",
+                        declarations=[build_http_sidecar_artifact_mount(artifact_id="opendesign")],
+                    )
+
+    def test_resolve_rejects_writable_app_parent_or_data_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = self._repository(Path(temp_dir))
+            with patch.dict(os.environ, {"LOOPINO_APP_ARTIFACT_STORE_ROOT": ""}):
+                namespace = create_artifact_namespace(repository_root=root, app_id="design-studio", artifact_id="opendesign")
+                for parent in (namespace.parent, root / "data"):
+                    before = parent.stat().st_mode & 0o777
+                    parent.chmod(0o770)
+                    with self.subTest(parent=parent.name), self.assertRaisesRegex(AppHostingError, "protected"):
+                        resolve_artifact_mounts(repository_root=root, app_id="design-studio",
+                                                declarations=[build_http_sidecar_artifact_mount(artifact_id="opendesign")])
+                    parent.chmod(before)
+
     @staticmethod
     def _repository(parent: Path) -> Path:
         root = parent / "loopino"

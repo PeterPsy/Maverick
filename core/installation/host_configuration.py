@@ -5,22 +5,26 @@ from hashlib import sha256
 from pathlib import Path
 
 from core.installation.environment import ADDRESS_KEYS, address_environment, target_environment
+from core.installation.catalog_ingress import render_catalog_locations
 from core.installation.errors import InstallationError
 from core.installation.validation import record_id, hostname
 from core.installation.private_state import write_private
+from core.installation.registrations import installation_backing_path, registration_exists, register_file, unregister_file
 from core.shared.env_file import read_env_file, service_env_path
 from scripts.deploy.activate_browser_origin_wildcard import atomic_replace
 from scripts.deploy.reload_nginx import check_nginx, reload_nginx
 
 
-def render_nginx(host: str, certificates: dict, port: int) -> str:
+def render_nginx(host: str, certificates: dict, port: int, *, repository_root: Path) -> str:
     blocks = []
     for kind, name in [("main", host), ("apps", "*.sidecars." + host)]:
         pair = certificates[kind]
+        acme_root = repository_root / "data" / ("acme-webroot" if kind == "main" else "browser-origin-acme")
         blocks.append(f'''server {{
     listen 80;
     listen [::]:80;
     server_name {name};
+    location ^~ /.well-known/acme-challenge/ {{ root {acme_root}; }}
     location / {{ return 301 https://$host$request_uri; }}
 }}
 server {{
@@ -32,6 +36,7 @@ server {{
     ssl_protocols TLSv1.2 TLSv1.3;
     client_max_body_size 40m;
     add_header Strict-Transport-Security "max-age=31536000" always;
+{render_catalog_locations(repository_root) if kind == 'main' else ''}
     location / {{
         proxy_pass http://127.0.0.1:{port};
         proxy_hide_header X-Frame-Options;
@@ -52,7 +57,11 @@ server {{
 def managed_nginx_path(service, host: str) -> Path:
     identifier = record_id(service.configuration()["installation_id"])
     suffix = sha256(hostname(host).encode()).hexdigest()[:16]
-    return Path(f"/etc/nginx/conf.d/loopino-installation-{identifier}-{suffix}.conf")
+    return installation_backing_path(service.store.repository_root, "nginx", f"loopino-installation-{identifier}-{suffix}.conf")
+
+
+def managed_nginx_registration(service, host: str) -> Path:
+    return Path("/etc/nginx/conf.d") / managed_nginx_path(service, host).name
 
 
 def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
@@ -61,22 +70,30 @@ def stage_host(service, plan: dict, certificates: dict, private: Path) -> dict:
     if identifier == "uninitialized":
         raise InstallationError("installation_worker_not_initialized", status=409)
     path = managed_nginx_path(service, plan["hostname"])
+    registration = managed_nginx_registration(service, plan["hostname"])
+    registered = registration_exists(registration, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     backup = private / "nginx-before"
     existed = path.exists()
+    previous = path.read_bytes() if existed else b""
     if not (private / "nginx-backup.json").exists():
-        backup.write_bytes(path.read_bytes() if existed else b"")
+        backup.write_bytes(previous)
         backup.chmod(0o600)
-        write_private(private / "nginx-backup.json", {"existed": existed, "hostname": plan["hostname"]})
-    content = render_nginx(plan["hostname"], certificates, int(service.environment.get("LOOPINO_PORT", "8014")))
+        write_private(private / "nginx-backup.json", {"existed": existed, "registered": registered, "hostname": plan["hostname"]})
+    content = render_nginx(plan["hostname"], certificates, int(service.environment.get("LOOPINO_PORT", "8014")), repository_root=service.store.repository_root)
     if not path.exists():
         path.touch(mode=0o644)
     try:
         atomic_replace(path, content.encode())
+        register_file(registration, path)
         check_nginx()
         reload_nginx()
     except BaseException:
+        registration_exists(registration, path)
+        if not registered:
+            unregister_file(registration, path)
         if existed:
-            atomic_replace(path, backup.read_bytes())
+            atomic_replace(path, previous)
         else:
             path.unlink(missing_ok=True)
         reload_nginx()
@@ -103,10 +120,16 @@ def restore_host(service, private: Path) -> None:
     if metadata.exists():
         snapshot = json.loads(metadata.read_text())
         path = managed_nginx_path(service, snapshot["hostname"])
+        registration = managed_nginx_registration(service, snapshot["hostname"])
+        registration_exists(registration, path)
         if snapshot["existed"]:
             atomic_replace(path, (private / "nginx-before").read_bytes())
         else:
             path.unlink(missing_ok=True)
+        if snapshot["registered"]:
+            register_file(registration, path)
+        else:
+            unregister_file(registration, path)
         check_nginx()
         reload_nginx()
     snapshot = private / "environment-before.json"

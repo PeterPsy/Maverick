@@ -2218,3 +2218,14 @@ The target Loopino architecture should be:
 This is the model that best matches the product expectation:
 
 each workspace is a private operating environment where the agent can work freely, but only inside that workspace.
+
+
+## Traversal-only installation ancestors
+
+A workspace may live beneath private installation ancestors that grant the
+service account search/traversal permission without directory-list permission.
+Descriptor-backed filesystem pinning uses no-follow path descriptors for those
+ancestors on Linux and opens only the final workspace with read authority.
+The final root must remain a real readable directory; symlink rejection and
+inode/location checks remain mandatory. Supporting this layout must not make
+`/root` or sibling projects readable to the service account.

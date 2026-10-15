@@ -1205,12 +1205,15 @@ class ConfinedWorkspaceFilesystem:
             raise
 
     def _open_configured_root(self) -> int:
-        current = os.open("/", os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC)
+        components = self.workspace_root.parts[1:]
+        read_flags = os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC
+        traverse_flags = getattr(os, "O_PATH", os.O_RDONLY) | _DIRECTORY | _NOFOLLOW | _CLOEXEC
+        current = os.open("/", traverse_flags if components else read_flags)
         try:
-            for component in self.workspace_root.parts[1:]:
+            for index, component in enumerate(components):
                 next_fd = os.open(
                     component,
-                    os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC,
+                    read_flags if index == len(components) - 1 else traverse_flags,
                     dir_fd=current,
                 )
                 os.close(current)

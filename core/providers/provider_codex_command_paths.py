@@ -246,18 +246,18 @@ class CodexCommandPathMixin:
         package_root = resolved.parent.parent if resolved.name == "codex.js" and resolved.parent.name == "bin" else None
         if package_root is None or package_root.name != "codex":
             return None
-        vendor_root = package_root / "node_modules" / "@openai"
-        if not vendor_root.exists():
-            return None
-        candidates = sorted(
-            [
+        vendor_roots = (
+            package_root / "node_modules" / "@openai",
+            package_root.parent,
+        )
+        for vendor_root in vendor_roots:
+            candidates = sorted([
                 *vendor_root.glob("codex-linux-*/vendor/*/codex/codex"),
                 *vendor_root.glob("codex-linux-*/vendor/*/bin/codex"),
-            ]
-        )
-        for candidate in candidates:
-            if candidate.is_file():
-                return candidate.resolve(strict=False)
+            ])
+            for candidate in candidates:
+                if candidate.is_file():
+                    return candidate.resolve(strict=False)
         return None
 
 

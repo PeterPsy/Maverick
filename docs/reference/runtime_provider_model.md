@@ -55,6 +55,11 @@ authorization, not model certification or availability state.
 
 ## Codex
 
+Codex's npm launcher may resolve its platform package from a nested dependency
+or a sibling hoisted under the same `@openai` scope. Core follows that dependency
+precedence and mounts the resolved native executable for sandbox startup; the
+JavaScript shim alone is not an executable sandbox dependency.
+
 Codex is a `native_agent` using `codex-app-server`. Its current model and
 reasoning catalog is discovered from the installed runtime. Each model has one
 stable direct config. A successful refresh updates discovery; a failed refresh

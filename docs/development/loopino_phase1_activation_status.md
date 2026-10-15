@@ -30,9 +30,12 @@ Codex 0.162.1 remains the default with `gpt-6.1-sol`. Antigravity 1.3.4 is insta
 at the protected `.toolchains/bin/agy`, matching the reviewed SHA-256
 `5b93565c5f04ea4f7b79d49d5c3237449bf6ce47b6779e8cf46c1fae97957c98`.
 The pre-existing root CLI remains unchanged. Its authenticated catalog exposed
-Gemini 3.8 Flash, Claude Sonnet 4.6, Claude Opus 4.6 Thinking and GPT OSS 120B;
-all four have enabled non-default workspace bindings. The two documented
-Antigravity runtime switches are enabled; no fake-data declaration was issued.
+Gemini 3.8 Flash, Claude Sonnet 4.6, Claude Opus 4.6 Thinking and GPT OSS 120B.
+All four were registered during activation. The final workspace selection keeps
+Gemini enabled; the other three were explicitly disabled afterward and those
+choices survived the verification restart. Codex remains the default. The two
+documented Antigravity runtime switches are enabled; no fake-data declaration
+was issued.
 
 Both engines completed an exact-response sandbox turn and a full-access turn
 that called the official read-only `developer-context.list` CLI. Codex's CLI

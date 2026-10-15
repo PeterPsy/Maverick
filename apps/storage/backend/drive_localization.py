@@ -319,6 +319,8 @@ def stream_url_for_localization(*, app_id: str, file_record: dict[str, Any], loc
         "source_version": _source_version(file_record),
         "_app_secret_request": json.dumps(_drive_media_secret_request(file_record), separators=(",", ":"), sort_keys=True),
     }
+    if not download and file_record.get("preview_kind") == "video":
+        query["preview"] = "browser"
     if download:
         query["download"] = "1"
     return f"/api/apps/{quote(app_id or 'storage', safe='')}/media?{urlencode(query)}"

@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 from base64 import b64encode
-from contextlib import contextmanager
-import fcntl
 import hashlib
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from time import monotonic, sleep
 from urllib.parse import urlencode
 from uuid import uuid4
 
 from errors import StorageValidationError
+from preview_conversion import cache_lock, conversion_slot
 from store import file_record
 
 
@@ -27,41 +25,6 @@ MAX_RENDER_CACHE_BYTES = 300 * 1024 * 1024
 
 def _preview_cache_root(data_root: Path) -> Path:
     return data_root / "rendered_previews"
-
-
-@contextmanager
-def _cache_lock(cache_path: Path):
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = cache_path.with_suffix(cache_path.suffix + ".lock")
-    with lock_path.open("a+") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-@contextmanager
-def _conversion_slot(cache_root: Path):
-    """Bound expensive conversion processes across all Storage frames and workers."""
-    deadline = monotonic() + RENDER_TIMEOUT_SECONDS
-    while True:
-        for index in range(2):
-            handle = (cache_root / f'.converter-{index}.lock').open('a+')
-            try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                handle.close()
-                continue
-            try:
-                yield
-            finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-                handle.close()
-            return
-        if monotonic() >= deadline:
-            raise StorageValidationError('Preview conversion is busy; retry shortly.')
-        sleep(.05)
 
 
 def _preview_cache_key(path: Path, record: dict) -> str:
@@ -131,14 +94,14 @@ def _ensure_cached_conversion(source: Path, cache_path: Path, *, output_extensio
     cache_hit = cache_path.is_file()
     if cache_hit:
         return True
-    with _cache_lock(cache_path):
+    with cache_lock(cache_path):
         if cache_path.is_file():
             return True
         temporary = cache_path.with_name(f'.{cache_path.stem}-{uuid4().hex}.{output_extension}')
         before = source.stat()
         signature = lambda value: (value.st_size, value.st_mtime_ns, value.st_ctime_ns, value.st_dev, value.st_ino)
         try:
-            with _conversion_slot(cache_path.parent):
+            with conversion_slot(cache_path.parent, timeout=RENDER_TIMEOUT_SECONDS, slots=2):
                 if output_extension == "pdf":
                     _convert_to_pdf(source, temporary)
                 else:

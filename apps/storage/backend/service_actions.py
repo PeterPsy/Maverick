@@ -1214,7 +1214,7 @@ def _media_stream_payload(
                 expected_fields=["_app_secrets"],
             )
         request_headers = body.get("_request_headers") if isinstance(body.get("_request_headers"), dict) else {}
-        return drive_media_stream_response(
+        result = drive_media_stream_response(
             data_root=data_root,
             file_record=record,
             app_id=str(body.get("_app_id") or "storage"),
@@ -1227,6 +1227,12 @@ def _media_stream_payload(
             request_method=request_method,
             streaming_response_supported=streaming_response_supported,
         )
+        if body.get("preview") == "browser" and not download and record.get("preview_kind") == "video":
+            if result.get("localization", {}).get("status") != "ready" or "file_response" not in result:
+                raise StorageValidationError("Localize the Drive video before requesting browser playback.")
+            from video_preview import browser_video_response
+            result["file_response"] = browser_video_response(data_root=data_root, file_response=result["file_response"])
+        return result
     role = str(record.get("role") or "")
     relative_path = str(record.get("relative_path") or "")
     root = uploaded_root.resolve() if role == "uploaded" else generated_root.resolve()
@@ -1250,11 +1256,11 @@ def _media_stream_payload(
                 expected_fields=["stable_storage_file_id", "source_version"],
             )
     preview = str(body.get("preview") or "")
-    if preview:
+    if preview and preview != "browser":
         if preview not in {"rendered", "thumbnail"}:
             raise StorageValidationError("Unknown preview format.", operation="file.media_stream")
         return rendered_media_payload(path=path, root=root, role=role, data_root=data_root, body=body)
-    return {
+    result = {
         "file": record,
         "file_response": {
             "path": str(path),
@@ -1265,6 +1271,10 @@ def _media_stream_payload(
             "cache_control": "private, max-age=60",
         },
     }
+    if preview == "browser" and not download and record.get("preview_kind") == "video":
+        from video_preview import browser_video_response
+        result["file_response"] = browser_video_response(data_root=data_root, file_response=result["file_response"])
+    return result
 
 
 def stream_media_response_body(

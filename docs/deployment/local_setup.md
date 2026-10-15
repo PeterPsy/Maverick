@@ -327,3 +327,11 @@ Use the checked-in wrapper for machine-readable discovery:
 Bootstrap and runtime create the installation-local directory layout for workspace-owned data. Runtime, app data, and local bootstrap state must not be committed.
 
 Use fake local data until the production persistence and secret-storage hardening work is complete.
+
+
+Automated/local development defaults require the explicit
+`LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS=1` switch. Their deterministic password is
+`loopino-test`, which satisfies the same eight-character minimum as normal
+password creation and recovery. The test runner and shared test environment
+use that value. Production installation uses the administrator password chosen
+during provisioning and does not enable these defaults.

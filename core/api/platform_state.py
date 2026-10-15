@@ -337,7 +337,7 @@ def _bootstrap_admin_credentials() -> tuple[str, str | None]:
     if username:
         return username, password
     if _allows_insecure_test_defaults():
-        return username or "admin", password or "loopino"
+        return username or "admin", password or "loopino-test"
     raise RuntimeError("LOOPINO_ADMIN_USERNAME is required.")
 
 

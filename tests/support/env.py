@@ -14,6 +14,6 @@ def apply_test_environment_defaults() -> None:
 
     os.environ.setdefault("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS", "1")
     os.environ.setdefault("LOOPINO_ADMIN_USERNAME", "admin")
-    os.environ.setdefault("LOOPINO_ADMIN_PASSWORD", "loopino")
+    os.environ.setdefault("LOOPINO_ADMIN_PASSWORD", "loopino-test")
     os.environ.setdefault("LOOPINO_RUNTIME_API_SECRET", "loopino-test-runtime-api-secret")
     os.environ.setdefault("LOOPINO_SECRET_STORE_KEY", "loopino-test-secret-store-key")

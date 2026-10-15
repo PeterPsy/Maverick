@@ -395,7 +395,7 @@ def _run_subprocess(
     env = os.environ.copy()
     env.setdefault("LOOPINO_ALLOW_INSECURE_TEST_DEFAULTS", "1")
     env.setdefault("LOOPINO_ADMIN_USERNAME", "admin")
-    env.setdefault("LOOPINO_ADMIN_PASSWORD", "loopino")
+    env.setdefault("LOOPINO_ADMIN_PASSWORD", "loopino-test")
     env.setdefault("LOOPINO_RUNTIME_API_SECRET", "loopino-test-runtime-api-secret")
     env.setdefault("LOOPINO_SECRET_STORE_KEY", "loopino-test-secret-store-key")
     env["LOOPINO_TEST_LEVEL"] = level

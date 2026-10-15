@@ -125,6 +125,7 @@ fieldset {
 }
 
 .vault-shell {
+  --vault-page-padding: 14px;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 14px;
@@ -132,7 +133,8 @@ fieldset {
   height: 100dvh;
   min-height: 0;
   margin: 0 auto;
-  padding: 14px;
+  padding: var(--vault-page-padding);
+  padding-top: calc(var(--vault-page-padding) + var(--loopino-shell-mobile-content-top-offset, 0px));
   overflow: hidden;
 }
 
@@ -753,7 +755,7 @@ tr:last-child td,
 
 @media (max-width: 560px) {
   .vault-shell {
-    padding: 10px;
+    --vault-page-padding: 10px;
   }
 
   .vault-stats {

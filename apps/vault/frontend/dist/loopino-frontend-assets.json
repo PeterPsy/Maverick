@@ -1,5 +1,5 @@
 {
-  "build_id": "4080acd8ec979e2f2930a99e95794c0c5b8c7cd889bbbba9ddad2a71b8390c07",
+  "build_id": "f6de5c22e8c5f16cbeb191b1152b35862343c2e7c47260a801d2fabd728384c9",
   "entrypoints": [
     "index.html",
     "widgets/vault-sidebar/index.html",
@@ -8,14 +8,14 @@
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/app-Bh37nTM6.css",
-      "sha256": "e963071a25bd555f8036f3a1509465e42d7fa67c62c6d798514b0681dc5018b7",
-      "size_bytes": 12071
-    },
-    {
-      "path": "assets/app-Dp8CR_QA.js",
+      "path": "assets/app-Bl8rad0Z.js",
       "sha256": "c056de7587dc6ffcc941fc276388ea541de4bc17d9cd79eeb724bd4717f6f51a",
       "size_bytes": 22216
+    },
+    {
+      "path": "assets/app-Cz-NL99G.css",
+      "sha256": "4ce2506b9db538e9a3b7384007c3baf49637207c86df4cfa1a7e7128456dca1c",
+      "size_bytes": 12231
     },
     {
       "path": "assets/download-DExHHmX6.js",
@@ -44,7 +44,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "8f8f7ceef1acd44f8322f1c572e66b49b4736afeaa13d3a13d8192866f3c72cb",
+      "sha256": "cca3b77f8439cbce9a1e10b9fe419a1a17bdb1468b439f9158c1951ff6fac86b",
       "size_bytes": 594
     },
     {

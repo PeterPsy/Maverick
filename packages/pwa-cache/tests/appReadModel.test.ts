@@ -27,6 +27,18 @@ it('issues only the fixed Calendar read action', () => {
   expect(() => describeReadModelRequest({ ...request, parameters: { kind: 'delete' } })).toThrow();
 });
 
+it('reads Website Studio snapshots without requesting GitHub credentials', () => {
+  const result = describeReadModelRequest({
+    appId: 'website-studio', resource: 'site-snapshots',
+    parameters: { route: '/' }
+  });
+  expect(result.endpoint).toBe('/api/apps/website-studio/backend');
+  expect(JSON.parse(result.body!)).toEqual({
+    route: '/', action: 'workspace_snapshot',
+    _app_secret_request: { logical_names: [], required: false }
+  });
+});
+
 it('issues pin discovery only as the non-mutating action, never list/repair or set', () => {
   const executor = createReadModelRequestExecutor({ appId: 'app-store', resource: 'pinned-apps' });
   expect(executor.endpoint).toBe('/api/apps/app-store/backend');

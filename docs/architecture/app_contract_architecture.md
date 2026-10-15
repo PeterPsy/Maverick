@@ -3333,6 +3333,10 @@ older writers; explicit cleanup retains the database-wide durable epoch,
 including RAM-to-IndexedDB recovery across distinct documents. SDK-owned
 `pwa.read_model` POSTs always inject an empty, optional app-secret selector:
 a display request must not initiate credential resolution or OAuth prompting.
+Website Studio's reviewed `workspace_snapshot` reader also sends an empty,
+optional app-secret selector. Opening an empty workspace or reading its display
+snapshot must succeed without a GitHub connection; Git import/sync/publish keep
+their own explicit secret grants and approval contracts.
 
 ## Installation public endpoint dependencies
 

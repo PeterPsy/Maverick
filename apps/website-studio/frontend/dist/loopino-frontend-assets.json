@@ -1,5 +1,5 @@
 {
-  "build_id": "cf59430161eee551a684b59fd032059aaadaabf5a89de4803aceb7b375a65dfc",
+  "build_id": "b7c78c5704f157f5b58b375407efc64941b7171a801429e21df6372e425dd8e9",
   "entrypoints": [
     "index.html",
     "preview-runtime/index.html",
@@ -9,9 +9,9 @@
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/api-DbsvDtPb.js",
-      "sha256": "2d50d606cfa4cc7d56aecb5b526205a4d0fbd475a1a7427ded7db6451c7e5e35",
-      "size_bytes": 223656
+      "path": "assets/api-ByyLLhBP.js",
+      "sha256": "389d2a9a97bc5e8e54adf7d8c2992546070d5c92a3363d3bc21e8c28f3cdc3cd",
+      "size_bytes": 223684
     },
     {
       "path": "assets/app-BbOhO3m0.css",
@@ -19,8 +19,8 @@
       "size_bytes": 9530
     },
     {
-      "path": "assets/app-ChNYpRlr.js",
-      "sha256": "5c18355ccdc1ebb3cf8d82a8dba57f2347a28dc1013f1252f2eaab6e310303ee",
+      "path": "assets/app-gWv6tC_r.js",
+      "sha256": "6df6c7ad9aba0dc67a09ff4faa1cb44574dab587ecde5315311ca46b3d2bc9aa",
       "size_bytes": 15894
     },
     {
@@ -29,13 +29,13 @@
       "size_bytes": 7055
     },
     {
-      "path": "assets/widgets/website-studio-sitemap-sidebar/index-Cr8TdJqK.js",
-      "sha256": "455c9c02649c022a80d4f02a1df197b1b93207292a1d535e9eff9c062babf810",
+      "path": "assets/widgets/website-studio-sitemap-sidebar/index-Byo2PoOU.js",
+      "sha256": "feca7d26a63165f60728d4e395b689aae2f9f83e5999b0a567cd8c07403c44de",
       "size_bytes": 43691
     },
     {
       "path": "index.html",
-      "sha256": "9d2d601ed1474f2ace8e0de4171f47fc4eb2cca232a4b45f24226911efa58696",
+      "sha256": "ddca7de23516736aac914445595fab4b3a5222d95e746f4e25b4283a0520969f",
       "size_bytes": 529
     },
     {
@@ -50,7 +50,7 @@
     },
     {
       "path": "widgets/website-studio-sitemap-sidebar/index.html",
-      "sha256": "73a79000e57576267370b6c65e08e0c8ecdb82e2c095a0f15f712f809dee7a2d",
+      "sha256": "2527837def68c32385c0414c06eb97a268a9294688db406ef6278e186baef752",
       "size_bytes": 629
     }
   ],

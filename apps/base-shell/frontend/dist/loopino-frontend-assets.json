@@ -1,14 +1,14 @@
 {
   "schema": "loopino.frontend-assets.v2",
-  "build_id": "19e5f8152cb2d54e57149a6a29736a391aedaa7b19469dd37d1f582f3c109516",
+  "build_id": "2935b7303f4e3c7dabdc21ea475e2a7c33a125d0a3d8dcd137da27824aced56e",
   "entrypoints": [
     "index.html",
     "installation.html"
   ],
   "immutable": [
     {
-      "path": "assets/LoginPaperBackground-Cu89fDyy.js",
-      "sha256": "81ed0d058c09119023f792afb1953c9959945b9fa8fc1443791952bf933b51d7",
+      "path": "assets/LoginPaperBackground-DDr0Jo0i.js",
+      "sha256": "cebef314169900d5d86f1f8ea99b44b43935eaed17a07c622feed95baa0386b8",
       "size_bytes": 25132
     },
     {
@@ -17,9 +17,9 @@
       "size_bytes": 117102
     },
     {
-      "path": "assets/index-BOwgEqjK.js",
-      "sha256": "a4d5b0688f470eb4b63bd43ce9c2ffb130ac3e6ebc32056a8cefe509206a94d7",
-      "size_bytes": 598428
+      "path": "assets/index-tLrAIs_r.js",
+      "sha256": "0ef211f2ad83ff4a606a0c9ecbe1fe96270074521dc756ebbc2ee0ed2278a400",
+      "size_bytes": 598456
     },
     {
       "path": "assets/installation-CSiKA517.css",
@@ -50,7 +50,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "3d7694591d0d427e3e40258755785d9457bf4eca6d2b104375ac8c51888993f4",
+      "sha256": "b1dc636cafb31f5cb87aba4cfa9c6516a88a4f05336b38d807199f854cc8442c",
       "size_bytes": 2367
     },
     {
@@ -110,7 +110,7 @@
     },
     {
       "path": "sw.js",
-      "sha256": "0747a39d92e28822d0d69103b1393b6751d793d8dc50010735931da3078045a9",
+      "sha256": "7f0f53cf3839ca05a43efc0f36b82a50a479080466a6a86250f1d0ae95fff9ec",
       "size_bytes": 14184
     }
   ],
@@ -119,7 +119,7 @@
     {
       "url": "/",
       "path": "index.html",
-      "sha256": "3d7694591d0d427e3e40258755785d9457bf4eca6d2b104375ac8c51888993f4",
+      "sha256": "b1dc636cafb31f5cb87aba4cfa9c6516a88a4f05336b38d807199f854cc8442c",
       "size_bytes": 2367
     },
     {
@@ -135,10 +135,10 @@
       "size_bytes": 117102
     },
     {
-      "url": "/apps/base-shell/assets/index-BOwgEqjK.js",
-      "path": "assets/index-BOwgEqjK.js",
-      "sha256": "a4d5b0688f470eb4b63bd43ce9c2ffb130ac3e6ebc32056a8cefe509206a94d7",
-      "size_bytes": 598428
+      "url": "/apps/base-shell/assets/index-tLrAIs_r.js",
+      "path": "assets/index-tLrAIs_r.js",
+      "sha256": "0ef211f2ad83ff4a606a0c9ecbe1fe96270074521dc756ebbc2ee0ed2278a400",
+      "size_bytes": 598456
     },
     {
       "url": "/apps/base-shell/assets/installation-CSiKA517.css",
@@ -153,9 +153,9 @@
       "size_bytes": 17337
     },
     {
-      "url": "/apps/base-shell/assets/LoginPaperBackground-Cu89fDyy.js",
-      "path": "assets/LoginPaperBackground-Cu89fDyy.js",
-      "sha256": "81ed0d058c09119023f792afb1953c9959945b9fa8fc1443791952bf933b51d7",
+      "url": "/apps/base-shell/assets/LoginPaperBackground-DDr0Jo0i.js",
+      "path": "assets/LoginPaperBackground-DDr0Jo0i.js",
+      "sha256": "cebef314169900d5d86f1f8ea99b44b43935eaed17a07c622feed95baa0386b8",
       "size_bytes": 25132
     },
     {

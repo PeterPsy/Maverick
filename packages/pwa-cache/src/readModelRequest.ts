@@ -68,7 +68,8 @@ export function describeReadModelRequest(request: ReadModelRequest): { endpoint:
   }
   const body = JSON.stringify({
     ...parameters, action,
-    ...((request.appId === "storage" || action === "pwa.read_model") ? { _app_secret_request: { logical_names: [], required: false } } : {}),
+    ...((request.appId === "storage" || request.appId === "website-studio" || action === "pwa.read_model")
+      ? { _app_secret_request: { logical_names: [], required: false } } : {}),
   });
   if (body.length > 16_384) throw new TypeError("Read-model retry request exceeds its budget.");
   return { endpoint: `/api/apps/${request.appId}/backend`, body };

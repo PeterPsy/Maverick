@@ -191,7 +191,7 @@ describe('work player presentation', () => {
     expect(mediaPlaybackResolverSource).toContain("event: 'media.asset_preload'");
     expect(mediaPlaybackResolverSource).toContain("event: 'storage.file_info'");
     expect(mediaPlaybackResolverSource).toContain("'storage.file.localize_status'");
-    expect(mediaPlaybackResolverSource).toContain("'storage.file.localize'");
+    expect(mediaPlaybackResolverSource).toContain('`storage.${action}`');
     expect(mediaPlaybackResolverSource).toContain("event: 'storage.file.content.read'");
     expect(mediaPlaybackMetricsSource).toContain('__fitnessCoachMediaMetrics');
     expect(mediaPlaybackMetricsSource).toContain("console.debug('[fitness-coach:media]', entry)");

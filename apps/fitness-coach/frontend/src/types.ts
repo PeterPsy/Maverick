@@ -222,5 +222,4 @@ export type MediaPlaybackResolution = {
   canRetry?: boolean;
   canCancel?: boolean;
   revoke?: () => void;
-  warmup?: Promise<MediaPlaybackResolution | null>;
 };

@@ -1925,13 +1925,7 @@ async function playerFallbackResolution(media: ExerciseMediaRef, currentResoluti
 async function drivePlaybackFailureDetail(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, currentResolution: MediaPlaybackResolution) {
   const cachedDetail = latestMediaPlaybackError(media);
   if (cachedDetail) return cachedDetail;
-  if (currentResolution.warmup) {
-    const warmed = await Promise.race([
-      currentResolution.warmup,
-      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 300))
-    ]);
-    if (warmed?.status === 'error' && warmed.detail) return warmed.detail;
-  }
+  if (currentResolution.status === 'error' && currentResolution.detail) return currentResolution.detail;
   return 'Storage could not play this Drive media yet. Retry after Drive localization is ready.';
 }
 
@@ -2008,7 +2002,7 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
 
   const hasPreviewMedia = Boolean(previewUrl && media && !previewFailed);
   const className = `media-thumb ${variant === 'large' ? 'is-large' : ''} ${media ? '' : 'is-empty'} ${hasPreviewMedia ? previewLoaded ? 'is-media-ready' : 'is-preview-loading' : ''}`;
-  const visiblePreviewUrl = isVisible ? (resolvedPreviewUrl || previewUrl) : '';
+  const visiblePreviewUrl = isVisible ? resolvedPreviewUrl : '';
   if (previewUrl && media && !previewFailed) {
     const previewMedia = media;
     return (

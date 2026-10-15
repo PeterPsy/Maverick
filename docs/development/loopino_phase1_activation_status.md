@@ -3,8 +3,10 @@
 2026-10-15. The installation in `/root/projects/loopino` has completed its native
 address job, Cloudflare connection and AI provider activation. This supersedes
 the pending server-setup gates in the historical deployment and relocation
-reports. Phase 1 remains open for authenticated visual acceptance, signed Apple
-clients and native hardware acceptance; Mac configuration remains last.
+reports. Authenticated browser smoke and host-layout checks are now recorded in
+[the browser acceptance report](loopino_phase1_browser_acceptance.md), including
+its Design Studio and real-device limitations. Phase 1 remains open for real
+PWA/device acceptance and signed Apple clients; Mac configuration remains last.
 
 ## Address and setup
 
@@ -89,7 +91,8 @@ configuration change; no Core/provider source, user chat or frontend was modifie
   and ripgrep paths passed all 167 cases.
 - Unused-import and diff-whitespace checks passed.
 - Authenticated inventory lists all 26 standard apps. Core, Browser, OpenWA and
-  the installation timer are active. No app source or frontend artifact changed.
+  the installation timer are active. This initial activation check preceded the
+  source/frontend corrections in the subsequent browser acceptance report.
 
 Private operational evidence is under `operations/phase1/providers`, including
 `verification.json`, `smoke-checks.json` and `runtime-tools-tests.log`. Credentials

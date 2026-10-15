@@ -1,5 +1,9 @@
 # Loopino canonical-root relocation checkpoint
 
+> Historical relocation snapshot. The later [server activation checkpoint](loopino_phase1_activation_status.md)
+> records completed Cloudflare, wildcard TLS, renewal and Codex/Antigravity setup.
+> The original remaining server gates below belong to the relocation checkpoint.
+
 The live installation and both independent repositories now reside at the real
 `/root/projects/loopino`. Main HTTPS, login, standalone setup and the generic
 catalog are available at `https://loopino.giuntitrail.com`. All 26 apps selected

@@ -1,5 +1,8 @@
 # Loopino phase 1 deployment checkpoint
 
+Current server-setup acceptance is recorded in the
+[activation checkpoint](loopino_phase1_activation_status.md).
+
 > Historical snapshot: paths, branch names and live observations below belong to
 > their recorded checkpoint or predecessor installation. Current destination and
 > acceptance evidence are in [the root relocation report](loopino_root_relocation_status.md);

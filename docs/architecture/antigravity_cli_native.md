@@ -71,6 +71,14 @@ healthy runtime, current authenticated model catalog, exact contract identity,
 actor/policy approval and normal containment checks. There is no separate
 issuance or expiry lifecycle.
 
+Installation activation also requires the existing operator switches
+`LOOPINO_FEATURE_HOSTED_AGENT_RUNTIME=true` and
+`LOOPINO_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW=true` in the protected service
+environment, followed by a Core restart. Other provider preview switches remain
+independent. Activating the provider publishes the authenticated model catalog;
+each desired model still needs an enabled workspace binding. Codex can remain
+the workspace default.
+
 Antigravity remains disabled by default until an operator explicitly enables the
 provider and workspace profile after reviewing the current runtime contract and
 successful operational tests. Google AI Studio is not published as a separate

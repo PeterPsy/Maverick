@@ -44,6 +44,37 @@ then completed the same command and final response successfully. The redacted
 receipt preserves this retry rather than claiming a first-attempt pass.
 Temporary smoke conversations were cleaned through the official thread API.
 
+## Full-access host administration
+
+A subsequent operator request aligned host privileges with the source
+installation. The source's actual full-access session runs as `ubuntu` (UID
+1000) and `sudo -n id -u` returns 0. The destination retains the service account
+`loopino` (UID 997), with the equivalent explicit `NOPASSWD: ALL` sudo grant.
+The account can administer the whole destination host through `sudo -n`,
+including protected files, services, packages, containers and firewall rules.
+Direct file operations still use the service account's Linux permissions.
+
+The protected rule and its exact OS registration are documented in
+[installation architecture](../architecture/installation_address.md#operator-host-access-for-this-installation).
+The rule is effective for existing full-access processes immediately; Core's
+service identity and the runtime-mode policy are unchanged.
+
+Live verification passed candidate and complete sudoers validation, root UID
+execution, Docker/firewall/journal reads, and creation/read/removal of a
+root-owned marker inside the private installation operations tree. Real Codex
+and Antigravity full-access chats each ran `id -u` and `sudo -n id -u`, returned
+997 and 0, and completed the expected final response. Codex succeeded directly;
+Antigravity reported one failed tool attempt before each successful command.
+These temporary chats were removed through the official thread API afterward.
+
+The non-default workspace policy still resolves an explicit full-access request
+to sandbox. A real Bubblewrap launch as `loopino`, with sudo and its runtime
+libraries available, retained `NoNewPrivs: 1`: sudo explicitly refused elevation,
+and the host sudoers rule and private operations path were absent. The root-owned
+private receipt is `operations/phase1/host-access/verification.json`, alongside
+`sudo-policy.json` and the temporary session identifiers. This was an OS
+configuration change; no Core/provider source, user chat or frontend was modified.
+
 ## Corrections and verification
 
 - `1725e212`: resolve native Codex binaries in nested and hoisted npm layouts;

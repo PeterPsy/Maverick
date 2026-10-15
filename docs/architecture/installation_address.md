@@ -222,8 +222,9 @@ target or copying any collections. Dry-run/status remain available to authorized
 admins. During explicitly authorized drained maintenance, a root operator may
 use the official persistence CLI with the protected service environment, review
 the plan, apply, and verify restart/adapter state. Cutover atomically preserves
-root ownership and 0640 mode; Core receives no environment write grant and no new
-privilege bridge. This phase uses JSON and performs no production migration.
+root ownership and 0640 mode; cutover grants Core no direct environment write
+authority and introduces no cutover-specific privilege bridge. This phase uses
+JSON and performs no production migration.
 
 Certbot 5.8.0/configargparse reads `/etc/letsencrypt/cli.ini` and the HOME/XDG
 user CLI default before an explicit `--config`; storage-directory arguments do
@@ -250,7 +251,46 @@ discovery, and verify isolated system/venv Python startup excludes user site.
 service-user Core fails before directory creation or an ACME subprocess with
 `managed_exact_operator_required`; installer preflight reports the unsupported
 service role/mode combination. Root operator exact-host issuance remains
-available. No sudo bridge, same-origin fallback or unprotected issuer is added.
+available. No issuer-specific sudo bridge, same-origin fallback or unprotected
+issuer is added.
 The authorized `loopino.giuntitrail.com` deployment uses `external_wildcard` and
 the trusted root installation worker, with the new human-entered DNS token.
 Non-root managed_exact functional acceptance is not claimed.
+
+## Operator host access for this installation
+
+The 2026-10-15 operator decision aligns the destination with the source
+installation's observed full-access runtime: a regular Linux service/runtime user
+can request root execution through non-interactive sudo. The source runtime is
+`ubuntu` with `NOPASSWD: ALL`; this destination uses the equivalent rule for
+`loopino`. This is an explicit installation-owner grant, not an authority
+created by the Chat badge or a workspace membership.
+The rule belongs to the Linux account and is not toggled by individual chats.
+
+Core and native providers continue to start as `loopino`. Administrative shell
+operations use `sudo -n`; direct file operations retain normal Linux ownership
+checks. The grant therefore covers host administration when explicitly invoked,
+including services, containers, packages and protected files. It is not limited
+to the Loopino project. Existing full-access processes see sudo policy changes
+without restarting Core or recreating a conversation.
+
+The root-owned 0440 rule is backed by
+`installation/sudoers/loopino-runtime-admin` and registered only through its exact
+`/etc/sudoers.d/loopino-runtime-admin` symlink. Validate the candidate and complete
+sudoers policy with `visudo`; never overwrite unrelated rules or change the Core
+service to UID 0 for this purpose. Removing that registration revokes the grant.
+
+The installed policy is:
+
+```sudoers
+loopino ALL=(ALL) NOPASSWD: ALL
+```
+
+This deployment-specific rule stays in ignored installation state rather than
+becoming a blanket installer default for every host.
+
+This operator grant does not change runtime-mode resolution or sandbox mounts.
+Non-default workspaces remain sandbox-only. Verification must prove that the
+outer sandbox keeps no-new-privileges enabled, hides host sudo policy and private
+paths, and cannot use sudo to obtain host authority. Full-access remains an
+operator/break-glass execution capability, as described in the Core architecture.

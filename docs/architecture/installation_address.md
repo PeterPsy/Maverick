@@ -257,6 +257,25 @@ The authorized `loopino.giuntitrail.com` deployment uses `external_wildcard` and
 the trusted root installation worker, with the new human-entered DNS token.
 Non-root managed_exact functional acceptance is not claimed.
 
+## Default workspace host privilege requirement
+
+Every self-hosted Linux installation enabling the `default` workspace in
+full-access operator mode must provision its actual runtime account with
+`NOPASSWD: ALL` sudo authority and verify `sudo -n id -u` returns 0 from real
+agent sessions. This applies equally to fresh installs and destination servers.
+The account name is not fixed; `ubuntu` and `loopino` are equivalent when granted
+the same authority. Core/providers keep their named non-root service identity.
+Privileged shell commands use `sudo -n`; direct file tools retain normal Linux
+permissions and official Core surfaces retain their authorization checks.
+
+The installation owner explicitly prepares the account-specific policy.
+The current installer does not automatically provision or verify that grant.
+Neither successful HTTP/DNS/TLS checks nor a full-access badge complete operator
+workspace acceptance. A real sandbox must still refuse elevation, and
+non-default workspaces stay sandbox-only. Follow the shared
+[host privilege runbook](../deployment/default_workspace_host_access.md) for
+protected policy registration, verification and revocation on each server.
+
 ## Operator host access for this installation
 
 The 2026-10-15 operator decision aligns the destination with the source
@@ -286,8 +305,9 @@ The installed policy is:
 loopino ALL=(ALL) NOPASSWD: ALL
 ```
 
-This deployment-specific rule stays in ignored installation state rather than
-becoming a blanket installer default for every host.
+The account-specific rule stays in ignored installation state. On each server,
+the installation owner must prepare and verify the equivalent grant for its
+actual runtime account; the installer does not silently create it.
 
 This operator grant does not change runtime-mode resolution or sandbox mounts.
 Non-default workspaces remain sandbox-only. Verification must prove that the

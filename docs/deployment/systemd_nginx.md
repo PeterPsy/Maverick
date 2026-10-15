@@ -4,6 +4,18 @@ This deployment path is for local demos, self-hosted evaluation, and controlled 
 
 Loopino is not production-ready. Do not expose this configuration with real secrets until the documented security hardening work is closed.
 
+## Default operator workspace privileges
+
+Every Linux server enabling the `default` full-access operator workspace must
+give the selected Core/runtime account `NOPASSWD: ALL` sudo authority.
+`--service-user` defaults to `loopino`; `ubuntu` or another reviewed account is
+equivalent only after the same live privilege checks. Keep the service non-root.
+
+Complete the explicit owner setup and real agent/sandbox checks in
+[the host privilege runbook](default_workspace_host_access.md). The installer
+does not provision or test this sudo grant. Healthy services, HTTP/TLS and the
+Chat badge alone do not establish operator workspace readiness.
+
 ## Files
 
 - `scripts/deploy/systemd/loopino-core.service`
@@ -29,7 +41,8 @@ deny these roles at blocker ancestors, with default denies for future children.
 Host www-data has the ingress group; container UID33 does not. This preserves
 the Giuntitrail container's existing bind-mount access without exposing its data
 to host Nginx or Loopino. Source, toolchains and privileged configuration remain
-root-owned and nonwritable by Core; `.env.loopino` is root:loopino0640.
+root-owned and nonwritable by direct Core-user operations; `.env.loopino` is
+root:loopino0640. The explicit sudo grant enables privileged shell operations.
 ACL metadata and native integration links are documented OS registration
 exceptions, not product backing files. The private relocation operations directory
 contains exact metadata restores and rollback instructions. Never make `/root`
@@ -191,8 +204,8 @@ Prompt answers:
 | Prompt | Correct response | Why |
 | --- | --- | --- |
 | `Install root [<checkout-root>]:` | Press Enter. | The install root must match the checkout root. |
-| `Service user [ubuntu]:` | Press Enter. | The systemd unit should run as Linux user `ubuntu`; `yes` is not a valid service user unless that account exists. |
-| `Service group [ubuntu]:` | Press Enter. | The systemd unit should run as Linux group `ubuntu`; `yes` is not a valid service group unless that group exists. |
+| `Service user [loopino]:` | Choose the existing reviewed runtime account. | Enter selects `loopino`; verify its passwordless root sudo as described above. |
+| `Service group [loopino]:` | Choose the runtime account's existing group. | Enter selects `loopino`; `yes` is not a group name unless that group exists. |
 | `Core bind host [127.0.0.1]:` | Press Enter. | The core should listen only locally; nginx exposes the public hostname. |
 | `Core port [8014]:` | Press Enter. | This is the default internal core port. |
 | `Rescue port [8015]:` | Press Enter. | This is the default internal rescue port. |

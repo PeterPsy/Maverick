@@ -662,6 +662,16 @@ approvals and egress. Workspace metadata may narrow this policy but may not
 bypass it. The default workspace may use full access only when platform and
 workspace governance both allow it; non-default workspaces remain sandboxed.
 
+On every self-hosted Linux server that enables the full-access `default`
+operator workspace, installation acceptance also requires explicit,
+non-interactive root authority for the actual runtime account through
+`NOPASSWD: ALL` sudo. The account name may vary; Core and providers remain
+non-root and use `sudo -n` for privileged shell operations. The OS grant is a
+separate installation-owner action, not authority derived from a badge or web
+login. Core capability checks and sandbox isolation remain enforced. See
+[the installation requirement](installation_address.md#default-workspace-host-privilege-requirement)
+and [live acceptance](../deployment/default_workspace_host_access.md).
+
 Hosted agentic runtimes use one provider-neutral Core loop:
 
 ```text

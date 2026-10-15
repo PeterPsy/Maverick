@@ -100,6 +100,20 @@ Adapter migrations run as one explicit operator workflow through core admin surf
 
 For the first public release, the recommended path is local CLI-first setup, not Docker and not a setup UI.
 
+## Default operator workspace privileges
+
+Every self-hosted Linux server enabling full access in `default` requires
+passwordless root sudo for its actual runtime account. This is the same
+requirement whether the account is named `loopino`, `ubuntu` or otherwise.
+The installer defaults to `loopino`; the account must exist and can be selected
+with `--service-user` and `--service-group`. The web `admin` login is separate.
+
+Follow [the host privilege runbook](default_workspace_host_access.md) to prepare
+the explicit OS grant and verify it through actual agent sessions. The installer
+does not create or validate this sudo rule automatically; operator workspace
+acceptance remains incomplete until those checks and sandbox denial pass.
+Local bootstrap/render-only commands alone do not establish host authority.
+
 ## Installer CLI
 
 For a fresh install, use the installer CLI:
@@ -210,8 +224,8 @@ When the installer prompts interactively, answer as follows:
 | Prompt | Answer |
 | --- | --- |
 | `Install root [<checkout-root>]:` | Press Enter. The default must be the checkout root. |
-| `Service user [ubuntu]:` | Press Enter, unless the Linux service user is different. Do not type `yes`. |
-| `Service group [ubuntu]:` | Press Enter, unless the Linux service group is different. Do not type `yes`. |
+| `Service user [loopino]:` | Use the existing reviewed runtime account; Enter selects `loopino`. Complete the required sudo verification. |
+| `Service group [loopino]:` | Use the selected runtime account's existing group; Enter selects `loopino`. |
 | `Core bind host [127.0.0.1]:` | Press Enter. Nginx is the public entrypoint. |
 | `Core port [8014]:` | Press Enter unless port `8014` is already used. |
 | `Rescue port [8015]:` | Press Enter unless port `8015` is already used. |
@@ -220,7 +234,9 @@ When the installer prompts interactively, answer as follows:
 | `Apply the rendered plan... [Y/n]:` | Press Enter to install live systemd/nginx paths and start services. Type `n` for render-only behavior. |
 | `Request a TLS certificate with certbot now? [Y/n]:` | Press Enter only when DNS and ports `80/443` are ready. Type `n` to skip TLS for now. |
 
-After live apply, verify:
+After live apply, complete
+[operator privilege acceptance](default_workspace_host_access.md#required-live-acceptance)
+and verify:
 
 ```bash
 systemctl status --no-pager loopino-core.service

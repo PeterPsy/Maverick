@@ -37,3 +37,9 @@ If you want a repeatable service-like evaluation environment, use:
 - `scripts/deploy/nginx/loopino.example.conf`
 
 Treat those files as evaluation infrastructure, not as proof of production readiness.
+
+When enabling the `default` full-access operator workspace on a Linux server,
+also complete [host privilege acceptance](default_workspace_host_access.md).
+Its selected runtime account requires passwordless root sudo, while sandboxed
+sessions and non-default workspaces must remain confined. Installer/HTTP success
+alone does not verify that separation.

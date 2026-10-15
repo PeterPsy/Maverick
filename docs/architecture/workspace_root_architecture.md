@@ -1696,6 +1696,15 @@ In the `default` workspace, agents run with `full-access` by default when platfo
 
 Full-access is execution mode, not administrative authority.
 
+A self-hosted Linux installation that enables this operator mode must explicitly
+provision and verify passwordless root sudo for the actual runtime account.
+The account may be named `ubuntu`, `loopino`, or another reviewed name; the
+privilege requirement is the same on every server. Core and providers remain
+non-root, using `sudo -n` for privileged shell operations. This OS permission
+does not replace the platform capability checks below. Installation acceptance
+must include real agent execution and sandbox denial, as described in
+[the host privilege runbook](../deployment/default_workspace_host_access.md).
+
 Operations that affect the platform host, such as manually restarting the backend service, must still require explicit platform or workspace admin capability grants. A full-access runtime in `default` may have the operating-system reach needed to perform the action, but the core CLI/MCP/API surface must deny it unless governance grants the corresponding capability.
 
 The `default` workspace may still explicitly request sandboxed execution for a specific runtime session, but that is an override rather than the default behavior.

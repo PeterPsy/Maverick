@@ -84,6 +84,7 @@ For local service installs, hosted evaluation, MongoDB, nginx, certbot, systemd,
 - `docs/deployment/local_setup.md`
 - `docs/deployment/self_hosted_evaluation.md`
 - `docs/deployment/systemd_nginx.md`
+- `docs/deployment/default_workspace_host_access.md` (required for Linux `default` operator access)
 
 ## What Loopino Provides
 

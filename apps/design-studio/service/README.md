@@ -75,6 +75,16 @@ calling the CLI executor. Both paths
 operate without a Loopino runtime session, prompt, memory, persona, skill,
 tool catalog, or semantic rewrite.
 
+Configure the Core service with `LOOPINO_MODEL_ACCESS_CODEX_BIN` pointing to
+the installation's protected standalone Codex executable and
+`LOOPINO_MODEL_ACCESS_CODEX_HOME` pointing to its authorized login source.
+These are technical model-bridge inputs, separate from agent runtime homes.
+A private toolchain location is supported: Core mounts only the executable
+read-only at `/model-cli/codex`, without exposing the installation tree.
+After changing these service values, restart Core and the Design Studio
+sidecar, then verify a real native run as well as catalog availability.
+
+
 `native_profile_bootstrap.py` then runs after the unchanged daemon is ready and
 before sidecar readiness is published. Through OpenDesign's public app-config
 API it replaces only an unset or unusable `amr` cloud selection with

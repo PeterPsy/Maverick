@@ -403,6 +403,11 @@ def codex_sandbox_command(
         "--dir",
         "/codex-home",
         "--dir",
+        "/model-cli",
+        "--ro-bind",
+        Path(executable).resolve(strict=True).as_posix(),
+        "/model-cli/codex",
+        "--dir",
         "/home",
         "--dir",
         "/home/codex",
@@ -465,7 +470,7 @@ def codex_sandbox_command(
             "--chdir",
             inner_cwd,
             "--",
-            executable.as_posix(),
+            "/model-cli/codex",
             *argv,
         )
     )

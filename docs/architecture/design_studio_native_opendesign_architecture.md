@@ -356,6 +356,17 @@ requires a lossless representation change.
 
 ### CLI models
 
+The installation explicitly configures `LOOPINO_MODEL_ACCESS_CODEX_BIN` with
+the protected standalone executable and `LOOPINO_MODEL_ACCESS_CODEX_HOME`
+with the installation-owned authenticated source. The technical bridge keeps
+these distinct from runtime-session homes and does not adopt an operator home.
+
+Core mounts only the resolved executable read-only at `/model-cli/codex` in
+the model sandbox and invokes that path. This supports private installation
+toolchains outside `/usr` without exposing their parent directories, repository
+or provider source home. The technical auth copy and app data retain their
+existing scoped mounts. Native OpenDesign remains unchanged.
+
 For an installed CLI model, such as a Codex-style local CLI, OpenDesign should
 invoke that CLI through the same kind of local profile or process adapter it
 would use outside Loopino.
